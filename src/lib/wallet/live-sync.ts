@@ -35,8 +35,7 @@ export function createLiveSync(
 ): LiveSyncController {
   let enabled = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
-  let active: Promise<boolean> | undefined;
-  let consecutiveFailures = 0;
+  let active: Promise<void> | undefined;
   let generation = 0;
 
   const clearTimer = () => {
@@ -46,29 +45,27 @@ export function createLiveSync(
 
   const schedule = () => {
     clearTimer();
-    const backoff = Math.min(2 ** consecutiveFailures, 30);
-    if (enabled) timer = setTimeout(() => void runNow(), intervalMs * backoff);
+    if (enabled) timer = setTimeout(() => void runNow(), intervalMs);
   };
 
-  const perform = async (startedGeneration: number): Promise<boolean> => {
+  const perform = async (startedGeneration: number): Promise<void> => {
     try {
       const kind = selectedWalletKind();
-      if (!kind) return true;
+      if (!kind) return;
       // A route-owned refresh survives read-only navigation. Observe that
       // native single-flight operation instead of repeatedly invoking a second
       // sync and filling diagnostics with expected sync_in_progress failures.
       if (wallet.syncStatus) {
         try {
-          if (isWalletSyncActive(await wallet.syncStatus())) return true;
+          if (isWalletSyncActive(await wallet.syncStatus())) return;
         } catch {
           // The sync call remains authoritative when status polling is unavailable.
         }
       }
       if (kind === 'multisig') await wallet.syncMultisig(true);
       else await wallet.sync(true);
-      return true;
     } catch (cause) {
-      if (!enabled || startedGeneration !== generation) return true;
+      if (!enabled || startedGeneration !== generation) return;
       if (
         typeof cause === 'object' &&
         cause !== null &&
@@ -80,26 +77,13 @@ export function createLiveSync(
           'initial_scan_required'
         ].includes(String(cause.code))
       ) {
-        return true;
-      }
-      // A Mainnet wallet cannot read chain state until the saved Core endpoint
-      // passes its exact-chain preflight. Repeating the gated sync every few
-      // seconds cannot repair an offline node; the Overview retry performs the
-      // preflight when the user is ready to try again.
-      if (
-        typeof cause === 'object' &&
-        cause !== null &&
-        'code' in cause &&
-        cause.code === 'node_admission_required'
-      ) {
-        consecutiveFailures = Math.max(consecutiveFailures, 4);
+        return;
       }
       try {
         onError(cause);
       } catch {
         /* Error reporting must never disable future wallet syncs. */
       }
-      return false;
     }
   };
 
@@ -114,9 +98,7 @@ export function createLiveSync(
     const pending = perform(startedGeneration);
     active = pending;
     try {
-      const succeeded = await pending;
-      if (startedGeneration === generation)
-        consecutiveFailures = succeeded ? 0 : consecutiveFailures + 1;
+      await pending;
     } finally {
       if (active === pending) active = undefined;
       if (enabled) schedule();
@@ -134,7 +116,6 @@ export function createLiveSync(
     restart() {
       generation += 1;
       enabled = true;
-      consecutiveFailures = 0;
       clearTimer();
       // A selection change cancels the previous sync. Once it drains, wait for
       // the normal interval so the target wallet can paint cached state first.

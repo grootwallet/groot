@@ -156,7 +156,7 @@ describe('live wallet sync', () => {
     controller.stop();
   });
 
-  it('backs off repeated failures and resets after a successful sync', async () => {
+  it('keeps the 35-second-equivalent cadence after transient failures', async () => {
     vi.useFakeTimers();
     const wallet = {
       sync: vi
@@ -171,11 +171,11 @@ describe('live wallet sync', () => {
     controller.start();
     await controller.runNow();
     expect(wallet.sync).toHaveBeenCalledTimes(1);
-    await vi.advanceTimersByTimeAsync(1_999);
+    await vi.advanceTimersByTimeAsync(999);
     expect(wallet.sync).toHaveBeenCalledTimes(1);
     await vi.advanceTimersByTimeAsync(1);
     expect(wallet.sync).toHaveBeenCalledTimes(2);
-    await vi.advanceTimersByTimeAsync(3_999);
+    await vi.advanceTimersByTimeAsync(999);
     expect(wallet.sync).toHaveBeenCalledTimes(2);
     await vi.advanceTimersByTimeAsync(1);
     expect(wallet.sync).toHaveBeenCalledTimes(3);
@@ -187,7 +187,7 @@ describe('live wallet sync', () => {
     vi.useRealTimers();
   });
 
-  it('backs off a Mainnet admission failure until the user can retry node verification', async () => {
+  it('keeps checking at the normal cadence after a Mainnet admission failure', async () => {
     vi.useFakeTimers();
     const wallet = {
       sync: vi.fn(),
@@ -201,7 +201,7 @@ describe('live wallet sync', () => {
     controller.start();
     await controller.runNow();
     expect(wallet.syncMultisig).toHaveBeenCalledTimes(1);
-    await vi.advanceTimersByTimeAsync(29_999);
+    await vi.advanceTimersByTimeAsync(999);
     expect(wallet.syncMultisig).toHaveBeenCalledTimes(1);
     await vi.advanceTimersByTimeAsync(1);
     expect(wallet.syncMultisig).toHaveBeenCalledTimes(2);

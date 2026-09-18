@@ -1238,7 +1238,7 @@ test('pruned recovery errors show retained history and remain easy to trace', as
   await page.goto('/settings?fixture-pruned-history=1');
   await page.getByRole('button', { name: /Recovery scan/ }).click();
   const recoveryScan = page.getByRole('dialog', { name: 'Full wallet rescan' });
-  await recoveryScan.getByLabel('Wallet birthday block').fill('96600');
+  await recoveryScan.getByRole('spinbutton', { name: 'Wallet birthday block' }).fill('96600');
   await recoveryScan.getByLabel('Wallet passphrase', { exact: true }).fill('prototype-passphrase');
   await recoveryScan.getByRole('button', { name: 'Save & rescan' }).click();
 
@@ -1626,21 +1626,31 @@ test('recovery scan and private network controls preserve explicit safety choice
 }) => {
   await page.goto('/settings?fixture-hold-first-recovery-scan=1');
   await page.getByRole('button', { name: /Recovery scan/ }).click();
-  const recoveryScan = page.getByRole('dialog', { name: 'Full wallet rescan' });
-  await page.getByLabel('Wallet birthday block').fill('0');
-  await page.getByLabel('Address gap limit').fill('19');
+  let recoveryScan = page.getByRole('dialog', { name: 'Full wallet rescan' });
+  await expect(recoveryScan.getByText('Current Regtest chain tip: block 301')).toBeVisible();
+  await recoveryScan.getByRole('button', { name: 'About wallet birthday blocks' }).hover();
+  await expect(page.getByRole('tooltip')).toContainText('The first block Groot will inspect');
+  await recoveryScan.getByRole('spinbutton', { name: 'Wallet birthday block' }).fill('0');
+  await recoveryScan.getByText('Address discovery options', { exact: true }).click();
+  await recoveryScan.getByRole('button', { name: 'About the address gap limit' }).hover();
+  await expect(page.getByRole('tooltip')).toContainText('consecutive unused addresses');
+  await recoveryScan.getByRole('spinbutton', { name: 'Address gap limit' }).fill('19');
   await page.getByLabel('Wallet passphrase', { exact: true }).fill('prototype-passphrase');
   await expect(recoveryScan.getByRole('button', { name: 'Save & rescan' })).toBeDisabled();
-  await page.getByLabel('Address gap limit').fill('50');
-  await Promise.all([
-    recoveryScan.getByRole('button', { name: 'Cancel scan' }).click(),
-    recoveryScan.getByRole('button', { name: 'Save & rescan' }).click()
-  ]);
+  await recoveryScan.getByRole('spinbutton', { name: 'Address gap limit' }).fill('50');
+  await recoveryScan.getByRole('button', { name: 'Save & rescan' }).click();
   await expect(
     recoveryScan.getByRole('progressbar', { name: 'Recovery scan progress' })
   ).toBeVisible();
-  await expect(recoveryScan.getByText('Scan cancelled', { exact: true })).toBeVisible();
-  await expect(recoveryScan.getByText(/Saved progress remains safe/)).toBeVisible();
+  await recoveryScan.getByRole('button', { name: 'Cancel scan' }).click();
+  await expect(page.getByText('Full rescan cancelled', { exact: true })).toBeVisible();
+  await expect(recoveryScan).toBeHidden();
+  await page.getByRole('button', { name: /Recovery scan/ }).click();
+  recoveryScan = page.getByRole('dialog', { name: 'Full wallet rescan' });
+  await expect(
+    recoveryScan.getByRole('progressbar', { name: 'Recovery scan progress' })
+  ).toHaveCount(0);
+  await expect(recoveryScan.getByText('Address gap limit', { exact: true })).toHaveCount(0);
   await page.getByLabel('Wallet passphrase', { exact: true }).fill('prototype-passphrase');
   await recoveryScan.getByRole('button', { name: 'Save & rescan' }).click();
   await expect(page.getByRole('button', { name: /Recovery scan.*gap limit 50/ })).toBeVisible();

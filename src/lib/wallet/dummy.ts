@@ -555,13 +555,18 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
       await new Promise((resolve) => setTimeout(resolve, 50));
       if (this._scanStatus.status === 'cancelling') {
         this._scanStatus = {
-          ...this._scanStatus,
-          status: 'cancelled',
-          updatedAt: Math.floor(Date.now() / 1000)
+          status: 'idle',
+          ...this._scanSettings,
+          currentHeight: 0,
+          targetHeight: 0,
+          processedBlocks: 0,
+          totalBlocks: 0,
+          startedAt: 0,
+          updatedAt: 0
         };
         throw new WalletError(
           'scan_cancelled',
-          'Recovery scan cancelled. Saved progress remains safe; start it again to continue.'
+          'Recovery scan cancelled. Start a new scan when you are ready.'
         );
       }
       this._scanStatus = {

@@ -1382,6 +1382,7 @@ pub async fn wallet_full_rescan(
             run_id,
             cancel,
             rpc,
+            remote_scan_rpc,
             delayed_policy,
         ) = {
             let _operation = operation_guard(&state)?;
@@ -1408,6 +1409,22 @@ pub async fn wallet_full_rescan(
             let run_id = Uuid::new_v4().to_string();
             let cancel = Arc::new(AtomicBool::new(false));
             let rpc = Arc::new(rpc_client(&app, &state)?);
+            let remote_core = matches!(
+                read_node_config(&app)?.backend,
+                ChainBackend::RemoteCore { .. }
+            );
+            if remote_core {
+                ensure_remote_core_sync_capabilities(rpc.as_ref())?;
+            }
+            let remote_scan_rpc = if remote_core {
+                Some(rpc_client_with_timeout(
+                    &app,
+                    &state,
+                    REMOTE_CORE_SCAN_RPC_TIMEOUT,
+                )?)
+            } else {
+                None
+            };
             let wallet = load_wallet(&mut db)?;
             let delayed_policy = if is_multisig {
                 selected_delayed_policy_context(&app)?
@@ -1439,13 +1456,26 @@ pub async fn wallet_full_rescan(
                 run_id,
                 cancel,
                 rpc,
+                remote_scan_rpc,
                 delayed_policy,
             )
         };
         let scan_result: ApiResult<WalletSnapshotDto> = (|| {
-            let mempool_snapshot =
-                full_rescan_loaded_wallet(rpc, &mut wallet, &mut db, &settings, &run_id, &cancel)?;
-            remember_core_mempool_snapshot(&state, profile.id, Some(mempool_snapshot));
+            let remote_core = remote_scan_rpc.is_some();
+            let mempool_snapshot = full_rescan_loaded_wallet(
+                rpc,
+                remote_scan_rpc.as_ref(),
+                &mut wallet,
+                &mut db,
+                &settings,
+                &run_id,
+                &cancel,
+            )?;
+            if remote_core {
+                forget_core_mempool_snapshot(&state, profile.id);
+            } else {
+                remember_core_mempool_snapshot(&state, profile.id, Some(mempool_snapshot));
+            }
             let snapshot = snapshot_from(
                 &wallet,
                 &db,
@@ -1463,7 +1493,11 @@ pub async fn wallet_full_rescan(
         };
         let finish_result = load_recovery_scan_record(&db).and_then(|record| {
             if record.is_some_and(|record| record.run_id == run_id) {
-                finish_recovery_scan_record(&db, &run_id, terminal_status)
+                if terminal_status == "cancelled" {
+                    discard_recovery_scan_record(&db, &run_id)
+                } else {
+                    finish_recovery_scan_record(&db, &run_id, terminal_status)
+                }
             } else {
                 Ok(())
             }

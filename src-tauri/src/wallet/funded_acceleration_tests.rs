@@ -623,6 +623,7 @@ fn clean_storage_descriptor_recovery_restores_known_history_and_survives_reopen(
     let cancel = AtomicBool::new(false);
     full_rescan_loaded_wallet(
         Arc::clone(&rpc),
+        None,
         &mut recovered,
         &mut recovery_db,
         &settings,
@@ -697,6 +698,7 @@ fn current_tip_initial_scan_allows_later_bitcoin_core_sync() {
     let cancel = AtomicBool::new(false);
     full_rescan_loaded_wallet(
         Arc::clone(&rpc),
+        None,
         &mut wallet,
         &mut db,
         &settings,
@@ -745,6 +747,7 @@ fn explicit_rescan_waits_when_core_falls_behind_the_wallet_checkpoint() {
     let cancel = AtomicBool::new(false);
     full_rescan_loaded_wallet(
         Arc::clone(&rpc),
+        None,
         &mut wallet,
         &mut db,
         &settings,
@@ -759,6 +762,7 @@ fn explicit_rescan_waits_when_core_falls_behind_the_wallet_checkpoint() {
     rpc.invalidate_block(&invalidated).unwrap();
     let result = full_rescan_loaded_wallet(
         Arc::clone(&rpc),
+        None,
         &mut wallet,
         &mut db,
         &settings,
@@ -804,6 +808,7 @@ fn birthday_only_checkpoint_recovers_after_a_deep_reorg() {
     let cancel = AtomicBool::new(false);
     full_rescan_loaded_wallet(
         Arc::clone(&rpc),
+        None,
         &mut wallet,
         &mut db,
         &settings,
@@ -872,6 +877,7 @@ fn existing_wallet_can_repeat_full_rescan_from_an_earlier_birthday() {
     };
     full_rescan_loaded_wallet(
         Arc::clone(&rpc),
+        None,
         &mut wallet,
         &mut db,
         &initial_settings,
@@ -896,6 +902,7 @@ fn existing_wallet_can_repeat_full_rescan_from_an_earlier_birthday() {
     };
     full_rescan_loaded_wallet(
         Arc::clone(&rpc),
+        None,
         &mut wallet,
         &mut db,
         &repeated_settings,

@@ -35,6 +35,7 @@
   import LanguageToggle from '$lib/components/LanguageToggle.svelte';
   import IdentifierDetailsModal from '$lib/components/IdentifierDetailsModal.svelte';
   import DeviceDetailsModal from '$lib/components/DeviceDetailsModal.svelte';
+  import InsightTip from '$lib/components/InsightTip.svelte';
   import LocalTimestamp from '$lib/components/LocalTimestamp.svelte';
   import { toast } from '$lib/stores/toasts';
   import { formatInteger, locale, t } from '$lib/i18n';
@@ -209,6 +210,12 @@
   let scanning = $state(false),
     cancellingScan = $state(false),
     scanPoll: ReturnType<typeof setTimeout> | undefined;
+  let scanOptionsOpen = $state(false),
+    scanTip = $state<number | null>(null),
+    scanTipLoading = $state(false);
+  let scanBirthdayAboveTip = $derived(
+    scanTip !== null && Number(scanDraft.birthdayHeight) > scanTip
+  );
   let destroyed = false;
   let scanPercent = $derived(
     scanStatus.totalBlocks > 0
@@ -840,6 +847,25 @@
         tone: 'success'
       });
     } catch (cause) {
+      if (cause instanceof WalletError && cause.code === 'scan_cancelled') {
+        scanStatus = {
+          status: 'idle',
+          ...scan,
+          currentHeight: 0,
+          targetHeight: 0,
+          processedBlocks: 0,
+          totalBlocks: 0,
+          startedAt: 0,
+          updatedAt: 0
+        };
+        scanOpen = false;
+        toast({
+          title: 'Full rescan cancelled',
+          description: 'No scan progress was kept. The next full rescan will start fresh.',
+          tone: 'success'
+        });
+        return;
+      }
       scanError = localizedError(cause, $locale, 'The full rescan failed.');
       scanErrorCode = cause instanceof WalletError ? cause.code : 'internal_error';
       scanErrorDetails = cause instanceof WalletError ? cause.details : null;
@@ -878,13 +904,41 @@
       cancellingScan = false;
     }
   }
+  async function refreshScanTip() {
+    scanTipLoading = true;
+    try {
+      const cached = await walletService.publicNetworkStatus();
+      scanTip = cached.networkTip;
+      const current = await walletService.testNodeConnection();
+      scanTip = current.blocks;
+    } catch {
+      // A saved tip is still useful for comparison. Starting the scan performs
+      // the authoritative native validation against the live node.
+    } finally {
+      scanTipLoading = false;
+    }
+  }
   function openFullRescan() {
     scanCredential = '';
     scanError = '';
     scanErrorCode = '';
     scanErrorDetails = null;
     scanDraft = { ...scan };
+    scanOptionsOpen = false;
+    if (!['running', 'cancelling'].includes(scanStatus.status)) {
+      scanStatus = {
+        status: 'idle',
+        ...scan,
+        currentHeight: 0,
+        targetHeight: 0,
+        processedBlocks: 0,
+        totalBlocks: 0,
+        startedAt: 0,
+        updatedAt: 0
+      };
+    }
     scanOpen = true;
+    void refreshScanTip();
   }
   function closeFullRescan() {
     if (scanning) return;
@@ -893,6 +947,7 @@
     scanErrorCode = '';
     scanErrorDetails = null;
     scanDraft = { ...scan };
+    scanOptionsOpen = false;
     scanOpen = false;
   }
   function openDeleteWallet() {
@@ -2058,7 +2113,15 @@
       )}
     </div>
     <label class="field"
-      ><span>{translate($locale, 'Wallet birthday block')}</span><input
+      ><span class="field-label"
+        >{translate($locale, 'Wallet birthday block')}<InsightTip
+          label={translate($locale, 'About wallet birthday blocks')}
+          text={translate(
+            $locale,
+            'The first block Groot will inspect. Choose a height at or before the wallet’s first possible payment.'
+          )}
+        /></span
+      ><input
         aria-label={translate($locale, 'Wallet birthday block')}
         type="number"
         min="0"
@@ -2066,25 +2129,52 @@
         bind:value={scanDraft.birthdayHeight}
         disabled={scanning}
       /><small
-        >{translate($locale, 'Use 0 when uncertain. Regtest scans are intentionally cheap.')}</small
-      ></label
-    >
-    <label class="field"
-      ><span>{translate($locale, 'Address gap limit')}</span><input
-        aria-label={translate($locale, 'Address gap limit')}
-        type="number"
-        min="20"
-        max="1000"
-        step="1"
-        bind:value={scanDraft.gapLimit}
-        disabled={scanning}
-      /><small
         >{translate(
           $locale,
-          '20 is standard. Increase only if the wallet revealed long unused runs.'
+          'Use 0 when uncertain. Earlier scans are safer but take longer.'
         )}</small
-      ></label
+      >{#if scanTip !== null}<small class="scan-tip"
+          >{translate($locale, 'Current {network} chain tip: block {height}', {
+            network: networkName(defaultConfig.network),
+            height: formatInteger(scanTip, $locale)
+          })}</small
+        >{:else if scanTipLoading}<small class="scan-tip"
+          >{translate($locale, 'Reading current chain tip…')}</small
+        >{/if}{#if scanBirthdayAboveTip}<small class="form-error"
+          >{translate($locale, 'Birthday block must be at or below the current chain tip.')}</small
+        >{/if}</label
     >
+    <details class="scan-optional-control" bind:open={scanOptionsOpen}>
+      <summary
+        ><span>{translate($locale, 'Address discovery options')}</span><ChevronDown
+          size={15}
+        /></summary
+      >
+      <label class="field"
+        ><span class="field-label"
+          >{translate($locale, 'Address gap limit')}<InsightTip
+            label={translate($locale, 'About the address gap limit')}
+            text={translate(
+              $locale,
+              'How many consecutive unused addresses Groot derives while searching for wallet activity. Increase it only for wallets that revealed long unused address runs.'
+            )}
+          /></span
+        ><input
+          aria-label={translate($locale, 'Address gap limit')}
+          type="number"
+          min="20"
+          max="1000"
+          step="1"
+          bind:value={scanDraft.gapLimit}
+          disabled={scanning}
+        /><small
+          >{translate(
+            $locale,
+            '20 is standard. It controls address discovery, not block-scan speed.'
+          )}</small
+        ></label
+      >
+    </details>
     <PasswordField
       label={credentialLabel}
       bind:value={scanCredential}
@@ -2193,7 +2283,8 @@
         !scanCredential ||
         scanDraft.gapLimit < 20 ||
         scanDraft.gapLimit > 1000 ||
-        scanDraft.birthdayHeight < 0}
+        scanDraft.birthdayHeight < 0 ||
+        scanBirthdayAboveTip}
       loading={scanning}
       loadingLabel={translate($locale, 'Scanning blocks…')}
       onclick={runFullRescan}><RefreshCw size={15} />{translate($locale, 'Save & rescan')}</Button

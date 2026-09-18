@@ -192,7 +192,7 @@ fn safe_error_message(code: &str) -> &'static str {
         "node_history_unavailable" => "Bitcoin Core has pruned a block required by this scan. The attached block heights identify the unavailable range and earliest usable birthday.",
         "proposal_not_found" => "The saved payment proposal no longer exists or is no longer active.",
         "rate_limited" => "This wallet temporarily rejected another authentication attempt after repeated failures.",
-        "scan_cancelled" => "The recovery scan was cancelled without applying a partial result.",
+        "scan_cancelled" => "The recovery scan was cancelled and its run progress was discarded.",
         "scan_in_progress" => "A recovery scan is already active for this wallet.",
         "sync_cancelled" => "The wallet sync was cancelled without applying a partial result.",
         "sync_in_progress" => "A wallet sync is already active for this wallet.",

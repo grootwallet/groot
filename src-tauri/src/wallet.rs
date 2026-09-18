@@ -6,7 +6,7 @@ use argon2::Argon2;
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use bdk_bitcoind_rpc::{
     bitcoincore_rpc::{
-        json::{EstimateMode, GetBlockFilterResult, GetBlockchainInfoResult},
+        json::{EstimateMode, GetBlockFilterResult, GetBlockResult, GetBlockchainInfoResult},
         jsonrpc, Auth, Client, Error as CoreRpcError, RpcApi,
     },
     BitcoindRpcErrorExt, Emitter,
@@ -3048,44 +3048,83 @@ fn core_server_scan_block_plan(
         ));
     }
 
-    let heights = (first_height..=target_height).collect::<Vec<_>>();
-    let mut hashes = Vec::with_capacity(heights.len());
-    for batch in heights.chunks(CORE_BLOCK_HASH_BATCH_SIZE) {
-        ensure_foreground_sync_not_cancelled(cancel)?;
-        let params = batch
-            .iter()
-            .map(|height| serde_json::json!([height]))
-            .collect::<Vec<_>>();
-        let batch_hashes = core_batch_call::<BlockHash>(client, "getblockhash", &params)
-            .ok_or_else(rpc_unavailable)?;
-        hashes.extend(batch_hashes);
-    }
-    if hashes.len() != heights.len() {
-        return Err(internal(
-            "Bitcoin Core returned an incomplete block-hash range.",
-        ));
-    }
-
     let relevant = scan.relevant_blocks.into_iter().collect::<HashSet<_>>();
-    if relevant.len() > hashes.len() {
+    if relevant.len() > usize::try_from(target_height.saturating_sub(start_height)).unwrap_or(0) {
         return Err(internal(
             "Bitcoin Core returned too many relevant blocks for the scan range.",
         ));
     }
-    let mut checkpoint = wallet_tip.clone();
-    let mut matched_blocks = Vec::with_capacity(relevant.len());
-    for (height, hash) in heights.into_iter().zip(hashes) {
-        let previous_hash = checkpoint.hash();
-        checkpoint = checkpoint
-            .push(BlockId { height, hash })
-            .map_err(|_| internal("The Core scan checkpoint could not be constructed."))?;
-        if relevant.contains(&hash) {
-            matched_blocks.push((height, hash, previous_hash));
+
+    // `scanblocks` has already used Core's local BIP158 index to reduce the
+    // range to wallet-relevant hashes. Resolve only those hashes to active-chain
+    // heights; downloading every height in a genesis scan would turn a single
+    // indexed server query into thousands of remote HTTPS round trips.
+    let relevant_hashes = relevant.iter().copied().collect::<Vec<_>>();
+    let mut relevant_blocks = Vec::with_capacity(relevant_hashes.len());
+    for batch in relevant_hashes.chunks(CORE_BLOCK_HASH_BATCH_SIZE) {
+        ensure_foreground_sync_not_cancelled(cancel)?;
+        let params = batch
+            .iter()
+            .map(|hash| serde_json::json!([hash.to_string(), 1]))
+            .collect::<Vec<_>>();
+        let batch_blocks = core_batch_call::<GetBlockResult>(client, "getblock", &params)
+            .ok_or_else(rpc_unavailable)?;
+        if batch_blocks.len() != batch.len() {
+            return Err(internal(
+                "Bitcoin Core returned incomplete relevant-block metadata.",
+            ));
+        }
+        for (expected_hash, block) in batch.iter().zip(batch_blocks) {
+            let height = u32::try_from(block.height)
+                .map_err(|_| internal("Bitcoin Core returned an unsupported block height."))?;
+            let previous_hash = block.previousblockhash.ok_or_else(|| {
+                internal("Bitcoin Core returned relevant block metadata without a parent.")
+            })?;
+            if block.hash != *expected_hash
+                || block.confirmations < 0
+                || height < first_height
+                || height > target_height
+            {
+                return Err(internal(
+                    "Bitcoin Core returned a relevant block outside the active scan range.",
+                ));
+            }
+            relevant_blocks.push((height, block.hash, previous_hash));
         }
     }
-    if matched_blocks.len() != relevant.len() {
+    relevant_blocks.sort_unstable_by_key(|(height, _, _)| *height);
+    if relevant_blocks
+        .windows(2)
+        .any(|blocks| blocks[0].0 == blocks[1].0)
+    {
         return Err(internal(
-            "Bitcoin Core returned a relevant block outside the requested scan range.",
+            "Bitcoin Core returned conflicting relevant blocks at one height.",
+        ));
+    }
+
+    let target_hash = retry_transient_core_rpc(
+        || client.get_block_hash(u64::from(target_height)),
+        std::thread::sleep,
+    )?;
+    let mut checkpoint = wallet_tip.clone();
+    for (height, hash, _) in &relevant_blocks {
+        checkpoint = checkpoint
+            .push(BlockId {
+                height: *height,
+                hash: *hash,
+            })
+            .map_err(|_| internal("The Core scan checkpoint could not be constructed."))?;
+    }
+    if checkpoint.height() < target_height {
+        checkpoint = checkpoint
+            .push(BlockId {
+                height: target_height,
+                hash: target_hash,
+            })
+            .map_err(|_| internal("The Core scan checkpoint could not be constructed."))?;
+    } else if checkpoint.hash() != target_hash {
+        return Err(internal(
+            "Bitcoin Core returned a conflicting target block for the scan range.",
         ));
     }
     update_core_sync_status(status, start_height, target_height, target_height);
@@ -3105,7 +3144,7 @@ fn core_server_scan_block_plan(
     }
     Ok(CoreFilterBlockPlan {
         checkpoint,
-        matched_blocks,
+        matched_blocks: relevant_blocks,
     })
 }
 
@@ -6230,8 +6269,20 @@ where
     Ok(snapshot)
 }
 
+fn recovery_scan_error(error: ApiError) -> ApiError {
+    if error.code == "sync_cancelled" {
+        api_error(
+            "scan_cancelled",
+            "Recovery scan cancelled. Start a new scan when you are ready.",
+        )
+    } else {
+        error
+    }
+}
+
 fn full_rescan_loaded_wallet(
     rpc: Arc<Client>,
+    remote_scan_rpc: Option<&Client>,
     wallet: &mut PersistedWallet<Connection>,
     db: &mut Connection,
     settings: &RecoveryScanSettingsDto,
@@ -6260,10 +6311,8 @@ fn full_rescan_loaded_wallet(
         .map_err(|_| internal("The node height exceeds the supported recovery range."))?;
     let previous = reconcile_recovery_scan_record(db, None)?.map(|record| record.status);
     let resumable = previous.as_ref().filter(|status| {
-        matches!(
-            status.status.as_str(),
-            "cancelled" | "interrupted" | "failed"
-        ) && status.birthday_height == settings.birthday_height
+        matches!(status.status.as_str(), "interrupted" | "failed")
+            && status.birthday_height == settings.birthday_height
             && status.gap_limit == settings.gap_limit
             && status.processed_blocks > 0
             && status.current_height <= target_height
@@ -6312,6 +6361,69 @@ fn full_rescan_loaded_wallet(
             ..Default::default()
         })
         .map_err(internal)?;
+
+    if let Some(scan_rpc) = remote_scan_rpc {
+        let status = Arc::new(Mutex::new(None));
+        let plan = core_server_scan_block_plan(
+            rpc.as_ref(),
+            scan_rpc,
+            wallet,
+            &checkpoint,
+            target_height,
+            Some(cancel),
+            &status,
+        )
+        .map_err(recovery_scan_error)?;
+        let mut matched_blocks = Vec::with_capacity(plan.matched_blocks.len());
+        for (height, expected_hash, expected_previous_hash) in plan.matched_blocks {
+            ensure_foreground_sync_not_cancelled(Some(cancel)).map_err(recovery_scan_error)?;
+            let block =
+                retry_transient_core_rpc(|| rpc.get_block(&expected_hash), std::thread::sleep)?;
+            ensure_foreground_sync_not_cancelled(Some(cancel)).map_err(recovery_scan_error)?;
+            if block.block_hash() != expected_hash
+                || block.header.prev_blockhash != expected_previous_hash
+            {
+                return Err(internal(
+                    "Bitcoin Core returned a block outside the verified recovery-scan range.",
+                ));
+            }
+            matched_blocks.push((height, block));
+        }
+        wallet
+            .apply_update(Update {
+                chain: Some(plan.checkpoint),
+                ..Default::default()
+            })
+            .map_err(internal)?;
+        for (height, block) in matched_blocks {
+            wallet.apply_block(&block, height).map_err(internal)?;
+        }
+        let expected_mempool = wallet
+            .transactions()
+            .filter(|tx| tx.chain_position.is_unconfirmed())
+            .map(|tx| tx.tx_node.tx.clone())
+            .collect::<Vec<_>>();
+        sync_remote_core_mempool(rpc.as_ref(), wallet, &expected_mempool, Some(cancel))
+            .map_err(recovery_scan_error)?;
+        if cancel.load(Ordering::Acquire) {
+            return Err(api_error(
+                "scan_cancelled",
+                "Recovery scan cancelled. Start a new scan when you are ready.",
+            ));
+        }
+        wallet.persist(db).map_err(internal)?;
+        update_recovery_scan_progress(
+            db,
+            run_id,
+            target_height,
+            target_height
+                .saturating_sub(settings.birthday_height)
+                .saturating_add(1),
+        )?;
+        mark_observed_addresses(wallet, db)?;
+        return Ok(HashSet::new());
+    }
+
     let expected_mempool = wallet
         .transactions()
         .filter(|tx| tx.chain_position.is_unconfirmed())
@@ -6337,7 +6449,7 @@ fn full_rescan_loaded_wallet(
         if cancel.load(Ordering::Acquire) {
             return Err(api_error(
                 "scan_cancelled",
-                "Recovery scan cancelled. Saved progress remains safe; start it again to continue.",
+                "Recovery scan cancelled. Start a new scan when you are ready.",
             ));
         }
         next?
@@ -6345,7 +6457,7 @@ fn full_rescan_loaded_wallet(
         if cancel.load(Ordering::Acquire) {
             return Err(api_error(
                 "scan_cancelled",
-                "Recovery scan cancelled. Saved progress remains safe; start it again to continue.",
+                "Recovery scan cancelled. Start a new scan when you are ready.",
             ));
         }
         wallet
@@ -6358,14 +6470,14 @@ fn full_rescan_loaded_wallet(
     if cancel.load(Ordering::Acquire) {
         return Err(api_error(
             "scan_cancelled",
-            "Recovery scan cancelled. Saved progress remains safe; start it again to continue.",
+            "Recovery scan cancelled. Start a new scan when you are ready.",
         ));
     }
     let mempool_result = retry_transient_core_rpc(|| emitter.mempool(), std::thread::sleep);
     if cancel.load(Ordering::Acquire) {
         return Err(api_error(
             "scan_cancelled",
-            "Recovery scan cancelled. Saved progress remains safe; start it again to continue.",
+            "Recovery scan cancelled. Start a new scan when you are ready.",
         ));
     }
     let mempool = mempool_result?;

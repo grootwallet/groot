@@ -85,6 +85,18 @@ pub(super) fn reconcile_recovery_scan_record(
     let Some(mut record) = load_recovery_scan_record(db)? else {
         return Ok(None);
     };
+    // Cancellation is an explicit discard boundary. Older Groot builds kept a
+    // terminal `cancelled` row so a later scan could resume it; clear that
+    // legacy state on first observation so the next scan starts from the saved
+    // birthday and the modal cannot present stale progress.
+    if record.status.status == "cancelled" {
+        db.execute(
+            "DELETE FROM groot_recovery_scans WHERE singleton = 1 AND run_id = ?1",
+            params![record.run_id],
+        )
+        .map_err(internal)?;
+        return Ok(None);
+    }
     if matches!(record.status.status.as_str(), "running" | "cancelling")
         && active_run_id != Some(record.run_id.as_str())
     {
@@ -238,6 +250,24 @@ pub(super) fn finish_recovery_scan_record(
         Err(api_error(
             "scan_interrupted",
             "Recovery scan state changed unexpectedly. Start the scan again.",
+        ))
+    }
+}
+
+pub(super) fn discard_recovery_scan_record(db: &Connection, run_id: &str) -> ApiResult<()> {
+    let changed = db
+        .execute(
+            "DELETE FROM groot_recovery_scans
+             WHERE singleton = 1 AND run_id = ?1 AND status IN ('running', 'cancelling')",
+            params![run_id],
+        )
+        .map_err(internal)?;
+    if changed == 1 {
+        Ok(())
+    } else {
+        Err(api_error(
+            "scan_interrupted",
+            "Recovery scan state changed unexpectedly. Start a new scan.",
         ))
     }
 }

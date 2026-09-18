@@ -490,6 +490,22 @@ export const settingsCopy = {
     fr: 'Limite d’écart des adresses',
     es: 'Límite de intervalo de direcciones'
   },
+  'About the address gap limit': {
+    fr: 'À propos de la limite d’écart des adresses',
+    es: 'Acerca del límite de intervalo de direcciones'
+  },
+  'About wallet birthday blocks': {
+    fr: 'À propos des blocs de naissance du portefeuille',
+    es: 'Acerca de los bloques de nacimiento de la cartera'
+  },
+  'Birthday block must be at or below the current chain tip.': {
+    fr: 'Le bloc de naissance doit être inférieur ou égal à la pointe actuelle de la chaîne.',
+    es: 'El bloque de nacimiento debe ser igual o anterior a la punta actual de la cadena.'
+  },
+  'Current {network} chain tip: block {height}': {
+    fr: 'Pointe actuelle de la chaîne {network} : bloc {height}',
+    es: 'Punta actual de la cadena {network}: bloque {height}'
+  },
   'Amount display': { fr: 'Affichage des montants', es: 'Visualización de importes' },
   Authentication: { fr: 'Authentification', es: 'Autenticación' },
   'Automatic cookie authentication': {
@@ -645,6 +661,18 @@ export const settingsCopy = {
   'RPC URL': { fr: 'URL RPC', es: 'URL RPC' },
   'RPC username': { fr: 'Nom d’utilisateur RPC', es: 'Usuario RPC' },
   'Save & rescan': { fr: 'Enregistrer et analyser', es: 'Guardar y volver a escanear' },
+  'Full rescan cancelled': {
+    fr: 'Nouvelle analyse complète annulée',
+    es: 'Reescaneo completo cancelado'
+  },
+  'No scan progress was kept. The next full rescan will start fresh.': {
+    fr: 'Aucune progression n’a été conservée. La prochaine analyse complète repartira de zéro.',
+    es: 'No se conservó el progreso. El próximo reescaneo completo comenzará de nuevo.'
+  },
+  'Reading current chain tip…': {
+    fr: 'Lecture de la pointe actuelle de la chaîne…',
+    es: 'Leyendo la punta actual de la cadena…'
+  },
   'Save & test': { fr: 'Enregistrer et tester', es: 'Guardar y probar' },
   'Save a watch-only backup for independent recovery.': {
     fr: 'Enregistrez une sauvegarde d’observation pour une récupération indépendante.',
@@ -666,9 +694,9 @@ export const settingsCopy = {
     fr: 'Saisissez DELETE pour confirmer',
     es: 'Escribe DELETE para confirmar'
   },
-  'Use 0 when uncertain. Regtest scans are intentionally cheap.': {
-    fr: 'Utilisez 0 en cas de doute. Les analyses Regtest sont volontairement peu coûteuses.',
-    es: 'Usa 0 si no estás seguro. Los escaneos de Regtest son intencionadamente ligeros.'
+  'Use 0 when uncertain. Earlier scans are safer but take longer.': {
+    fr: 'Utilisez 0 en cas de doute. Une analyse plus ancienne est plus sûre, mais prend plus de temps.',
+    es: 'Usa 0 si no estás seguro. Un escaneo más antiguo es más seguro, pero tarda más.'
   },
   'Use an existing network setup': {
     fr: 'Utiliser une configuration réseau existante',
@@ -704,6 +732,16 @@ export const settingsCopy = {
     fr: 'Bloc de naissance du portefeuille',
     es: 'Bloque de nacimiento de la cartera'
   },
+  'The first block Groot will inspect. Choose a height at or before the wallet’s first possible payment.':
+    {
+      fr: 'Le premier bloc que Groot inspectera. Choisissez une hauteur antérieure ou égale au premier paiement possible du portefeuille.',
+      es: 'El primer bloque que Groot inspeccionará. Elige una altura igual o anterior al primer pago posible de la cartera.'
+    },
+  'How many consecutive unused addresses Groot derives while searching for wallet activity. Increase it only for wallets that revealed long unused address runs.':
+    {
+      fr: 'Nombre d’adresses inutilisées consécutives que Groot dérive lors de la recherche d’activité. Augmentez-le uniquement pour les portefeuilles ayant révélé de longues séries d’adresses inutilisées.',
+      es: 'Cuántas direcciones consecutivas sin usar deriva Groot al buscar actividad. Auméntalo solo para carteras que hayan revelado largas series de direcciones sin usar.'
+    },
   'Wallet deletion': { fr: 'Suppression du portefeuille', es: 'Eliminación de la cartera' },
   'Wallet details': { fr: 'Détails du portefeuille', es: 'Detalles de la cartera' },
   'Wallet name': { fr: 'Nom du portefeuille', es: 'Nombre de la cartera' },

@@ -418,6 +418,16 @@ pass, wallet-pending rechecks, eviction handling, confirmed-chain scan,
 descriptors, transaction interpretation, recovery semantics, and persisted
 formats. It adds no interoperability evidence.
 
+The fixed live-sync cadence, explicit-cancellation reset, rescan-modal guidance,
+and indexed remote full-rescan follow-up have no BIP support impact. Remote
+birthday/genesis scans reuse the already documented bounded `scanblocks`
+BIP158-index query and mempool-only `getdescriptoractivity` transport, download
+only matching full blocks, and retain the same BDK descriptor and transaction
+interpretation. The sparse verified target checkpoint and removal of the
+per-height HTTPS walk change transport performance only. Descriptor derivation,
+address discovery bounds, PSBTs, signing, wallet formats, and interoperability
+claims are unchanged.
+
 Every feature, interoperability, signer, descriptor, transaction, payment request,
 backup/recovery, sync/backend, network, or dependency change must assess BIP impact.
 If it adds, removes, expands, narrows, or changes evidence for a BIP:

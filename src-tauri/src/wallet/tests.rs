@@ -24,6 +24,7 @@ struct BlockFilterBatchFixture {
     block_hash: BlockHash,
     filter: GetBlockFilterResult,
     batches: Arc<AtomicU64>,
+    batch_methods: Arc<Mutex<Vec<String>>>,
     scan_params: Arc<Mutex<Vec<serde_json::Value>>>,
 }
 
@@ -155,6 +156,26 @@ impl BlockFilterBatchFixture {
             other => panic!("unexpected block-height parameters: {other:?}"),
         }
     }
+
+    fn block_info(&self) -> serde_json::Value {
+        serde_json::json!({
+            "hash": self.block_hash,
+            "confirmations": 1,
+            "size": 80,
+            "weight": 320,
+            "height": 1,
+            "version": 1,
+            "merkleroot": bdk_wallet::bitcoin::TxMerkleNode::all_zeros(),
+            "tx": [],
+            "time": 1,
+            "nonce": 0,
+            "bits": "207fffff",
+            "difficulty": 1.0,
+            "chainwork": "00",
+            "nTx": 0,
+            "previousblockhash": self.genesis
+        })
+    }
 }
 
 impl jsonrpc::client::Transport for BlockFilterBatchFixture {
@@ -200,6 +221,10 @@ impl jsonrpc::client::Transport for BlockFilterBatchFixture {
         requests: &[jsonrpc::Request<'_>],
     ) -> Result<Vec<jsonrpc::Response>, jsonrpc::Error> {
         self.batches.fetch_add(1, Ordering::Relaxed);
+        self.batch_methods
+            .lock()
+            .unwrap()
+            .extend(requests.iter().map(|request| request.method.to_owned()));
         requests
             .iter()
             .map(|request| match request.method {
@@ -208,6 +233,7 @@ impl jsonrpc::client::Transport for BlockFilterBatchFixture {
                     Self::response(request, serde_json::to_value(hash)?)
                 }
                 "getblockfilter" => Self::response(request, serde_json::to_value(&self.filter)?),
+                "getblock" => Self::response(request, self.block_info()),
                 other => panic!("unexpected fixture batch RPC: {other}"),
             })
             .collect()
@@ -287,6 +313,7 @@ fn core_filter_plan_batches_filters_and_keeps_matching_blocks() {
             filter: filter.content,
         },
         batches: Arc::clone(&batches),
+        batch_methods: Arc::new(Mutex::new(Vec::new())),
         scan_params: Arc::new(Mutex::new(Vec::new())),
     };
     let rpc = Client::from_jsonrpc(jsonrpc::client::Client::with_transport(fixture));
@@ -319,6 +346,7 @@ fn remote_core_scan_sends_only_bounded_raw_scripts_and_keeps_matching_blocks() {
     let genesis = genesis_block(Network::Regtest).block_hash();
     let block_hash = BlockHash::from_byte_array([7; 32]);
     let scan_params = Arc::new(Mutex::new(Vec::new()));
+    let batch_methods = Arc::new(Mutex::new(Vec::new()));
     let fixture = BlockFilterBatchFixture {
         genesis,
         block_hash,
@@ -327,6 +355,7 @@ fn remote_core_scan_sends_only_bounded_raw_scripts_and_keeps_matching_blocks() {
             filter: Vec::<u8>::new(),
         },
         batches: Arc::new(AtomicU64::new(0)),
+        batch_methods: Arc::clone(&batch_methods),
         scan_params: Arc::clone(&scan_params),
     };
     let rpc = Client::from_jsonrpc(jsonrpc::client::Client::with_transport(fixture));
@@ -357,6 +386,11 @@ fn remote_core_scan_sends_only_bounded_raw_scripts_and_keeps_matching_blocks() {
     assert_eq!(params[2], 1);
     assert_eq!(params[3], 1);
     assert_eq!(params[4], "basic");
+    assert_eq!(
+        batch_methods.lock().unwrap().as_slice(),
+        ["getblock"],
+        "the indexed remote path must not walk every height with batched getblockhash calls"
+    );
 }
 
 #[test]
@@ -1961,20 +1995,14 @@ fn recovery_scan_progress_is_persisted_and_terminal_transitions_are_guarded() {
     assert_eq!(progress.status.current_height, 34);
     assert_eq!(progress.status.processed_blocks, 25);
 
-    db.execute(
-        "UPDATE groot_recovery_scans SET status = 'cancelling' WHERE singleton = 1",
-        [],
-    )
-    .unwrap();
-    update_recovery_scan_progress(&db, "run-one", 35, 26).unwrap();
-    finish_recovery_scan_record(&db, "run-one", "cancelled").unwrap();
+    finish_recovery_scan_record(&db, "run-one", "completed").unwrap();
     assert_eq!(
         load_recovery_scan_record(&db)
             .unwrap()
             .unwrap()
             .status
             .status,
-        "cancelled"
+        "completed"
     );
     assert_eq!(
         update_recovery_scan_progress(&db, "run-one", 36, 27)
@@ -1991,7 +2019,7 @@ fn recovery_scan_progress_is_persisted_and_terminal_transitions_are_guarded() {
 }
 
 #[test]
-fn recovery_scan_resume_preserves_saved_progress_and_extends_the_target() {
+fn cancelled_recovery_scan_discards_progress_and_legacy_cancelled_state() {
     let db = Connection::open_in_memory().unwrap();
     init_app_schema(&db).unwrap();
     let settings = RecoveryScanSettingsDto {
@@ -2000,7 +2028,35 @@ fn recovery_scan_resume_preserves_saved_progress_and_extends_the_target() {
     };
     start_recovery_scan_record(&db, "first-run", &settings, 109).unwrap();
     update_recovery_scan_progress(&db, "first-run", 39, 30).unwrap();
-    finish_recovery_scan_record(&db, "first-run", "cancelled").unwrap();
+    db.execute(
+        "UPDATE groot_recovery_scans SET status = 'cancelling' WHERE singleton = 1",
+        [],
+    )
+    .unwrap();
+    discard_recovery_scan_record(&db, "first-run").unwrap();
+    assert!(load_recovery_scan_record(&db).unwrap().is_none());
+
+    start_recovery_scan_record(&db, "legacy-run", &settings, 109).unwrap();
+    db.execute(
+        "UPDATE groot_recovery_scans SET status = 'cancelled' WHERE singleton = 1",
+        [],
+    )
+    .unwrap();
+    assert!(reconcile_recovery_scan_record(&db, None).unwrap().is_none());
+    assert!(load_recovery_scan_record(&db).unwrap().is_none());
+}
+
+#[test]
+fn interrupted_recovery_scan_resume_preserves_saved_progress_and_extends_the_target() {
+    let db = Connection::open_in_memory().unwrap();
+    init_app_schema(&db).unwrap();
+    let settings = RecoveryScanSettingsDto {
+        birthday_height: 10,
+        gap_limit: 20,
+    };
+    start_recovery_scan_record(&db, "first-run", &settings, 109).unwrap();
+    update_recovery_scan_progress(&db, "first-run", 39, 30).unwrap();
+    finish_recovery_scan_record(&db, "first-run", "interrupted").unwrap();
 
     let previous = load_recovery_scan_record(&db).unwrap().unwrap().status;
     let resumed = resume_recovery_scan_record(&db, "second-run", &previous, 119).unwrap();

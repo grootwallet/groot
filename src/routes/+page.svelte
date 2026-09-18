@@ -150,7 +150,7 @@
   let savedRecoveryCanResume = $derived(
     initialHistoryRequired &&
       recoveryStatus.processedBlocks > 0 &&
-      ['cancelled', 'interrupted', 'failed'].includes(recoveryStatus.status)
+      ['interrupted', 'failed'].includes(recoveryStatus.status)
   );
   let scanCredentialLabel = $derived(
     selectedProfile?.kind === 'single_key'

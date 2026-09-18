@@ -1535,6 +1535,40 @@ code {
 .scan-form .field {
   margin: 0;
 }
+.scan-form .scan-tip {
+  color: var(--text-soft);
+  font-variant-numeric: tabular-nums;
+}
+.scan-form .field > .form-error {
+  color: var(--danger);
+}
+.scan-optional-control {
+  border-bottom: 1px solid var(--border);
+}
+.scan-optional-control > summary {
+  display: flex;
+  width: fit-content;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 0 12px;
+  color: var(--link);
+  font-size: var(--font-size-meta);
+  font-weight: 700;
+  cursor: pointer;
+  list-style: none;
+}
+.scan-optional-control > summary::-webkit-details-marker {
+  display: none;
+}
+.scan-optional-control > summary svg {
+  transition: transform 140ms ease;
+}
+.scan-optional-control[open] > summary svg {
+  transform: rotate(180deg);
+}
+.scan-optional-control > .field {
+  margin-bottom: 14px;
+}
 .scan-progress {
   display: grid;
   gap: 9px;
