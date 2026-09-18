@@ -428,6 +428,13 @@ per-height HTTPS walk change transport performance only. Descriptor derivation,
 address discovery bounds, PSBTs, signing, wallet formats, and interoperability
 claims are unchanged.
 
+The repeat-rescan checkpoint-continuity and terminal-state cleanup correction has
+no BIP support impact. It connects a new birthday anchor to the highest retained
+Core-verified BDK checkpoint and discards failed, cancelled, or interrupted
+progress presentation before an authoritative retry. Descriptor derivation,
+address discovery, BIP158 matching, transaction interpretation, PSBTs, signing,
+wallet formats, and interoperability claims are unchanged.
+
 Every feature, interoperability, signer, descriptor, transaction, payment request,
 backup/recovery, sync/backend, network, or dependency change must assess BIP impact.
 If it adds, removes, expands, narrows, or changes evidence for a BIP:

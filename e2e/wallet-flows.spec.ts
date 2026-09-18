@@ -1633,7 +1633,23 @@ test('recovery scan and private network controls preserve explicit safety choice
   await recoveryScan.getByRole('spinbutton', { name: 'Wallet birthday block' }).fill('0');
   await recoveryScan.getByText('Address discovery options', { exact: true }).click();
   await recoveryScan.getByRole('button', { name: 'About the address gap limit' }).hover();
-  await expect(page.getByRole('tooltip')).toContainText('consecutive unused addresses');
+  const gapTooltip = page.getByRole('tooltip');
+  await expect(gapTooltip).toContainText('consecutive unused addresses');
+  const [dialogBox, tooltipBox] = await Promise.all([
+    recoveryScan.boundingBox(),
+    gapTooltip.boundingBox()
+  ]);
+  if ((page.viewportSize()?.width ?? 0) > 760) {
+    expect(tooltipBox?.x ?? -1).toBeGreaterThanOrEqual(dialogBox?.x ?? 0);
+    expect((tooltipBox?.x ?? 0) + (tooltipBox?.width ?? 0)).toBeLessThanOrEqual(
+      (dialogBox?.x ?? 0) + (dialogBox?.width ?? 0)
+    );
+  } else {
+    expect(tooltipBox?.x ?? -1).toBeGreaterThanOrEqual(0);
+    expect((tooltipBox?.x ?? 0) + (tooltipBox?.width ?? 0)).toBeLessThanOrEqual(
+      page.viewportSize()?.width ?? 0
+    );
+  }
   await recoveryScan.getByRole('spinbutton', { name: 'Address gap limit' }).fill('19');
   await page.getByLabel('Wallet passphrase', { exact: true }).fill('prototype-passphrase');
   await expect(recoveryScan.getByRole('button', { name: 'Save & rescan' })).toBeDisabled();
@@ -1685,6 +1701,26 @@ test('recovery scan and private network controls preserve explicit safety choice
   await coreDialog.getByLabel('Wallet passphrase', { exact: true }).fill('prototype-passphrase');
   await coreDialog.getByRole('button', { name: 'Save & test' }).click();
   await expect(page.getByText(/Trusted remote server/)).toBeVisible();
+});
+
+test('failed recovery scans discard stale progress before retry', async ({ page }) => {
+  await page.goto('/settings?fixture-recovery-scan-failure=1');
+  await page.getByRole('button', { name: /Recovery scan/ }).click();
+  let recoveryScan = page.getByRole('dialog', { name: 'Full wallet rescan' });
+  await recoveryScan.getByLabel('Wallet passphrase', { exact: true }).fill('prototype-passphrase');
+  await recoveryScan.getByRole('button', { name: 'Save & rescan' }).click();
+
+  await expect(recoveryScan.getByRole('alert')).toContainText('Full rescan failed');
+  await expect(
+    recoveryScan.getByRole('progressbar', { name: 'Recovery scan progress' })
+  ).toHaveCount(0);
+  await expect(recoveryScan.getByText(/blocks processed/)).toHaveCount(0);
+
+  await recoveryScan.getByText('Close', { exact: true }).click();
+  await page.getByRole('button', { name: /Recovery scan/ }).click();
+  recoveryScan = page.getByRole('dialog', { name: 'Full wallet rescan' });
+  await expect(recoveryScan.getByRole('alert')).toHaveCount(0);
+  await expect(recoveryScan.getByText(/blocks processed/)).toHaveCount(0);
 });
 
 test('first Bitcoin Core scan starts automatically without requesting a passphrase', async ({

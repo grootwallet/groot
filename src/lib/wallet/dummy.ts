@@ -546,6 +546,19 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
       startedAt,
       updatedAt: startedAt
     };
+    if (
+      typeof location !== 'undefined' &&
+      new URLSearchParams(location.search).has('fixture-recovery-scan-failure')
+    ) {
+      this._scanStatus = {
+        ...this._scanStatus,
+        status: 'failed',
+        currentHeight: this._scanSettings.birthdayHeight,
+        processedBlocks: 1,
+        updatedAt: Math.floor(Date.now() / 1000)
+      };
+      throw new WalletError('internal_error', 'The recovery scan could not be completed.');
+    }
     const holdForCancellation = this._holdFirstRecoveryScan && this._recoveryScanAttempts === 0;
     this._recoveryScanAttempts += 1;
     while (holdForCancellation && this._scanStatus.status === 'running') {

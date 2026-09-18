@@ -1291,12 +1291,25 @@ fn recovery_scan_anchors_immediately_before_the_birthday() {
     ));
     let client = build_rpc_client(&endpoint, Auth::None, None).unwrap();
     let genesis = genesis_block(Network::Bitcoin).block_hash();
-    let checkpoint = recovery_scan_checkpoint(&client, genesis, 965_600).unwrap();
+    let genesis_checkpoint = CheckPoint::new(BlockId {
+        height: 0,
+        hash: genesis,
+    });
+    let retained_hash = "2222222222222222222222222222222222222222222222222222222222222222"
+        .parse()
+        .unwrap();
+    let retained = genesis_checkpoint
+        .push(BlockId {
+            height: 960_000,
+            hash: retained_hash,
+        })
+        .unwrap();
+    let checkpoint = recovery_scan_checkpoint(&client, retained, 965_600).unwrap();
     assert_eq!(checkpoint.height(), 965_599);
     assert_eq!(checkpoint.hash().to_string(), anchor_hash);
     let base = checkpoint.prev().unwrap();
-    assert_eq!(base.height(), 0);
-    assert_eq!(base.hash(), genesis);
+    assert_eq!(base.height(), 960_000);
+    assert_eq!(base.hash(), retained_hash);
 }
 
 #[test]
@@ -2047,7 +2060,7 @@ fn cancelled_recovery_scan_discards_progress_and_legacy_cancelled_state() {
 }
 
 #[test]
-fn interrupted_recovery_scan_resume_preserves_saved_progress_and_extends_the_target() {
+fn incomplete_recovery_scan_records_are_discarded_before_a_fresh_retry() {
     let db = Connection::open_in_memory().unwrap();
     init_app_schema(&db).unwrap();
     let settings = RecoveryScanSettingsDto {
@@ -2058,21 +2071,22 @@ fn interrupted_recovery_scan_resume_preserves_saved_progress_and_extends_the_tar
     update_recovery_scan_progress(&db, "first-run", 39, 30).unwrap();
     finish_recovery_scan_record(&db, "first-run", "interrupted").unwrap();
 
-    let previous = load_recovery_scan_record(&db).unwrap().unwrap().status;
-    let resumed = resume_recovery_scan_record(&db, "second-run", &previous, 119).unwrap();
-    assert_eq!(resumed.status, "running");
-    assert_eq!(resumed.current_height, 39);
-    assert_eq!(resumed.processed_blocks, 30);
-    assert_eq!(resumed.total_blocks, 110);
-    assert_eq!(resumed.started_at, previous.started_at);
+    assert!(reconcile_recovery_scan_record(&db, None).unwrap().is_none());
+    assert!(load_recovery_scan_record(&db).unwrap().is_none());
+
+    let restarted = start_recovery_scan_record(&db, "second-run", &settings, 119).unwrap();
+    assert_eq!(restarted.status, "running");
+    assert_eq!(restarted.current_height, 9);
+    assert_eq!(restarted.processed_blocks, 0);
+    assert_eq!(restarted.total_blocks, 110);
     let persisted = load_recovery_scan_record(&db).unwrap().unwrap();
     assert_eq!(persisted.run_id, "second-run");
-    assert_eq!(persisted.status.current_height, 39);
-    assert_eq!(persisted.status.processed_blocks, 30);
+    assert_eq!(persisted.status.current_height, 9);
+    assert_eq!(persisted.status.processed_blocks, 0);
 }
 
 #[test]
-fn recovery_scan_restart_marks_persisted_work_interrupted() {
+fn recovery_scan_restart_discards_persisted_partial_work() {
     let directory = std::env::temp_dir().join(format!("groot-scan-restart-{}", Uuid::new_v4()));
     fs::create_dir_all(&directory).unwrap();
     let path = directory.join("wallet.sqlite");
@@ -2093,11 +2107,8 @@ fn recovery_scan_restart_marks_persisted_work_interrupted() {
     {
         let db = Connection::open(&path).unwrap();
         init_app_schema(&db).unwrap();
-        let interrupted = reconcile_recovery_scan_record(&db, None).unwrap().unwrap();
-        assert_eq!(interrupted.run_id, "persisted-run");
-        assert_eq!(interrupted.status.status, "interrupted");
-        assert_eq!(interrupted.status.current_height, 124);
-        assert_eq!(interrupted.status.processed_blocks, 25);
+        assert!(reconcile_recovery_scan_record(&db, None).unwrap().is_none());
+        assert!(load_recovery_scan_record(&db).unwrap().is_none());
     }
     fs::remove_dir_all(directory).unwrap();
 }

@@ -1486,17 +1486,11 @@ pub async fn wallet_full_rescan(
             enqueue_snapshot_notifications(&db, &snapshot)?;
             Ok(snapshot)
         })();
-        let terminal_status = match &scan_result {
-            Ok(_) => "completed",
-            Err(error) if error.code == "scan_cancelled" => "cancelled",
-            Err(_) => "failed",
-        };
         let finish_result = load_recovery_scan_record(&db).and_then(|record| {
             if record.is_some_and(|record| record.run_id == run_id) {
-                if terminal_status == "cancelled" {
-                    discard_recovery_scan_record(&db, &run_id)
-                } else {
-                    finish_recovery_scan_record(&db, &run_id, terminal_status)
+                match &scan_result {
+                    Ok(_) => finish_recovery_scan_record(&db, &run_id, "completed"),
+                    Err(_) => discard_recovery_scan_record(&db, &run_id),
                 }
             } else {
                 Ok(())

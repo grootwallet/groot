@@ -23,4 +23,19 @@ describe('full rescan result presentation', () => {
     expect(close).toBeGreaterThan(observationalCatch);
     expect(success).toBeGreaterThan(close);
   });
+
+  it('clears failed progress instead of reloading a stale scan range', () => {
+    const failure = settings.indexOf(
+      "scanError = localizedError(cause, $locale, 'The full rescan failed.');"
+    );
+    const reset = settings.indexOf('scanStatus = idleScanStatus();', failure);
+    const progressCondition = settings.indexOf(
+      "{#if scanning || scanStatus.status === 'cancelling'}"
+    );
+
+    expect(failure).toBeGreaterThan(-1);
+    expect(reset).toBeGreaterThan(failure);
+    expect(progressCondition).toBeGreaterThan(-1);
+    expect(settings).not.toContain("['cancelling', 'cancelled', 'interrupted', 'failed']");
+  });
 });

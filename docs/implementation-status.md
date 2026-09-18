@@ -892,3 +892,19 @@ proposal, backup, node-setting, dependency, or schema format; legacy terminal
 `cancelled` run rows are safely deleted when first observed. Exact-package
 Mainnet full-scan timing, cancellation/reset, route-independent cadence, and
 hardware certification remain owner acceptance gates.
+
+The exact `be20f19` Mainnet owner run proved the indexed remote path could
+complete, then exposed a repeat-rescan checkpoint discontinuity: a later
+birthday anchor was constructed from genesis rather than the highest retained
+BDK checkpoint, so BDK correctly rejected the introduced sparse chain. The
+correction verifies that retained checkpoint against Core and extends it to the
+new anchor before applying the indexed result. It also supersedes partial-run
+resume behavior: cancelled, failed, and process-interrupted scan rows are
+discarded, retries begin at zero from the saved birthday, and the Settings modal
+never displays a stale prior range. The gap-limit tooltip is contained within
+the rescan dialog. The remote transport remains one bounded `scanblocks` range,
+matching-block downloads only, and one bounded descriptor-activity mempool pass;
+no per-height HTTPS walk was reintroduced. No wallet, registry, descriptor,
+proposal, backup, node-setting, dependency, DTO, or schema format changes; no
+migration is required. Exact replacement-package repeat-scan timing and
+Mainnet hardware certification remain owner acceptance gates.

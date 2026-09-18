@@ -231,6 +231,18 @@
       scanStatus.totalBlocks > 0 &&
       scanStatus.processedBlocks >= scanStatus.totalBlocks
   );
+  function idleScanStatus(): RecoveryScanStatus {
+    return {
+      status: 'idle',
+      ...scan,
+      currentHeight: 0,
+      targetHeight: 0,
+      processedBlocks: 0,
+      totalBlocks: 0,
+      startedAt: 0,
+      updatedAt: 0
+    };
+  }
   let verifyOpen = $state(false),
     verifyCredential = $state(''),
     verifyError = $state(''),
@@ -848,16 +860,7 @@
       });
     } catch (cause) {
       if (cause instanceof WalletError && cause.code === 'scan_cancelled') {
-        scanStatus = {
-          status: 'idle',
-          ...scan,
-          currentHeight: 0,
-          targetHeight: 0,
-          processedBlocks: 0,
-          totalBlocks: 0,
-          startedAt: 0,
-          updatedAt: 0
-        };
+        scanStatus = idleScanStatus();
         scanOpen = false;
         toast({
           title: 'Full rescan cancelled',
@@ -869,11 +872,7 @@
       scanError = localizedError(cause, $locale, 'The full rescan failed.');
       scanErrorCode = cause instanceof WalletError ? cause.code : 'internal_error';
       scanErrorDetails = cause instanceof WalletError ? cause.details : null;
-      try {
-        scanStatus = await walletService.recoveryScanStatus();
-      } catch {
-        /* Keep the original failure. */
-      }
+      scanStatus = idleScanStatus();
     } finally {
       if (scanPoll) clearTimeout(scanPoll);
       scanPoll = undefined;
@@ -926,16 +925,7 @@
     scanDraft = { ...scan };
     scanOptionsOpen = false;
     if (!['running', 'cancelling'].includes(scanStatus.status)) {
-      scanStatus = {
-        status: 'idle',
-        ...scan,
-        currentHeight: 0,
-        targetHeight: 0,
-        processedBlocks: 0,
-        totalBlocks: 0,
-        startedAt: 0,
-        updatedAt: 0
-      };
+      scanStatus = idleScanStatus();
     }
     scanOpen = true;
     void refreshScanTip();
@@ -2181,7 +2171,7 @@
       autocomplete="current-password"
       disabled={scanning}
     />
-    {#if scanning || ['cancelling', 'cancelled', 'interrupted', 'failed'].includes(scanStatus.status)}
+    {#if scanning || scanStatus.status === 'cancelling'}
       <div class="scan-progress" role="status" aria-live="polite">
         <div>
           <strong
@@ -2189,17 +2179,11 @@
               $locale,
               scanStatus.status === 'cancelling'
                 ? 'Cancelling safely…'
-                : scanStatus.status === 'interrupted'
-                  ? 'Previous scan interrupted'
-                  : scanStatus.status === 'cancelled'
-                    ? 'Scan cancelled'
-                    : scanStatus.status === 'failed'
-                      ? 'Previous scan failed'
-                      : scanCheckingPending
-                        ? 'Checking pending transactions…'
-                        : translate($locale, 'Scanning blocks · {percent}%', {
-                            percent: scanPercent
-                          })
+                : scanCheckingPending
+                  ? 'Checking pending transactions…'
+                  : translate($locale, 'Scanning blocks · {percent}%', {
+                      percent: scanPercent
+                    })
             )}</strong
           ><small
             >{formatInteger(scanStatus.processedBlocks, $locale)} of {formatInteger(

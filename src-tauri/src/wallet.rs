@@ -2818,22 +2818,23 @@ fn ensure_recovery_scan_history_available(
 
 fn recovery_scan_checkpoint(
     client: &Client,
-    genesis: BlockHash,
+    retained_checkpoint: CheckPoint,
     birthday_height: u32,
 ) -> ApiResult<CheckPoint> {
     let anchor_height = recovery_scan_anchor_height(birthday_height);
-    let genesis_checkpoint = CheckPoint::new(BlockId {
-        height: 0,
-        hash: genesis,
-    });
-    if anchor_height == 0 {
-        return Ok(genesis_checkpoint);
+    if retained_checkpoint.height() > anchor_height {
+        return Err(internal(
+            "The retained wallet checkpoint is above the recovery scan anchor.",
+        ));
+    }
+    if retained_checkpoint.height() == anchor_height {
+        return Ok(retained_checkpoint);
     }
     let anchor_hash = retry_transient_core_rpc(
         || client.get_block_hash(u64::from(anchor_height)),
         std::thread::sleep,
     )?;
-    genesis_checkpoint
+    retained_checkpoint
         .push(BlockId {
             height: anchor_height,
             hash: anchor_hash,
@@ -6289,7 +6290,7 @@ fn full_rescan_loaded_wallet(
     run_id: &str,
     cancel: &AtomicBool,
 ) -> ApiResult<HashSet<Txid>> {
-    let (chain, genesis) = checked_core_chain(rpc.as_ref())?;
+    let (chain, _) = checked_core_chain(rpc.as_ref())?;
     let tip = chain.blocks;
     ensure_core_ready_for_wallet_history(
         tip,
@@ -6309,52 +6310,24 @@ fn full_rescan_loaded_wallet(
     )?;
     let target_height = u32::try_from(tip)
         .map_err(|_| internal("The node height exceeds the supported recovery range."))?;
-    let previous = reconcile_recovery_scan_record(db, None)?.map(|record| record.status);
-    let resumable = previous.as_ref().filter(|status| {
-        matches!(status.status.as_str(), "interrupted" | "failed")
-            && status.birthday_height == settings.birthday_height
-            && status.gap_limit == settings.gap_limit
-            && status.processed_blocks > 0
-            && status.current_height <= target_height
-    });
-    let resume_checkpoint = resumable.and_then(|status| {
-        wallet
-            .latest_checkpoint()
-            .get(status.current_height)
-            .map(|checkpoint| (status, checkpoint))
-    });
-    let resume_checkpoint = match resume_checkpoint {
-        Some((status, checkpoint)) => {
-            let current_hash = retry_transient_core_rpc(
-                || rpc.get_block_hash(u64::from(status.current_height)),
-                std::thread::sleep,
-            )?;
-            (current_hash == checkpoint.hash()).then_some((status, checkpoint))
-        }
-        None => None,
-    };
-    let (checkpoint, start_height, mut processed_blocks) =
-        if let Some((status, checkpoint)) = resume_checkpoint {
-            resume_recovery_scan_record(db, run_id, status, target_height)?;
-            (
-                checkpoint,
-                status.current_height.saturating_add(1).min(target_height),
-                status.processed_blocks,
-            )
-        } else {
-            start_recovery_scan_record(db, run_id, settings, target_height)?;
-            (
-                recovery_scan_checkpoint(rpc.as_ref(), genesis, settings.birthday_height)?,
-                settings.birthday_height,
-                0,
-            )
-        };
+    reconcile_recovery_scan_record(db, None)?;
+    start_recovery_scan_record(db, run_id, settings, target_height)?;
+    let start_height = settings.birthday_height;
+    let mut processed_blocks: u32 = 0;
+    let anchor_height = recovery_scan_anchor_height(settings.birthday_height);
     db.execute(
         "DELETE FROM bdk_blocks WHERE block_height > ?1",
-        params![checkpoint.height()],
+        params![anchor_height],
     )
     .map_err(internal)?;
     *wallet = load_wallet(db)?;
+    // A recovery anchor must extend a checkpoint already retained by the
+    // wallet. Building an otherwise-correct genesis+anchor chain is ambiguous
+    // to BDK after a previous sparse scan because it may share no exact
+    // checkpoint with the persisted local chain.
+    let (retained_checkpoint, _) = rewind_stale_core_checkpoints(rpc.as_ref(), wallet)?;
+    let checkpoint =
+        recovery_scan_checkpoint(rpc.as_ref(), retained_checkpoint, settings.birthday_height)?;
     wallet
         .apply_update(Update {
             chain: Some(checkpoint.clone()),

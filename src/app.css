@@ -151,6 +151,15 @@ a[aria-disabled='true'] {
   visibility: visible;
   transform: translate(-50%, 0);
 }
+.scan-form .insight-tip > span {
+  left: 0;
+  transform: translate(0, 4px);
+}
+.scan-form .insight-tip:hover > span,
+.scan-form .insight-tip > button:focus-visible + span,
+.scan-form .insight-tip.open > span {
+  transform: translate(0, 0);
+}
 @media (hover: hover) and (pointer: fine) {
   .insight-tip > button {
     cursor: help;
