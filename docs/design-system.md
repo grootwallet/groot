@@ -77,7 +77,7 @@ The desktop rail ends with a quiet, tabular-numeric native build identity (`Groo
 
 Required review sizes are 1180×780 and 390×844. At mobile width, content must have no horizontal overflow, long identifiers must truncate or wrap, and actions must remain above the keyboard/safe area.
 
-Transaction-review action grids respond to the width of their own card, not only the window. They use three columns when the card is spacious, two at compact desktop widths, and one on mobile. Action labels remain concise and on one line; shrinking a card must never create stacked word fragments or horizontal overflow.
+Transaction-review action grids respond to the width of their own card, not only the window. They use three columns when the card is spacious, two at compact desktop widths, and one on mobile. Action labels remain concise and on one line; shrinking a card must never create stacked word fragments or horizontal overflow. The compact **View more details** disclosure is separated by spacing rather than a decorative divider.
 
 ## Components and states
 
@@ -106,6 +106,8 @@ durable retry surface and must never display a hardware wallet as a software sig
 - Hardware device discovery uses `HardwareDeviceList`; flows supply their selection action, empty-state guidance, and whether readiness or rescan presentation is needed.
 - Modals: one decision or compact data-entry task; Escape/backdrop close; destructive confirmation names the consequence.
 - Long modal bodies scroll independently while their headers remain visible. Nested or rapidly replaced dialogs must restore document scrolling after the last dialog closes.
+- Desktop dialogs re-anchor to the visible viewport after window or fullscreen resizing; the backdrop must continue covering the complete viewport and actions must remain reachable through the internal scroll body.
+- Hardware policy signing review shows only the step, saved signer identity, device account/policy values, optional signer keys, first-address reference, and primary action. Address-detail dialogs show one copy-safe spacing note and do not repeat the same comparison guidance below it.
 - A modal whose optional details change its height preserves its initial desktop top edge so expansion grows downward instead of making the whole dialog jump. On mobile, expandable modals begin at the safe top inset and retain that position.
 - Status chips: network, threshold, signer readiness, confirmation state. Color is never the only signal.
 - Wallet labels use the shared `PermanentLabelTags` component everywhere they identify a receive request, payment intent, transaction, coin, or provenance source. They are compact rounded rectangles rather than status pills, wrap without widening their row, preserve every Rust-derived inherited label, and collapse to one neutral **Labels hidden** tag in discreet mode. Never flatten multiple labels into punctuation-separated prose. Signer, device, and wallet names remain ordinary text because they are identities rather than wallet labels.

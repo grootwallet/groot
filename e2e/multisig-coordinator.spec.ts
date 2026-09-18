@@ -538,8 +538,15 @@ test('spends end-to-end from the ready-made demo wallet', async ({ page }) => {
   await unsignedQrDialog.getByRole('button', { name: 'Close' }).click();
   await page.getByRole('button', { name: 'Sign with device' }).click();
   const hardwareDialog = page.getByRole('dialog', { name: 'Sign with hardware' });
+  await expect(hardwareDialog.getByRole('button', { name: /Virtual Ledger outsider/ })).toHaveCSS(
+    'cursor',
+    'pointer'
+  );
   await expect(hardwareDialog.getByText('Fee rate', { exact: true })).toBeHidden();
-  await hardwareDialog.getByText('View more details', { exact: true }).click();
+  const moreDetails = hardwareDialog.getByText('View more details', { exact: true });
+  await expect(moreDetails).toHaveCSS('cursor', 'pointer');
+  await expect(moreDetails.locator('xpath=..')).toHaveCSS('border-top-width', '0px');
+  await moreDetails.click();
   await expect(hardwareDialog.getByText('Fee rate', { exact: true })).toBeVisible();
   await expect(hardwareDialog.getByText('Transaction inputs', { exact: true })).toHaveCount(0);
   await hardwareDialog.getByRole('button', { name: /Virtual Ledger outsider/ }).click();
@@ -1538,13 +1545,38 @@ test('creates and verifies a simple 2-of-3 descriptor wallet', async ({ page }) 
     signingPolicyReview.getByText('Reject if any value differs on Ledger.')
   ).toBeVisible();
   await expect(
-    signingPolicyReview.getByText('Review all signer public keys', { exact: true })
+    signingPolicyReview.getByText('Signer keys to compare', { exact: true })
   ).toBeVisible();
+  await expect(signingPolicyReview).not.toContainText(
+    'current Ledger connection must authorize this policy again'
+  );
+  await expect(signingPolicyReview).not.toContainText('Do not fund this address directly');
+  await expect(signingPolicyReview).toBeInViewport();
+  expect(
+    await signingPolicyReview.evaluate((dialog) => {
+      const bounds = dialog.getBoundingClientRect();
+      return bounds.top >= 0 && bounds.bottom <= window.innerHeight;
+    })
+  ).toBe(true);
+  if ((page.viewportSize()?.width ?? 1180) > 760) {
+    await page.setViewportSize({ width: 1728, height: 1117 });
+    await expect(signingPolicyReview).toBeInViewport();
+    expect(
+      await signingPolicyReview.evaluate((dialog) => {
+        const bounds = dialog.getBoundingClientRect();
+        return bounds.top >= 0 && bounds.bottom <= window.innerHeight;
+      })
+    ).toBe(true);
+  }
   await expect(
     signingPolicyReview.getByLabel('I compared the threshold and every signer key')
   ).toHaveCount(0);
   await signingPolicyReview.getByRole('button', { name: 'Review on Ledger' }).click();
-  await signingPolicyReview.getByRole('button', { name: 'Start Ledger review & signing' }).click();
+  await expect(signingPolicyReview.getByText('Policy reference saved in Groot')).toBeVisible();
+  await signingPolicyReview.getByRole('button', { name: 'Review & sign on Ledger' }).click();
+  await signingPolicyReview
+    .getByRole('button', { name: 'Wallet policy reviewed — show transaction' })
+    .click();
   await expect(signingPolicyReview).toBeHidden();
   await expect(paymentSigners.getByText('1 of 2 collected')).toBeVisible();
   await page.getByRole('button', { name: 'Sign with device' }).click();

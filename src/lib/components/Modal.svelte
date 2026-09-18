@@ -74,15 +74,22 @@
     if (!open || typeof document === 'undefined') return;
     const previousFocus =
       document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    documentTop = window.scrollY - 32;
+    updateDocumentTop();
     const releaseScrollLock = lockModalScroll(document);
+    window.addEventListener('resize', updateDocumentTop);
+    window.addEventListener('scroll', updateDocumentTop);
+    window.visualViewport?.addEventListener('resize', updateDocumentTop);
     queueMicrotask(() => {
+      updateDocumentTop();
       const first = dialog?.querySelector<HTMLElement>(
         'button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [href], [tabindex]:not([tabindex="-1"])'
       );
       (first ?? dialog)?.focus();
     });
     return () => {
+      window.removeEventListener('resize', updateDocumentTop);
+      window.removeEventListener('scroll', updateDocumentTop);
+      window.visualViewport?.removeEventListener('resize', updateDocumentTop);
       releaseScrollLock();
       previousFocus?.focus();
     };
@@ -114,6 +121,10 @@
       event.preventDefault();
       first.focus();
     }
+  }
+
+  function updateDocumentTop() {
+    documentTop = window.scrollY - 32;
   }
 </script>
 

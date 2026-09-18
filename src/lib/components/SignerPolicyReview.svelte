@@ -93,13 +93,13 @@
         )}</strong
       >
       <small
-        >{#if verification}{translate(
+        >{#if verification && action === 'sign'}{translate($locale, 'Signer')}
+          <code>{verification.signerFingerprint}</code>{:else if verification}{translate(
             $locale,
             kind === 'ledger' ? 'Previously compared' : 'Verified'
           )}
-          <LocalTimestamp value={verification.verifiedAt} />
-          {translate($locale, 'with signer')}
-          <code>{verification.signerFingerprint}</code>.{:else}{translate(
+          <LocalTimestamp value={verification.verifiedAt} /> ·
+          <code>{verification.signerFingerprint}</code>{:else}{translate(
             $locale,
             'Reject if any value differs on'
           )}
@@ -126,21 +126,8 @@
         </div>
       </dl>
       <p>
-        {translate($locale, 'Ledger may label the keys @0 through @')}{wallet.cosigners.length - 1}
-        {translate(
-          $locale,
-          'in a different order. Match\n        the complete values, not the position.'
-        )}
+        {translate($locale, 'Compare every signer key and the first address on Ledger.')}
       </p>
-      {#if verification}<p class="policy-repeat-note">
-          {translate(
-            $locale,
-            "Groot's current Ledger connection must authorize this policy again for each signing\n          request. Keep this reference open until Ledger reaches the transaction."
-          )}
-        </p>{/if}
-      {#if action === 'sign'}<p>
-          {translate($locale, 'Review all signer public keys below while Ledger shows each key.')}
-        </p>{/if}
     </div>
   {:else if isBitBox}
     <div class="policy-device-warning">
@@ -171,11 +158,8 @@
     }}
   >
     <summary
-      ><span
-        ><strong>{translate($locale, 'Review all signer public keys')}</strong><small
-          >{translate($locale, 'Open while reviewing the values shown by the device.')}</small
-        ></span
-      ><span class="policy-signer-details-state"
+      ><span><strong>{translate($locale, 'Signer keys to compare')}</strong></span><span
+        class="policy-signer-details-state"
         ><em
           >{translate(
             $locale,
@@ -194,13 +178,13 @@
           $locale,
           isBitBox ? 'Address shown after registration' : 'First address reference'
         )}</strong
-      ><small
-        >{isBitBox
-          ? translate($locale, '{device} shows this after policy approval.', {
-              device: deviceName
-            })
-          : translate($locale, 'Compare this when it appears on the device.')}</small
-      >
+      >{#if action !== 'sign'}<small
+          >{isBitBox
+            ? translate($locale, '{device} shows this after policy approval.', {
+                device: deviceName
+              })
+            : translate($locale, 'Compare this when it appears on the device.')}</small
+        >{/if}
     </div>
     <button
       type="button"
@@ -217,10 +201,7 @@
         oncopy={copyAddress}
       />{/if}
     <small class="policy-address-purpose">
-      {translate(
-        $locale,
-        'Verification reference only. Do not fund this address directly; after the wallet is created,\n      use Receive to create a permanently labeled payment request.'
-      )}
+      {translate($locale, 'Verification only. Create payment addresses in Receive.')}
     </small>
     {#if testnetAddressDevice}<small
         >{testnetAddressDevice}
@@ -254,7 +235,7 @@
         >{translate($locale, 'Wallet policy reviewed — show transaction')}</Button
       >
     {:else}<Button onclick={oncontinue}
-        >{translate($locale, 'Start')} {deviceName} {translate($locale, 'review & signing')}</Button
+        >{translate($locale, 'Review & sign on {device}', { device: deviceName })}</Button
       >{/if}
   </div>
 </section>

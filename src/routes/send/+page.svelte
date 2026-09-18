@@ -2334,7 +2334,8 @@
   label={translate($locale, proposal?.label ?? '')}
   labels={proposal?.labels ?? (proposal ? [proposal.label] : [])}
   title={translate($locale, 'Address shown on hardware')}
-  description={translate($locale, 'Compare this exact encoding with the hardware device.')}
+  description=""
+  detail=""
   onclose={() => (hardwareAddressOpen = false)}
 />
 <RecipientAddressModal

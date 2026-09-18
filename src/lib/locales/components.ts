@@ -355,6 +355,14 @@ export const componentCopy = {
     fr: 'Comparez-la lorsqu’elle apparaît sur l’appareil.',
     es: 'Compárala cuando aparezca en el dispositivo.'
   },
+  'Compare every signer key and the first address on Ledger.': {
+    fr: 'Comparez chaque clé de signataire et la première adresse sur Ledger.',
+    es: 'Compara cada clave de firmante y la primera dirección en Ledger.'
+  },
+  'Review & sign on {device}': {
+    fr: 'Vérifier et signer sur {device}',
+    es: 'Revisar y firmar en {device}'
+  },
   '{device} shows this after policy approval.': {
     fr: '{device} l’affiche après l’approbation de la politique.',
     es: '{device} la muestra después de aprobar la política.'
@@ -443,6 +451,10 @@ export const componentCopy = {
       fr: 'Référence de vérification uniquement. N’alimentez pas cette adresse directement ; après la création du portefeuille, utilisez Recevoir pour créer une demande de paiement avec un libellé permanent.',
       es: 'Solo como referencia de verificación. No envíes fondos directamente a esta dirección; tras crear la cartera, usa Recibir para crear una solicitud de pago con etiqueta permanente.'
     },
+  'Verification only. Create payment addresses in Receive.': {
+    fr: 'Vérification uniquement. Créez les adresses de paiement dans Recevoir.',
+    es: 'Solo para verificación. Crea las direcciones de pago en Recibir.'
+  },
   'Verified on hardware': { fr: 'Vérifiée sur le matériel', es: 'Verificada en el dispositivo' },
   'View completed step': { fr: 'Afficher l’étape terminée', es: 'Ver paso completado' },
   'View on mempool.space': { fr: 'Afficher sur mempool.space', es: 'Ver en mempool.space' },

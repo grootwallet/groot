@@ -311,3 +311,16 @@ test.
 
 This updates the test resume point; it does not mark the seven-model matrix or
 Mainnet distribution gate complete.
+
+## 2026-09-18 exact `a393a0e7` owner-operated 2-of-3 checkpoint
+
+The release owner reports that internal Mainnet build `v0.4.95 · a393a0e7`
+completed a standard 2-of-3 payment with Ledger Nano S Plus and BitBox02 Nova
+Bitcoin-only. Groot collected both signatures and displayed successful Bitcoin
+network broadcast. This closes the happy-path signing and broadcast row for
+that exact package and signer pair only. It does not transfer to the pending
+replacement build and does not close confirmation, restart reconciliation,
+rejection, disconnect/reconnect, wrong-device, altered/foreign/stale-PSBT,
+clean-profile recovery, exact-firmware capture, or independent-review rows.
+No amount, address, transaction identifier, fingerprint, descriptor, PSBT,
+device path, credential, or node detail is retained.

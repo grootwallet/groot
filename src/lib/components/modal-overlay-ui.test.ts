@@ -22,4 +22,13 @@ describe('modal overlay', () => {
       /@media \(max-width: 760px\)[\s\S]*?\.modal-layer\s*\{[\s\S]*?position:\s*fixed;[\s\S]*?inset:\s*0;/
     );
   });
+
+  it('reanchors an open desktop dialog after the window viewport changes', () => {
+    expect(modal).toContain("window.addEventListener('resize', updateDocumentTop)");
+    expect(modal).toContain("window.visualViewport?.addEventListener('resize', updateDocumentTop)");
+    expect(modal).toContain("window.removeEventListener('resize', updateDocumentTop)");
+    expect(modal).toContain(
+      "window.visualViewport?.removeEventListener('resize', updateDocumentTop)"
+    );
+  });
 });

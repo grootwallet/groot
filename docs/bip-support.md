@@ -446,6 +446,11 @@ support impact. It preserves those exact BIP158 queries and wallet semantics,
 while ensuring the HTTPS proxy outlives the bounded upstream operation and a
 concurrent caller cannot collide with Core's process-wide indexed scanner.
 
+The hardware-policy and address-modal copy/layout follow-up has no BIP support
+impact. It removes duplicated presentation text and keeps the existing signer
+identity, BIP48 policy values, complete public keys, exact address, PSBT,
+trusted-display review, and signing boundaries unchanged.
+
 Every feature, interoperability, signer, descriptor, transaction, payment request,
 backup/recovery, sync/backend, network, or dependency change must assess BIP impact.
 If it adds, removes, expands, narrows, or changes evidence for a BIP:

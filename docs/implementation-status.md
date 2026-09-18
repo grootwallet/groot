@@ -1,5 +1,15 @@
 # Implementation status
 
+The Mainnet hardware-signing presentation follow-up keeps the existing Ledger
+policy and transaction authorization boundary while reducing the policy modal
+to its security-relevant values and one action. Hardware-address details retain
+the exact grouped address, intended label, copy control, and one spacing note
+without duplicating comparison guidance. The shared desktop modal layer now
+re-anchors after window and fullscreen resizing so its internal scroll body and
+actions remain reachable. No wallet data, native command, signing behavior,
+persisted format, dependency, or protocol support changes; no migration is
+required.
+
 The multi-network onboarding header now keeps global Settings reachable when the
 selected network has no wallet profiles. This closes the empty-namespace trap in
 which the shell correctly opened onboarding but provided no route to the

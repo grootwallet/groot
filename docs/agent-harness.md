@@ -185,6 +185,11 @@ Current local status on 2026-08-24:
   and does not certify its superseded UX or v0.4.89. The separately deferred
   recovery procedure, independent tester/reviewer, and Whisper/BLE remain open.
   Original BitBox02 evidence is not inherited.
+- Internal Mainnet `v0.4.95 · a393a0e7` passed an owner-operated standard
+  2-of-3 signing and broadcast with Ledger Nano S Plus and BitBox02 Nova.
+  Evidence remains bound to that exact package and signer pair; confirmation,
+  negative PSBT, recovery, exact-firmware, replacement-build, and independent
+  review rows remain open.
 - Exact packaged v0.4.89 commit `fc2ac74f` passed the reviewer-operated
   Testnet4 software-wallet create, copied-network-setup, wrong-passphrase,
   reopen-without-Keychain-prompt, labeled receive and restart-persistence,

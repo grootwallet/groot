@@ -185,7 +185,9 @@ All dialogs, including complete identifier views opened from another dialog,
 compose the shared `Modal` component. Its layer is portaled to `document.body`
 so transformed route containers cannot change viewport centering or split the
 backdrop. The component's reference-counted scroll lock remains active until the
-last nested dialog closes.
+last nested dialog closes. While open on desktop, the layer recomputes its
+document anchor after window, visual-viewport, or scroll changes so entering or
+leaving fullscreen cannot strand part of the dialog outside the visible viewport.
 
 All dialogs, including complete identifier views opened from another dialog,
 compose the shared `Modal` component. Its layer is portaled to `document.body`

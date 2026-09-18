@@ -6324,7 +6324,7 @@ code {
 .hardware-review-details {
   margin-top: 2px;
   padding-top: 9px;
-  border-top: 1px solid var(--border);
+  border-top: 0;
 }
 .hardware-review-details summary {
   width: fit-content;

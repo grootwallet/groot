@@ -4,6 +4,11 @@ import { describe, expect, it } from 'vitest';
 const amount = readFileSync(new URL('./Amount.svelte', import.meta.url), 'utf8');
 const details = readFileSync(new URL('./TransactionReviewDetails.svelte', import.meta.url), 'utf8');
 const policy = readFileSync(new URL('./SignerPolicyReview.svelte', import.meta.url), 'utf8');
+const recipientAddressModal = readFileSync(
+  new URL('./RecipientAddressModal.svelte', import.meta.url),
+  'utf8'
+);
+const appCss = readFileSync(new URL('../../app.css', import.meta.url), 'utf8');
 const singleSend = readFileSync(new URL('../../routes/send/+page.svelte', import.meta.url), 'utf8');
 const multisigSend = readFileSync(
   new URL('../../routes/multisig/send/+page.svelte', import.meta.url),
@@ -24,8 +29,21 @@ describe('hardware signing review usability', () => {
   it('keeps the Ledger policy and transaction reviews as explicit reachable steps', () => {
     expect(policy).toContain("'Step 1 of 2 · Wallet policy'");
     expect(policy).toContain("'Wallet policy reviewed — show transaction'");
+    expect(policy).toContain("'Review & sign on {device}'");
     expect(multisigSend).toContain("'Step 2 of 2 · Transaction review'");
     expect(multisigSend).toContain('showTransactionDuringSigning()');
+  });
+
+  it('keeps the Ledger policy modal compact without removing trusted-display checks', () => {
+    expect(policy).toContain("'Compare every signer key and the first address on Ledger.'");
+    expect(policy).toContain("'Signer keys to compare'");
+    expect(policy).toContain("'Verification only. Create payment addresses in Receive.'");
+    expect(policy).not.toContain(
+      "Groot's current Ledger connection must authorize this policy again for each signing"
+    );
+    expect(multisigSend).not.toContain(
+      "description={translate($locale, 'Check the policy, signer keys, and first address.')}"
+    );
   });
 
   it('starts with a compact first-address reference and expands on request', () => {
@@ -33,6 +51,21 @@ describe('hardware signing review usability', () => {
     expect(policy).toContain('<code>{compactAddress(displayedAddress)}</code>');
     expect(policy).toContain('aria-expanded={addressExpanded}');
     expect(policy).toContain('{#if addressExpanded}<ReadableAddress');
+  });
+
+  it('does not repeat address-comparison guidance in the hardware address modal', () => {
+    expect(recipientAddressModal).not.toContain('The brighter first and last groups');
+    for (const source of [singleSend, multisigSend]) {
+      const hardwareAddressStart = source.indexOf('open={hardwareAddressOpen}');
+      const hardwareAddressEnd = source.indexOf('/>', hardwareAddressStart);
+      const hardwareAddressModal = source.slice(hardwareAddressStart, hardwareAddressEnd);
+      expect(hardwareAddressModal).toContain('description=""');
+      expect(hardwareAddressModal).toContain('detail=""');
+    }
+  });
+
+  it('does not place a decorative divider above hardware review details', () => {
+    expect(appCss).toMatch(/\.hardware-review-details\s*\{[^}]*border-top:\s*0;/s);
   });
 
   it('marks wallet-owned recipients and shows their Rust-derived receive paths', () => {
