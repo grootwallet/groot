@@ -235,12 +235,14 @@ class Gateway:
             raise RequestRejected(401, "unauthorized")
         if not self.principal_limits.allow(principal):
             raise RequestRejected(429, "rate_limited")
-        requests = validate_payload(body)
-        upstream_requests, identities = self._reconstruct(requests)
+        requests, is_batch = validate_payload(body)
+        upstream_requests, identities = self._reconstruct(requests, is_batch)
         response = self._call_core(upstream_requests)
-        return restore_response_identities(response, identities, len(requests) > 1)
+        return restore_response_identities(response, identities, is_batch)
 
-    def _reconstruct(self, requests: list[dict[str, Any]]) -> tuple[Any, dict[int, tuple[Any, str | None]]]:
+    def _reconstruct(
+        self, requests: list[dict[str, Any]], is_batch: bool
+    ) -> tuple[Any, dict[int, tuple[Any, str | None]]]:
         rebuilt: list[dict[str, Any]] = []
         identities: dict[int, tuple[Any, str | None]] = {}
         with self._id_lock:
@@ -256,7 +258,7 @@ class Gateway:
                 if request.get("jsonrpc") is not None:
                     item["jsonrpc"] = request["jsonrpc"]
                 rebuilt.append(item)
-        return (rebuilt if len(rebuilt) > 1 else rebuilt[0]), identities
+        return (rebuilt if is_batch else rebuilt[0]), identities
 
     def _call_core(self, request: Any) -> bytes:
         encoded = json.dumps(request, separators=(",", ":"), ensure_ascii=True).encode("ascii")
@@ -334,7 +336,7 @@ def parse_basic_authorization(value: str | None) -> tuple[str, bytes] | None:
     return username, password
 
 
-def validate_payload(body: bytes) -> list[dict[str, Any]]:
+def validate_payload(body: bytes) -> tuple[list[dict[str, Any]], bool]:
     if not body or len(body) > MAX_REQUEST_BYTES:
         raise RequestRejected(413, "request_too_large")
     try:
@@ -347,7 +349,7 @@ def validate_payload(body: bytes) -> list[dict[str, Any]]:
         raise RequestRejected(400, "invalid_batch")
     for request in requests:
         validate_request(request)
-    return requests
+    return requests, is_batch
 
 
 def validate_request(request: Any) -> None:

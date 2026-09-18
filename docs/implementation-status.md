@@ -958,3 +958,14 @@ accepts only the newest requested status read, so progress remains monotonic and
 the completed state cannot regress. Native sync ordering, wallet data, node
 settings, DTOs, schemas, and the 35-second automatic cadence are unchanged; no
 migration or BIP-support change is required.
+
+The subsequent exact-package Family Test unlock exposed a narrow JSON-RPC
+gateway compatibility error: when indexed matching found exactly one relevant
+block, Groot correctly sent a one-item batch for that block, but the gateway
+collapsed it into a single upstream request and response object. The Rust batch
+client rejected that response shape and surfaced the misleading
+`network_unavailable` result after the indexed scan had succeeded. The gateway
+now preserves the original batch shape independently of batch length, with an
+integration regression covering the one-item request, upstream payload, restored
+client id, and array response. No wallet data, credentials, persisted format,
+DTO, dependency, or schema changes; no migration is required.

@@ -451,6 +451,11 @@ impact. It removes duplicated presentation text and keeps the existing signer
 identity, BIP48 policy values, complete public keys, exact address, PSBT,
 trusted-display review, and signing boundaries unchanged.
 
+The one-item remote-Core batch correction has no BIP support impact. It preserves
+JSON-RPC request/response framing when an indexed match resolves to exactly one
+block; descriptor derivation, BIP158 matching, transaction interpretation,
+wallet formats, signing, recovery, and interoperability claims are unchanged.
+
 Every feature, interoperability, signer, descriptor, transaction, payment request,
 backup/recovery, sync/backend, network, or dependency change must assess BIP impact.
 If it adds, removes, expands, narrows, or changes evidence for a BIP:

@@ -193,6 +193,22 @@ class GatewayIntegrationTests(unittest.TestCase):
         self.assertEqual((status, result), (403, {"error": "method_not_allowed"}))
         self.assertEqual(len(self.core.requests), 1)
 
+    def test_single_item_batch_preserves_batch_shape(self) -> None:
+        batch = [
+            {"jsonrpc": "2.0", "id": "solo", "method": "getblock", "params": [HASH, 1]}
+        ]
+        status, result, _ = self.request(batch, auth=authorization())
+
+        self.assertEqual(status, 200)
+        self.assertIsInstance(result, list)
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["id"], "solo")
+        self.assertEqual(result[0]["jsonrpc"], "2.0")
+        _, upstream = self.core.requests[0]
+        self.assertIsInstance(upstream, list)
+        self.assertEqual(len(upstream), 1)
+        self.assertEqual(upstream[0]["method"], "getblock")
+
     def test_requires_valid_basic_credentials_and_post(self) -> None:
         request = {"id": 1, "method": "getblockcount", "params": []}
         status, _, headers = self.request(request)
@@ -356,7 +372,7 @@ class GatewayValidationTests(unittest.TestCase):
         ]
         for request in accepted:
             with self.subTest(request["method"]):
-                self.assertEqual(validate_payload(json.dumps(request).encode()), [request])
+                self.assertEqual(validate_payload(json.dumps(request).encode()), ([request], False))
 
     def test_rejects_notifications_extra_keys_and_oversized_batches(self) -> None:
         rejected = [

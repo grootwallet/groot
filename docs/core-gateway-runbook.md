@@ -69,6 +69,8 @@ Then verify on the host and from a separate network:
 2. GET, HEAD, PUT, missing authentication, wrong authentication, malformed JSON,
    a batch over 32, and `stop` all fail without a Core request.
 3. A valid `getblockchaininfo` succeeds and reports the expected chain and tip.
+   A valid one-item JSON-RPC batch remains an array in both the upstream request
+   and client response; it must not be collapsed into a single request object.
 4. A single-source burst above the NGINX limits returns 429 and the service
    remains responsive. Cross-source handler saturation returns a bounded 503
    `gateway_busy` response, never an upstream-looking 502.
