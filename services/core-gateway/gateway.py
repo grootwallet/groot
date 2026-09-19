@@ -13,7 +13,9 @@ import ipaddress
 import json
 import os
 import re
+import secrets
 import stat
+import tempfile
 import threading
 import time
 from dataclasses import dataclass
@@ -27,6 +29,9 @@ MAX_RESPONSE_BYTES = 16 * 1024 * 1024
 MAX_BATCH_SIZE = 256
 MAX_UPSTREAM_CONCURRENCY = 16
 MAX_HANDLER_CONCURRENCY = 16
+MAX_ENROLL_REQUEST_BYTES = 64
+MAX_ENROLLED_PRINCIPALS = 10_000
+MAX_CREDENTIAL_FILE_BYTES = 4 * 1024 * 1024
 BUSY_RESPONSE_BODY = b'{"error":"gateway_busy"}'
 BUSY_RESPONSE = (
     b"HTTP/1.1 503 Service Unavailable\r\n"
@@ -60,10 +65,10 @@ class Principal:
 
 
 class CredentialStore:
-    def __init__(self, path: Path):
-        self._path = path
+    def __init__(self, path: Path | tuple[Path, ...]):
+        self._paths = path if isinstance(path, tuple) else (path,)
         self._lock = threading.Lock()
-        self._stamp: tuple[int, int] | None = None
+        self._stamp: tuple[tuple[int, int], ...] | None = None
         self._principals: dict[str, Principal] = {}
 
     def authenticate(self, authorization: str | None) -> str | None:
@@ -96,36 +101,87 @@ class CredentialStore:
         return username if hmac.compare_digest(candidate, principal.password_scrypt) else None
 
     def _reload_if_changed(self) -> None:
-        stamp, raw = read_private_file(self._path, 256 * 1024)
+        files = [read_private_file(path, MAX_CREDENTIAL_FILE_BYTES) for path in self._paths]
+        stamp = tuple(item[0] for item in files)
         with self._lock:
             if stamp == self._stamp:
                 return
-            document = json.loads(raw)
-            if document.get("version") != 1 or not isinstance(document.get("principals"), list):
-                raise ValueError("unsupported client credential file")
             principals: dict[str, Principal] = {}
-            for item in document["principals"]:
-                username = item.get("username")
-                n, r, p = item.get("n"), item.get("r"), item.get("p")
-                if (
-                    not isinstance(username, str)
-                    or USERNAME.fullmatch(username) is None
-                    or username in principals
-                    or not isinstance(n, int)
-                    or n < 1 << 14
-                    or n > 1 << 18
-                    or n & (n - 1)
-                    or r != 8
-                    or p != 1
-                ):
-                    raise ValueError("invalid client credential record")
-                salt = decode_b64(item.get("salt"), 16, 64)
-                password_scrypt = decode_b64(item.get("password_scrypt"), 32, 32)
-                principals[username] = Principal(username, salt, password_scrypt, n, r, p)
+            for _, raw in files:
+                document = json.loads(raw)
+                if document.get("version") != 1 or not isinstance(document.get("principals"), list):
+                    raise ValueError("unsupported client credential file")
+                for item in document["principals"]:
+                    username = item.get("username")
+                    n, r, p = item.get("n"), item.get("r"), item.get("p")
+                    if (
+                        not isinstance(username, str)
+                        or USERNAME.fullmatch(username) is None
+                        or username in principals
+                        or not isinstance(n, int)
+                        or n < 1 << 14
+                        or n > 1 << 18
+                        or n & (n - 1)
+                        or r != 8
+                        or p != 1
+                    ):
+                        raise ValueError("invalid client credential record")
+                    salt = decode_b64(item.get("salt"), 16, 64)
+                    password_scrypt = decode_b64(item.get("password_scrypt"), 32, 32)
+                    principals[username] = Principal(username, salt, password_scrypt, n, r, p)
             if not principals:
                 raise ValueError("at least one client principal is required")
             self._principals = principals
             self._stamp = stamp
+
+
+class EnrollmentStore:
+    def __init__(self, path: Path):
+        self._path = path
+        self._lock = threading.Lock()
+        if not path.exists():
+            self._write({"version": 1, "principals": []})
+
+    def issue(self) -> tuple[str, str]:
+        username = f"groot-{secrets.token_hex(12)}"
+        password = secrets.token_urlsafe(32)
+        salt = secrets.token_bytes(16)
+        digest = hashlib.scrypt(
+            password.encode("ascii"), salt=salt, n=1 << 14, r=8, p=1, dklen=32
+        )
+        record = {
+            "username": username,
+            "salt": base64.b64encode(salt).decode("ascii"),
+            "password_scrypt": base64.b64encode(digest).decode("ascii"),
+            "n": 1 << 14,
+            "r": 8,
+            "p": 1,
+        }
+        with self._lock:
+            _, raw = read_private_file(self._path, MAX_CREDENTIAL_FILE_BYTES)
+            document = json.loads(raw)
+            principals = document.get("principals")
+            if document.get("version") != 1 or not isinstance(principals, list):
+                raise ValueError("unsupported enrolled-client file")
+            if len(principals) >= MAX_ENROLLED_PRINCIPALS:
+                raise RequestRejected(503, "enrollment_unavailable")
+            self._write({"version": 1, "principals": principals + [record]})
+        return username, password
+
+    def _write(self, document: dict[str, Any]) -> None:
+        self._path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        descriptor, temporary = tempfile.mkstemp(prefix=f".{self._path.name}.", dir=self._path.parent)
+        try:
+            os.fchmod(descriptor, 0o600)
+            with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+                json.dump(document, handle, separators=(",", ":"), sort_keys=True)
+                handle.write("\n")
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary, self._path)
+        finally:
+            if os.path.exists(temporary):
+                os.unlink(temporary)
 
 
 class CoreCookie:
@@ -205,6 +261,7 @@ class TokenBuckets:
 class GatewayConfig:
     clients: CredentialStore
     core_cookie: CoreCookie
+    enrollment: EnrollmentStore | None = None
     core_host: str = "127.0.0.1"
     core_port: int = 8332
     core_timeout_seconds: float = 10.0
@@ -216,6 +273,7 @@ class Gateway:
         self.config = config
         self.ip_limits = TokenBuckets(rate=10.0, burst=20.0)
         self.principal_limits = TokenBuckets(rate=25.0, burst=100.0)
+        self.enrollment_ip_limits = TokenBuckets(rate=1.0 / 3600.0, burst=8.0)
         self.upstream_slots = threading.BoundedSemaphore(MAX_UPSTREAM_CONCURRENCY)
         # Bitcoin Core exposes one process-wide scanblocks worker. Reject a
         # second indexed scan at the gateway instead of letting it collide
@@ -239,6 +297,34 @@ class Gateway:
         upstream_requests, identities = self._reconstruct(requests, is_batch)
         response = self._call_core(upstream_requests)
         return restore_response_identities(response, identities, is_batch)
+
+    def enroll(self, client_ip: str, body: bytes) -> bytes:
+        if self.config.enrollment is None:
+            raise RequestRejected(404, "not_found")
+        try:
+            request = json.loads(body)
+        except (UnicodeDecodeError, json.JSONDecodeError, RecursionError):
+            raise RequestRejected(400, "invalid_request") from None
+        if (
+            not isinstance(request, dict)
+            or set(request) != {"version"}
+            or type(request["version"]) is not int
+            or request["version"] != 1
+        ):
+            raise RequestRejected(400, "invalid_request")
+        if not self.enrollment_ip_limits.allow(client_ip):
+            raise RequestRejected(429, "rate_limited")
+        try:
+            username, password = self.config.enrollment.issue()
+        except RequestRejected:
+            raise
+        except (OSError, ValueError, json.JSONDecodeError):
+            raise RequestRejected(503, "enrollment_unavailable") from None
+        return json.dumps(
+            {"version": 1, "username": username, "password": password},
+            separators=(",", ":"),
+            ensure_ascii=True,
+        ).encode("ascii")
 
     def _reconstruct(
         self, requests: list[dict[str, Any]], is_batch: bool
@@ -555,7 +641,7 @@ class GatewayHandler(BaseHTTPRequestHandler):
         content_lengths = self.headers.get_all("Content-Length", [])
         authorizations = self.headers.get_all("Authorization", [])
         if (
-            self.path != "/"
+            self.path not in {"/", "/enroll"}
             or self.headers.get("Transfer-Encoding") is not None
             or len(content_lengths) != 1
             or len(authorizations) > 1
@@ -571,7 +657,8 @@ class GatewayHandler(BaseHTTPRequestHandler):
         except ValueError:
             self._error(411, "content_length_required")
             return
-        if length <= 0 or length > MAX_REQUEST_BYTES:
+        maximum = MAX_ENROLL_REQUEST_BYTES if self.path == "/enroll" else MAX_REQUEST_BYTES
+        if length <= 0 or length > maximum:
             self._error(413, "request_too_large")
             return
         body = self.rfile.read(length)
@@ -580,13 +667,20 @@ class GatewayHandler(BaseHTTPRequestHandler):
             return
         try:
             client_ip = self._client_ip()
-            response = self.gateway.handle(
-                self.headers.get("Authorization"), client_ip, body
-            )
+            if self.path == "/enroll":
+                if authorizations:
+                    raise RequestRejected(400, "invalid_request")
+                response = self.gateway.enroll(client_ip, body)
+                status = 201
+            else:
+                response = self.gateway.handle(
+                    self.headers.get("Authorization"), client_ip, body
+                )
+                status = 200
         except RequestRejected as error:
             self._error(error.status, error.code)
             return
-        self.send_response(200)
+        self.send_response(status)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(response)))
         self.send_header("Cache-Control", "no-store")
@@ -679,6 +773,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--listen", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8432)
     parser.add_argument("--clients", type=Path, required=True)
+    parser.add_argument("--enrolled-clients", type=Path)
     parser.add_argument("--core-cookie", type=Path, required=True)
     parser.add_argument("--core-port", type=int, default=8332)
     return parser.parse_args()
@@ -690,10 +785,15 @@ def main() -> None:
         raise SystemExit("the gateway must listen on loopback")
     if not 1 <= args.port <= 65535 or not 1 <= args.core_port <= 65535:
         raise SystemExit("invalid port")
+    enrollment = EnrollmentStore(args.enrolled_clients) if args.enrolled_clients else None
+    credential_paths = (
+        (args.clients, args.enrolled_clients) if args.enrolled_clients else args.clients
+    )
     gateway = Gateway(
         GatewayConfig(
-            clients=CredentialStore(args.clients),
+            clients=CredentialStore(credential_paths),
             core_cookie=CoreCookie(args.core_cookie),
+            enrollment=enrollment,
             core_port=args.core_port,
         )
     )

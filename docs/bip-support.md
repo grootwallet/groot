@@ -475,6 +475,13 @@ impact. It only standardizes concise retry feedback and spacing across existing
 Overview, Activity, and Receive sync controls; no descriptor, transaction,
 address-discovery, signing, broadcast, or interoperability behavior changes.
 
+ADR 0071 managed-gateway enrollment and the locked Settings continuity fix have
+no BIP support impact. They provision a unique native-only RPC credential through
+the existing protected node-auth envelope and keep app-global controls reachable
+without changing descriptors, derivation, BIP158 matching, PSBTs, signing,
+broadcast, recovery, wallet formats, or interoperability evidence. Enrollment
+failure is explicit offline state and never a backend or fee fallback.
+
 Every feature, interoperability, signer, descriptor, transaction, payment request,
 backup/recovery, sync/backend, network, or dependency change must assess BIP impact.
 If it adds, removes, expands, narrows, or changes evidence for a BIP:

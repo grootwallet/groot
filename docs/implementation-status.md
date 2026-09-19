@@ -1003,3 +1003,27 @@ Activity search and sort labels from overlapping it. The sanitized
 `network_unavailable` copy is shorter in every supported locale. Wallet sync,
 credentials, node admission, persistence, DTOs, and schemas are unchanged; no
 migration is required.
+
+## 2026-09-19 Managed Mainnet enrollment and locked Settings continuity
+
+ADR 0071 removes the shared-client-secret dead end without embedding a password
+in source, build configuration, or environment. The gateway now issues unique
+random principals through a separately source-throttled, size-bounded endpoint
+and persists only scrypt verifiers. Native Rust consumes the one-time response,
+rejects redirects, unknown fields, malformed credentials, wrong chain, IBD, and
+missing indexed-scan capabilities, then uses the existing per-wallet encrypted
+node-secret envelope. New Mainnet profiles and existing Mainnet profiles with no
+saved node enroll automatically; every saved custom or managed configuration is
+left untouched. An unavailable enrollment service leaves the wallet offline and
+does not select a fallback node or fee.
+
+The same follow-up fixes the recorded locked-route bounce. Startup and the
+session monitor both treat Settings and App logs as intentional locked utility
+routes, so the reduced **APP SETTINGS** surface remains stable instead of briefly
+rendering before redirecting to Unlock. It exposes only appearance, language,
+denomination, shortcuts, Bitcoin network selection, build identity, and sanitized
+app logs. Wallet-specific node, sync, backup, recovery, export, and deletion
+controls still require unlock. Existing wallet, registry, node-setting,
+credential-envelope, descriptor, proposal, backup, and database formats are
+unchanged; no migration is required. Gateway deployment, load/abuse review, and
+exact-package Mainnet acceptance remain open GA gates.

@@ -2,6 +2,10 @@ import type { CatalogSection } from './types';
 
 export const settingsCopy = {
   'APP SETTINGS': { fr: 'RÉGLAGES DE L’APP', es: 'AJUSTES DE LA APP' },
+  'Wallet locked · App settings only.': {
+    fr: 'Portefeuille verrouillé · Réglages de l’app uniquement.',
+    es: 'Cartera bloqueada · Solo ajustes de la app.'
+  },
   'Appearance and Bitcoin network.': {
     fr: 'Apparence et réseau Bitcoin.',
     es: 'Apariencia y red Bitcoin.'

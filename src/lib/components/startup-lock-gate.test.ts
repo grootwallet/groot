@@ -69,11 +69,14 @@ describe('startup wallet lock gate', () => {
     expect(shell).toContain('!settingsRoute &&');
     expect(shell).toContain('locked={walletLocked}');
     expect(shell).toContain('class="locked-settings-link"');
+    expect(shell).toMatch(
+      /selection\.profile\.id !== selectedWalletId \|\|[\s\S]*lockedRoute \|\|[\s\S]*settingsRoute \|\|[\s\S]*diagnosticsRoute/
+    );
     expect(settings).toContain('walletService.session()');
     expect(settings).toContain(
       '{#if walletUnlocked}<section class="settings-group wallet-details">'
     );
-    expect(settings).toContain('Appearance and Bitcoin network.');
+    expect(settings).toContain('Wallet locked · App settings only.');
     expect(settings).toContain('Wallet-specific network details are locked');
     expect(appCss).toContain('.locked-settings-link:focus-visible');
   });

@@ -1144,7 +1144,7 @@
           $locale,
           walletUnlocked
             ? 'Security and connection for this wallet.'
-            : 'Appearance and Bitcoin network.'
+            : 'Wallet locked · App settings only.'
         )}
       </p>
     </div>

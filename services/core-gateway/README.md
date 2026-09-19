@@ -24,9 +24,18 @@ broadcast. Groot must continue to describe the service as trusted.
 Create a dedicated unprivileged `groot-gateway` user, grant its group read-only
 access to Bitcoin Core's cookie, install `gateway.py` under
 `/opt/groot-core-gateway`, and install the systemd and NGINX files from
-`deploy/`. The service refuses a non-loopback listener.
+`deploy/`. `nginx-rate-limit.conf` belongs in NGINX's `http {}` include scope;
+`nginx-site.conf` is the complete TLS virtual host, while
+`nginx-location.conf` documents the reusable route fragments. The service
+refuses a non-loopback listener.
 
-Provision a unique credential per client installation. This command prompts
+Production clients request a unique random credential from the separately
+throttled `/enroll` endpoint. The password is returned once, stays in Groot's
+native process, and is encrypted under the wallet credential before use. The
+endpoint contains no shared application secret; source and principal quotas,
+the narrow method allowlist, and revocation remain the abuse boundary.
+
+Operators can also provision or rotate a credential manually. This command prompts
 without echo and stores only a salted scrypt verifier:
 
 ```sh
@@ -45,6 +54,16 @@ in Groot, then clear the terminal. Do not put it in a URL, shell argument,
 service unit, log, or support message. Restart or send SIGHUP after replacing
 credentials; the service also reloads the verifier file when its timestamp or
 size changes.
+
+Revoke either a manually provisioned or enrolled principal from its owning file
+without handling its password:
+
+```sh
+python3 /opt/groot-core-gateway/provision_client.py \
+  --clients /var/lib/groot-core-gateway/clients.json \
+  --username groot-client-id \
+  --remove
+```
 
 Keep Core RPC bound to `127.0.0.1`. Once the gateway is verified, remove the
 NGINX route to port 8332. Core's own `rpcwhitelistdefault=1`, strong `rpcauth`,

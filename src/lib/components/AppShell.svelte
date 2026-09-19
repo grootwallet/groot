@@ -487,7 +487,13 @@
     sessionMonitor = createSessionMonitor(
       walletService,
       async (selection) => {
-        if (selection.profile.id !== selectedWalletId || lockedRoute) return;
+        if (
+          selection.profile.id !== selectedWalletId ||
+          lockedRoute ||
+          settingsRoute ||
+          diagnosticsRoute
+        )
+          return;
         selectedWalletUnlocked = false;
         liveSync?.stop();
         await walletService.cancelSync().catch(() => undefined);

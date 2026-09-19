@@ -18,6 +18,7 @@ sys.path.insert(0, str(SERVICE))
 from gateway import (  # noqa: E402
     CoreCookie,
     CredentialStore,
+    EnrollmentStore,
     Gateway,
     GatewayConfig,
     GatewayServer,
@@ -101,13 +102,16 @@ class GatewayIntegrationTests(unittest.TestCase):
         self.cookie = directory / ".cookie"
         self.cookie.write_bytes(b"__cookie__:core-secret\n")
         self.cookie.chmod(0o640)
+        self.enrolled = directory / "enrolled.json"
+        enrollment = EnrollmentStore(self.enrolled)
         self.core = FakeCore()
         self.core_thread = threading.Thread(target=self.core.serve_forever, daemon=True)
         self.core_thread.start()
         self.gateway = Gateway(
             GatewayConfig(
-                clients=CredentialStore(self.clients),
+                clients=CredentialStore((self.clients, self.enrolled)),
                 core_cookie=CoreCookie(self.cookie),
+                enrollment=enrollment,
                 core_port=self.core.server_port,
             )
         )
@@ -130,6 +134,7 @@ class GatewayIntegrationTests(unittest.TestCase):
         method: str = "POST",
         content_type: str = "application/json",
         extra_headers: dict[str, str] | None = None,
+        path: str = "/",
     ) -> tuple[int, dict | list | None, dict]:
         connection = http.client.HTTPConnection("127.0.0.1", self.server.server_port, timeout=2)
         encoded = json.dumps(body).encode()
@@ -138,13 +143,43 @@ class GatewayIntegrationTests(unittest.TestCase):
             headers["Authorization"] = auth
         if extra_headers:
             headers.update(extra_headers)
-        connection.request(method, "/", body=encoded, headers=headers)
+        connection.request(method, path, body=encoded, headers=headers)
         response = connection.getresponse()
         response_body = response.read()
         result = json.loads(response_body) if response_body else None
         response_headers = dict(response.getheaders())
         connection.close()
         return response.status, result, response_headers
+
+    def test_enrolls_a_unique_revocable_principal_without_shared_credentials(self) -> None:
+        status, result, headers = self.request({"version": 1}, path="/enroll")
+        self.assertEqual(status, 201)
+        self.assertEqual(headers["Cache-Control"], "no-store")
+        self.assertEqual(result["version"], 1)
+        self.assertRegex(result["username"], r"^groot-[0-9a-f]{24}$")
+        self.assertGreaterEqual(len(result["password"]), 32)
+
+        encoded = base64.b64encode(
+            f'{result["username"]}:{result["password"]}'.encode("ascii")
+        ).decode("ascii")
+        status, rpc_result, _ = self.request(
+            {"id": 1, "method": "getblockcount", "params": []},
+            auth=f"Basic {encoded}",
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(rpc_result["result"]["method"], "getblockcount")
+        persisted = json.loads(self.enrolled.read_text())
+        self.assertNotIn(result["password"], self.enrolled.read_text())
+        self.assertEqual(persisted["principals"][0]["username"], result["username"])
+
+    def test_enrollment_is_strict_and_separately_rate_limited(self) -> None:
+        status, result, _ = self.request({"version": 2}, path="/enroll")
+        self.assertEqual((status, result), (400, {"error": "invalid_request"}))
+        for _ in range(8):
+            status, _, _ = self.request({"version": 1}, path="/enroll")
+            self.assertEqual(status, 201)
+        status, result, _ = self.request({"version": 1}, path="/enroll")
+        self.assertEqual((status, result), (429, {"error": "rate_limited"}))
 
     def test_allows_only_validated_groot_method_and_hides_core_cookie(self) -> None:
         status, result, _ = self.request(

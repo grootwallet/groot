@@ -16,7 +16,11 @@ const pinnedPolicySources = new Map([
   ['.env.mainnet', '1623f3f97de588daea2bbeae1f9c56ebc896b6bc2c22ac238563b46b688ced85'],
   ['.env.multi', '33fc3d5022968d9eaa25bfe749c0b01691c0570611a65255100718d2c50df723'],
   ['package.json', '11cd0626ef8f795919abaa142ab307bced9a589e81645f09617e2db26e192970'],
-  ['src-tauri/src/lib.rs', 'a5938703c3e0cf141e2360ac0f2b7ba9b01594354bcc7b2ef93f809043db1d25'],
+  ['src-tauri/src/lib.rs', '8253cd70b10420b75ac050db7fd5e5f5a2b61fa9c9541b7cc2234d4adfb8ed24'],
+  [
+    'src-tauri/src/managed_gateway.rs',
+    '35813781f3e3e6669940e05b38339a37c2f035c0372b1264c3b418853aad76d1'
+  ],
   [
     'scripts/network/check-native-builds.sh',
     '3a984ab7ef5f0d7c29d689d2ab39e114d61f1db0efd29a632cea980d7284bef4'
@@ -83,7 +87,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src-tauri/src/wallet/profile_commands.rs',
-    '7931face502371a5311d8fc93e6e1577404cafd867ba2551ab6bdcc0f45d5ea3'
+    'b381b9594adcc5d8d65c44a5cb391d83ed58dfafc59725fc81223e149a3e04bd'
   ],
   [
     'src-tauri/src/wallet/payment_draft_commands.rs',
@@ -127,7 +131,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src/lib/components/AppShell.svelte',
-    '909d13215002c713a87c5809a6bf9aec2d26ceafaa69401125684c3173671ba3'
+    '0fb281ef78d7d0ce5ce7d8aa93521210a62246d52daab2357041c60859528316'
   ],
   [
     'src/lib/wallet/live-sync.ts',
@@ -173,7 +177,31 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src/routes/settings/+page.svelte',
-    'aca9a89bfa785c5cc7fdd81756a866f9567ea9349f9ee03ef82f271801318f69'
+    'fe6cdb26992cad562b7dcea1007d674b166acb853117da5609ea922cbdb621da'
+  ],
+  [
+    'services/core-gateway/gateway.py',
+    '0b9491739fc51df9956b70d3856d2943b645abb87bf2a25ea697959ec793e327'
+  ],
+  [
+    'services/core-gateway/provision_client.py',
+    '558882823d43889c3e4fc161bcbebdf11fdd410364bc2ca0489c92dc6ebf559a'
+  ],
+  [
+    'services/core-gateway/deploy/groot-core-gateway.service',
+    '44e821ba98de16e5ff7012fef1c5bf931d4c977a24e58800dd4c13d1c9a7aa0e'
+  ],
+  [
+    'services/core-gateway/deploy/nginx-location.conf',
+    'b40671954640759ff978d0e1e179a8bbb3b0a19dd0e4d2870be4096c23c16359'
+  ],
+  [
+    'services/core-gateway/deploy/nginx-rate-limit.conf',
+    'f5c7487c81fd341a2e5d239124a1241330c6ec51e9a5c298d377a6c1500044e2'
+  ],
+  [
+    'services/core-gateway/deploy/nginx-site.conf',
+    'a3c9727be8119714f08ec03c3a6c13d0d13aa5221121a903d11fd52af6ec8a2e'
   ],
   [
     'src/routes/hardware/new/+page.svelte',

@@ -9,6 +9,7 @@ mod direct_rpc;
 pub mod external_signer;
 mod hardware;
 mod label_provenance;
+mod managed_gateway;
 mod multisig;
 mod native_backup;
 pub mod network;

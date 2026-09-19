@@ -474,51 +474,55 @@ pub fn wallet_reveal_and_verify_backup(
 }
 
 #[tauri::command]
-pub fn wallet_unlock(
-    app: AppHandle,
-    state: State<'_, AppState>,
-    credential: String,
-) -> ApiResult<()> {
+pub async fn wallet_unlock(app: AppHandle, credential: String) -> ApiResult<()> {
     let credential = Zeroizing::new(credential);
-    let _operation = operation_guard(&state)?;
-    check_auth_throttle(&app, &state)?;
-    let result = match selected_profile(&app)?.kind {
-        WalletKind::SingleKey => decrypt_mnemonic(&app, credential.as_str()).and_then(|mnemonic| {
-            software_wallet_descriptors(&mnemonic, credential.as_str()).map(Some)
-        }),
-        WalletKind::Multisig => {
-            verify_multisig_credential(&app, credential.as_str()).map(|()| None)
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let _operation = operation_guard(&state)?;
+        check_auth_throttle(&app, &state)?;
+        let result = match selected_profile(&app)?.kind {
+            WalletKind::SingleKey => {
+                decrypt_mnemonic(&app, credential.as_str()).and_then(|mnemonic| {
+                    software_wallet_descriptors(&mnemonic, credential.as_str()).map(Some)
+                })
+            }
+            WalletKind::Multisig => {
+                verify_multisig_credential(&app, credential.as_str()).map(|()| None)
+            }
+            WalletKind::WatchOnly => {
+                verify_external_signer_credential(&app, credential.as_str()).map(|()| None)
+            }
+        };
+        record_auth_result(&app, &state, &result)?;
+        let authenticated_descriptors = result?;
+        provision_managed_mainnet_node_if_missing(&app, &state, credential.as_str())?;
+        load_node_auth_session(&app, &state, credential.as_str())?;
+        if let Some(descriptors) = authenticated_descriptors {
+            let selected = selected_profile_of_kind(&app, WalletKind::SingleKey)?.id;
+            state
+                .authenticated_software_descriptors
+                .lock()
+                .map_err(internal)?
+                .insert(selected, descriptors);
         }
-        WalletKind::WatchOnly => {
-            verify_external_signer_credential(&app, credential.as_str()).map(|()| None)
-        }
-    };
-    record_auth_result(&app, &state, &result)?;
-    let authenticated_descriptors = result?;
-    load_node_auth_session(&app, &state, credential.as_str())?;
-    if let Some(descriptors) = authenticated_descriptors {
-        let selected = selected_profile_of_kind(&app, WalletKind::SingleKey)?.id;
-        state
-            .authenticated_software_descriptors
-            .lock()
-            .map_err(internal)?
-            .insert(selected, descriptors);
-    }
-    unlock_selected(&app, &state)?;
-    clear_mainnet_node_admission(&state)?;
-    let kind = diagnostics::wallet_kind(selected_profile(&app)?.kind);
-    diagnostics::record(
-        &app,
-        &state,
-        diagnostics::DiagnosticEventKind::WalletUnlocked,
-        diagnostics::DiagnosticOutcome::Succeeded,
-        diagnostics::DiagnosticContext {
-            wallet_kind: Some(kind),
-            ..Default::default()
-        },
-        None,
-    );
-    Ok(())
+        unlock_selected(&app, &state)?;
+        clear_mainnet_node_admission(&state)?;
+        let kind = diagnostics::wallet_kind(selected_profile(&app)?.kind);
+        diagnostics::record(
+            &app,
+            &state,
+            diagnostics::DiagnosticEventKind::WalletUnlocked,
+            diagnostics::DiagnosticOutcome::Succeeded,
+            diagnostics::DiagnosticContext {
+                wallet_kind: Some(kind),
+                ..Default::default()
+            },
+            None,
+        );
+        Ok(())
+    })
+    .await
+    .map_err(internal)?
 }
 
 #[tauri::command]
@@ -1102,7 +1106,14 @@ pub(super) fn persist_mainnet_node_admission_for_new_profile(
     })?;
     let pending = match current_mainnet_node_admission(state) {
         Ok(pending) => pending,
-        Err(error) if error.code == "node_admission_required" => return Ok(false),
+        Err(error) if error.code == "node_admission_required" => {
+            let Some(pending) =
+                managed_mainnet_node_admission(MainnetNodeAdmissionScope::NewWallet)
+            else {
+                return Ok(false);
+            };
+            pending
+        }
         Err(error) => return Err(error),
     };
     if pending.scope != MainnetNodeAdmissionScope::NewWallet {
@@ -1111,6 +1122,54 @@ pub(super) fn persist_mainnet_node_admission_for_new_profile(
             "Verify the Bitcoin Core node specifically for new mainnet wallet creation.",
         ));
     }
+    persist_mainnet_node_admission(app, state, destination, credential, pending)?;
+    Ok(true)
+}
+
+fn provision_managed_mainnet_node_if_missing(
+    app: &AppHandle,
+    state: &State<'_, AppState>,
+    credential: &str,
+) -> ApiResult<bool> {
+    if network() != Network::Bitcoin {
+        return Ok(false);
+    }
+    let destination = selected_profile(app)?.id;
+    if node_config_path_for(app, destination)?.exists() {
+        return Ok(false);
+    }
+    let Some(pending) =
+        managed_mainnet_node_admission(MainnetNodeAdmissionScope::ExistingWallet(destination))
+    else {
+        return Ok(false);
+    };
+    persist_mainnet_node_admission(app, state, destination, credential, pending)?;
+    Ok(true)
+}
+
+fn managed_mainnet_node_admission(
+    scope: MainnetNodeAdmissionScope,
+) -> Option<PendingMainnetNodeAdmission> {
+    let managed = crate::managed_gateway::enroll().ok()?;
+    let client = candidate_rpc_client(&managed.config, managed.password.as_str()).ok()?;
+    let status = checked_node_status(&client, managed.config.clone()).ok()?;
+    ensure_mainnet_core_ready_for_admission(status.initial_block_download).ok()?;
+    ensure_remote_core_sync_capabilities(&client).ok()?;
+    Some(PendingMainnetNodeAdmission {
+        config: managed.config,
+        password: managed.password,
+        created_at: Instant::now(),
+        scope,
+    })
+}
+
+fn persist_mainnet_node_admission(
+    app: &AppHandle,
+    state: &State<'_, AppState>,
+    destination: Uuid,
+    credential: &str,
+    pending: PendingMainnetNodeAdmission,
+) -> ApiResult<()> {
     let protected = Zeroizing::new(
         serde_json::to_vec(&ProtectedNodeAuthRef {
             version: PROTECTED_NODE_AUTH_VERSION,
@@ -1138,7 +1197,7 @@ pub(super) fn persist_mainnet_node_admission_for_new_profile(
             mainnet_node_verified: true,
         },
     );
-    Ok(true)
+    Ok(())
 }
 
 #[tauri::command]
