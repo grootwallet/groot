@@ -5,6 +5,10 @@ const nativeCommands = readFileSync(
   new URL('../../../src-tauri/src/wallet/profile_commands.rs', import.meta.url),
   'utf8'
 );
+const walletCore = readFileSync(
+  new URL('../../../src-tauri/src/wallet.rs', import.meta.url),
+  'utf8'
+);
 const multisigCommands = readFileSync(
   new URL('../../../src-tauri/src/wallet/multisig_proposal_commands.rs', import.meta.url),
   'utf8'
@@ -116,12 +120,20 @@ describe('protected network setup reuse', () => {
       standardCreate.indexOf('commit_multisig_profile(&app, id, &wallet)?;')
     );
     expect(nativeCommands).toContain('pub(super) fn copy_network_setup_before_profile_commit(');
-    expect(nativeCommands).toContain('return Ok(true);');
-    expect(nativeCommands).toContain('return Ok(false);');
+    expect(nativeCommands).toContain('copied: true');
+    expect(nativeCommands).toContain('copied: false');
     expect(nativeCommands).toContain(
       'diagnostics::DiagnosticEventKind::NetworkConfigurationChanged'
     );
     expect(nativeCommands).toContain('diagnostics::DiagnosticOutcome::Failed');
+  });
+
+  it('persists the verified node tip as the birthday for a generated software wallet', () => {
+    expect(nativeCommands).toContain('birthday_height: Some(birthday_height)');
+    expect(walletCore).toContain('if let Some(birthday_height) = network_setup.birthday_height');
+    expect(walletCore).toContain(
+      'INSERT INTO groot_recovery_settings (singleton, birthday_height, gap_limit)'
+    );
   });
 
   it('does not silently publish a multisig wallet when the user selected setup reuse', () => {

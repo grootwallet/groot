@@ -1861,6 +1861,7 @@ fn authentication_throttle_round_trips_through_wallet_storage() {
 fn recovery_scan_settings_default_and_persist_with_safe_bounds() {
     let db = Connection::open_in_memory().unwrap();
     init_app_schema(&db).unwrap();
+    assert!(!has_saved_recovery_scan_settings(&db).unwrap());
     assert_eq!(
         load_recovery_scan_settings(&db).unwrap(),
         RecoveryScanSettingsDto {
@@ -1873,6 +1874,7 @@ fn recovery_scan_settings_default_and_persist_with_safe_bounds() {
         [],
     )
     .unwrap();
+    assert!(has_saved_recovery_scan_settings(&db).unwrap());
     assert_eq!(
         load_recovery_scan_settings(&db).unwrap(),
         RecoveryScanSettingsDto {

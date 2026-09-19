@@ -52,7 +52,7 @@ const pinnedPolicySources = new Map([
   ['src-tauri/src/recovery.rs', '96eba2aaea0461d8ed067513c044f85f8845837dbf584eb3f93e6969ec5670dc'],
   ['src-tauri/src/network.rs', 'dcf011fb789a0b690b1832a9245df5fc0199318f03a820d10f9a3b1c90f5d76b'],
   ['src-tauri/src/registry.rs', '343aea20f5d09df6abd5c9fdba3b093efc6729c9ece8f180b27a150061753a18'],
-  ['src-tauri/src/wallet.rs', 'fffcc4696d2307be034273a05967c1d2446272ec901b765124418b16a521b76b'],
+  ['src-tauri/src/wallet.rs', 'fa310d1542a59e6eac72645b06a6328a605a57aff8ce0a180840f3c38b0e40b6'],
   [
     'src-tauri/src/wallet/diagnostics.rs',
     'e30f2d38fb7ccb44538646791aeb1f9eb1b67a2698aa4a3ebefd7aed973b4f2d'
@@ -83,11 +83,11 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src-tauri/src/wallet/multisig_proposal_commands.rs',
-    '0b09de2a86eafa565140df9e11ccd764c0a059b53ecec0aab71a9f4f98465b9d'
+    '6363e35905963bc86d6ff7d92c2395bf9c41226d42284324b2c7e57120cf9b7c'
   ],
   [
     'src-tauri/src/wallet/profile_commands.rs',
-    '2dd569ec2f474ab5d05677773099e9c003e81b12aca41f18f1445fd14733e518'
+    '4bb7f22fa427c1ed742ce8a6f74e13d2284d816df0ecd62389c9267fba72a0e9'
   ],
   [
     'src-tauri/src/wallet/payment_draft_commands.rs',
@@ -99,7 +99,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src-tauri/src/wallet/recovery_scan.rs',
-    'f29a2e2780c715c5ca31f8a8cff7c965f66ad804cb5eb506c11fa651a389bdde'
+    '0d2516987f32eac7e834a68a14a0dfa51e1937a8e9b183fb6437ad62cbb6b4b9'
   ],
   [
     'src-tauri/src/wallet/transaction_commands.rs',
@@ -131,7 +131,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src/lib/components/AppShell.svelte',
-    '47ad9447884f13f17dc098c4a1ebe0f2d0ecdc0a3dd1f6cae7e9a6fe3d83a1da'
+    '4613e19b40a09fc5750cb4c60fbbc0bf3d5c06bda7ab2fc50c64a710bf6977af'
   ],
   [
     'src/lib/wallet/live-sync.ts',
@@ -162,7 +162,7 @@ const pinnedPolicySources = new Map([
     'src/routes/unlock/+page.svelte',
     '32953a75c52de1df3c557ab6b6edb3a7aef88676e93fad5aa82204c742ca7b3b'
   ],
-  ['src/routes/+page.svelte', '3bdf985d5db28676a54a1c86af41f7e853b4ce52582050916f3f667f865a6398'],
+  ['src/routes/+page.svelte', '83947b01ce4b58005ed75b7c4a746ebb6cef871a33ee390662f989c925e91ae7'],
   [
     'src/routes/activity/+page.svelte',
     '38104eee15def811c78e25623978361cde42c80bf4bec20035c0d41b8df0483c'

@@ -1046,3 +1046,16 @@ native Rust. Failure stays on the selected mode and never chooses a fallback
 node or fee source. Existing wallet, registry, scan, node-setting,
 credential-envelope, descriptor, proposal, backup, and database formats are
 unchanged; no migration is required.
+
+## 2026-09-19 Generated-wallet birthday and first-scan progress
+
+Physical retest of `6f5cc85` showed that the route-independent scan did start,
+but a generated wallet still inherited the recovery fallback birthday `0` and
+Overview could miss the start transition until remount. Generated software
+wallet creation now persists the verified node tip in the existing recovery
+settings row before publishing the profile. The shell wakes immediately after
+creation, and Overview watches the short admission/start window so it attaches
+to native progress without navigation. Recovery/import profiles without a saved
+choice reject automatic empty-credential scans instead of defaulting to
+genesis. The progress banner is reduced to percentage and block counts. This is
+compatible with every existing database; no migration or discard is required.

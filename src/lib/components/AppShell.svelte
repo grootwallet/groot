@@ -294,7 +294,10 @@
     // Routine navigation must not repeat registry and setup-draft reads that
     // every destination performs independently. Refresh only after a flow that
     // can actually mutate those shell-level records.
-    if (previousPath && profileMutatingRoutes.has(previousPath)) void refreshProfiles();
+    const profileRefresh =
+      previousPath && profileMutatingRoutes.has(previousPath)
+        ? refreshProfiles()
+        : Promise.resolve();
     if (previousPath === '/multisig/new') void refreshSetupDraft();
     if (previousPath === '/unlock') {
       void walletService
@@ -310,6 +313,9 @@
       // first or routine sync even when the user returns to Settings instead
       // of waiting for Overview to mount or for the steady-state interval.
       if (previousPath === '/unlock') void liveSync.runNow();
+      else if (previousPath === '/welcome') {
+        void profileRefresh.then(() => liveSync?.runNow());
+      }
     }
   });
 

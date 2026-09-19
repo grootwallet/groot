@@ -76,6 +76,13 @@ The global foreground scheduler owns the explicit post-unlock wake-up rather
 than Overview. It restores exact-node admission and starts the saved initial
 history scan when required even if Settings is the visible route.
 
+For a newly generated software wallet, the same verified node preflight supplies
+the creation-tip birthday persisted in the existing recovery-settings table
+before the profile is published. Automatic first sync therefore checks only
+post-creation history and the mempool. Recovery/import profiles without an
+explicit saved choice remain blocked from empty-credential automatic scanning;
+they cannot silently fall back to genesis.
+
 The macOS enrollment endpoint remains publicly reachable and is not a proof of
 genuine-app identity. IP throttling, a bounded principal population, monitoring,
 revocation, and the least-privilege RPC contract limit abuse but do not eliminate

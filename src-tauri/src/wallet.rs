@@ -5799,13 +5799,20 @@ fn create_from_mnemonic(
             .map_err(internal)?;
         let words = Zeroizing::new(mnemonic.to_string());
         persist_secret_material(&dir.join("secret.json"), words.as_bytes(), credential)?;
-        let network_setup_copied = profile_commands::copy_network_setup_before_profile_commit(
+        let network_setup = profile_commands::copy_network_setup_before_profile_commit(
             app,
             state,
             network_setup_source_wallet_id,
             id,
             credential,
         )?;
+        if let Some(birthday_height) = network_setup.birthday_height {
+            db.execute(
+                "INSERT INTO groot_recovery_settings (singleton, birthday_height, gap_limit) VALUES (1, ?1, ?2)",
+                params![birthday_height, MIN_RECOVERY_GAP_LIMIT],
+            )
+            .map_err(internal)?;
+        }
         commit_profile(
             app,
             WalletProfile {
@@ -5821,7 +5828,7 @@ fn create_from_mnemonic(
             },
             &wallet.public_descriptor(KeychainKind::External).to_string(),
         )?;
-        Ok(network_setup_copied)
+        Ok(network_setup.copied)
     })();
     finish_new_profile_attempt(state, id, &dir, result.is_ok())?;
     result

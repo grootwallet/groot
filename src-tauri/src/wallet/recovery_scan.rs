@@ -21,6 +21,15 @@ pub(super) fn load_recovery_scan_settings(db: &Connection) -> ApiResult<Recovery
     })
 }
 
+pub(super) fn has_saved_recovery_scan_settings(db: &Connection) -> ApiResult<bool> {
+    db.query_row(
+        "SELECT EXISTS(SELECT 1 FROM groot_recovery_settings WHERE singleton = 1)",
+        [],
+        |row| row.get(0),
+    )
+    .map_err(internal)
+}
+
 pub(super) fn has_completed_sync(db: &Connection) -> ApiResult<bool> {
     db.query_row(
         "SELECT EXISTS(SELECT 1 FROM groot_chain_observation WHERE singleton = 1)",

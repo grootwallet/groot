@@ -617,12 +617,13 @@
       if (recoveryScanIsActive(status)) {
         startRecoveryStatusPolling();
       } else if (!snapshot?.syncedAt && nodeReady) {
-        // If setup navigation was interrupted, scan conservatively. Only an
-        // explicit new-wallet hint may skip history before the current tip.
+        // The shell owns automatic first-sync startup. Watch briefly for its
+        // native recovery scan so this route attaches even when admission and
+        // scan startup finish just after the initial status read.
         initialScanMode = page.url.searchParams.get('initial') === 'new' ? 'new' : 'full';
         showManualScanOptions = false;
         showAdvancedScanOptions = false;
-        void startInitialScan();
+        startRecoveryStatusPolling(true);
       }
     } catch (cause) {
       initialScanError = localizedError(
@@ -642,19 +643,24 @@
       return null;
     }
   }
-  async function pollRecoveryStatus(token: number) {
+  async function pollRecoveryStatus(token: number, waitForAutomaticStart = false) {
+    const startupDeadline = Date.now() + 10_000;
     while (token === recoveryPollToken) {
       const status = await refreshRecoveryStatus();
       if (!status || !recoveryScanIsActive(status)) {
         if (status?.status === 'completed') await loadSnapshot();
+        else if (waitForAutomaticStart && Date.now() < startupDeadline) {
+          await new Promise((resolve) => setTimeout(resolve, 250));
+          continue;
+        }
         return;
       }
       await new Promise((resolve) => setTimeout(resolve, 500));
     }
   }
-  function startRecoveryStatusPolling() {
+  function startRecoveryStatusPolling(waitForAutomaticStart = false) {
     const token = ++recoveryPollToken;
-    void pollRecoveryStatus(token);
+    void pollRecoveryStatus(token, waitForAutomaticStart);
   }
   function openInitialScan() {
     initialScanError = '';
@@ -921,7 +927,7 @@
           >{translate(
             $locale,
             recoveryScanIsActive(recoveryStatus)
-              ? 'Scanning wallet history · {percent}%'
+              ? 'Syncing · {percent}%'
               : savedRecoveryCanResume
                 ? 'Wallet-history scan paused'
                 : nodeReady
@@ -931,14 +937,10 @@
           )}</strong
         ><small
           >{recoveryScanIsActive(recoveryStatus) || savedRecoveryCanResume
-            ? translate(
-                $locale,
-                '{processed} of {total} blocks saved · progress continues across wallet locks',
-                {
-                  processed: formatInteger(recoveryStatus.processedBlocks, $locale),
-                  total: formatInteger(recoveryStatus.totalBlocks, $locale)
-                }
-              )
+            ? translate($locale, '{processed} / {total} blocks', {
+                processed: formatInteger(recoveryStatus.processedBlocks, $locale),
+                total: formatInteger(recoveryStatus.totalBlocks, $locale)
+              })
             : nodeReady
               ? translate(
                   $locale,

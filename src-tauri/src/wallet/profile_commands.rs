@@ -1150,9 +1150,9 @@ pub(super) fn persist_mainnet_node_admission_for_new_profile(
     state: &State<'_, AppState>,
     destination: Uuid,
     credential: &str,
-) -> ApiResult<bool> {
+) -> ApiResult<Option<u32>> {
     if network() != Network::Bitcoin {
-        return Ok(false);
+        return Ok(None);
     }
     crate::release_policy::ensure_database_open_enabled(network(), true).map_err(|_| {
         api_error(
@@ -1166,7 +1166,7 @@ pub(super) fn persist_mainnet_node_admission_for_new_profile(
             let Some(pending) =
                 managed_mainnet_node_admission(MainnetNodeAdmissionScope::NewWallet)
             else {
-                return Ok(false);
+                return Ok(None);
             };
             pending
         }
@@ -1178,8 +1178,13 @@ pub(super) fn persist_mainnet_node_admission_for_new_profile(
             "Verify the Bitcoin Core node specifically for new mainnet wallet creation.",
         ));
     }
+    let birthday_height = u32::try_from(checked_block_height(&candidate_rpc_client(
+        &pending.config,
+        pending.password.as_str(),
+    )?)?)
+    .map_err(internal)?;
     persist_mainnet_node_admission(app, state, destination, credential, pending)?;
-    Ok(true)
+    Ok(Some(birthday_height))
 }
 
 fn provision_managed_mainnet_node_if_missing(
@@ -1517,6 +1522,12 @@ pub async fn wallet_full_rescan(
                         "Enter the wallet credential before starting another full rescan.",
                     ));
                 }
+                if !has_saved_recovery_scan_settings(&db)? {
+                    return Err(api_error(
+                        "initial_scan_required",
+                        "Choose where wallet history begins before starting the first scan.",
+                    ));
+                }
             } else {
                 check_auth_throttle(&app, &state)?;
                 let verified = verify_selected_credential(&app, credential.as_str());
@@ -1837,7 +1848,7 @@ pub(super) fn adopt_network_setup_for_new_profile(
     source_wallet_id: &str,
     destination: Uuid,
     credential: &str,
-) -> ApiResult<()> {
+) -> ApiResult<u32> {
     let source = Uuid::parse_str(source_wallet_id).map_err(|_| {
         api_error(
             "wallet_not_found",
@@ -1872,10 +1883,10 @@ pub(super) fn adopt_network_setup_for_new_profile(
 
     let config = read_node_config_for(app, source)?;
     let sync_source = read_sync_source_for(app, source)?;
-    let password = match config.auth {
+    let (password, status) = match config.auth {
         RpcAuthMode::Cookie => {
-            checked_node_status(&candidate_rpc_client(&config, "")?, config.clone())?;
-            None
+            let status = checked_node_status(&candidate_rpc_client(&config, "")?, config.clone())?;
+            (None, status)
         }
         RpcAuthMode::UserPass => {
             let password = {
@@ -1894,11 +1905,11 @@ pub(super) fn adopt_network_setup_for_new_profile(
                 }
                 Zeroizing::new(session.password.to_string())
             };
-            checked_node_status(
+            let status = checked_node_status(
                 &candidate_rpc_client(&config, password.as_str())?,
                 config.clone(),
             )?;
-            Some(password)
+            (Some(password), status)
         }
     };
 
@@ -1934,7 +1945,12 @@ pub(super) fn adopt_network_setup_for_new_profile(
     } else {
         sessions.remove(&destination);
     }
-    Ok(())
+    u32::try_from(status.blocks).map_err(internal)
+}
+
+pub(super) struct NewProfileNetworkSetup {
+    pub(super) copied: bool,
+    pub(super) birthday_height: Option<u32>,
 }
 
 pub(super) fn copy_network_setup_before_profile_commit(
@@ -1943,7 +1959,7 @@ pub(super) fn copy_network_setup_before_profile_commit(
     source_wallet_id: Option<&str>,
     destination: Uuid,
     credential: &str,
-) -> ApiResult<bool> {
+) -> ApiResult<NewProfileNetworkSetup> {
     if let Some(source_wallet_id) = source_wallet_id {
         let adoption = adopt_network_setup_for_new_profile(
             app,
@@ -1952,8 +1968,11 @@ pub(super) fn copy_network_setup_before_profile_commit(
             destination,
             credential,
         );
-        if adoption.is_ok() {
-            return Ok(true);
+        if let Ok(birthday_height) = adoption {
+            return Ok(NewProfileNetworkSetup {
+                copied: true,
+                birthday_height: Some(birthday_height),
+            });
         }
         diagnostics::record(
             app,
@@ -1980,13 +1999,24 @@ pub(super) fn copy_network_setup_before_profile_commit(
             .lock()
             .map_err(internal)?
             .remove(&destination);
-        return Ok(false);
+        return Ok(NewProfileNetworkSetup {
+            copied: false,
+            birthday_height: None,
+        });
     }
 
     if network() == Network::Bitcoin {
-        return persist_mainnet_node_admission_for_new_profile(app, state, destination, credential);
+        let birthday_height =
+            persist_mainnet_node_admission_for_new_profile(app, state, destination, credential)?;
+        return Ok(NewProfileNetworkSetup {
+            copied: birthday_height.is_some(),
+            birthday_height,
+        });
     }
-    Ok(true)
+    Ok(NewProfileNetworkSetup {
+        copied: true,
+        birthday_height: None,
+    })
 }
 
 pub(crate) fn node_test(app: &AppHandle, state: &State<'_, AppState>) -> ApiResult<NodeStatusDto> {

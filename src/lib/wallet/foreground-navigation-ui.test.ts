@@ -44,6 +44,8 @@ describe('foreground wallet navigation', () => {
     expect(appShell).toContain('liveSync = createLiveSync(');
     expect(appShell).toContain('() => selectedProfile?.kind ?? null');
     expect(appShell).toContain("if (previousPath === '/unlock') void liveSync.runNow();");
+    expect(appShell).toContain("else if (previousPath === '/welcome')");
+    expect(appShell).toContain('profileRefresh.then(() => liveSync?.runNow())');
   });
 
   it('keeps scans alive across read-only routes and cancels before exclusive routes or lock', () => {
@@ -184,13 +186,16 @@ describe('foreground wallet navigation', () => {
     expect(overview).toContain("'Address discovery options'");
     expect(overview).toContain('!snapshot?.syncedAt && nodeReady');
     expect(overview).toContain("page.url.searchParams.get('initial') === 'new'");
-    expect(overview).toContain('void startInitialScan()');
+    expect(overview).toContain('startRecoveryStatusPolling(true)');
+    expect(overview).toContain('const startupDeadline = Date.now() + 10_000');
     expect(overview).toContain(
       "href={nodeReady && savedRecoveryCanResume ? undefined : '/settings'}"
     );
     expect(overview).toContain("const credential = ''");
     expect(overview).toContain('walletService.fullRescan(credential)');
     expect(overview).toContain('recoveryStatus.processedBlocks');
+    expect(overview).toContain("'Syncing · {percent}%'");
+    expect(overview).toContain("'{processed} / {total} blocks'");
     expect(overview).toContain('<Amount value={0} hidden={$discreetMode} />');
     expect(overview).toContain("'Never synced'");
   });

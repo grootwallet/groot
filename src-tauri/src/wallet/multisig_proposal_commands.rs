@@ -1244,7 +1244,7 @@ pub async fn multisig_create(
                 spending_paths: Vec::new(),
             };
             write_private_json(&dir.join("wallet.json"), &wallet)?;
-            let network_setup_copied = profile_commands::copy_network_setup_before_profile_commit(
+            let network_setup = profile_commands::copy_network_setup_before_profile_commit(
                 &app,
                 &state,
                 network_setup_source_wallet_id.as_deref(),
@@ -1253,10 +1253,10 @@ pub async fn multisig_create(
             )?;
             require_requested_network_setup(
                 network_setup_source_wallet_id.as_deref(),
-                network_setup_copied,
+                network_setup.copied,
             )?;
             commit_multisig_profile(&app, id, &wallet)?;
-            Ok((wallet, network_setup_copied))
+            Ok((wallet, network_setup.copied))
         })();
         finish_new_profile_attempt(&state, id, &dir, result.is_ok())?;
         let (wallet, network_setup_copied) = result?;
@@ -1355,16 +1355,16 @@ pub async fn multisig_recovery_create(
                 spending_paths: analysis.paths,
             };
             write_private_json(&dir.join("wallet.json"), &wallet)?;
-            let network_setup_copied = profile_commands::copy_network_setup_before_profile_commit(
+            let network_setup = profile_commands::copy_network_setup_before_profile_commit(
                 &app,
                 &state,
                 network_setup_source_wallet_id.as_deref(),
                 id,
                 credential.as_str(),
             )?;
-            require_requested_network_setup(network_setup_source_wallet_id.as_deref(), network_setup_copied)?;
+            require_requested_network_setup(network_setup_source_wallet_id.as_deref(), network_setup.copied)?;
             commit_multisig_profile(&app, id, &wallet)?;
-            Ok((wallet, network_setup_copied))
+            Ok((wallet, network_setup.copied))
         })();
         finish_new_profile_attempt(&state, id, &dir, result.is_ok())?;
         let (wallet, network_setup_copied) = result?;

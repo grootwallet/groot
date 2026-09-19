@@ -481,9 +481,9 @@ export const copyCatalog = {
     fr: 'Vos mots écrits correspondent à ce portefeuille.',
     es: 'Tus palabras escritas coinciden con esta cartera.'
   },
-  '{processed} of {total} blocks saved · progress continues across wallet locks': {
-    fr: '{processed} blocs sur {total} enregistrés · la progression continue quand le portefeuille se verrouille',
-    es: '{processed} de {total} bloques guardados · el progreso continúa aunque la cartera se bloquee'
+  '{processed} / {total} blocks': {
+    fr: '{processed} / {total} blocs',
+    es: '{processed} / {total} bloques'
   },
   '20 is standard. It controls address discovery, not block-scan speed.': {
     fr: '20 est la valeur standard. Elle contrôle la découverte des adresses, pas la vitesse d’analyse des blocs.',
@@ -570,9 +570,9 @@ export const copyCatalog = {
     fr: 'Analyser depuis le bloc initial. Cela peut prendre plusieurs dizaines de minutes sur Testnet4.',
     es: 'Escanear desde el bloque génesis. Puede tardar decenas de minutos en Testnet4.'
   },
-  'Scanning wallet history · {percent}%': {
-    fr: 'Analyse de l’historique · {percent} %',
-    es: 'Escaneando el historial · {percent}%'
+  'Syncing · {percent}%': {
+    fr: 'Synchronisation · {percent} %',
+    es: 'Sincronizando · {percent}%'
   },
   'Start at the current chain tip. Fastest, but it will not find older payments.': {
     fr: 'Commencer à la pointe actuelle de la chaîne. C’est le plus rapide, mais les anciens paiements ne seront pas trouvés.',

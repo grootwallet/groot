@@ -489,6 +489,12 @@ derivation, address discovery, PSBTs, signing, broadcast, recovery, wallet
 formats, and interoperability evidence; no alternate backend or fee source is
 introduced.
 
+Persisting the verified creation-tip birthday for a newly generated software wallet and
+reattaching its compact progress UI have no BIP support impact. The same BIP158
+matching, BIP84 descriptors, gap discovery, PSBT, signing, and recovery paths
+remain in use; recovered/imported wallets still require an explicit history
+choice and existing database schemas remain compatible.
+
 Every feature, interoperability, signer, descriptor, transaction, payment request,
 backup/recovery, sync/backend, network, or dependency change must assess BIP impact.
 If it adds, removes, expands, narrows, or changes evidence for a BIP:
