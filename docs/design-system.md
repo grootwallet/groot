@@ -20,6 +20,9 @@ Groot combines calm, task-focused desktop density with restrained native-utility
 
 1. One primary action per state. Secondary and destructive actions must be visually distinct.
 2. Put the durable result in the page. Toasts acknowledge events but never carry the only copy of an error or success state.
+   Manual-sync failures use the same concise retry banner on Overview, Activity,
+   and Receive, with normal section spacing below it so the next controls never
+   overlap the banner.
 3. Show plain-language policy before descriptors, fingerprints, or PSBT terminology.
 4. Never suggest that a coordinator can sign. Copy says which device is needed and how many signatures remain.
 5. Use progressive disclosure for long addresses, xpubs, descriptors, and transaction IDs while preserving copy/export access.

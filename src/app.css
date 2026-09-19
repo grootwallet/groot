@@ -1960,6 +1960,9 @@ code {
   line-height: 1.45;
   overflow-wrap: anywhere;
 }
+.sync-failure-banner {
+  margin-bottom: 34px;
+}
 .mobile-brand,
 .mobile-nav,
 .mobile-actions {

@@ -995,3 +995,11 @@ uses shorter copy. No native accounting, transaction graph, wallet data,
 descriptor, proposal, node-setting, DTO, dependency, or schema format changes;
 no migration is required. The reviewed Mainnet source-policy snapshot now pins
 the exact Overview, Activity, and Settings route bytes containing this change.
+
+The subsequent manual-sync failure polish is presentation-only. Overview,
+Activity, and both Receive flows now preserve their last verified content while
+showing the same concise retry banner, with enough following space to prevent
+Activity search and sort labels from overlapping it. The sanitized
+`network_unavailable` copy is shorter in every supported locale. Wallet sync,
+credentials, node admission, persistence, DTOs, and schemas are unchanged; no
+migration is required.

@@ -470,6 +470,11 @@ JSON-RPC request/response framing when an indexed match resolves to exactly one
 block; descriptor derivation, BIP158 matching, transaction interpretation,
 wallet formats, signing, recovery, and interoperability claims are unchanged.
 
+The 2026-09-19 manual-sync failure presentation follow-up has no BIP support
+impact. It only standardizes concise retry feedback and spacing across existing
+Overview, Activity, and Receive sync controls; no descriptor, transaction,
+address-discovery, signing, broadcast, or interoperability behavior changes.
+
 Every feature, interoperability, signer, descriptor, transaction, payment request,
 backup/recovery, sync/backend, network, or dependency change must assess BIP impact.
 If it adds, removes, expands, narrows, or changes evidence for a BIP:

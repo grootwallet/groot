@@ -633,8 +633,8 @@ const errorCategoryCopy = {
     es: 'Desbloquea la cartera para continuar.'
   },
   network_unavailable: {
-    fr: 'Le réseau est indisponible. Réessayez lorsque la connexion est rétablie.',
-    es: 'La red no está disponible. Inténtalo cuando se restablezca la conexión.'
+    fr: 'Bitcoin Core est indisponible. Vérifiez la connexion dans Réglages.',
+    es: 'Bitcoin Core no está disponible. Comprueba la conexión en Ajustes.'
   },
   node_syncing: {
     fr: 'Bitcoin Core est encore en cours de synchronisation. Attendez qu’il ait atteint le dernier bloc vérifié du portefeuille, puis réessayez.',
@@ -699,7 +699,7 @@ export function localizedError(
   if (current === 'en') {
     if (cause && typeof cause === 'object' && 'code' in cause) {
       if (cause.code === 'network_unavailable')
-        return 'Could not connect to Bitcoin Core. Check that the node is running and review the RPC address, authentication, and network settings.';
+        return 'Bitcoin Core is unavailable. Check the connection in Settings.';
       if (cause.code === 'internal_error') return fallback;
     }
     return cause instanceof Error ? cause.message : fallback;

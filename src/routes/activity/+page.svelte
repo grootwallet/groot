@@ -207,11 +207,15 @@
       </div>
     </div>
   </header>
-  {#if syncError}<LoadFailure
-      title={translate($locale, 'Sync failed')}
-      description={syncError}
-      onretry={syncNow}
-    />{/if}
+  {#if syncError}
+    <div class="sync-failure-banner">
+      <LoadFailure
+        title={translate($locale, 'Sync failed')}
+        description={syncError}
+        onretry={syncNow}
+      />
+    </div>
+  {/if}
   <section class="activity-controls" aria-label={translate($locale, 'Search and sort activity')}>
     <label
       ><span>{translate($locale, 'Search')}</span><input

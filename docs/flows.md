@@ -333,6 +333,11 @@ The page/list is durable truth. Unique markers persist in Rust until explicitly 
 
 While an unlocked desktop session is open, a single 35-second foreground loop syncs only the selected wallet. Every settled attempt schedules the next normal interval, including after a failure; slow attempts coalesce rather than overlap. Unlock and wallet selection paint the persisted snapshot before the first scheduled network refresh; selecting another wallet first cancels the previous wallet's automatic sync. A fresh Core scan reports progress from that wallet's own persisted checkpoint; copying another profile's network setup never copies scan state. Returning to the app wakes sync immediately. The scheduler remains mounted across Overview, Activity, Coins, Settings, Receive, and Send, so route navigation neither restarts nor suppresses it. The returned authoritative snapshot updates the current view, and durable notification markers produce the receipt/confirmation toast once. A quiet automatic attempt does not animate route content, and **Updated** advances only after a successful committed snapshot. Sync and notification reads validate the five-minute session but never refresh its idle deadline; an expired session stops polling, cancels the foreground scan, and returns to that wallet's unlock screen without stacked route errors. Sync pauses on onboarding or lock and never overlaps a previous native sync. Fully terminated push/background execution remains a later platform gate.
 
+A failed manual refresh keeps the last verified wallet state visible and adds the
+same concise, durable retry banner on Overview, Activity, and both Receive flows.
+The banner is separated from the next control group and its toast uses the same
+sanitized message.
+
 ADR 0064 supersedes the earlier scheduler and initial-scan presentation details.
 Automatic sync now runs every 35 seconds across Settings, Receive, and Send;
 exclusive mutations retain shared pause/resume ownership. A first Core scan

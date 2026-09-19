@@ -77,6 +77,7 @@
   const walletShell = useWalletShellContext();
   const isMainnet = defaultConfig.network === 'mainnet';
   let syncing = $state(false);
+  let syncError = $state('');
   let manualSyncDetailsVisible = $state(false);
   let snapshot = $state<WalletSnapshot | import('$lib/wallet/contracts').WalletOverview | null>(
     null
@@ -567,6 +568,7 @@
         snapshot = event.snapshot;
         loadError = '';
         loadErrorCode = '';
+        syncError = '';
         initialDataLoading = false;
       }
     })
@@ -759,6 +761,7 @@
     if (syncInProgress) return;
     manualSyncDetailsVisible = manual;
     syncing = true;
+    if (manual) syncError = '';
     try {
       if (manual) await walletShell.pauseAutomaticSync();
       startSyncStatusPolling();
@@ -787,17 +790,16 @@
           'node_admission_required',
           'wallet_corrupt'
         ].includes(cause.code);
+      if (manual) {
+        syncError = localizedError(cause, $locale);
+        manualSyncDetailsVisible = false;
+        toast({ title: 'Sync failed', description: syncError, tone: 'danger' });
+      }
       if (manual && setupRequired) {
         networkSetupRequired = true;
         await openNetworkSetup();
         return;
       }
-      if (manual)
-        toast({
-          title: 'Sync failed',
-          description: localizedError(cause, $locale),
-          tone: 'danger'
-        });
     } finally {
       await refreshSyncStatus();
       syncing = false;
@@ -1024,6 +1026,15 @@
           )}>{syncStatus.progressPercent}%</progress
         >{/if}
     </section>
+  {/if}
+  {#if syncError}
+    <div class="sync-failure-banner">
+      <LoadFailure
+        title={translate($locale, 'Sync failed')}
+        description={syncError}
+        onretry={() => sync(true)}
+      />
+    </div>
   {/if}
   {#if selectedProfile?.kind === 'single_key' && !selectedProfile.backupVerified}
     <section

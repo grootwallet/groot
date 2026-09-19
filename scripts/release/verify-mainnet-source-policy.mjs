@@ -158,18 +158,18 @@ const pinnedPolicySources = new Map([
     'src/routes/unlock/+page.svelte',
     '32953a75c52de1df3c557ab6b6edb3a7aef88676e93fad5aa82204c742ca7b3b'
   ],
-  ['src/routes/+page.svelte', 'e0a6ef5330e4a5528e74b11fb526c69be71b1b38b078d50101e251698dbd0b26'],
+  ['src/routes/+page.svelte', '3bdf985d5db28676a54a1c86af41f7e853b4ce52582050916f3f667f865a6398'],
   [
     'src/routes/activity/+page.svelte',
-    '70eafe96115e226c6a82d95bf727120e02be09fbd626c2eef0ec6338bb58aafd'
+    '38104eee15def811c78e25623978361cde42c80bf4bec20035c0d41b8df0483c'
   ],
   [
     'src/routes/receive/+page.svelte',
-    '8ad587785e285afb6c7244475b8195a900509be0c6755c236606b60530fc906a'
+    'e65a4a34e646134ffd22f1a4211df8c36de6f85ba96a7efd35bab07f2b8c9d91'
   ],
   [
     'src/routes/multisig/receive/+page.svelte',
-    'b47078ad29cb0bbecf2701d5ab11ebec8832c20a67d1952bef99123ecd700ccc'
+    'df1c553df035aee74003398ccad4c698b77fbc07fedebfb23d22f23952e60682'
   ],
   [
     'src/routes/settings/+page.svelte',

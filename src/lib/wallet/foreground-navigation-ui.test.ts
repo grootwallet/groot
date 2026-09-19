@@ -22,6 +22,7 @@ const multisigReceive = readFileSync(
   new URL('../../routes/multisig/receive/+page.svelte', import.meta.url),
   'utf8'
 );
+const appStyles = readFileSync(new URL('../../app.css', import.meta.url), 'utf8');
 
 describe('foreground wallet navigation', () => {
   it('focuses the selected wallet credential after the locked route finishes loading', () => {
@@ -147,7 +148,16 @@ describe('foreground wallet navigation', () => {
       expect(source).toContain('await walletShell.pauseAutomaticSync()');
       expect(source).toContain(command);
       expect(source).toContain('walletShell.resumeAutomaticSync()');
+      expect(source).toContain('class="sync-failure-banner"');
+      expect(source).toContain('<LoadFailure');
     }
+  });
+
+  it('keeps concise manual-sync failures durable and clear of adjacent controls', () => {
+    expect(overview).toContain('class="sync-failure-banner"');
+    expect(activity).toContain('class="sync-failure-banner"');
+    expect(appStyles).toContain('.sync-failure-banner {');
+    expect(appStyles).toContain('margin-bottom: 34px;');
   });
 
   it('gives coin freezing exclusive ownership before applying its local state', () => {

@@ -16,6 +16,7 @@
   import QRCode from 'qrcode';
   import { onMount, tick } from 'svelte';
   import Button from '$lib/components/Button.svelte';
+  import LoadFailure from '$lib/components/LoadFailure.svelte';
   import WalletSkeleton from '$lib/components/WalletSkeleton.svelte';
   import PermanentLabelEditor from '$lib/components/PermanentLabelEditor.svelte';
   import Modal from '$lib/components/Modal.svelte';
@@ -53,6 +54,7 @@
   let loadError = $state('');
   let busy = $state(false);
   let syncing = $state(false);
+  let syncError = $state('');
   let showGenerate = $state(false);
   let showDiscard = $state(false);
   let showQr = $state(false);
@@ -79,6 +81,7 @@
         return;
       applyAddresses(event.snapshot.receiveAddresses);
       labelSuggestions = event.snapshot.labelSuggestions;
+      syncError = '';
     })
   );
   $effect(() => {
@@ -135,6 +138,7 @@
   async function syncNow() {
     if (syncing || busy) return;
     syncing = true;
+    syncError = '';
     try {
       await walletShell.pauseAutomaticSync();
       const [snapshot] = await Promise.all([
@@ -154,9 +158,10 @@
         await goto('/unlock?next=/receive');
         return;
       }
+      syncError = localizedError(cause, $locale);
       toast({
         title: 'Sync failed',
-        description: localizedError(cause, $locale),
+        description: syncError,
         tone: 'danger'
       });
     } finally {
@@ -278,6 +283,15 @@
       )}</button
     >
   </header>
+  {#if syncError}
+    <div class="sync-failure-banner">
+      <LoadFailure
+        title={translate($locale, 'Sync failed')}
+        description={syncError}
+        onretry={syncNow}
+      />
+    </div>
+  {/if}
   {#if loadError}
     <section class="empty-state" role="alert">
       <h2>{translate($locale, 'Could not load addresses')}</h2>

@@ -115,6 +115,12 @@ describe('locale preferences', () => {
     expect(localizedError({ code: 'node_history_unavailable' }, 'es')).toContain(
       'ya no conserva los bloques necesarios'
     );
+    expect(localizedError({ code: 'network_unavailable' }, 'fr')).toBe(
+      'Bitcoin Core est indisponible. Vérifiez la connexion dans Réglages.'
+    );
+    expect(localizedError({ code: 'network_unavailable' }, 'es')).toBe(
+      'Bitcoin Core no está disponible. Comprueba la conexión en Ajustes.'
+    );
     expect(localizedError(new Error('Uncatalogued native detail'), 'fr')).toBe(
       'Une erreur est survenue. Réessayez.'
     );
@@ -126,9 +132,7 @@ describe('locale preferences', () => {
         { code: 'network_unavailable', message: 'JSON-RPC transport exposed private detail' },
         'en'
       )
-    ).toBe(
-      'Could not connect to Bitcoin Core. Check that the node is running and review the RPC address, authentication, and network settings.'
-    );
+    ).toBe('Bitcoin Core is unavailable. Check the connection in Settings.');
     expect(
       localizedError(
         { code: 'internal_error', message: 'JSON-RPC transport exposed private detail' },
