@@ -43,6 +43,7 @@ describe('foreground wallet navigation', () => {
     expect(appShell).toContain('automaticSyncPauseCount === 0');
     expect(appShell).toContain('liveSync = createLiveSync(');
     expect(appShell).toContain('() => selectedProfile?.kind ?? null');
+    expect(appShell).toContain("if (previousPath === '/unlock') void liveSync.runNow();");
   });
 
   it('keeps scans alive across read-only routes and cancels before exclusive routes or lock', () => {

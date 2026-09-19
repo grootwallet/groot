@@ -426,6 +426,17 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
       throw new WalletError('invalid_credential', 'Incorrect app PIN.');
     return this.testNodeConnection();
   }
+  async configureManagedNode(credential: string) {
+    if (!this._selectedWalletId || credential !== this._credentials.get(this._selectedWalletId))
+      throw new WalletError('invalid_credential', 'Incorrect app PIN.');
+    this._nodeConfig = {
+      backend: { type: 'remote_core', url: 'https://bitcoin-rpc.usegroot.com/' },
+      auth: 'user_pass',
+      username: 'groot-0123456789abcdef01234567',
+      torProxy: null
+    };
+    return this.testNodeConnection();
+  }
   async saveNodeConfig(config: CoreNodeConfig, password: string, credential: string) {
     if (!this._selectedWalletId || credential !== this._credentials.get(this._selectedWalletId))
       throw new WalletError('invalid_credential', 'Incorrect app PIN.');

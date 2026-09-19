@@ -1019,6 +1019,62 @@ pub fn node_config(app: AppHandle) -> ApiResult<CoreNodeConfig> {
 }
 
 #[tauri::command]
+pub async fn managed_node_configure(
+    app: AppHandle,
+    credential: String,
+) -> ApiResult<NodeStatusDto> {
+    let credential = Zeroizing::new(credential);
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        cancel_foreground_sync(&state)?;
+        let _operation = operation_guard(&state)?;
+        require_unlocked(&app, &state)?;
+        if network() != Network::Bitcoin {
+            return Err(api_error(
+                "invalid_node_config",
+                "The Groot managed node is available only on Mainnet.",
+            ));
+        }
+        check_auth_throttle(&app, &state)?;
+        let verified = verify_selected_credential(&app, credential.as_str());
+        record_auth_result(&app, &state, &verified)?;
+        verified?;
+        let destination = selected_profile(&app)?.id;
+        let pending = managed_mainnet_node_admission(
+            MainnetNodeAdmissionScope::ExistingWallet(destination),
+        )
+        .ok_or_else(|| {
+            api_error(
+                "network_unavailable",
+                "Groot could not provision managed-node access. Check the connection and try again.",
+            )
+        })?;
+        persist_mainnet_node_admission(
+            &app,
+            &state,
+            destination,
+            credential.as_str(),
+            pending,
+        )?;
+        let status = node_test(&app, &state)?;
+        diagnostics::record(
+            &app,
+            &state,
+            diagnostics::DiagnosticEventKind::NetworkConfigurationChanged,
+            diagnostics::DiagnosticOutcome::Succeeded,
+            diagnostics::DiagnosticContext {
+                sync_source: Some(diagnostics::DiagnosticSyncSource::BitcoinCore),
+                ..Default::default()
+            },
+            None,
+        );
+        Ok(status)
+    })
+    .await
+    .map_err(internal)?
+}
+
+#[tauri::command]
 pub fn network_public_status(app: AppHandle) -> ApiResult<PublicNetworkStatusDto> {
     read_public_network_status(&app)
 }
@@ -1151,6 +1207,9 @@ fn managed_mainnet_node_admission(
     scope: MainnetNodeAdmissionScope,
 ) -> Option<PendingMainnetNodeAdmission> {
     let managed = crate::managed_gateway::enroll().ok()?;
+    if !crate::managed_gateway::is_managed_config(&managed.config) {
+        return None;
+    }
     let client = candidate_rpc_client(&managed.config, managed.password.as_str()).ok()?;
     let status = checked_node_status(&client, managed.config.clone()).ok()?;
     ensure_mainnet_core_ready_for_admission(status.initial_block_download).ok()?;

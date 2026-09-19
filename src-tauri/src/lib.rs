@@ -181,6 +181,7 @@ pub fn run() {
             wallet::profile_commands::mainnet_core_admit,
             wallet::profile_commands::node_config,
             wallet::profile_commands::network_public_status,
+            wallet::profile_commands::managed_node_configure,
             wallet::profile_commands::node_config_save,
             wallet::profile_commands::network_setup_sources,
             wallet::profile_commands::network_setup_adopt,

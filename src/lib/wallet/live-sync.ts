@@ -11,6 +11,8 @@ export type LiveSyncController = {
 export const LIVE_SYNC_INTERVAL_MS = 35_000;
 
 type LiveSyncPort = Pick<WalletSnapshotPort, 'sync' | 'cancelSync' | 'syncMultisig'> & {
+  fullRescan?: (credential: string) => Promise<unknown>;
+  testNodeConnection?: () => Promise<unknown>;
   syncStatus?: () => Promise<WalletSyncStatus | null>;
 };
 
@@ -49,6 +51,13 @@ export function createLiveSync(
   };
 
   const perform = async (startedGeneration: number): Promise<void> => {
+    const report = (cause: unknown) => {
+      try {
+        onError(cause);
+      } catch {
+        /* Error reporting must never disable future wallet syncs. */
+      }
+    };
     try {
       const kind = selectedWalletKind();
       if (!kind) return;
@@ -66,24 +75,56 @@ export function createLiveSync(
       else await wallet.sync(true);
     } catch (cause) {
       if (!enabled || startedGeneration !== generation) return;
+      let failure = cause;
       if (
-        typeof cause === 'object' &&
-        cause !== null &&
-        'code' in cause &&
-        [
-          'sync_cancelled',
-          'sync_in_progress',
-          'scan_in_progress',
-          'initial_scan_required'
-        ].includes(String(cause.code))
+        typeof failure === 'object' &&
+        failure !== null &&
+        'code' in failure &&
+        String(failure.code) === 'node_admission_required' &&
+        wallet.testNodeConnection
+      ) {
+        try {
+          await wallet.testNodeConnection();
+          const kind = selectedWalletKind();
+          if (!kind) return;
+          if (kind === 'multisig') await wallet.syncMultisig(true);
+          else await wallet.sync(true);
+          return;
+        } catch (retryCause) {
+          failure = retryCause;
+        }
+      }
+      if (
+        typeof failure === 'object' &&
+        failure !== null &&
+        'code' in failure &&
+        String(failure.code) === 'initial_scan_required'
+      ) {
+        try {
+          await wallet.fullRescan?.('');
+        } catch (scanCause) {
+          if (
+            typeof scanCause === 'object' &&
+            scanCause !== null &&
+            'code' in scanCause &&
+            ['sync_cancelled', 'sync_in_progress', 'scan_in_progress'].includes(
+              String(scanCause.code)
+            )
+          )
+            return;
+          report(scanCause);
+        }
+        return;
+      }
+      if (
+        typeof failure === 'object' &&
+        failure !== null &&
+        'code' in failure &&
+        ['sync_cancelled', 'sync_in_progress', 'scan_in_progress'].includes(String(failure.code))
       ) {
         return;
       }
-      try {
-        onError(cause);
-      } catch {
-        /* Error reporting must never disable future wallet syncs. */
-      }
+      report(failure);
     }
   };
 

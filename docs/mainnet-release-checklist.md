@@ -112,6 +112,15 @@ onboarding, word-selection, automatic first-scan, 35-second background sync,
 fee acceleration, remote HTTPS Core after IBD, and full signed lifecycle still
 require exact-candidate acceptance.
 
+Internal RC `da617773` passed the 30-second locked Settings stability check, but
+its fresh managed-wallet run exposed a release-blocking route-ownership defect:
+enrollment and the Core preflight succeeded, while the initial history scan did
+not start until Overview mounted after relaunch. The same run also exposed the
+managed principal in the generic custom-RPC editor and offered no explicit path
+back from a custom node. The replacement candidate must prove route-independent
+first sync plus the credential-free **Groot managed** / **This Mac** / **Custom
+remote** selector and authenticated renewal path before these rows can close.
+
 The release owner approved seven desktop-USB model targets: Coldcard Mk4, Trezor Model One, Ledger Nano S Plus, original Bitcoin-only BitBox02, original Blockstream Jade Classic, Trezor Safe 3 Bitcoin-only, and BitBox02 Nova. Frozen firmware exists for Coldcard Mk4 5.6.1, original BitBox02 9.26.3, Jade Classic 1.0.40, Safe 3 2.12.3, and Nova 9.26.3. The release owner has declared Trezor Model One firmware 1.14.1 and Ledger Nano S Plus firmware 1.6.1 with Bitcoin app 2.5.0 as release-target versions; these declarations are not physical certification evidence. HWI is pinned to 3.2.0. The trusted future-mainnet boundary rejects unlisted families and exact-model identifiers outside the approved Ledger, Trezor, and Bitcoin-only BitBox set. ADR 0054 deliberately also admits only HWI's exact `coldcard`/`coldcard` and `jade`/`jade` family records because HWI cannot identify Mk4 and Jade Classic more narrowly. New hardware-wallet creation still requires recent live-HWI admission bound to the exact public account identity. Physical and release evidence remains specific to Mk4 and Jade Classic and is not inherited by other family models. Release notes must disclose the family-level runtime boundary. No BLE, QR, NFC, or unlisted family inherits USB evidence.
 
 The owner-operated internal Mainnet `4630bf95` checkpoint confirms three

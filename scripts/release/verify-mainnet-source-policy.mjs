@@ -16,10 +16,10 @@ const pinnedPolicySources = new Map([
   ['.env.mainnet', '1623f3f97de588daea2bbeae1f9c56ebc896b6bc2c22ac238563b46b688ced85'],
   ['.env.multi', '33fc3d5022968d9eaa25bfe749c0b01691c0570611a65255100718d2c50df723'],
   ['package.json', '11cd0626ef8f795919abaa142ab307bced9a589e81645f09617e2db26e192970'],
-  ['src-tauri/src/lib.rs', '8253cd70b10420b75ac050db7fd5e5f5a2b61fa9c9541b7cc2234d4adfb8ed24'],
+  ['src-tauri/src/lib.rs', 'c10997e4a806be08742fde042200d57ae479a2a458a234bc7b8344b408c34c2a'],
   [
     'src-tauri/src/managed_gateway.rs',
-    '35813781f3e3e6669940e05b38339a37c2f035c0372b1264c3b418853aad76d1'
+    '7e5bf0ab7c25346448e4423bab2e748de96684612230c38b797a075fef5866d0'
   ],
   [
     'scripts/network/check-native-builds.sh',
@@ -87,7 +87,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src-tauri/src/wallet/profile_commands.rs',
-    'b381b9594adcc5d8d65c44a5cb391d83ed58dfafc59725fc81223e149a3e04bd'
+    '2dd569ec2f474ab5d05677773099e9c003e81b12aca41f18f1445fd14733e518'
   ],
   [
     'src-tauri/src/wallet/payment_draft_commands.rs',
@@ -131,20 +131,20 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src/lib/components/AppShell.svelte',
-    '0fb281ef78d7d0ce5ce7d8aa93521210a62246d52daab2357041c60859528316'
+    '47ad9447884f13f17dc098c4a1ebe0f2d0ecdc0a3dd1f6cae7e9a6fe3d83a1da'
   ],
   [
     'src/lib/wallet/live-sync.ts',
-    '961da1b4d0671a1f5223f5c7810e578e9bf84892c9cc8ba20275f803e44d63ae'
+    'a5c477820a08a6fda433fbf8c7ac9b0a2d36ede2e16593f0f0c3aebd6538a33c'
   ],
-  ['src/lib/wallet/tauri.ts', 'be2ed274f59464fa0c6f16659765118af29860eeabc793643212a322d0853375'],
+  ['src/lib/wallet/tauri.ts', 'a115b59e86a6c87b569b41d5d4e01fca176f11702c73c8d00b2c5907b614e5e1'],
   [
     'src/lib/wallet/contracts/errors.ts',
     'd962be99040369e7ec5047919e23f543406bec604fd30a145c158c486838b0a5'
   ],
   [
     'src/lib/wallet/contracts/port.ts',
-    '0eb377f6475f4c51dc054175a1f037498890e5d4cf11014d44c9481a5a641d64'
+    '0d49648db5d6ef72b3c57878a373f0a8e001450988e5ab250496f96474286625'
   ],
   [
     'src/lib/wallet/contracts/runtime.ts',
@@ -177,7 +177,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src/routes/settings/+page.svelte',
-    'fe6cdb26992cad562b7dcea1007d674b166acb853117da5609ea922cbdb621da'
+    '76f01092199dd4e498cd5002403de42c51797a98566683c0881b1bc4b9f06b2d'
   ],
   [
     'services/core-gateway/gateway.py',

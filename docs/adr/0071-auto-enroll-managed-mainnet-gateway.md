@@ -53,6 +53,13 @@ unlock remain offline as allowed by ADR 0064; the UI must show that network data
 is unavailable. There is no alternate node, fee source, downgrade, or silent
 fallback.
 
+Settings presents the managed endpoint as its own mode beside **This Mac** and
+**Custom remote**. It does not render the generated principal or password.
+Returning from a custom node, or replacing revoked managed access, requires an
+explicit wallet-credential-authenticated action. That action repeats enrollment
+and the exact-node/capability preflight before atomically replacing the existing
+protected node envelope. It is never attempted as an automatic fallback.
+
 Wallet unlock performs the optional network operation on a blocking worker,
 after exact wallet-credential authentication and before the unlocked session is
 published. Global Settings and sanitized app logs remain available while the
@@ -64,6 +71,10 @@ checks do not.
 Fresh Mainnet users receive a usable default node without seeing or pasting RPC
 credentials, while operators can revoke or throttle one profile without
 rotating every client. Existing manually configured profiles are unchanged.
+
+The global foreground scheduler owns the explicit post-unlock wake-up rather
+than Overview. It restores exact-node admission and starts the saved initial
+history scan when required even if Settings is the visible route.
 
 The macOS enrollment endpoint remains publicly reachable and is not a proof of
 genuine-app identity. IP throttling, a bounded principal population, monitoring,

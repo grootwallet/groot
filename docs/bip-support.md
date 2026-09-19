@@ -482,6 +482,13 @@ without changing descriptors, derivation, BIP158 matching, PSBTs, signing,
 broadcast, recovery, wallet formats, or interoperability evidence. Enrollment
 failure is explicit offline state and never a backend or fee fallback.
 
+The managed-node mode separation, explicit credential renewal, and
+route-independent initial-scan wake-up have no BIP support impact. They preserve
+the same protected RPC envelope, exact Core/BIP158 scan operations, descriptor
+derivation, address discovery, PSBTs, signing, broadcast, recovery, wallet
+formats, and interoperability evidence; no alternate backend or fee source is
+introduced.
+
 Every feature, interoperability, signer, descriptor, transaction, payment request,
 backup/recovery, sync/backend, network, or dependency change must assess BIP impact.
 If it adds, removes, expands, narrows, or changes evidence for a BIP:

@@ -166,7 +166,20 @@
     username: null,
     torProxy: null
   });
+  const managedNodeUrl = 'https://bitcoin-rpc.usegroot.com/';
+  const isManagedNodeConfig = (config: CoreNodeConfig) =>
+    defaultConfig.network === 'mainnet' &&
+    config.backend.type === 'remote_core' &&
+    config.backend.url === managedNodeUrl &&
+    config.auth === 'user_pass' &&
+    /^groot-[0-9a-f]{24}$/.test(config.username ?? '') &&
+    !config.torProxy;
   let node = $state<CoreNodeConfig>(localNodeConfig());
+  let nodeMode = $state<'managed' | 'local_core' | 'remote_core' | 'tor'>('local_core');
+  let managedNodeConfigured = $derived(isManagedNodeConfig(node));
+  let managedRenewalAvailable = $derived(
+    nodeMode === 'managed' && (!managedNodeConfigured || connected === false)
+  );
   let networkSetupSources = $state<NetworkSetupSource[]>([]);
   let networkReuseOpen = $state(false),
     networkReuseSourceId = $state(''),
@@ -337,6 +350,7 @@
         walletService.syncSource(),
         walletService.networkSetupSources()
       ]);
+      nodeMode = isManagedNodeConfig(node) ? 'managed' : node.torProxy ? 'tor' : node.backend.type;
       scan = await walletService.recoveryScanSettings();
       scanDraft = { ...scan };
       scanStatus = await walletService.recoveryScanStatus();
@@ -531,8 +545,14 @@
       checking = false;
     }
   }
-  function setNodeLocation(type: 'local_core' | 'remote_core' | 'tor') {
+  function setNodeLocation(type: 'managed' | 'local_core' | 'remote_core' | 'tor') {
     if (defaultConfig.network === 'mainnet' && type === 'tor') return;
+    nodeMode = type;
+    if (type === 'managed') {
+      nodePassword = '';
+      nodeError = '';
+      return;
+    }
     node =
       type === 'local_core'
         ? localNodeConfig()
@@ -559,11 +579,19 @@
   }
   function openNodeSettings() {
     clearNodeCredentials();
+    nodeMode = isManagedNodeConfig(node) ? 'managed' : node.torProxy ? 'tor' : node.backend.type;
     nodeOpen = true;
   }
   function closeNodeSettings() {
     clearNodeCredentials();
     nodeOpen = false;
+  }
+  function nodeSaveLabel() {
+    if (nodeMode !== 'managed') return translate($locale, 'Save & test');
+    return translate(
+      $locale,
+      managedNodeConfigured ? 'Renew managed access' : 'Use Groot managed node'
+    );
   }
   async function saveNode() {
     busy = true;
@@ -591,6 +619,31 @@
       nodeError = localizedError(cause, $locale, 'Could not save this node.');
     } finally {
       nodePassword = '';
+      walletCredential = '';
+      busy = false;
+    }
+  }
+  async function configureManagedNode() {
+    busy = true;
+    nodeError = '';
+    const renewing = managedNodeConfigured;
+    try {
+      const result = await walletService.configureManagedNode(walletCredential);
+      node = result.backend;
+      nodeMode = 'managed';
+      connected = true;
+      nodeStatus = result;
+      nodeOpen = false;
+      clearNodeCredentials();
+      toast({
+        title: renewing ? 'Managed-node access renewed' : 'Groot node connected',
+        description: 'Groot provisioned new wallet-specific access without exposing credentials.',
+        tone: 'success'
+      });
+    } catch (cause) {
+      connected = false;
+      nodeError = localizedError(cause, $locale, 'Could not provision Groot managed-node access.');
+    } finally {
       walletCredential = '';
       busy = false;
     }
@@ -1498,8 +1551,14 @@
             ><strong>{translate($locale, 'Fee and broadcast node')}</strong><small
               >{networkName(defaultConfig.network)}{' · '}{translate(
                 $locale,
-                node.backend.type === 'local_core' ? 'This Mac' : 'Trusted remote server'
-              )}{' · '}<span class="selectable-text">{node.backend.url}</span></small
+                managedNodeConfigured
+                  ? 'Groot managed node'
+                  : node.backend.type === 'local_core'
+                    ? 'This Mac'
+                    : 'Custom remote node'
+              )}{#if !managedNodeConfigured}{' · '}<span class="selectable-text"
+                  >{node.backend.url}</span
+                >{/if}</small
             ></span
           ><ChevronRight size={16} /></button
         >
@@ -2366,97 +2425,125 @@
   onclose={closeNodeSettings}
 >
   <div class="theme-choice node-location">
-    <button
-      class:active={node.backend.type === 'local_core'}
+    {#if defaultConfig.network === 'mainnet'}<button
+        class:active={nodeMode === 'managed'}
+        onclick={() => setNodeLocation('managed')}>{translate($locale, 'Groot managed')}</button
+      >{/if}<button
+      class:active={nodeMode === 'local_core'}
       onclick={() => setNodeLocation('local_core')}>{translate($locale, 'This Mac')}</button
     ><button
-      class:active={node.backend.type === 'remote_core' && !node.torProxy}
-      onclick={() => setNodeLocation('remote_core')}>{translate($locale, 'Remote TLS')}</button
+      class:active={nodeMode === 'remote_core'}
+      onclick={() => setNodeLocation('remote_core')}>{translate($locale, 'Custom remote')}</button
     >{#if defaultConfig.network !== 'mainnet'}<button
-        class:active={!!node.torProxy}
+        class:active={nodeMode === 'tor'}
         onclick={() => setNodeLocation('tor')}>{translate($locale, 'Tor onion')}</button
       >{/if}
   </div>
-  <label class="field"
-    ><span>{translate($locale, 'RPC URL')}</span><input
-      bind:value={node.backend.url}
-      placeholder={translate(
+  {#if nodeMode === 'managed'}
+    <div class="ready-panel">
+      <ShieldCheck size={18} />
+      <div>
+        <strong>{translate($locale, 'Groot managed node')}</strong><small
+          >{translate(
+            $locale,
+            'Groot provisions isolated access for this wallet. RPC credentials stay encrypted in native code and are never shown here.'
+          )}</small
+        >
+      </div>
+    </div>
+    <div class="warning-box">
+      <strong>{translate($locale, 'Trusted service privacy tradeoff.')}</strong>
+      {translate(
         $locale,
-        node.backend.type === 'local_core'
-          ? localRpcUrl
-          : node.torProxy
-            ? 'http://your-node.onion:8332'
-            : 'https://node.example.com:8332'
+        'The service can observe connection timing and requested blocks. Groot never sends recovery words, private keys, labels, or addresses.'
       )}
-    /><small
-      >{translate(
-        $locale,
-        defaultConfig.network === 'mainnet'
-          ? 'Mainnet accepts loopback HTTP or a trusted remote HTTPS endpoint. Credentials in URLs are rejected.'
-          : 'Credentials in URLs are rejected. TLS uses system trust roots; Tor accepts only .onion\n      destinations.'
-      )}</small
-    ></label
-  >
-  {#if node.torProxy}<label class="field"
-      ><span>{translate($locale, 'Local SOCKS5 proxy')}</span><input
-        bind:value={node.torProxy}
-        placeholder="127.0.0.1:9050"
+    </div>
+  {:else}<label class="field"
+      ><span>{translate($locale, 'RPC URL')}</span><input
+        bind:value={node.backend.url}
+        placeholder={translate(
+          $locale,
+          node.backend.type === 'local_core'
+            ? localRpcUrl
+            : node.torProxy
+              ? 'http://your-node.onion:8332'
+              : 'https://node.example.com:8332'
+        )}
       /><small
         >{translate(
           $locale,
-          'The proxy must listen on loopback. Remote proxies are rejected.'
+          defaultConfig.network === 'mainnet'
+            ? 'Mainnet accepts loopback HTTP or a trusted remote HTTPS endpoint. Credentials in URLs are rejected.'
+            : 'Credentials in URLs are rejected. TLS uses system trust roots; Tor accepts only .onion\n      destinations.'
         )}</small
       ></label
-    >{/if}
-  {#if node.backend.type === 'local_core'}
-    {#if defaultConfig.network === 'regtest'}<div class="credential-warning">
-        <ShieldCheck size={16} />
-        <p>
-          <strong>{translate($locale, 'Automatic cookie authentication')}</strong><span
-            >{translate(
-              $locale,
-              'Uses Groot’s isolated local Regtest cookie. Switch to username/password only for a\n            custom local node.'
-            )}</span
-          >
-        </p>
-      </div>{/if}
-    <label class="field"
-      ><span>{translate($locale, 'Authentication')}</span><select bind:value={node.auth}
-        >{#if defaultConfig.network === 'regtest'}<option value="cookie"
-            >{translate($locale, 'Local cookie')}</option
-          >{/if}<option value="user_pass">{translate($locale, 'Username and password')}</option
-        ></select
-      ></label
     >
-  {/if}
-  {#if node.auth === 'user_pass'}<label class="field"
-      ><span>{translate($locale, 'RPC username')}</span><input
-        value={node.username ?? ''}
-        oninput={(event) => (node = { ...node, username: event.currentTarget.value })}
-        autocomplete="off"
-      /></label
-    ><PasswordField
-      label={translate($locale, 'RPC password')}
-      bind:value={nodePassword}
-      autocomplete="new-password"
-      hint={translate($locale, 'Encrypted locally; never placed in the URL or public config.')}
+    {#if node.torProxy}<label class="field"
+        ><span>{translate($locale, 'Local SOCKS5 proxy')}</span><input
+          bind:value={node.torProxy}
+          placeholder="127.0.0.1:9050"
+        /><small
+          >{translate(
+            $locale,
+            'The proxy must listen on loopback. Remote proxies are rejected.'
+          )}</small
+        ></label
+      >{/if}
+    {#if nodeMode === 'local_core'}
+      {#if defaultConfig.network === 'regtest'}<div class="credential-warning">
+          <ShieldCheck size={16} />
+          <p>
+            <strong>{translate($locale, 'Automatic cookie authentication')}</strong><span
+              >{translate(
+                $locale,
+                'Uses Groot’s isolated local Regtest cookie. Switch to username/password only for a\n            custom local node.'
+              )}</span
+            >
+          </p>
+        </div>{/if}
+      <label class="field"
+        ><span>{translate($locale, 'Authentication')}</span><select bind:value={node.auth}
+          >{#if defaultConfig.network === 'regtest'}<option value="cookie"
+              >{translate($locale, 'Local cookie')}</option
+            >{/if}<option value="user_pass">{translate($locale, 'Username and password')}</option
+          ></select
+        ></label
+      >
+    {/if}
+    {#if node.auth === 'user_pass'}<label class="field"
+        ><span>{translate($locale, 'RPC username')}</span><input
+          value={node.username ?? ''}
+          oninput={(event) => (node = { ...node, username: event.currentTarget.value })}
+          autocomplete="off"
+        /></label
+      ><PasswordField
+        label={translate($locale, 'RPC password')}
+        bind:value={nodePassword}
+        autocomplete="new-password"
+        hint={translate($locale, 'Encrypted locally; never placed in the URL or public config.')}
+      />{/if}{/if}
+  {#if nodeMode !== 'managed' || managedRenewalAvailable}<PasswordField
+      label={credentialLabel}
+      bind:value={walletCredential}
+      autocomplete="current-password"
+      hint={translate($locale, 'Required once to protect this wallet’s RPC credentials.')}
     />{/if}
-  <PasswordField
-    label={credentialLabel}
-    bind:value={walletCredential}
-    autocomplete="current-password"
-    hint={translate($locale, 'Required once to protect this wallet’s RPC credentials.')}
-  />
   {#if nodeError}<p class="form-error">{nodeError}</p>{/if}
   <div class="modal-footer">
     <Button variant="secondary" onclick={closeNodeSettings}>{translate($locale, 'Cancel')}</Button
-    ><Button
-      disabled={!node.backend.url ||
-        !walletCredential ||
-        (node.auth === 'user_pass' && (!node.username || !nodePassword))}
-      loading={busy}
-      loadingLabel={translate($locale, 'Testing connection…')}
-      onclick={saveNode}>{translate($locale, 'Save & test')}</Button
-    >
+    >{#if nodeMode === 'managed' && managedNodeConfigured && !managedRenewalAvailable}<Button
+        disabled={checking}
+        loading={checking}
+        loadingLabel={translate($locale, 'Testing connection…')}
+        onclick={checkConnection}>{translate($locale, 'Check managed status')}</Button
+      >{:else}<Button
+        disabled={!walletCredential ||
+          (nodeMode !== 'managed' &&
+            (!node.backend.url ||
+              (node.auth === 'user_pass' && (!node.username || !nodePassword))))}
+        loading={busy}
+        loadingLabel={translate($locale, 'Testing connection…')}
+        onclick={nodeMode === 'managed' ? configureManagedNode : saveNode}>{nodeSaveLabel()}</Button
+      >{/if}
   </div>
 </Modal>

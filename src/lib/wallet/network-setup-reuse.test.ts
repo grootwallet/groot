@@ -160,6 +160,28 @@ describe('protected network setup reuse', () => {
     expect(settings).toContain('if (reusableNetworkSetups.length > 0) openNetworkReuse()');
   });
 
+  it('separates managed, local, and custom node choices without rendering managed credentials', () => {
+    expect(settings).toContain("setNodeLocation('managed')");
+    expect(settings).toContain("setNodeLocation('local_core')");
+    expect(settings).toContain("setNodeLocation('remote_core')");
+    expect(settings).toContain("nodeMode === 'managed'");
+    expect(settings).toContain('Groot managed node');
+    expect(settings).toContain('Custom remote');
+    expect(settings).toContain('Check managed status');
+    expect(settings).toContain('managedRenewalAvailable');
+    expect(settings).toContain('{:else}<label class="field"');
+    expect(settings).toContain('walletService.configureManagedNode(walletCredential)');
+  });
+
+  it('renews managed access only inside native code after wallet authentication', () => {
+    const source = nativeCommand('managed_node_configure');
+
+    expect(source).toContain('verify_selected_credential(&app, credential.as_str())');
+    expect(source).toContain('managed_mainnet_node_admission(');
+    expect(source).toContain('persist_mainnet_node_admission(');
+    expect(source).not.toContain('password: String');
+  });
+
   it('keeps the public descriptor behind the standard progressive disclosure', () => {
     expect(welcome).toContain('class="proposal-review-details created-wallet-details"');
     expect(welcome).toContain(

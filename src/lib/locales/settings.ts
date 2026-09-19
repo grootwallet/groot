@@ -558,6 +558,39 @@ export const settingsCopy = {
     fr: 'Nœud de frais et de diffusion',
     es: 'Nodo de comisiones y difusión'
   },
+  'Groot managed': { fr: 'Géré par Groot', es: 'Gestionado por Groot' },
+  'Groot managed node': { fr: 'Nœud géré par Groot', es: 'Nodo gestionado por Groot' },
+  'Custom remote': { fr: 'Distant personnalisé', es: 'Remoto personalizado' },
+  'Custom remote node': { fr: 'Nœud distant personnalisé', es: 'Nodo remoto personalizado' },
+  'Groot provisions isolated access for this wallet. RPC credentials stay encrypted in native code and are never shown here.':
+    {
+      fr: 'Groot fournit un accès isolé pour ce portefeuille. Les identifiants RPC restent chiffrés dans le code natif et ne sont jamais affichés ici.',
+      es: 'Groot proporciona acceso aislado para esta cartera. Las credenciales RPC permanecen cifradas en el código nativo y nunca se muestran aquí.'
+    },
+  'Trusted service privacy tradeoff.': {
+    fr: 'Compromis de confidentialité d’un service de confiance.',
+    es: 'Compromiso de privacidad de un servicio de confianza.'
+  },
+  'The service can observe connection timing and requested blocks. Groot never sends recovery words, private keys, labels, or addresses.':
+    {
+      fr: 'Le service peut observer les horaires de connexion et les blocs demandés. Groot n’envoie jamais les mots de récupération, les clés privées, les libellés ni les adresses.',
+      es: 'El servicio puede observar los tiempos de conexión y los bloques solicitados. Groot nunca envía palabras de recuperación, claves privadas, etiquetas ni direcciones.'
+    },
+  'Renew managed access': { fr: 'Renouveler l’accès géré', es: 'Renovar acceso gestionado' },
+  'Check managed status': { fr: 'Vérifier l’état géré', es: 'Comprobar estado gestionado' },
+  'Managed-node access renewed': {
+    fr: 'Accès au nœud géré renouvelé',
+    es: 'Acceso al nodo gestionado renovado'
+  },
+  'Groot node connected': { fr: 'Nœud Groot connecté', es: 'Nodo Groot conectado' },
+  'Groot provisioned new wallet-specific access without exposing credentials.': {
+    fr: 'Groot a fourni un nouvel accès propre au portefeuille sans exposer les identifiants.',
+    es: 'Groot proporcionó un nuevo acceso específico para la cartera sin exponer credenciales.'
+  },
+  'Use Groot managed node': {
+    fr: 'Utiliser le nœud géré par Groot',
+    es: 'Usar el nodo gestionado por Groot'
+  },
   'Bitcoin network': { fr: 'Réseau Bitcoin', es: 'Red de Bitcoin' },
   'Switching restarts Groot. Each network keeps separate wallets and settings.': {
     fr: 'Changer de réseau redémarre Groot. Chaque réseau garde ses portefeuilles et réglages séparés.',

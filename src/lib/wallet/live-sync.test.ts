@@ -91,7 +91,7 @@ describe('live wallet sync', () => {
     controller.stop();
   });
 
-  it('treats an unconfigured or active resumable first scan as expected scheduler state', async () => {
+  it('starts an unconfigured first scan and treats an active resumable scan as expected', async () => {
     const onError = vi.fn();
     const wallet = {
       sync: vi
@@ -100,11 +100,14 @@ describe('live wallet sync', () => {
         .mockRejectedValueOnce({ code: 'scan_in_progress' })
         .mockResolvedValue(undefined),
       cancelSync: vi.fn().mockResolvedValue(undefined),
-      syncMultisig: vi.fn()
+      syncMultisig: vi.fn(),
+      fullRescan: vi.fn().mockResolvedValue(undefined)
     };
     const controller = createLiveSync(wallet, () => 'single_key', 60_000, onError);
     controller.start();
     await controller.runNow();
+    expect(wallet.fullRescan).toHaveBeenCalledOnce();
+    expect(wallet.fullRescan).toHaveBeenCalledWith('');
     await controller.runNow();
     await controller.runNow();
     expect(onError).not.toHaveBeenCalled();
@@ -185,6 +188,28 @@ describe('live wallet sync', () => {
     expect(wallet.sync).toHaveBeenCalledTimes(4);
     controller.stop();
     vi.useRealTimers();
+  });
+
+  it('restores Mainnet node admission before starting a first scan off Overview', async () => {
+    const wallet = {
+      sync: vi
+        .fn()
+        .mockRejectedValueOnce({ code: 'node_admission_required' })
+        .mockRejectedValueOnce({ code: 'initial_scan_required' }),
+      syncMultisig: vi.fn(),
+      cancelSync: vi.fn().mockResolvedValue(undefined),
+      testNodeConnection: vi.fn().mockResolvedValue({ connected: true }),
+      fullRescan: vi.fn().mockResolvedValue(undefined)
+    };
+    const controller = createLiveSync(wallet, () => 'single_key', 60_000);
+    controller.start();
+
+    await controller.runNow();
+
+    expect(wallet.testNodeConnection).toHaveBeenCalledOnce();
+    expect(wallet.sync).toHaveBeenCalledTimes(2);
+    expect(wallet.fullRescan).toHaveBeenCalledWith('');
+    controller.stop();
   });
 
   it('keeps checking at the normal cadence after a Mainnet admission failure', async () => {

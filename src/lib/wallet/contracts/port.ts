@@ -93,6 +93,7 @@ export interface WalletNetworkPort {
   ): Promise<NodeStatus>;
   networkSetupSources(): Promise<NetworkSetupSource[]>;
   adoptNetworkSetup(sourceWalletId: string, credential: string): Promise<NodeStatus>;
+  configureManagedNode(credential: string): Promise<NodeStatus>;
   nodeConfig(): Promise<CoreNodeConfig>;
   publicNetworkStatus(): Promise<PublicNetworkStatus>;
   saveNodeConfig(config: CoreNodeConfig, password: string, credential: string): Promise<NodeStatus>;

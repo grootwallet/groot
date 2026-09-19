@@ -304,7 +304,13 @@
     }
     if (!liveSync || isPrototypeWallet) return;
     if (syncPausedRoute) liveSync.stop();
-    else if (automaticSyncPauseCount === 0) liveSync.start();
+    else if (automaticSyncPauseCount === 0) {
+      liveSync.start();
+      // Unlock is an explicit foreground wake-up. Start the selected wallet's
+      // first or routine sync even when the user returns to Settings instead
+      // of waiting for Overview to mount or for the steady-state interval.
+      if (previousPath === '/unlock') void liveSync.runNow();
+    }
   });
 
   async function selectWallet(walletId: string) {

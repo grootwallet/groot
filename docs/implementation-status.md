@@ -1027,3 +1027,22 @@ controls still require unlock. Existing wallet, registry, node-setting,
 credential-envelope, descriptor, proposal, backup, and database formats are
 unchanged; no migration is required. Gateway deployment, load/abuse review, and
 exact-package Mainnet acceptance remain open GA gates.
+
+## 2026-09-19 Managed-node mode and route-independent first sync
+
+The `da617773` physical run confirmed that native managed enrollment and Core
+preflight succeeded, but exposed two UI/orchestration gaps. A never-synced
+wallet did not begin its initial history scan until Overview mounted, and the
+fixed managed endpoint appeared inside the editable custom-RPC form with its
+generated principal visible.
+
+The global live-sync controller now treats unlock as an immediate wake-up,
+restores Mainnet node admission when required, and starts the saved first scan
+without depending on the current route. Settings separately presents **Groot
+managed**, **This Mac**, and **Custom remote**. Managed mode renders neither RPC
+field, states its privacy tradeoff, and provides an explicitly authenticated
+renew/switch action that enrolls and verifies a fresh isolated principal in
+native Rust. Failure stays on the selected mode and never chooses a fallback
+node or fee source. Existing wallet, registry, scan, node-setting,
+credential-envelope, descriptor, proposal, backup, and database formats are
+unchanged; no migration is required.

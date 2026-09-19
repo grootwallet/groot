@@ -34,6 +34,21 @@ pub(crate) fn enroll() -> Result<ManagedGatewayCredential, ManagedGatewayError> 
     enroll_at(MANAGED_GATEWAY_URL)
 }
 
+pub(crate) fn is_managed_config(config: &CoreNodeConfig) -> bool {
+    matches!(
+        &config.backend,
+        ChainBackend::RemoteCore { url } if url == MANAGED_GATEWAY_URL
+    ) && config.auth == RpcAuthMode::UserPass
+        && config.tor_proxy.is_none()
+        && config.username.as_deref().is_some_and(|username| {
+            username.len() == 30
+                && username.starts_with("groot-")
+                && username[6..]
+                    .bytes()
+                    .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+        })
+}
+
 fn enroll_at(base_url: &str) -> Result<ManagedGatewayCredential, ManagedGatewayError> {
     let endpoint = format!("{}/enroll", base_url.trim_end_matches('/'));
     let mut response = minreq::post(&endpoint)
@@ -130,6 +145,29 @@ mod tests {
             credential.config.backend,
             ChainBackend::RemoteCore { ref url } if url == MANAGED_GATEWAY_URL
         ));
+        assert!(is_managed_config(&credential.config));
+    }
+
+    #[test]
+    fn managed_identity_requires_the_fixed_endpoint_and_generated_principal_shape() {
+        let managed = CoreNodeConfig {
+            backend: ChainBackend::RemoteCore {
+                url: MANAGED_GATEWAY_URL.to_owned(),
+            },
+            auth: RpcAuthMode::UserPass,
+            username: Some("groot-0123456789abcdef01234567".to_owned()),
+            tor_proxy: None,
+        };
+        assert!(is_managed_config(&managed));
+
+        let mut custom = managed.clone();
+        custom.username = Some("alice".to_owned());
+        assert!(!is_managed_config(&custom));
+        custom.username = managed.username;
+        custom.backend = ChainBackend::RemoteCore {
+            url: "https://node.example.com:8332".to_owned(),
+        };
+        assert!(!is_managed_config(&custom));
     }
 
     #[test]
