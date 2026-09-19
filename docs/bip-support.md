@@ -1,5 +1,13 @@
 # Bitcoin Improvement Proposal support
 
+The 2026-09-19 transaction-detail refresh and Network Services presentation
+follow-up has no BIP support or evidence impact. An open detail modal now
+re-resolves its selected transaction from each authoritative wallet snapshot,
+including an RBF replacement lineage, so a newly confirmed payment cannot keep
+showing stale mempool state. The settings change only restores row spacing and
+shortens explanatory copy. Transaction accounting, BIP125 replacement logic,
+descriptors, PSBTs, signing, sync, and persisted formats are unchanged.
+
 The application-wide readability and copy-density follow-up has no BIP support or
 evidence impact. It changes shared typography, semantic color tokens, optional
 disclosure presentation, concise page copy, and selected-wallet visibility only;

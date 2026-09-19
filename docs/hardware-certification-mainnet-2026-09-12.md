@@ -324,3 +324,41 @@ rejection, disconnect/reconnect, wrong-device, altered/foreign/stale-PSBT,
 clean-profile recovery, exact-firmware capture, or independent-review rows.
 No amount, address, transaction identifier, fingerprint, descriptor, PSBT,
 device path, credential, or node detail is retained.
+
+## 2026-09-19 exact `cb4e172a` owner-operated acceleration and interoperability checkpoint
+
+The release owner reports that the internal Mainnet build displayed as
+`v0.4.95 · cb4e172a` completed additional positive testing with Coldcard Mk4,
+Ledger Nano S Plus, and BitBox02 Nova Bitcoin-only. The existing 2-of-3 wallet
+received bitcoin, matched receive addresses on hardware, sent to an external
+address, and exercised multiple RBF and CPFP flows. The owner also created a
+PSBT in Groot, signed it with Ledger in Groot, imported it into Sparrow, added a
+Ledger signature there, and broadcast it from Sparrow successfully. This adds
+owner-operated positive evidence for the three-device coordinator and a second
+Groot-to-Sparrow PSBT path; it does not substitute for frozen-package firmware
+capture, negative or interruption tests, clean Groot-profile recovery, or
+independent review.
+
+An accounting concern raised during the same session was reconciled without
+retaining transaction identifiers: the Ledger and multisig databases contained
+two distinct shared 7,000-satoshi payments on different dates, and the CPFP was
+a separate fee-only multisig entry. A confirmed payment could briefly remain
+pending only inside an already-open detail modal even after the refreshed wallet
+state and first-confirmation notification arrived. That stale-modal defect is a
+presentation correction in the subsequent source and is not hardware evidence.
+
+### Updated signer resume matrix
+
+| Model or boundary              | Positive owner evidence now recorded                                                                                                                                       | Essential rows still open                                                                                                                              |
+| ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Coldcard Mk4                   | Mainnet BIP48 import, policy acknowledgement, hardware address comparison, multisig receive/external send, RBF/CPFP participation, and Sparrow signing/broadcast with Nova | Frozen-package firmware capture; Groot rejection, disconnect/retry, wrong-device, altered/foreign/stale-PSBT; clean Groot recovery; independent review |
+| Ledger Nano S Plus             | Mainnet BIP48 import, policy/address verification, single-key and 2-of-3 payments, Groot broadcast with Nova, RBF/CPFP participation, and Groot-to-Sparrow PSBT signing    | Frozen-package firmware/app capture; rejection, disconnect/retry, wrong-device, altered/foreign/stale-PSBT; clean Groot recovery; independent review   |
+| BitBox02 Nova Bitcoin-only     | Mainnet BIP48 import, policy/address verification, Groot 2-of-3 signing with Ledger, Sparrow signing with Mk4, external send, and RBF/CPFP participation                   | Frozen-package firmware capture; rejection, disconnect/retry, wrong-device, altered/foreign/stale-PSBT; clean Groot recovery; independent review       |
+| Trezor Safe 3 Bitcoin-only     | Prior Testnet4 evidence only                                                                                                                                               | Full exact-package Mainnet campaign                                                                                                                    |
+| Trezor Model One               | Target model only                                                                                                                                                          | Full exact-package Mainnet campaign                                                                                                                    |
+| Original Bitcoin-only BitBox02 | Prior model-specific evidence only; Nova results do not transfer                                                                                                           | Full exact-package Mainnet campaign                                                                                                                    |
+| Blockstream Jade Classic       | Prior discovery attempt only                                                                                                                                               | Full exact-package Mainnet campaign, including login retry                                                                                             |
+
+No address, transaction identifier, amount beyond the reported accounting
+comparison, fingerprint, descriptor, PSBT, credential, device path, or node
+detail is retained.

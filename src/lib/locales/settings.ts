@@ -555,13 +555,13 @@ export const settingsCopy = {
     es: 'Nodo de comisiones y difusión'
   },
   'Bitcoin network': { fr: 'Réseau Bitcoin', es: 'Red de Bitcoin' },
-  'Changing networks restarts Groot. Wallets and node settings stay isolated per network.': {
-    fr: 'Changer de réseau redémarre Groot. Les portefeuilles et réglages de nœud restent isolés par réseau.',
-    es: 'Cambiar de red reinicia Groot. Las carteras y los ajustes del nodo permanecen aislados por red.'
+  'Switching restarts Groot. Each network keeps separate wallets and settings.': {
+    fr: 'Changer de réseau redémarre Groot. Chaque réseau garde ses portefeuilles et réglages séparés.',
+    es: 'Cambiar de red reinicia Groot. Cada red mantiene sus carteras y ajustes separados.'
   },
-  'This release is fixed to {network}.': {
-    fr: 'Cette version est limitée à {network}.',
-    es: 'Esta versión está limitada a {network}.'
+  'Fixed to {network}.': {
+    fr: 'Réseau fixe : {network}.',
+    es: 'Red fija: {network}.'
   },
   'Switch to {network}?': {
     fr: 'Passer à {network} ?',

@@ -3967,6 +3967,9 @@ code {
 .settings-list > .setting-row.language-setting-row {
   grid-template-columns: minmax(0, 1fr);
 }
+.settings-list > .bitcoin-network-row {
+  padding-block: 14px;
+}
 .settings-list > button {
   cursor: pointer;
 }

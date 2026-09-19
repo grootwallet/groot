@@ -54,12 +54,15 @@
   } from '$lib/hardware/health-check-state';
   import { latestActiveProposal, proposalInputsUnavailable } from '$lib/wallet/proposal-resume';
   import type { PaymentDraft } from '$lib/wallet/payment-draft';
-  import { pendingBalanceBreakdown, sortTransactionsNewestFirst } from '$lib/wallet/presentation';
+  import {
+    pendingBalanceBreakdown,
+    sortTransactionsNewestFirst,
+    transactionForSelection
+  } from '$lib/wallet/presentation';
   import { policyMaturitySummary } from '$lib/wallet/policy';
   import { onDestroy, onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
-  import type { Transaction } from '$lib/types';
   import { discreetMode, setDiscreetMode } from '$lib/privacy';
   import MobileWalletSwitcher from '$lib/components/MobileWalletSwitcher.svelte';
   import OverflowMenuButton from '$lib/components/OverflowMenuButton.svelte';
@@ -89,7 +92,10 @@
   let discardDraftOpen = $state(false);
   let discardingDraft = $state(false);
   let discardDraftError = $state('');
-  let selected = $state<Transaction | null>(null);
+  let selectedTransactionId = $state<string | null>(null);
+  let selected = $derived(
+    transactionForSelection(snapshot?.transactions ?? [], selectedTransactionId)
+  );
   let multisig = $state(false);
   let moreOpen = $state(false);
   let moreMenu = $state<HTMLDivElement | null>(null);
@@ -1322,7 +1328,10 @@
           {#snippet icon()}<Activity size={22} />{/snippet}
         </EmptyState>
       {:else if recentTransactions.length}
-        <TxList items={recentTransactions} onselect={(transaction) => (selected = transaction)} />
+        <TxList
+          items={recentTransactions}
+          onselect={(transaction) => (selectedTransactionId = transaction.id)}
+        />
       {:else}
         <EmptyState
           compact
@@ -1336,7 +1345,7 @@
   {/if}
 </div>
 
-<TxDetailsModal transaction={selected} {multisig} onclose={() => (selected = null)} />
+<TxDetailsModal transaction={selected} {multisig} onclose={() => (selectedTransactionId = null)} />
 <DeviceDetailsModal
   signer={signerDetailsOpen ? hardwareSignerDetails : null}
   health={signerHealth}

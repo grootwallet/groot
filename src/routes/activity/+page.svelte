@@ -6,7 +6,7 @@
   import type { Transaction } from '$lib/types';
   import { toast } from '$lib/stores/toasts';
   import { walletService, WalletError, walletErrorCode } from '$lib/wallet';
-  import type { TransactionSortOrder } from '$lib/wallet/presentation';
+  import { transactionForSelection, type TransactionSortOrder } from '$lib/wallet/presentation';
   import Button from '$lib/components/Button.svelte';
   import { onMount } from 'svelte';
   import { Activity, RefreshCw } from '@lucide/svelte';
@@ -16,8 +16,9 @@
   import { goto } from '$app/navigation';
   import { isWalletSyncActive } from '$lib/wallet/live-sync';
   const walletShell = useWalletShellContext();
-  let selected = $state<Transaction | null>(null);
+  let selectedTransactionId = $state<string | null>(null);
   let transactions = $state<Transaction[]>([]);
+  let selected = $derived(transactionForSelection(transactions, selectedTransactionId));
   let filter = $state<'all' | 'received' | 'sent'>('all');
   let query = $state('');
   let sortOrder = $state<TransactionSortOrder>('newest');
@@ -64,7 +65,7 @@
     const selection = { filter, query, sortOrder };
     if (!mounted) return;
     ++generation;
-    selected = null;
+    selectedTransactionId = null;
     cursor = null;
     loading = true;
     const timer = setTimeout(() => void load(), selection.query.trim() ? 180 : 0);
@@ -240,7 +241,7 @@
         onretry={() => load()}
       />
     {:else if transactions.length}
-      <TxList items={transactions} onselect={(tx) => (selected = tx)} />
+      <TxList items={transactions} onselect={(tx) => (selectedTransactionId = tx.id)} />
     {:else}
       <EmptyState
         title={query.trim()
@@ -282,4 +283,4 @@
   </section>
 </div>
 
-<TxDetailsModal transaction={selected} {multisig} onclose={() => (selected = null)} />
+<TxDetailsModal transaction={selected} {multisig} onclose={() => (selectedTransactionId = null)} />

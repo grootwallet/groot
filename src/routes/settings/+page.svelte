@@ -1460,9 +1460,9 @@
             >{runtime?.networkSwitching
               ? translate(
                   $locale,
-                  'Changing networks restarts Groot. Wallets and node settings stay isolated per network.'
+                  'Switching restarts Groot. Each network keeps separate wallets and settings.'
                 )
-              : translate($locale, 'This release is fixed to {network}.', {
+              : translate($locale, 'Fixed to {network}.', {
                   network: networkName(defaultConfig.network)
                 })}</small
           ></span

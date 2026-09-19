@@ -981,3 +981,17 @@ now preserves the original batch shape independently of batch length, with an
 integration regression covering the one-item request, upstream payload, restored
 client id, and array response. No wallet data, credentials, persisted format,
 DTO, dependency, or schema changes; no migration is required.
+
+The 2026-09-19 Mainnet accounting review found no duplicate 7,000-satoshi
+payment: the Ledger and multisig databases contain two distinct shared
+transactions from separate dates, while the multisig CPFP remains its own
+fee-only activity entry. It did expose a presentation race when a detail modal
+was already open: the wallet snapshot and confirmation toast refreshed, but the
+modal retained the previously clicked pending object. Overview and Activity now
+retain only the selected transaction identifier and resolve its current record
+from every authoritative snapshot, following the canonical RBF replacement when
+needed. Network Services also restores vertical padding on its network row and
+uses shorter copy. No native accounting, transaction graph, wallet data,
+descriptor, proposal, node-setting, DTO, dependency, or schema format changes;
+no migration is required. The reviewed Mainnet source-policy snapshot now pins
+the exact Overview, Activity, and Settings route bytes containing this change.

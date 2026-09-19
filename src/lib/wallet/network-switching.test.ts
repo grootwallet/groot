@@ -24,7 +24,9 @@ describe('restart-bound Bitcoin network switching', () => {
     expect(settings).toContain('{#each SWITCHABLE_NETWORKS as candidate}');
     expect(settings).toContain("networkSwitchTarget === 'mainnet'");
     expect(settings).toContain('walletService.switchNetwork(networkSwitchTarget)');
-    expect(settings).toContain('Wallets and node settings stay isolated per network.');
+    expect(settings).toContain(
+      'Switching restarts Groot. Each network keeps separate wallets and settings.'
+    );
     expect(settings).toContain("loadingLabel={translate($locale, 'Restarting…')}");
     expect(settings).toContain('walletService.session()');
     expect(settings).toContain("walletUnlocked ? 'WALLET SETTINGS' : 'APP SETTINGS'");
