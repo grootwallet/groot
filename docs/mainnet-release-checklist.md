@@ -129,6 +129,14 @@ must persist the verified creation tip, begin without route interaction, show
 compact progress immediately, and still leave recovery/import history choice
 explicit before this row can close.
 
+Internal RC `e959a532` persisted the new software wallet's verified birthday at
+the live Mainnet tip, but remains failed: the onboarding-to-Overview transition
+retained the pre-creation locked shell state and did not issue the immediate sync
+wake. The resulting idle Overview incorrectly offered recovery scan settings.
+Its replacement must refresh the selected native session after creation, finish
+the short tip/mempool reconciliation automatically, and never require route
+interaction or a recovery/import history choice.
+
 The release owner approved seven desktop-USB model targets: Coldcard Mk4, Trezor Model One, Ledger Nano S Plus, original Bitcoin-only BitBox02, original Blockstream Jade Classic, Trezor Safe 3 Bitcoin-only, and BitBox02 Nova. Frozen firmware exists for Coldcard Mk4 5.6.1, original BitBox02 9.26.3, Jade Classic 1.0.40, Safe 3 2.12.3, and Nova 9.26.3. The release owner has declared Trezor Model One firmware 1.14.1 and Ledger Nano S Plus firmware 1.6.1 with Bitcoin app 2.5.0 as release-target versions; these declarations are not physical certification evidence. HWI is pinned to 3.2.0. The trusted future-mainnet boundary rejects unlisted families and exact-model identifiers outside the approved Ledger, Trezor, and Bitcoin-only BitBox set. ADR 0054 deliberately also admits only HWI's exact `coldcard`/`coldcard` and `jade`/`jade` family records because HWI cannot identify Mk4 and Jade Classic more narrowly. New hardware-wallet creation still requires recent live-HWI admission bound to the exact public account identity. Physical and release evidence remains specific to Mk4 and Jade Classic and is not inherited by other family models. Release notes must disclose the family-level runtime boundary. No BLE, QR, NFC, or unlisted family inherits USB evidence.
 
 The owner-operated internal Mainnet `4630bf95` checkpoint confirms three

@@ -131,7 +131,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src/lib/components/AppShell.svelte',
-    '4613e19b40a09fc5750cb4c60fbbc0bf3d5c06bda7ab2fc50c64a710bf6977af'
+    '0b94ebd1f3127d6b8615c54bb443aa70222ad4463d9969147338f4fc10447d26'
   ],
   [
     'src/lib/wallet/live-sync.ts',

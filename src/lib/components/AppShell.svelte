@@ -39,7 +39,12 @@
   import { toast } from '$lib/stores/toasts';
   import { denomination, initDenomination } from '$lib/denomination';
   import { fade } from 'svelte/transition';
-  import type { MultisigSetupDraft, RuntimePlatform, WalletProfile } from '$lib/wallet/contracts';
+  import type {
+    MultisigSetupDraft,
+    RuntimePlatform,
+    WalletProfile,
+    WalletSelection
+  } from '$lib/wallet/contracts';
   import { formatWalletCount, locale, t, type MessageKey } from '$lib/i18n';
   import { provideWalletShellContext } from '$lib/wallet/shell-context';
   import { multisigSetupSignerTarget, multisigSetupStageLabel } from '$lib/wallet/multisig-setup';
@@ -278,6 +283,27 @@
     '/multisig/delete'
   ]);
 
+  async function resumeAfterWalletCreation(profileRefresh: Promise<void>) {
+    await profileRefresh;
+    let selection: WalletSelection;
+    try {
+      selection = await walletService.session();
+      selectedWalletUnlocked = selection.unlocked;
+    } catch {
+      selectedWalletUnlocked = false;
+      return;
+    }
+    if (
+      !selection.unlocked ||
+      !liveSync ||
+      routeCancelsSync(page.url.pathname) ||
+      automaticSyncPauseCount > 0
+    )
+      return;
+    liveSync.start();
+    await liveSync.runNow();
+  }
+
   beforeNavigate(({ to }) => {
     navigationPending = Boolean(to && to.url.href !== page.url.href);
     const preserveMainnetAdmission = Boolean(
@@ -305,7 +331,12 @@
         .then((selection) => (selectedWalletUnlocked = selection.unlocked))
         .catch(() => (selectedWalletUnlocked = false));
     }
-    if (!liveSync || isPrototypeWallet) return;
+    if (!liveSync) return;
+    if (previousPath === '/welcome') {
+      void resumeAfterWalletCreation(profileRefresh);
+      return;
+    }
+    if (isPrototypeWallet) return;
     if (syncPausedRoute) liveSync.stop();
     else if (automaticSyncPauseCount === 0) {
       liveSync.start();
@@ -313,9 +344,6 @@
       // first or routine sync even when the user returns to Settings instead
       // of waiting for Overview to mount or for the steady-state interval.
       if (previousPath === '/unlock') void liveSync.runNow();
-      else if (previousPath === '/welcome') {
-        void profileRefresh.then(() => liveSync?.runNow());
-      }
     }
   });
 

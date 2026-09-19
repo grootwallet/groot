@@ -490,10 +490,7 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     return { ...this._scanSettings };
   }
   async saveRecoveryScanSettings(birthdayHeight: number, gapLimit: number, credential: string) {
-    const initialFixtureScan =
-      !this._initialHistoryCompleted &&
-      typeof location !== 'undefined' &&
-      new URLSearchParams(location.search).has('fixture-initial-history-required');
+    const initialFixtureScan = !this._initialHistoryCompleted && this._initialHistoryRequired;
     if (
       !this._selectedWalletId ||
       (credential !== this._credentials.get(this._selectedWalletId) &&
@@ -515,10 +512,7 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     return structuredClone(this._scanStatus);
   }
   async fullRescan(credential: string) {
-    const initialFixtureScan =
-      !this._initialHistoryCompleted &&
-      typeof location !== 'undefined' &&
-      new URLSearchParams(location.search).has('fixture-initial-history-required');
+    const initialFixtureScan = !this._initialHistoryCompleted && this._initialHistoryRequired;
     if (
       !this._selectedWalletId ||
       (credential !== this._credentials.get(this._selectedWalletId) &&
@@ -635,10 +629,7 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     const pendingSelfSpend =
       typeof location !== 'undefined' &&
       new URLSearchParams(location.search).has('fixture-pending-self-spend');
-    const initialHistoryRequired =
-      typeof location !== 'undefined' &&
-      new URLSearchParams(location.search).has('fixture-initial-history-required') &&
-      !this._initialHistoryCompleted;
+    const initialHistoryRequired = this._initialHistoryRequired && !this._initialHistoryCompleted;
     const snapshot: WalletSnapshot = {
       network: defaultConfig.network,
       balance: emptyWallet
@@ -740,6 +731,11 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
   }
 
   async sync(_automatic = false): Promise<WalletSnapshot> {
+    if (this._initialHistoryRequired && !this._initialHistoryCompleted)
+      throw new WalletError(
+        'initial_scan_required',
+        'Complete the first wallet-history scan before syncing.'
+      );
     return this.snapshot();
   }
 

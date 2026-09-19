@@ -1726,15 +1726,23 @@ test('failed recovery scans discard stale progress before retry', async ({ page 
 test('first Bitcoin Core scan starts automatically without requesting a passphrase', async ({
   page
 }) => {
-  await page.goto('/?fixture-initial-history-required=1&initial=new');
+  await page.goto('/welcome?fixture-empty=1&fixture-initial-history-required=1');
+  await page.getByRole('button', { name: 'Add wallet' }).click();
+  await chooseSoftwareWallet(page);
+  await page.getByRole('button', { name: 'Generate 24 recovery words' }).click();
+  await page.getByRole('button', { name: /reveal words/i }).click();
+  await page.getByRole('button', { name: 'I wrote them down' }).click();
+  await page.getByRole('button', { name: 'Verify later' }).click();
+  await page.getByPlaceholder('My wallet').fill('Fresh sync wallet');
+  await page.getByLabel('Wallet passphrase', { exact: true }).fill('fresh-sync-passphrase');
+  await page.getByLabel('Confirm wallet passphrase', { exact: true }).fill('fresh-sync-passphrase');
+  await page.getByLabel(/I understand this exact passphrase/).check();
+  await page.getByRole('button', { name: 'Create wallet' }).click();
+  await openCreatedSoftwareWallet(page);
 
-  await expect(page.getByText('Never synced')).toBeVisible();
-  await expect(page.getByText('Wallet history not verified')).toBeVisible();
-  await expect(page.getByLabel('Unverified balance')).toContainText('0 sats');
+  await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible();
   await expect(page.getByRole('dialog', { name: 'First wallet-history scan' })).toHaveCount(0);
   await expect(page.getByLabel('Wallet passphrase', { exact: true })).toHaveCount(0);
-
-  await expect(page.getByText('Wallet history verified', { exact: true })).toBeVisible();
   await expect(page.getByText('Never synced')).toHaveCount(0);
   await expect(page.getByText('Wallet history not verified')).toHaveCount(0);
 

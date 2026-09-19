@@ -1059,3 +1059,13 @@ to native progress without navigation. Recovery/import profiles without a saved
 choice reject automatic empty-credential scans instead of defaulting to
 genesis. The progress banner is reduced to percentage and block counts. This is
 compatible with every existing database; no migration or discard is required.
+
+Physical retest of `e959a532` confirmed that the creation-tip birthday was saved
+at the live Mainnet height, but exposed a separate shell-state race: leaving
+onboarding still saw the pre-creation locked state and suppressed the immediate
+sync wake. The post-creation transition now refreshes both the profile registry
+and selected native session before deciding whether sync is paused, then starts
+and awaits the first sync wake. A generated software wallet therefore performs
+only its short tip/mempool reconciliation without presenting the recovery/import
+history-choice state. This changes orchestration and test-fixture fidelity only;
+it has no BIP support or persisted-format impact.

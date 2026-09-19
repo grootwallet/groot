@@ -44,8 +44,27 @@ describe('foreground wallet navigation', () => {
     expect(appShell).toContain('liveSync = createLiveSync(');
     expect(appShell).toContain('() => selectedProfile?.kind ?? null');
     expect(appShell).toContain("if (previousPath === '/unlock') void liveSync.runNow();");
-    expect(appShell).toContain("else if (previousPath === '/welcome')");
-    expect(appShell).toContain('profileRefresh.then(() => liveSync?.runNow())');
+    expect(appShell).toContain("if (previousPath === '/welcome')");
+    const afterNavigation = appShell.slice(
+      appShell.indexOf('afterNavigate(({ from }) =>'),
+      appShell.indexOf('async function selectWallet')
+    );
+    expect(afterNavigation.indexOf("if (previousPath === '/welcome')")).toBeLessThan(
+      afterNavigation.indexOf('if (isPrototypeWallet) return')
+    );
+    const creationResume = appShell.slice(
+      appShell.indexOf('async function resumeAfterWalletCreation'),
+      appShell.indexOf('beforeNavigate(({ to }) =>')
+    );
+    expect(creationResume).toContain('await profileRefresh');
+    expect(creationResume).toContain('selection = await walletService.session()');
+    expect(creationResume).not.toContain('isPrototypeWallet');
+    expect(creationResume.indexOf('selectedWalletUnlocked = selection.unlocked')).toBeLessThan(
+      creationResume.indexOf('liveSync.start()')
+    );
+    expect(creationResume.indexOf('liveSync.start()')).toBeLessThan(
+      creationResume.indexOf('await liveSync.runNow()')
+    );
   });
 
   it('keeps scans alive across read-only routes and cancels before exclusive routes or lock', () => {
