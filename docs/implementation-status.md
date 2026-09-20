@@ -1129,3 +1129,14 @@ The Core dialog keeps that rehearsal-only option reachable without making the
 normal Core configuration look different by network. This is presentation and
 navigation only; saved node and sync-source formats are unchanged, and there is
 no migration or BIP-support impact.
+
+A physical Mainnet Coldcard Mk4 import showed that the managed node was ready but
+the new wallet remained at **Never synced** with a manual history-choice warning.
+External-hardware creation now saves block `0` in the existing recovery-settings
+row before publishing the profile, because an imported signer cannot provide a
+trustworthy birthday. Leaving hardware onboarding immediately wakes the shared
+sync scheduler, and Overview opens in automatic full-history mode so it attaches
+to the resumable scan without flashing the manual warning. Existing profiles are
+not rewritten; wallet, descriptor, key, credential, node, proposal, backup, and
+database formats remain compatible and no migration is required. Physical retest
+on the replacement package remains required.

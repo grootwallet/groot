@@ -38,6 +38,10 @@ const hardwareSetup = readFileSync(
   new URL('../../routes/hardware/new/+page.svelte', import.meta.url),
   'utf8'
 );
+const hardwareCommands = readFileSync(
+  new URL('../../../src-tauri/src/wallet/hardware_commands.rs', import.meta.url),
+  'utf8'
+);
 const singleKeySend = readFileSync(
   new URL('../../routes/send/+page.svelte', import.meta.url),
   'utf8'
@@ -438,10 +442,21 @@ describe('hardware receive verification UI', () => {
   it('refreshes the selected wallet before opening a newly created hardware-signer wallet', () => {
     const created = hardwareSetup.indexOf('await walletService.createExternalSignerWallet');
     const refreshed = hardwareSetup.indexOf('await walletShell.refreshProfiles()', created);
-    const opened = hardwareSetup.indexOf("await goto('/')", refreshed);
+    const opened = hardwareSetup.indexOf("await goto('/?initial=full')", refreshed);
     expect(created).toBeGreaterThan(-1);
     expect(refreshed).toBeGreaterThan(created);
     expect(opened).toBeGreaterThan(refreshed);
+  });
+
+  it('opens a new hardware wallet in automatic full-history scan mode', () => {
+    expect(hardwareSetup).toContain("await goto('/?initial=full')");
+    const createStart = hardwareCommands.indexOf('pub fn external_signer_create(');
+    const createEnd = hardwareCommands.indexOf(
+      '#[tauri::command]\npub async fn external_signer_wallet',
+      createStart
+    );
+    const create = hardwareCommands.slice(createStart, createEnd);
+    expect(create).toContain('persist_initial_recovery_scan_settings(&db, 0)?');
   });
 
   it('opens only the exact native-matched duplicate wallet', () => {

@@ -336,7 +336,7 @@
         .catch(() => (selectedWalletUnlocked = false));
     }
     if (!liveSync) return;
-    if (previousPath === '/welcome') {
+    if (previousPath === '/welcome' || previousPath === '/hardware/new') {
       void resumeAfterWalletCreation(profileRefresh);
       return;
     }

@@ -513,6 +513,11 @@ Classifying Jade's persisted-network mismatch as a dedicated presentation error
 has no BIP support impact. Network derivation, account-key validation,
 descriptors, PSBTs, signing, and interoperability behavior are unchanged.
 
+Automatically starting a new external-hardware wallet's existing full-history
+scan has no BIP support impact. It changes only the persisted initial birthday
+choice and scheduler wake-up; the same BIP84 descriptors, BIP158 matching, gap
+discovery, PSBT, signing, and recovery paths remain authoritative.
+
 Every feature, interoperability, signer, descriptor, transaction, payment request,
 backup/recovery, sync/backend, network, or dependency change must assess BIP impact.
 If it adds, removes, expands, narrows, or changes evidence for a BIP:

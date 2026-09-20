@@ -95,6 +95,14 @@ the existing Core configuration dialog when no reusable source exists. The
 result remains a per-wallet copy, so either wallet can later choose a different
 node or sync method without changing the other.
 
+A newly created external-hardware profile saves full history (block `0`) as its
+initial scan choice because a signer provides no authoritative birthday. When a
+managed or copied Bitcoin Core connection is ready, leaving onboarding immediately
+starts the existing resumable history scan and Overview attaches to its progress
+without flashing a manual-choice warning. Groot never assumes that hardware imported
+today was first used today. A user who knows the wallet birthday can deliberately
+replace the saved full-history choice in Scan settings.
+
 Desktop navigation lists wallet profiles directly instead of hiding them in a native select. The active profile is visually identified; choosing another profile immediately removes the previous wallet's balance, activity, coins, and addresses from presentation, then shows the target wallet's loading, unlock, empty, or populated state. A late sync result from the wallet being left must never update the newly selected wallet's routes.
 
 A registered watch-only or multisig profile counts as an existing wallet even though it intentionally has no software-wallet secret file. Startup loads the registry and exposes the existing wallet selector; it must never route such a profile set to first-run onboarding.

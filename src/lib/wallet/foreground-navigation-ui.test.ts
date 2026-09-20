@@ -44,14 +44,18 @@ describe('foreground wallet navigation', () => {
     expect(appShell).toContain('liveSync = createLiveSync(');
     expect(appShell).toContain('() => selectedProfile?.kind ?? null');
     expect(appShell).toContain("if (previousPath === '/unlock') void liveSync.runNow();");
-    expect(appShell).toContain("if (previousPath === '/welcome')");
+    expect(appShell).toContain(
+      "if (previousPath === '/welcome' || previousPath === '/hardware/new')"
+    );
     const afterNavigation = appShell.slice(
       appShell.indexOf('afterNavigate(({ from }) =>'),
       appShell.indexOf('async function selectWallet')
     );
-    expect(afterNavigation.indexOf("if (previousPath === '/welcome')")).toBeLessThan(
-      afterNavigation.indexOf('if (isPrototypeWallet) return')
-    );
+    expect(
+      afterNavigation.indexOf(
+        "if (previousPath === '/welcome' || previousPath === '/hardware/new')"
+      )
+    ).toBeLessThan(afterNavigation.indexOf('if (isPrototypeWallet) return'));
     const creationResume = appShell.slice(
       appShell.indexOf('async function resumeAfterWalletCreation'),
       appShell.indexOf('beforeNavigate(({ to }) =>')
@@ -204,7 +208,7 @@ describe('foreground wallet navigation', () => {
     expect(overview).toContain("'Full history · safest'");
     expect(overview).toContain("'Address discovery options'");
     expect(overview).toContain('!snapshot?.syncedAt && nodeReady');
-    expect(overview).toContain("page.url.searchParams.get('initial') === 'new'");
+    expect(overview).toContain("page.url.searchParams.has('initial')");
     expect(overview).toContain('startRecoveryStatusPolling(true)');
     expect(overview).toContain('const startupDeadline = Date.now() + 10_000');
     expect(overview).toContain(

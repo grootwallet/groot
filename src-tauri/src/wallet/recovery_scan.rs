@@ -30,6 +30,19 @@ pub(super) fn has_saved_recovery_scan_settings(db: &Connection) -> ApiResult<boo
     .map_err(internal)
 }
 
+pub(super) fn persist_initial_recovery_scan_settings(
+    db: &Connection,
+    birthday_height: u32,
+) -> ApiResult<()> {
+    db.execute(
+        "INSERT INTO groot_recovery_settings (singleton, birthday_height, gap_limit)
+         VALUES (1, ?1, ?2)",
+        params![birthday_height, MIN_RECOVERY_GAP_LIMIT],
+    )
+    .map_err(internal)?;
+    Ok(())
+}
+
 pub(super) fn has_completed_sync(db: &Connection) -> ApiResult<bool> {
     db.query_row(
         "SELECT EXISTS(SELECT 1 FROM groot_chain_observation WHERE singleton = 1)",

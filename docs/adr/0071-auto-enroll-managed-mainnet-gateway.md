@@ -80,8 +80,10 @@ For a newly generated software wallet, the same verified node preflight supplies
 the creation-tip birthday persisted in the existing recovery-settings table
 before the profile is published. Automatic first sync therefore checks only
 post-creation history and the mempool. Recovery/import profiles without an
-explicit saved choice remain blocked from empty-credential automatic scanning;
-they cannot silently fall back to genesis.
+explicit saved choice remain blocked from empty-credential automatic scanning,
+except for a newly created external-hardware profile under ADR 0072. That profile
+saves the explicit safest full-history choice before publication because its
+signer cannot supply an authoritative birthday.
 
 The macOS enrollment endpoint remains publicly reachable and is not a proof of
 genuine-app identity. IP throttling, a bounded principal population, monitoring,

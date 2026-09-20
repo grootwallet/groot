@@ -1869,19 +1869,20 @@ fn recovery_scan_settings_default_and_persist_with_safe_bounds() {
             gap_limit: 20,
         }
     );
-    db.execute(
-        "INSERT INTO groot_recovery_settings (singleton, birthday_height, gap_limit) VALUES (1, 840000, 250)",
-        [],
-    )
-    .unwrap();
+    persist_initial_recovery_scan_settings(&db, 840_000).unwrap();
     assert!(has_saved_recovery_scan_settings(&db).unwrap());
     assert_eq!(
         load_recovery_scan_settings(&db).unwrap(),
         RecoveryScanSettingsDto {
             birthday_height: 840_000,
-            gap_limit: 250,
+            gap_limit: MIN_RECOVERY_GAP_LIMIT,
         }
     );
+    db.execute(
+        "UPDATE groot_recovery_settings SET gap_limit = 250 WHERE singleton = 1",
+        [],
+    )
+    .unwrap();
     assert!(db
         .execute(
             "UPDATE groot_recovery_settings SET gap_limit = 19 WHERE singleton = 1",

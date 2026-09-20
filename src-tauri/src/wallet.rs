@@ -5807,11 +5807,7 @@ fn create_from_mnemonic(
             credential,
         )?;
         if let Some(birthday_height) = network_setup.birthday_height {
-            db.execute(
-                "INSERT INTO groot_recovery_settings (singleton, birthday_height, gap_limit) VALUES (1, ?1, ?2)",
-                params![birthday_height, MIN_RECOVERY_GAP_LIMIT],
-            )
-            .map_err(internal)?;
+            persist_initial_recovery_scan_settings(&db, birthday_height)?;
         }
         commit_profile(
             app,

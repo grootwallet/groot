@@ -9,6 +9,10 @@ const walletCore = readFileSync(
   new URL('../../../src-tauri/src/wallet.rs', import.meta.url),
   'utf8'
 );
+const recoveryScan = readFileSync(
+  new URL('../../../src-tauri/src/wallet/recovery_scan.rs', import.meta.url),
+  'utf8'
+);
 const multisigCommands = readFileSync(
   new URL('../../../src-tauri/src/wallet/multisig_proposal_commands.rs', import.meta.url),
   'utf8'
@@ -138,7 +142,8 @@ describe('protected network setup reuse', () => {
   it('persists the verified node tip as the birthday for a generated software wallet', () => {
     expect(nativeCommands).toContain('birthday_height: Some(birthday_height)');
     expect(walletCore).toContain('if let Some(birthday_height) = network_setup.birthday_height');
-    expect(walletCore).toContain(
+    expect(walletCore).toContain('persist_initial_recovery_scan_settings(&db, birthday_height)?');
+    expect(recoveryScan).toContain(
       'INSERT INTO groot_recovery_settings (singleton, birthday_height, gap_limit)'
     );
   });

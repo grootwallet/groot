@@ -300,7 +300,7 @@
         tone: networkSetupCopied ? 'success' : 'default'
       });
       await walletShell.refreshProfiles();
-      await goto('/');
+      await goto('/?initial=full');
     } catch (cause) {
       errorCode = cause instanceof WalletError ? cause.code : 'internal_error';
       existingWalletId = cause instanceof WalletError ? cause.existingWalletId : null;

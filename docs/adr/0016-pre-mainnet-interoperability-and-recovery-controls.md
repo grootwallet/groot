@@ -1,6 +1,6 @@
 # ADR 0016: Pre-mainnet interoperability and recovery controls
 
-- Status: Accepted for test networks; the TLS portion is superseded by ADR 0020 and the Tor transport portion by ADR 0025; mainnet remains blocked
+- Status: Accepted for test networks; the TLS portion is superseded by ADR 0020, the Tor transport portion by ADR 0025, and the explicit first-scan choice for newly created external-hardware profiles by ADR 0072; mainnet remains blocked
 - Date: 2026-08-05
 
 ## Context

@@ -144,7 +144,7 @@
   let initialScanErrorDetails = $state<WalletErrorDetails | null>(null);
   let initialScanStarting = $state(false);
   let nodeReady = $state(false);
-  let automaticInitialScanPending = $state(page.url.searchParams.get('initial') === 'new');
+  let automaticInitialScanPending = $state(page.url.searchParams.has('initial'));
   const recoveryScanIsActive = (status: RecoveryScanStatus) =>
     ['running', 'cancelling'].includes(status.status);
   let recoveryPercent = $derived(
@@ -163,8 +163,8 @@
       recoveryStatus.processedBlocks > 0 &&
       ['interrupted', 'failed'].includes(recoveryStatus.status)
   );
-  let generatedWalletAwaitingAutomaticScan = $derived(
-    page.url.searchParams.get('initial') === 'new' &&
+  let walletAwaitingAutomaticScan = $derived(
+    page.url.searchParams.has('initial') &&
       initialHistoryRequired &&
       !recoveryScanIsActive(recoveryStatus) &&
       !savedRecoveryCanResume
@@ -228,7 +228,7 @@
   let syncAgeValue = $derived(syncAge(snapshot?.syncedAt ?? null, syncClock));
   let syncButtonLabel = $derived.by(() => {
     if (initialDataLoading) return translate($locale, isMainnet ? 'Checking node…' : 'Loading…');
-    if (automaticInitialScanPending || generatedWalletAwaitingAutomaticScan)
+    if (automaticInitialScanPending || walletAwaitingAutomaticScan)
       return translate($locale, 'Syncing');
     if (loadErrorCode === 'network_unavailable') return translate($locale, 'Node unavailable');
     if (loadError && !snapshot) return translate($locale, 'Sync unavailable');
@@ -444,7 +444,7 @@
       }
       if (generation !== loadGeneration) return;
       automaticInitialScanPending = Boolean(
-        page.url.searchParams.get('initial') === 'new' &&
+        page.url.searchParams.has('initial') &&
         nextSyncSource.type === 'bitcoin_core' &&
         !nextSnapshot.syncedAt &&
         nodeReady
@@ -933,7 +933,7 @@
     <button
       class="sync-button"
       disabled={automaticInitialScanPending ||
-        generatedWalletAwaitingAutomaticScan ||
+        walletAwaitingAutomaticScan ||
         syncInProgress ||
         recoveryScanIsActive(recoveryStatus)}
       title={syncButtonTitle}
@@ -941,7 +941,7 @@
       ><RefreshCw
         size={15}
         class={automaticInitialScanPending ||
-        generatedWalletAwaitingAutomaticScan ||
+        walletAwaitingAutomaticScan ||
         syncInProgress ||
         recoveryScanIsActive(recoveryStatus)
           ? 'spin'
@@ -949,7 +949,7 @@
       />{syncButtonLabel}</button
     >
   </header>
-  {#if initialHistoryRequired && !generatedWalletAwaitingAutomaticScan}
+  {#if initialHistoryRequired && !walletAwaitingAutomaticScan}
     <section class="initial-history-scan" aria-live="polite">
       <div>
         <strong
@@ -1141,7 +1141,7 @@
       description={loadError}
       onretry={networkSetupRequired ? openNetworkSetup : loadSnapshot}
     />
-  {:else if snapshot && !initialDataLoading && !generatedWalletAwaitingAutomaticScan}
+  {:else if snapshot && !initialDataLoading && !walletAwaitingAutomaticScan}
     <section class="balance-card content-reveal">
       <div class="balance-top">
         <span>{translate($locale, 'Total balance')}</span><button

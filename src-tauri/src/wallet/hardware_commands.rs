@@ -2293,6 +2293,10 @@ pub fn external_signer_create(
             id,
             credential.as_str(),
         )?;
+        // Unlike a Groot-generated seed, an imported hardware signer may have
+        // received bitcoin at any point in the chain. Start from genesis unless
+        // the user later narrows the saved birthday explicitly.
+        persist_initial_recovery_scan_settings(&db, 0)?;
         commit_profile(
             &app,
             WalletProfile {
