@@ -4599,8 +4599,17 @@ code {
   font-size: var(--font-size-meta);
   line-height: 1.45;
 }
-.wallet-type-meta {
+.wallet-type-footer {
   margin-top: auto;
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 10px;
+}
+.wallet-type-meta {
+  min-width: 0;
   color: var(--muted-2);
   font-size: var(--font-size-meta);
   font-weight: 650;
@@ -4608,9 +4617,7 @@ code {
   text-transform: uppercase;
 }
 .wallet-type-arrow {
-  position: absolute;
-  right: 13px;
-  bottom: 13px;
+  flex: 0 0 auto;
   color: var(--muted-2);
   transition:
     transform 0.15s ease,
@@ -11138,17 +11145,13 @@ code {
     grid-row: 1;
     padding-right: 17px;
   }
-  .wallet-type-meta {
-    grid-column: 2;
+  .wallet-type-footer {
+    grid-column: 2 / 4;
     grid-row: 2;
     margin: 0;
   }
   .wallet-type-arrow {
-    position: static;
-    grid-column: 3;
-    grid-row: 2;
     align-self: center;
-    justify-self: end;
   }
   .setup-progress-label {
     font-size: var(--font-size-meta);

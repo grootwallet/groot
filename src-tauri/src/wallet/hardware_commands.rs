@@ -274,7 +274,14 @@ fn discovery_flight() -> &'static DiscoveryFlight {
     })
 }
 
-fn validate_discovered_devices(mut devices: Vec<HwiDevice>) -> ApiResult<Vec<HwiDevice>> {
+fn validate_discovered_devices(devices: Vec<HwiDevice>) -> ApiResult<Vec<HwiDevice>> {
+    validate_discovered_devices_for_network(devices, network())
+}
+
+fn validate_discovered_devices_for_network(
+    mut devices: Vec<HwiDevice>,
+    active_network: Network,
+) -> ApiResult<Vec<HwiDevice>> {
     if devices.len() > MAX_DISCOVERED_DEVICES {
         return Err(api_error(
             "hardware_response_too_large",
@@ -284,9 +291,7 @@ fn validate_discovered_devices(mut devices: Vec<HwiDevice>) -> ApiResult<Vec<Hwi
     let mut paths = std::collections::HashSet::new();
     for device in &mut devices {
         device.device_type = device.device_type.trim().to_ascii_lowercase();
-        if !SUPPORTED_HWI_DEVICE_TYPES.contains(&device.device_type.as_str())
-            || !approved_hwi_model(network(), &device.device_type, &device.model)
-            || device.path.len() > 1024
+        if device.path.len() > 1024
             || device.model.chars().count() > 256
             || device.path.chars().any(char::is_control)
             || device.model.chars().any(char::is_control)
@@ -296,6 +301,17 @@ fn validate_discovered_devices(mut devices: Vec<HwiDevice>) -> ApiResult<Vec<Hwi
                 "HWI returned an invalid hardware-signer record.",
             ));
         }
+    }
+    // Aggregate HWI discovery reports every connected family. An otherwise
+    // valid but out-of-scope model must not prevent an approved signer from
+    // being discovered. Drop it before issuing a capability or caching its
+    // private path; selected-device commands therefore remain limited to the
+    // exact Mainnet allowlist.
+    devices.retain(|device| {
+        SUPPORTED_HWI_DEVICE_TYPES.contains(&device.device_type.as_str())
+            && approved_hwi_model(active_network, &device.device_type, &device.model)
+    });
+    for device in &mut devices {
         device.fingerprint = match device.fingerprint.take() {
             Some(fingerprint) if !fingerprint.trim().is_empty() => {
                 let fingerprint = fingerprint.trim().to_ascii_lowercase();
@@ -949,17 +965,45 @@ mod targeted_scan_tests {
     }
 
     #[test]
-    fn removed_legacy_hwi_devices_fail_closed_before_cache_or_ui() {
+    fn unapproved_hwi_devices_are_omitted_before_cache_or_ui() {
         for device_type in ["keepkey", "digitalbitbox"] {
-            let error = validate_discovered_devices(vec![HwiDevice {
+            let devices = validate_discovered_devices(vec![HwiDevice {
                 device_type: device_type.into(),
                 model: device_type.into(),
                 path: format!("{device_type}-path"),
                 ..HwiDevice::default()
             }])
-            .unwrap_err();
-            assert_eq!(error.code, "invalid_hardware_response", "{device_type}");
+            .unwrap();
+            assert!(devices.is_empty(), "{device_type}");
         }
+    }
+
+    #[test]
+    fn an_unapproved_model_cannot_hide_an_approved_safe_3() {
+        let devices = validate_discovered_devices_for_network(
+            vec![
+                HwiDevice {
+                    device_type: "ledger".into(),
+                    model: "ledger_nano_x".into(),
+                    path: "ledger-path".into(),
+                    fingerprint: Some("11223344".into()),
+                    ..HwiDevice::default()
+                },
+                HwiDevice {
+                    device_type: "trezor".into(),
+                    model: "trezor_t3b1".into(),
+                    path: "trezor-path".into(),
+                    fingerprint: Some("a1b2c3d4".into()),
+                    ..HwiDevice::default()
+                },
+            ],
+            Network::Bitcoin,
+        )
+        .unwrap();
+
+        assert_eq!(devices.len(), 1);
+        assert_eq!(devices[0].device_type, "trezor");
+        assert_eq!(devices[0].model, "trezor_t3b1");
     }
 
     #[test]

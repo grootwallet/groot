@@ -113,6 +113,14 @@ describe('hardware receive verification UI', () => {
     expect(multisigSetup).not.toContain('Coldcard XPUB JSON or Groot signer JSON');
   });
 
+  it('uses the shared structured error notice throughout single-signer setup', () => {
+    expect(hardwareSetup).toContain(
+      "import WarningNotice from '$lib/components/WarningNotice.svelte'"
+    );
+    expect(hardwareSetup.match(/<WarningNotice/g)).toHaveLength(2);
+    expect(hardwareSetup).not.toContain('class="hardware-inline-error"');
+  });
+
   it('keeps source hierarchy and loading rotation in shared styles', () => {
     expect(appCss).toMatch(/\.source-list strong\s*\{[\s\S]*?font-size:\s*13px/);
     expect(appCss).toMatch(/\.source-list small\s*\{[\s\S]*?font-size:\s*var\(--font-size-meta\)/);
@@ -342,7 +350,7 @@ describe('hardware receive verification UI', () => {
     expect(hardwareSetup).toContain("errorTitle = 'Could not read the account key'");
     expect(hardwareSetup).toContain("errorTitle = 'Could not start hardware unlock'");
     expect(hardwareSetup).toContain('{:else if devices.length || !error}<HardwareDeviceList');
-    expect(hardwareSetup).toContain('<strong>{translate($locale, errorTitle)}</strong>');
+    expect(hardwareSetup).toContain('title={translate($locale, errorTitle)}');
     expect(hardwareSetup).not.toContain(
       '<strong>Could not read the account key</strong><small>{error}</small>'
     );

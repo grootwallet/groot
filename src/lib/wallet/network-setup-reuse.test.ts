@@ -23,6 +23,7 @@ const directAdoptionRoutes = [
   readFileSync(new URL('../../routes/hardware/new/+page.svelte', import.meta.url), 'utf8')
 ];
 const welcome = directAdoptionRoutes[0];
+const appCss = readFileSync(new URL('../../app.css', import.meta.url), 'utf8');
 const multisigCreationRoute = readFileSync(
   new URL('../../routes/multisig/new/+page.svelte', import.meta.url),
   'utf8'
@@ -40,6 +41,12 @@ function nativeCommand(name: string): string {
 }
 
 describe('protected network setup reuse', () => {
+  it('keeps wallet-choice CTA arrows in a non-overlapping shared footer', () => {
+    expect(welcome.match(/class="wallet-type-footer"/g)).toHaveLength(3);
+    expect(appCss).toContain('.wallet-type-footer {');
+    expect(appCss).toContain('.wallet-type-arrow {\n  flex: 0 0 auto;');
+  });
+
   it('never returns node credentials to the webview', () => {
     const start = runtimeContract.indexOf('export type NetworkSetupSource');
     const end = runtimeContract.indexOf('\n};', start);

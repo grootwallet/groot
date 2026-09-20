@@ -521,6 +521,15 @@ test('locked wallet can continue into hardware and multisig setup', async ({ pag
 
   await page.goto('/welcome?add=1');
   await page.getByRole('button', { name: 'Add wallet' }).click();
+  for (const card of await page.locator('.wallet-type-card').all()) {
+    expect(
+      await card.locator('.wallet-type-footer').evaluate((footer) => {
+        const label = footer.querySelector('.wallet-type-meta')?.getBoundingClientRect();
+        const arrow = footer.querySelector('.wallet-type-arrow')?.getBoundingClientRect();
+        return Boolean(label && arrow && label.right <= arrow.left);
+      })
+    ).toBe(true);
+  }
   await page.getByRole('button', { name: /Hardware signer/ }).click();
   await expect(page).toHaveURL(/\/hardware\/new$/);
   await expect(page.getByRole('heading', { name: 'Add hardware signer' })).toBeVisible();

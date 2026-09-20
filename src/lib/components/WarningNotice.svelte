@@ -99,6 +99,10 @@
     gap: 0.25rem;
     min-width: 0;
   }
+  .warning-notice-content :global(.button) {
+    justify-self: start;
+    margin-top: 6px;
+  }
   .danger {
     display: flex;
     flex-direction: column;

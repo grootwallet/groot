@@ -2,7 +2,6 @@
   import { locale } from '$lib/i18n';
   import { translate, localizedError } from '$lib/i18n-catalog';
   import {
-    AlertTriangle,
     ArrowLeft,
     ArrowRight,
     Cable,
@@ -26,6 +25,7 @@
   import PasswordField from '$lib/components/PasswordField.svelte';
   import SetupProgress from '$lib/components/SetupProgress.svelte';
   import TrezorPinModal from '$lib/components/TrezorPinModal.svelte';
+  import WarningNotice from '$lib/components/WarningNotice.svelte';
   import { toast } from '$lib/stores/toasts';
   import { readTransferFile } from '$lib/transfer';
   import { compactIdentifier } from '$lib/address-display';
@@ -650,32 +650,30 @@
           </p></label
         >{/if}
       {#if error}
-        <div class="hardware-inline-error hardware-create-error" role="alert">
-          <AlertTriangle size={18} />
-          <span>
-            <strong
-              >{translate(
-                $locale,
-                errorCode === 'wallet_already_exists'
-                  ? 'This hardware signer is already in Groot'
-                  : 'Could not create the wallet'
-              )}</strong
-            >
-            <small
-              >{translate(
-                $locale,
-                errorCode === 'wallet_already_exists'
-                  ? 'Groot matched the same public descriptor. No duplicate was created and nothing was changed. Open the existing wallet instead.'
-                  : error
-              )}</small
-            >
-          </span>
+        <WarningNotice
+          tone="danger"
+          icon
+          role="alert"
+          ariaLive="polite"
+          title={translate(
+            $locale,
+            errorCode === 'wallet_already_exists'
+              ? 'This hardware signer is already in Groot'
+              : 'Could not create the wallet'
+          )}
+          body={translate(
+            $locale,
+            errorCode === 'wallet_already_exists'
+              ? 'Groot matched the same public descriptor. No duplicate was created and nothing was changed. Open the existing wallet instead.'
+              : error
+          )}
+        >
           {#if errorCode === 'wallet_already_exists' && existingWalletId}<Button
               variant="secondary"
               size="small"
               onclick={openExistingWallet}>{translate($locale, 'Open wallet')}</Button
             >{/if}
-        </div>
+        </WarningNotice>
       {/if}
       <div class="split-actions">
         <Button
@@ -742,9 +740,13 @@
       detailedStatus
       showRescan
     />{/if}
-  {#if error}<div class="hardware-inline-error" role="alert">
-      <AlertTriangle size={18} /><span
-        ><strong>{translate($locale, errorTitle)}</strong><small>{error}</small></span
+  {#if error}<WarningNotice
+      tone="danger"
+      icon
+      role="alert"
+      ariaLive="polite"
+      title={translate($locale, errorTitle)}
+      body={error}
       ><Button
         variant="secondary"
         size="small"
@@ -762,7 +764,7 @@
             : 'Scan again'
         )}</Button
       >
-    </div>{/if}
+    </WarningNotice>{/if}
 </Modal>
 <Modal
   open={standardWalletOpen}

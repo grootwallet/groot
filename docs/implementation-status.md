@@ -1,5 +1,18 @@
 # Implementation status
 
+The hardware-onboarding follow-up prevents an unrelated out-of-scope HWI model
+from invalidating an approved signer returned by the same aggregate enumeration.
+Rust still bounds every record, issues capabilities only for the exact network
+allowlist, and performs the same selected-device fingerprint, derivation, and
+account-key proof before import. Hardware setup now renders scan and creation
+failures through the shared structured danger notice, and wallet-choice arrows
+participate in the card footer layout instead of overlapping localized CTA copy.
+The pinned HWI 3.2.0 binary remains the measured latency floor: its all-backend
+enumeration cannot be narrowed with `--device-type`, so this change removes the
+false failure but does not claim Sparrow-equivalent discovery performance. No
+persisted format, dependency, descriptor, derivation, PSBT, signing, or BIP
+support changes; no migration is required.
+
 The warning-copy and App Logs loading follow-up is presentation-only. Recovery-word
 verification, BIP329 label exchange, and saved network-setup reuse now lead with a
 short title and one plain-language sentence; the existing insight tooltip retains

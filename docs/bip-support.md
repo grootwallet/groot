@@ -504,6 +504,11 @@ shared App Logs navigation/loading skeleton have no BIP support impact. They
 change presentation only; descriptors, derivation, scanning, PSBTs, signing,
 broadcast, recovery, persistence, and interoperability remain unchanged.
 
+Filtering out-of-scope HWI discovery rows before capability issuance has no BIP
+support impact. Approved signers retain the same BIP84/BIP48 derivations and
+live fingerprint/account-key proof; no descriptor, PSBT, signing, recovery, or
+interoperability claim changes.
+
 Every feature, interoperability, signer, descriptor, transaction, payment request,
 backup/recovery, sync/backend, network, or dependency change must assess BIP impact.
 If it adds, removes, expands, narrows, or changes evidence for a BIP:

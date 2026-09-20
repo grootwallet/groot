@@ -378,8 +378,12 @@
               >{translate($locale, 'Create and back up your keys in Groot.')}</small
             ></span
           >
-          <span class="wallet-type-meta">{translate($locale, 'On this device')}</span>
-          <ArrowRight class="wallet-type-arrow" size={17} />
+          <span class="wallet-type-footer"
+            ><span class="wallet-type-meta">{translate($locale, 'On this device')}</span><ArrowRight
+              class="wallet-type-arrow"
+              size={17}
+            /></span
+          >
         </button>
         <button
           class="wallet-type-card hardware"
@@ -391,8 +395,10 @@
               >{translate($locale, 'Connect a device you already trust.')}</small
             ></span
           >
-          <span class="wallet-type-meta">{translate($locale, 'Separate device')}</span>
-          <ArrowRight class="wallet-type-arrow" size={17} />
+          <span class="wallet-type-footer"
+            ><span class="wallet-type-meta">{translate($locale, 'Separate device')}</span
+            ><ArrowRight class="wallet-type-arrow" size={17} /></span
+          >
         </button>
         <button
           class="wallet-type-card multisig"
@@ -407,8 +413,10 @@
               )}</small
             ></span
           >
-          <span class="wallet-type-meta">{translate($locale, 'Flexible security')}</span>
-          <ArrowRight class="wallet-type-arrow" size={17} />
+          <span class="wallet-type-footer"
+            ><span class="wallet-type-meta">{translate($locale, 'Flexible security')}</span
+            ><ArrowRight class="wallet-type-arrow" size={17} /></span
+          >
         </button>
       </div>
     {:else if mode === 'create'}
