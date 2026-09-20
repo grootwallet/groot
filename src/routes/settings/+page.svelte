@@ -1534,34 +1534,48 @@
             >{/each}
         </span>
       </div>
-      {#if walletUnlocked}<button onclick={openSyncSource}
-          ><span class="setting-icon"><RefreshCw size={18} /></span><span
-            ><strong>{translate($locale, 'Wallet activity sync')}</strong><small
-              >{translate(
-                $locale,
-                syncSource.type === 'compact_filters'
-                  ? 'P2P compact filters · confirmed activity only'
-                  : 'Bitcoin Core RPC · confirmed and mempool activity'
-              )}</small
-            ></span
-          ><ChevronRight size={16} /></button
-        >
-        <button onclick={openNodeSettings}
-          ><span class="setting-icon"><Network size={18} /></span><span
-            ><strong>{translate($locale, 'Fee and broadcast node')}</strong><small
-              >{networkName(defaultConfig.network)}{' · '}{translate(
-                $locale,
-                managedNodeConfigured
-                  ? 'Groot managed node'
-                  : node.backend.type === 'local_core'
-                    ? 'This Mac'
-                    : 'Custom remote node'
-              )}{#if !managedNodeConfigured}{' · '}<span class="selectable-text"
-                  >{node.backend.url}</span
-                >{/if}</small
-            ></span
-          ><ChevronRight size={16} /></button
-        >
+      {#if walletUnlocked}{#if defaultConfig.network === 'mainnet'}<button
+            onclick={openNodeSettings}
+            ><span class="setting-icon"><Network size={18} /></span><span
+              ><strong>{translate($locale, 'Bitcoin Core connection')}</strong><small
+                >{translate(
+                  $locale,
+                  managedNodeConfigured
+                    ? 'Groot managed · activity, fees, and broadcast'
+                    : node.backend.type === 'local_core'
+                      ? 'This Mac · activity, fees, and broadcast'
+                      : 'Custom remote · activity, fees, and broadcast'
+                )}</small
+              ></span
+            ><ChevronRight size={16} /></button
+          >{:else}<button onclick={openSyncSource}
+            ><span class="setting-icon"><RefreshCw size={18} /></span><span
+              ><strong>{translate($locale, 'Wallet activity sync')}</strong><small
+                >{translate(
+                  $locale,
+                  syncSource.type === 'compact_filters'
+                    ? 'P2P compact filters · confirmed activity only'
+                    : 'Bitcoin Core RPC · confirmed and mempool activity'
+                )}</small
+              ></span
+            ><ChevronRight size={16} /></button
+          >
+          <button onclick={openNodeSettings}
+            ><span class="setting-icon"><Network size={18} /></span><span
+              ><strong>{translate($locale, 'Fee and broadcast node')}</strong><small
+                >{networkName(defaultConfig.network)}{' · '}{translate(
+                  $locale,
+                  managedNodeConfigured
+                    ? 'Groot managed node'
+                    : node.backend.type === 'local_core'
+                      ? 'This Mac'
+                      : 'Custom remote node'
+                )}{#if !managedNodeConfigured}{' · '}<span class="selectable-text"
+                    >{node.backend.url}</span
+                  >{/if}</small
+              ></span
+            ><ChevronRight size={16} /></button
+          >{/if}
         {#if reusableNetworkSetups.length > 0}<button onclick={openNetworkReuse}
             ><span class="setting-icon"><RefreshCw size={18} /></span><span
               ><strong>{translate($locale, 'Use an existing network setup')}</strong><small
@@ -2451,12 +2465,14 @@
         >
       </div>
     </div>
-    <div class="warning-box">
-      <strong>{translate($locale, 'Trusted service privacy tradeoff.')}</strong>
-      {translate(
-        $locale,
-        'The service can observe connection timing and requested blocks. Groot never sends recovery words, private keys, labels, or addresses.'
-      )}
+    <div class="warning-box managed-privacy-warning">
+      <strong>{translate($locale, 'Privacy tradeoff')}</strong>
+      <span
+        >{translate(
+          $locale,
+          'The service sees connection timing and requested blocks. Recovery words, private keys, labels, and addresses stay in Groot.'
+        )}</span
+      >
     </div>
   {:else}<label class="field"
       ><span>{translate($locale, 'RPC URL')}</span><input
@@ -2522,12 +2538,14 @@
         autocomplete="new-password"
         hint={translate($locale, 'Encrypted locally; never placed in the URL or public config.')}
       />{/if}{/if}
-  {#if nodeMode !== 'managed' || managedRenewalAvailable}<PasswordField
-      label={credentialLabel}
-      bind:value={walletCredential}
-      autocomplete="current-password"
-      hint={translate($locale, 'Required once to protect this wallet’s RPC credentials.')}
-    />{/if}
+  {#if nodeMode !== 'managed' || managedRenewalAvailable}<div class="node-wallet-credential">
+      <PasswordField
+        label={credentialLabel}
+        bind:value={walletCredential}
+        autocomplete="current-password"
+        hint={translate($locale, 'Required once to protect this wallet’s RPC credentials.')}
+      />
+    </div>{/if}
   {#if nodeError}<p class="form-error">{nodeError}</p>{/if}
   <div class="modal-footer">
     <Button variant="secondary" onclick={closeNodeSettings}>{translate($locale, 'Cancel')}</Button

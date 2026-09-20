@@ -4913,6 +4913,7 @@ code {
   font-variant-numeric: tabular-nums;
   line-height: 1;
   text-align: right;
+  transform: translateY(1px);
 }
 .mnemonic-grid strong {
   color: var(--text);
@@ -4923,6 +4924,7 @@ code {
   font-weight: 500;
   line-height: 1;
   text-align: left;
+  transform: translateY(1px);
 }
 .mnemonic-verification {
   display: grid;
@@ -5072,6 +5074,9 @@ code {
 }
 .credential-form .field {
   margin: 0;
+}
+.software-credential-form > .field:nth-child(2) {
+  margin-top: 7px;
 }
 .credential-form .field small {
   min-height: 14px;
@@ -6008,6 +6013,17 @@ code {
 }
 .node-location {
   margin-bottom: 14px;
+}
+.managed-privacy-warning {
+  display: grid;
+  gap: 3px;
+}
+.managed-privacy-warning strong,
+.managed-privacy-warning span {
+  display: block;
+}
+.node-wallet-credential {
+  margin-top: 24px;
 }
 .import-error {
   display: grid;

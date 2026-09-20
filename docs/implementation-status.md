@@ -1069,3 +1069,13 @@ and awaits the first sync wake. A generated software wallet therefore performs
 only its short tip/mempool reconciliation without presenting the recovery/import
 history-choice state. This changes orchestration and test-fixture fidelity only;
 it has no BIP support or persisted-format impact.
+
+Follow-up physical review of `ee5bce4` confirmed the tip-based scan completes,
+but found presentation gaps around that correct behavior. The creation action
+now paints its busy indicator before native work begins; the generated-wallet
+route suppresses the recovery/import history-choice banner while automatic
+startup is pending; recovery words receive a one-pixel optical baseline
+correction; and the Mainnet-only Core controls are shown as one connection row.
+The managed-service warning and credential spacing are also tightened. These
+are UI/orchestration changes only: existing profiles and databases remain
+compatible, and there is no BIP-support impact.

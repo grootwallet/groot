@@ -558,6 +558,22 @@ export const settingsCopy = {
     fr: 'Nœud de frais et de diffusion',
     es: 'Nodo de comisiones y difusión'
   },
+  'Bitcoin Core connection': {
+    fr: 'Connexion à Bitcoin Core',
+    es: 'Conexión a Bitcoin Core'
+  },
+  'Groot managed · activity, fees, and broadcast': {
+    fr: 'Géré par Groot · activité, frais et diffusion',
+    es: 'Gestionado por Groot · actividad, comisiones y difusión'
+  },
+  'This Mac · activity, fees, and broadcast': {
+    fr: 'Ce Mac · activité, frais et diffusion',
+    es: 'Este Mac · actividad, comisiones y difusión'
+  },
+  'Custom remote · activity, fees, and broadcast': {
+    fr: 'Distant personnalisé · activité, frais et diffusion',
+    es: 'Remoto personalizado · actividad, comisiones y difusión'
+  },
   'Groot managed': { fr: 'Géré par Groot', es: 'Gestionado por Groot' },
   'Groot managed node': { fr: 'Nœud géré par Groot', es: 'Nodo gestionado por Groot' },
   'Custom remote': { fr: 'Distant personnalisé', es: 'Remoto personalizado' },
@@ -567,14 +583,14 @@ export const settingsCopy = {
       fr: 'Groot fournit un accès isolé pour ce portefeuille. Les identifiants RPC restent chiffrés dans le code natif et ne sont jamais affichés ici.',
       es: 'Groot proporciona acceso aislado para esta cartera. Las credenciales RPC permanecen cifradas en el código nativo y nunca se muestran aquí.'
     },
-  'Trusted service privacy tradeoff.': {
-    fr: 'Compromis de confidentialité d’un service de confiance.',
-    es: 'Compromiso de privacidad de un servicio de confianza.'
+  'Privacy tradeoff': {
+    fr: 'Compromis de confidentialité',
+    es: 'Compromiso de privacidad'
   },
-  'The service can observe connection timing and requested blocks. Groot never sends recovery words, private keys, labels, or addresses.':
+  'The service sees connection timing and requested blocks. Recovery words, private keys, labels, and addresses stay in Groot.':
     {
-      fr: 'Le service peut observer les horaires de connexion et les blocs demandés. Groot n’envoie jamais les mots de récupération, les clés privées, les libellés ni les adresses.',
-      es: 'El servicio puede observar los tiempos de conexión y los bloques solicitados. Groot nunca envía palabras de recuperación, claves privadas, etiquetas ni direcciones.'
+      fr: 'Le service voit les horaires de connexion et les blocs demandés. Les mots de récupération, clés privées, libellés et adresses restent dans Groot.',
+      es: 'El servicio ve los tiempos de conexión y los bloques solicitados. Las palabras de recuperación, claves privadas, etiquetas y direcciones permanecen en Groot.'
     },
   'Renew managed access': { fr: 'Renouveler l’accès géré', es: 'Renovar acceso gestionado' },
   'Check managed status': { fr: 'Vérifier l’état géré', es: 'Comprobar estado gestionado' },

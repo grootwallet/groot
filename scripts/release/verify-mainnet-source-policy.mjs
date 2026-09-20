@@ -156,13 +156,13 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src/routes/welcome/+page.svelte',
-    '423d7867af4a63f03d8a7947589510668a1ff758ab4b76ddc62d83c8aaf1b487'
+    'c29a4a0876405bfb4d1dffbadb14a9e226426db16490fdd1dea75fef183a12d8'
   ],
   [
     'src/routes/unlock/+page.svelte',
     '32953a75c52de1df3c557ab6b6edb3a7aef88676e93fad5aa82204c742ca7b3b'
   ],
-  ['src/routes/+page.svelte', '83947b01ce4b58005ed75b7c4a746ebb6cef871a33ee390662f989c925e91ae7'],
+  ['src/routes/+page.svelte', 'fa1c34ff0e4fe82f5824a6e6c90d4bec2a392b7a37601715d0ebcb4a5121edce'],
   [
     'src/routes/activity/+page.svelte',
     '38104eee15def811c78e25623978361cde42c80bf4bec20035c0d41b8df0483c'
@@ -177,7 +177,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src/routes/settings/+page.svelte',
-    '76f01092199dd4e498cd5002403de42c51797a98566683c0881b1bc4b9f06b2d'
+    '8745a450b3edec8916b4017f7578d2fc67c4651219c56e85c0d87fee84e43374'
   ],
   [
     'services/core-gateway/gateway.py',

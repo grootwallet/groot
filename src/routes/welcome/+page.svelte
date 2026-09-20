@@ -39,7 +39,7 @@
   } from '$lib/wallet';
   import { beforeNavigate, goto } from '$app/navigation';
   import { page } from '$app/state';
-  import { onDestroy, onMount } from 'svelte';
+  import { onDestroy, onMount, tick } from 'svelte';
   import {
     MAX_WALLET_PASSPHRASE_BYTES,
     MIN_NEW_WALLET_PASSPHRASE_CHARACTERS,
@@ -239,6 +239,9 @@
   async function finishCreate() {
     busy = true;
     error = '';
+    // Let the loading state reach the screen before native key derivation and
+    // persistence begin. Some WebKit builds otherwise paint only after IPC.
+    await tick();
     try {
       const creation = await walletService.createWallet(
         walletName,
@@ -707,7 +710,7 @@
           'Choose the BIP39 wallet passphrase that completes this backup. The same passphrase unlocks\n        Groot.'
         )}
       </p>
-      <div class="credential-form">
+      <div class="credential-form software-credential-form">
         <label class="field">
           <span>{translate($locale, 'Wallet name')}</span>
           <input

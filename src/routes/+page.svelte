@@ -143,6 +143,7 @@
   let initialScanErrorDetails = $state<WalletErrorDetails | null>(null);
   let initialScanStarting = $state(false);
   let nodeReady = $state(false);
+  let automaticInitialScanPending = $state(page.url.searchParams.get('initial') === 'new');
   const recoveryScanIsActive = (status: RecoveryScanStatus) =>
     ['running', 'cancelling'].includes(status.status);
   let recoveryPercent = $derived(
@@ -160,6 +161,12 @@
     initialHistoryRequired &&
       recoveryStatus.processedBlocks > 0 &&
       ['interrupted', 'failed'].includes(recoveryStatus.status)
+  );
+  let generatedWalletAwaitingAutomaticScan = $derived(
+    page.url.searchParams.get('initial') === 'new' &&
+      initialHistoryRequired &&
+      !recoveryScanIsActive(recoveryStatus) &&
+      !savedRecoveryCanResume
   );
   let scanCredentialLabel = $derived(
     selectedProfile?.kind === 'single_key'
@@ -220,6 +227,8 @@
   let syncAgeValue = $derived(syncAge(snapshot?.syncedAt ?? null, syncClock));
   let syncButtonLabel = $derived.by(() => {
     if (initialDataLoading) return translate($locale, isMainnet ? 'Checking node…' : 'Loading…');
+    if (automaticInitialScanPending || generatedWalletAwaitingAutomaticScan)
+      return translate($locale, 'Syncing');
     if (loadErrorCode === 'network_unavailable') return translate($locale, 'Node unavailable');
     if (loadError && !snapshot) return translate($locale, 'Sync unavailable');
     if (initialHistoryRequired && !nodeReady && !recoveryScanIsActive(recoveryStatus))
@@ -433,6 +442,12 @@
         nextSnapshot = await walletService.overview(selectedProfile.id);
       }
       if (generation !== loadGeneration) return;
+      automaticInitialScanPending = Boolean(
+        page.url.searchParams.get('initial') === 'new' &&
+        nextSyncSource.type === 'bitcoin_core' &&
+        !nextSnapshot.syncedAt &&
+        nodeReady
+      );
       snapshot = nextSnapshot;
       initialDataLoading = false;
       void loadSecondaryDetails(generation);
@@ -615,6 +630,7 @@
       initialBirthdayHeight = settings.birthdayHeight;
       initialGapLimit = settings.gapLimit;
       if (recoveryScanIsActive(status)) {
+        automaticInitialScanPending = false;
         startRecoveryStatusPolling();
       } else if (!snapshot?.syncedAt && nodeReady) {
         // The shell owns automatic first-sync startup. Watch briefly for its
@@ -626,6 +642,7 @@
         startRecoveryStatusPolling(true);
       }
     } catch (cause) {
+      automaticInitialScanPending = false;
       initialScanError = localizedError(
         cause,
         $locale,
@@ -648,13 +665,16 @@
     while (token === recoveryPollToken) {
       const status = await refreshRecoveryStatus();
       if (!status || !recoveryScanIsActive(status)) {
-        if (status?.status === 'completed') await loadSnapshot();
-        else if (waitForAutomaticStart && Date.now() < startupDeadline) {
+        if (status?.status === 'completed') {
+          await loadSnapshot();
+        } else if (waitForAutomaticStart && Date.now() < startupDeadline) {
           await new Promise((resolve) => setTimeout(resolve, 250));
           continue;
         }
+        automaticInitialScanPending = false;
         return;
       }
+      automaticInitialScanPending = false;
       await new Promise((resolve) => setTimeout(resolve, 500));
     }
   }
@@ -911,16 +931,24 @@
     </div>
     <button
       class="sync-button"
-      disabled={syncInProgress || recoveryScanIsActive(recoveryStatus)}
+      disabled={automaticInitialScanPending ||
+        generatedWalletAwaitingAutomaticScan ||
+        syncInProgress ||
+        recoveryScanIsActive(recoveryStatus)}
       title={syncButtonTitle}
       onclick={() => sync(true)}
       ><RefreshCw
         size={15}
-        class={syncInProgress || recoveryScanIsActive(recoveryStatus) ? 'spin' : ''}
+        class={automaticInitialScanPending ||
+        generatedWalletAwaitingAutomaticScan ||
+        syncInProgress ||
+        recoveryScanIsActive(recoveryStatus)
+          ? 'spin'
+          : ''}
       />{syncButtonLabel}</button
     >
   </header>
-  {#if initialHistoryRequired}
+  {#if initialHistoryRequired && !generatedWalletAwaitingAutomaticScan}
     <section class="initial-history-scan" aria-live="polite">
       <div>
         <strong
@@ -1112,7 +1140,7 @@
       description={loadError}
       onretry={networkSetupRequired ? openNetworkSetup : loadSnapshot}
     />
-  {:else if snapshot && !initialDataLoading}
+  {:else if snapshot && !initialDataLoading && !generatedWalletAwaitingAutomaticScan}
     <section class="balance-card content-reveal">
       <div class="balance-top">
         <span>{translate($locale, 'Total balance')}</span><button

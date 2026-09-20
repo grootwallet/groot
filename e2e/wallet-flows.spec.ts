@@ -246,6 +246,18 @@ test('creates a 24-word wallet and clears onboarding secrets', async ({ page }) 
   await page.getByRole('button', { name: /reveal words/i }).click();
   const recoveryCells = page.locator('.mnemonic-grid > div');
   await expect(recoveryCells).toHaveCount(24);
+  const opticalOffsets = await recoveryCells.first().evaluate((cell) => {
+    const cellBox = cell.getBoundingClientRect();
+    const center = (element: Element) => {
+      const box = element.getBoundingClientRect();
+      return (box.top + box.bottom - cellBox.top - cellBox.bottom) / 2;
+    };
+    return [center(cell.querySelector('span')!), center(cell.querySelector('strong')!)];
+  });
+  for (const offset of opticalOffsets) {
+    expect(offset).toBeGreaterThanOrEqual(0.5);
+    expect(offset).toBeLessThanOrEqual(1.5);
+  }
   const cellPositions = await recoveryCells.evaluateAll((cells) =>
     cells.map((cell) => {
       const box = cell.getBoundingClientRect();
@@ -1737,7 +1749,25 @@ test('first Bitcoin Core scan starts automatically without requesting a passphra
   await page.getByLabel('Wallet passphrase', { exact: true }).fill('fresh-sync-passphrase');
   await page.getByLabel('Confirm wallet passphrase', { exact: true }).fill('fresh-sync-passphrase');
   await page.getByLabel(/I understand this exact passphrase/).check();
-  await page.getByRole('button', { name: 'Create wallet' }).click();
+  const createWallet = page.getByRole('button', { name: 'Create wallet' });
+  const createClick = createWallet.click();
+  await expect(page.getByRole('button', { name: 'Creating wallet…' })).toHaveAttribute(
+    'aria-busy',
+    'true'
+  );
+  await expect(page.locator('.button-loading-indicator')).toBeVisible();
+  await createClick;
+  await expect(page.getByRole('heading', { name: 'Wallet created' })).toBeVisible();
+  await page.evaluate(() => {
+    const state = window as Window & { __sawFreshHistoryChoice?: boolean };
+    state.__sawFreshHistoryChoice = false;
+    const observer = new MutationObserver(() => {
+      if (document.body.textContent?.includes('Choose where wallet history begins')) {
+        state.__sawFreshHistoryChoice = true;
+      }
+    });
+    observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+  });
   await openCreatedSoftwareWallet(page);
 
   await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible();
@@ -1745,6 +1775,11 @@ test('first Bitcoin Core scan starts automatically without requesting a passphra
   await expect(page.getByLabel('Wallet passphrase', { exact: true })).toHaveCount(0);
   await expect(page.getByText('Never synced')).toHaveCount(0);
   await expect(page.getByText('Wallet history not verified')).toHaveCount(0);
+  expect(
+    await page.evaluate(
+      () => (window as Window & { __sawFreshHistoryChoice?: boolean }).__sawFreshHistoryChoice
+    )
+  ).toBe(false);
 
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
     true
@@ -2357,6 +2392,24 @@ test('recovery words remain readable in light and dark themes', async ({ page })
     await page.getByRole('button', { name: 'Generate 24 recovery words' }).click();
     await page.getByRole('button', { name: /reveal words/i }).click();
     await expect(page.locator('.mnemonic-grid > div')).toHaveCount(24);
+    const verticalOffsets = await page
+      .locator('.mnemonic-grid > div')
+      .first()
+      .evaluate((cell) => {
+        const cellBox = cell.getBoundingClientRect();
+        const centerOffset = (element: Element) => {
+          const box = element.getBoundingClientRect();
+          return (box.top + box.bottom - cellBox.top - cellBox.bottom) / 2;
+        };
+        return [
+          centerOffset(cell.querySelector('span')!),
+          centerOffset(cell.querySelector('strong')!)
+        ];
+      });
+    for (const offset of verticalOffsets) {
+      expect(offset).toBeGreaterThanOrEqual(0.5);
+      expect(offset).toBeLessThanOrEqual(1.5);
+    }
     const ratios = await page.evaluate(() => {
       const rgb = (value: string) => {
         if (value.startsWith('color(')) {

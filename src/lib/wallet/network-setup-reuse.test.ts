@@ -185,6 +185,17 @@ describe('protected network setup reuse', () => {
     expect(settings).toContain('walletService.configureManagedNode(walletCredential)');
   });
 
+  it('presents Mainnet Core activity, fees, and broadcast as one understandable setting', () => {
+    expect(settings).toContain("defaultConfig.network === 'mainnet'");
+    expect(settings).toContain('Bitcoin Core connection');
+    expect(settings).toContain('Groot managed · activity, fees, and broadcast');
+    expect(settings).toContain('This Mac · activity, fees, and broadcast');
+    expect(settings).toContain('Custom remote · activity, fees, and broadcast');
+    expect(settings).toContain('class="warning-box managed-privacy-warning"');
+    expect(settings).toContain('Privacy tradeoff');
+    expect(settings).toContain('class="node-wallet-credential"');
+  });
+
   it('renews managed access only inside native code after wallet authentication', () => {
     const source = nativeCommand('managed_node_configure');
 

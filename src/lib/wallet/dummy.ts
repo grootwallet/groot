@@ -270,6 +270,9 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     backupVerified: boolean,
     _networkSetupSourceWalletId?: string
   ) {
+    // Keep the browser adapter asynchronous enough to exercise the same
+    // painted loading state as native profile encryption and persistence.
+    await new Promise((resolve) => setTimeout(resolve, 250));
     if (!name.trim()) throw new WalletError('invalid_wallet_name', 'A wallet name is required.');
     if (!credential) throw new WalletError('invalid_credential', 'A passphrase / PIN is required.');
     if (unicodeCharacterLength(credential) < MIN_NEW_WALLET_PASSPHRASE_CHARACTERS)
