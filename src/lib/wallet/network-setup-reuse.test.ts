@@ -185,12 +185,17 @@ describe('protected network setup reuse', () => {
     expect(settings).toContain('walletService.configureManagedNode(walletCredential)');
   });
 
-  it('presents Mainnet Core activity, fees, and broadcast as one understandable setting', () => {
-    expect(settings).toContain("defaultConfig.network === 'mainnet'");
+  it('presents Core consistently and separates activity only when compact filters are active', () => {
+    expect(settings).toContain("syncSource.type === 'compact_filters'");
     expect(settings).toContain('Bitcoin Core connection');
     expect(settings).toContain('Groot managed · activity, fees, and broadcast');
     expect(settings).toContain('This Mac · activity, fees, and broadcast');
     expect(settings).toContain('Custom remote · activity, fees, and broadcast');
+    expect(settings).toContain('Groot managed · fees and broadcast');
+    expect(settings).toContain('This Mac · fees and broadcast');
+    expect(settings).toContain('Custom remote · fees and broadcast');
+    expect(settings).toContain('Use compact filters for wallet activity');
+    expect(settings).not.toContain("translate($locale, 'Fee and broadcast node')");
     expect(settings).toContain('class="managed-privacy-warning"');
     expect(settings).toContain('Privacy tradeoff');
     expect(settings).toContain('Your keys and wallet data stay locally in Groot.');

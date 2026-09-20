@@ -177,7 +177,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src/routes/settings/+page.svelte',
-    'f63e7e1a3b928d4b38d61a562070d188ecc3a3c3a728b65e253963aba949c04f'
+    '3d5acaf2c0e3638d3247cd38df1a6910b2dd5a66ac08288aca140adcc15ad62a'
   ],
   [
     'services/core-gateway/gateway.py',

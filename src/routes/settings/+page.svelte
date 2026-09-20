@@ -587,6 +587,10 @@
     clearNodeCredentials();
     nodeOpen = false;
   }
+  function openSyncSourceFromNode() {
+    closeNodeSettings();
+    openSyncSource();
+  }
   function nodeSaveLabel() {
     if (nodeMode !== 'managed') return translate($locale, 'Save & test');
     return translate(
@@ -1535,48 +1539,33 @@
             >{/each}
         </span>
       </div>
-      {#if walletUnlocked}{#if defaultConfig.network === 'mainnet'}<button
-            onclick={openNodeSettings}
-            ><span class="setting-icon"><Network size={18} /></span><span
-              ><strong>{translate($locale, 'Bitcoin Core connection')}</strong><small
-                >{translate(
-                  $locale,
-                  managedNodeConfigured
-                    ? 'Groot managed · activity, fees, and broadcast'
-                    : node.backend.type === 'local_core'
-                      ? 'This Mac · activity, fees, and broadcast'
-                      : 'Custom remote · activity, fees, and broadcast'
-                )}</small
-              ></span
-            ><ChevronRight size={16} /></button
-          >{:else}<button onclick={openSyncSource}
+      {#if walletUnlocked}{#if syncSource.type === 'compact_filters'}<button
+            onclick={openSyncSource}
             ><span class="setting-icon"><RefreshCw size={18} /></span><span
               ><strong>{translate($locale, 'Wallet activity sync')}</strong><small
-                >{translate(
-                  $locale,
-                  syncSource.type === 'compact_filters'
-                    ? 'P2P compact filters · confirmed activity only'
-                    : 'Bitcoin Core RPC · confirmed and mempool activity'
-                )}</small
+                >{translate($locale, 'P2P compact filters · confirmed activity only')}</small
               ></span
             ><ChevronRight size={16} /></button
-          >
-          <button onclick={openNodeSettings}
-            ><span class="setting-icon"><Network size={18} /></span><span
-              ><strong>{translate($locale, 'Fee and broadcast node')}</strong><small
-                >{networkName(defaultConfig.network)}{' · '}{translate(
-                  $locale,
-                  managedNodeConfigured
-                    ? 'Groot managed node'
-                    : node.backend.type === 'local_core'
-                      ? 'This Mac'
-                      : 'Custom remote node'
-                )}{#if !managedNodeConfigured}{' · '}<span class="selectable-text"
-                    >{node.backend.url}</span
-                  >{/if}</small
-              ></span
-            ><ChevronRight size={16} /></button
-          >{/if}
+          >{/if}<button onclick={openNodeSettings}
+          ><span class="setting-icon"><Network size={18} /></span><span
+            ><strong>{translate($locale, 'Bitcoin Core connection')}</strong><small
+              >{translate(
+                $locale,
+                managedNodeConfigured
+                  ? syncSource.type === 'compact_filters'
+                    ? 'Groot managed · fees and broadcast'
+                    : 'Groot managed · activity, fees, and broadcast'
+                  : node.backend.type === 'local_core'
+                    ? syncSource.type === 'compact_filters'
+                      ? 'This Mac · fees and broadcast'
+                      : 'This Mac · activity, fees, and broadcast'
+                    : syncSource.type === 'compact_filters'
+                      ? 'Custom remote · fees and broadcast'
+                      : 'Custom remote · activity, fees, and broadcast'
+              )}</small
+            ></span
+          ><ChevronRight size={16} /></button
+        >
         {#if reusableNetworkSetups.length > 0}<button onclick={openNetworkReuse}
             ><span class="setting-icon"><RefreshCw size={18} /></span><span
               ><strong>{translate($locale, 'Use an existing network setup')}</strong><small
@@ -2555,6 +2544,18 @@
         autocomplete="current-password"
         hint={translate($locale, 'Required once to protect this wallet’s RPC credentials.')}
       />
+    </div>{/if}
+  {#if defaultConfig.network !== 'mainnet' && syncSource.type !== 'compact_filters'}<div
+      class="node-activity-source"
+    >
+      <Button variant="secondary" onclick={openSyncSourceFromNode}
+        >{translate($locale, 'Use compact filters for wallet activity')}</Button
+      ><small
+        >{translate(
+          $locale,
+          'Optional on rehearsal networks. Bitcoin Core still provides fees and broadcast.'
+        )}</small
+      >
     </div>{/if}
   {#if nodeError}<p class="form-error">{nodeError}</p>{/if}
   <div class="modal-footer">

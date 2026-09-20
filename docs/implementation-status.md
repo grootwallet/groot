@@ -1098,3 +1098,12 @@ while native diagnostics load. Signet is not part of ADR 0069's selectable GA
 application and is therefore no longer tracked as a Mainnet GA release blocker;
 Regtest, Testnet4, and Mainnet evidence remain network-specific. No wallet,
 profile, credential, node-setting, database, DTO, or BIP behavior changes.
+
+The network-services follow-up gives Regtest, Testnet4, and Mainnet the same
+primary **Bitcoin Core connection** row. Regtest and Testnet4 show the separate
+**Wallet activity sync** row only when compact filters are active, because only
+then is activity discovery genuinely independent from Core fees and broadcast.
+The Core dialog keeps that rehearsal-only option reachable without making the
+normal Core configuration look different by network. This is presentation and
+navigation only; saved node and sync-source formats are unchanged, and there is
+no migration or BIP-support impact.

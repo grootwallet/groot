@@ -946,8 +946,8 @@ test('creates an external-signer wallet, signs by cable, and configures its isol
   await expect((await descriptorDownload).suggestedFilename()).toBe('groot-hardware-wallet.json');
   await expect(page.getByText('Descriptor backup saved', { exact: true })).toBeVisible();
   await descriptorDialog.getByRole('button', { name: 'Close' }).click();
-  await page.getByRole('button', { name: /Fee and broadcast node/ }).click();
-  await page.getByRole('button', { name: 'Remote TLS' }).click();
+  await page.getByRole('button', { name: /Bitcoin Core connection/ }).click();
+  await page.getByRole('button', { name: 'Custom remote' }).click();
   await page.getByLabel('RPC URL').fill('https://regtest-node.example:18443');
   await page.getByLabel('RPC username').fill('groot');
   await page.getByLabel('RPC password', { exact: true }).fill('rpc-secret');
@@ -1306,13 +1306,13 @@ test('settings clears credentials and confirmations after every modal dismissal'
 }) => {
   await page.goto('/settings');
 
-  await page.getByRole('button', { name: /Fee and broadcast node/ }).click();
+  await page.getByRole('button', { name: /Bitcoin Core connection/ }).click();
   let dialog = page.getByRole('dialog', { name: 'Connect Bitcoin Core' });
-  await dialog.getByRole('button', { name: 'Remote TLS' }).click();
+  await dialog.getByRole('button', { name: 'Custom remote' }).click();
   await dialog.getByLabel('RPC password', { exact: true }).fill('temporary-rpc-secret');
   await dialog.getByLabel('Wallet passphrase', { exact: true }).fill('prototype-passphrase');
   await page.keyboard.press('Escape');
-  await page.getByRole('button', { name: /Fee and broadcast node/ }).click();
+  await page.getByRole('button', { name: /Bitcoin Core connection/ }).click();
   dialog = page.getByRole('dialog', { name: 'Connect Bitcoin Core' });
   await expect(dialog.getByLabel('RPC password', { exact: true })).toHaveValue('');
   await expect(dialog.getByLabel('Wallet passphrase', { exact: true })).toHaveValue('');
@@ -1342,9 +1342,9 @@ test('settings clears credentials and confirmations after every modal dismissal'
 test('mainnet can select and save direct remote TLS without exposing Tor', async ({ page }) => {
   test.skip(process.env.E2E_MAINNET !== '1', 'Run against a Mainnet-mode browser build.');
   await page.goto('/settings');
-  await page.getByRole('button', { name: /Fee and broadcast node/ }).click();
+  await page.getByRole('button', { name: /Bitcoin Core connection/ }).click();
   const dialog = page.getByRole('dialog', { name: 'Connect Bitcoin Core' });
-  const remote = dialog.getByRole('button', { name: 'Remote TLS' });
+  const remote = dialog.getByRole('button', { name: 'Custom remote' });
   await expect(dialog.getByRole('button', { name: 'Tor onion' })).toHaveCount(0);
   await remote.click();
   await expect(remote).toHaveClass(/active/);
@@ -1356,7 +1356,7 @@ test('mainnet can select and save direct remote TLS without exposing Tor', async
   await dialog.getByRole('button', { name: 'Save & test' }).click();
   await expect(dialog).not.toBeVisible();
   await expect(page.getByText('Trusted remote server')).toBeVisible();
-  await page.getByRole('button', { name: /Fee and broadcast node/ }).click();
+  await page.getByRole('button', { name: /Bitcoin Core connection/ }).click();
   await expect(dialog.getByLabel('RPC URL')).toHaveValue('https://node.example.test:8332');
   await expect(dialog.getByLabel('RPC password', { exact: true })).toHaveValue('');
   await expect(dialog.getByLabel('Wallet passphrase', { exact: true })).toHaveValue('');
@@ -1731,7 +1731,11 @@ test('recovery scan and private network controls preserve explicit safety choice
   await recoveryScan.getByRole('button', { name: 'Save & rescan' }).click();
   await expect(page.getByRole('button', { name: /Recovery scan.*gap limit 50/ })).toBeVisible();
 
-  await page.getByRole('button', { name: /Wallet activity sync/ }).click();
+  await page.getByRole('button', { name: /Bitcoin Core connection/ }).click();
+  const initialCoreDialog = page.getByRole('dialog', { name: 'Connect Bitcoin Core' });
+  await initialCoreDialog
+    .getByRole('button', { name: 'Use compact filters for wallet activity' })
+    .click();
   const syncSource = page.getByRole('dialog', { name: 'Wallet activity sync' });
   await syncSource.getByRole('button', { name: 'Compact filters' }).click();
   await expect(syncSource.getByText('Confirmed activity only.')).toBeVisible();
@@ -1751,7 +1755,7 @@ test('recovery scan and private network controls preserve explicit safety choice
     })
   ).toBeVisible();
 
-  await page.getByRole('button', { name: /Fee and broadcast node/ }).click();
+  await page.getByRole('button', { name: /Bitcoin Core connection/ }).click();
   await page.getByRole('button', { name: 'Tor onion' }).click();
   await expect(page.getByLabel('Local SOCKS5 proxy')).toHaveValue('127.0.0.1:9050');
   await page.getByLabel('RPC URL').fill('http://groottestnode.onion:8332');
@@ -1761,6 +1765,38 @@ test('recovery scan and private network controls preserve explicit safety choice
   await coreDialog.getByLabel('Wallet passphrase', { exact: true }).fill('prototype-passphrase');
   await coreDialog.getByRole('button', { name: 'Save & test' }).click();
   await expect(page.getByText(/Trusted remote server/)).toBeVisible();
+});
+
+test('network services use one Core row unless compact filters are active', async ({ page }) => {
+  await page.goto('/settings');
+
+  const coreRow = page.getByRole('button', { name: /Bitcoin Core connection/ });
+  await expect(coreRow).toContainText('activity, fees, and broadcast');
+  await expect(page.getByRole('button', { name: /Wallet activity sync/ })).toHaveCount(0);
+
+  await coreRow.click();
+  const coreDialog = page.getByRole('dialog', { name: 'Connect Bitcoin Core' });
+  await coreDialog.getByRole('button', { name: 'Use compact filters for wallet activity' }).click();
+
+  const syncDialog = page.getByRole('dialog', { name: 'Wallet activity sync' });
+  await syncDialog.getByRole('button', { name: 'Compact filters' }).click();
+  await syncDialog.getByLabel('Wallet passphrase', { exact: true }).fill('prototype-passphrase');
+  await syncDialog.getByRole('button', { name: 'Save source' }).click();
+
+  const activityRow = page.getByRole('button', {
+    name: /Wallet activity sync.*P2P compact filters.*confirmed activity only/
+  });
+  await expect(activityRow).toBeVisible();
+  await expect(coreRow).toContainText('fees and broadcast');
+  await expect(coreRow).not.toContainText('activity, fees, and broadcast');
+
+  await activityRow.click();
+  await syncDialog.getByRole('button', { name: 'Bitcoin Core' }).click();
+  await syncDialog.getByLabel('Wallet passphrase', { exact: true }).fill('prototype-passphrase');
+  await syncDialog.getByRole('button', { name: 'Save source' }).click();
+
+  await expect(page.getByRole('button', { name: /Wallet activity sync/ })).toHaveCount(0);
+  await expect(coreRow).toContainText('activity, fees, and broadcast');
 });
 
 test('failed recovery scans discard stale progress before retry', async ({ page }) => {

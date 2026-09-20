@@ -574,6 +574,26 @@ export const settingsCopy = {
     fr: 'Distant personnalisé · activité, frais et diffusion',
     es: 'Remoto personalizado · actividad, comisiones y difusión'
   },
+  'Groot managed · fees and broadcast': {
+    fr: 'Géré par Groot · frais et diffusion',
+    es: 'Gestionado por Groot · comisiones y difusión'
+  },
+  'This Mac · fees and broadcast': {
+    fr: 'Ce Mac · frais et diffusion',
+    es: 'Este Mac · comisiones y difusión'
+  },
+  'Custom remote · fees and broadcast': {
+    fr: 'Distant personnalisé · frais et diffusion',
+    es: 'Remoto personalizado · comisiones y difusión'
+  },
+  'Use compact filters for wallet activity': {
+    fr: 'Utiliser les filtres compacts pour l’activité du portefeuille',
+    es: 'Usar filtros compactos para la actividad de la cartera'
+  },
+  'Optional on rehearsal networks. Bitcoin Core still provides fees and broadcast.': {
+    fr: 'Optionnel sur les réseaux de répétition. Bitcoin Core fournit toujours les frais et la diffusion.',
+    es: 'Opcional en redes de ensayo. Bitcoin Core sigue proporcionando comisiones y difusión.'
+  },
   'Groot managed': { fr: 'Géré par Groot', es: 'Gestionado por Groot' },
   'Groot managed node': { fr: 'Nœud géré par Groot', es: 'Nodo gestionado por Groot' },
   'Custom remote': { fr: 'Distant personnalisé', es: 'Remoto personalizado' },
