@@ -109,6 +109,9 @@ describe('locale preferences', () => {
     expect(localizedError({ code: 'hardware_pairing_required' }, 'es')).toBe(
       'Empareja esta BitBox en BitBoxApp y comprueba que BitBoxApp puede abrirla. Después, cierra BitBoxApp por completo y vuelve a buscar en Groot.'
     );
+    expect(localizedError({ code: 'hardware_wrong_network' }, 'fr')).toContain(
+      'autre réseau Bitcoin'
+    );
     expect(localizedError({ code: 'node_syncing' }, 'fr')).toContain(
       'Bitcoin Core est encore en cours de synchronisation'
     );

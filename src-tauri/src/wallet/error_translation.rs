@@ -314,6 +314,9 @@ pub(super) fn hardware_api_error(error: HardwareError) -> ApiError {
         HardwareError::Busy => "Another hardware-signer action is already in progress.",
         HardwareError::Cancelled => "The hardware-signer action was cancelled.",
         HardwareError::OutputTooLarge => "The hardware signer returned an oversized response.",
+        HardwareError::WrongNetwork => {
+            "The hardware signer is configured for a different Bitcoin network."
+        }
         HardwareError::CommandFailed(code) => match code {
             Some(-3 | -12) => "Unlock the signer and quit other wallet apps, then try again.",
             Some(-14) => "The action was cancelled on the hardware signer.",
@@ -335,6 +338,16 @@ fn bundled_hwi_unavailable_message() -> &'static str {
 }
 
 pub(super) fn hardware_device_api_error(error: HardwareError, device_type: &str) -> ApiError {
+    if device_type.eq_ignore_ascii_case("jade") && matches!(error, HardwareError::WrongNetwork) {
+        return api_error(
+            error.code(),
+            format!(
+                "Jade is set to another network, but Groot is on {}. Confirm your recovery backup, then factory-reset and restore Jade with {} selected—or switch Groot to Jade’s current network.",
+                network_name(),
+                network_name()
+            ),
+        );
+    }
     if device_type.eq_ignore_ascii_case("trezor") && matches!(error, HardwareError::TimedOut) {
         return api_error(
             error.code(),

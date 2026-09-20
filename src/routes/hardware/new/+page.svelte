@@ -111,6 +111,7 @@
     lastAttemptedDevice = null;
     lastAttemptAllowedEmptyPassphrase = false;
     errorTitle = 'Could not scan hardware';
+    errorCode = '';
     error = '';
     try {
       const discovered = await walletService.listHardwareDevices();
@@ -153,6 +154,7 @@
     lastAttemptedDevice = device;
     lastAttemptAllowedEmptyPassphrase = allowEmptyPassphrase;
     errorTitle = 'Could not read the account key';
+    errorCode = '';
     hardwareProgress = device.model.startsWith('ledger')
       ? 'Reading the public account key from Ledger…'
       : translate($locale, 'Reading the public account key from {device}…', {
@@ -174,6 +176,8 @@
       lastAttemptedDevice = null;
       lastAttemptAllowedEmptyPassphrase = false;
     } catch (cause) {
+      errorCode = cause instanceof WalletError ? cause.code : 'internal_error';
+      if (errorCode === 'hardware_wrong_network') errorTitle = 'Jade is on a different network';
       error = localizedError(cause, $locale, 'Could not import the public account key.');
     } finally {
       busy = false;
@@ -751,7 +755,9 @@
         variant="secondary"
         size="small"
         onclick={() => {
-          if (errorTitle === 'Could not read the account key' && lastAttemptedDevice) {
+          if (errorCode === 'hardware_wrong_network') {
+            closeHardwareScan();
+          } else if (errorTitle === 'Could not read the account key' && lastAttemptedDevice) {
             useDevice(lastAttemptedDevice, lastAttemptAllowedEmptyPassphrase);
           } else {
             scan();
@@ -759,9 +765,11 @@
         }}
         >{translate(
           $locale,
-          errorTitle === 'Could not read the account key' && lastAttemptedDevice
-            ? 'Try this signer again'
-            : 'Scan again'
+          errorCode === 'hardware_wrong_network'
+            ? 'Close'
+            : errorTitle === 'Could not read the account key' && lastAttemptedDevice
+              ? 'Try this signer again'
+              : 'Scan again'
         )}</Button
       >
     </WarningNotice>{/if}

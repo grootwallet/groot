@@ -648,6 +648,10 @@ const errorCategoryCopy = {
     fr: 'Le signataire matériel est indisponible. Vérifiez sa connexion et réessayez.',
     es: 'El firmante físico no está disponible. Comprueba la conexión e inténtalo de nuevo.'
   },
+  hardware_wrong_network: {
+    fr: 'Jade utilise un autre réseau Bitcoin. Vérifiez votre sauvegarde, puis restaurez Jade sur le même réseau que Groot.',
+    es: 'Jade usa otra red de Bitcoin. Comprueba tu copia de seguridad y restaura Jade en la misma red que Groot.'
+  },
   hardware_pairing_required: {
     fr: 'Associez cette BitBox dans BitBoxApp et vérifiez que BitBoxApp peut l’ouvrir. Quittez ensuite complètement BitBoxApp, puis relancez la recherche dans Groot.',
     es: 'Empareja esta BitBox en BitBoxApp y comprueba que BitBoxApp puede abrirla. Después, cierra BitBoxApp por completo y vuelve a buscar en Groot.'

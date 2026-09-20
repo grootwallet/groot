@@ -47,6 +47,7 @@ pub enum HardwareError {
     Busy,
     Cancelled,
     OutputTooLarge,
+    WrongNetwork,
     CommandFailed(Option<i64>),
     Io,
 }
@@ -60,6 +61,7 @@ impl HardwareError {
             Self::Busy => "hardware_busy",
             Self::Cancelled => "hardware_cancelled",
             Self::OutputTooLarge => "hardware_response_too_large",
+            Self::WrongNetwork => "hardware_wrong_network",
             Self::CommandFailed(_) => "hardware_command_failed",
             Self::Io => "hardware_io_error",
         }
@@ -351,6 +353,13 @@ fn hwi_error_code(stdout: &[u8]) -> Option<i64> {
         .ok()?
         .get("code")?
         .as_i64()
+}
+
+fn hwi_reports_wrong_network(stdout: &[u8]) -> bool {
+    serde_json::from_slice::<serde_json::Value>(stdout)
+        .ok()
+        .and_then(|value| value.get("error")?.as_str().map(str::to_ascii_lowercase))
+        .is_some_and(|message| message.contains("network type inconsistent with prior usage"))
 }
 
 fn pin_command_input(pin_positions: &[u8]) -> Result<Vec<u8>, HardwareError> {
@@ -1064,7 +1073,11 @@ fn run_program_in_operation_with_mode(
         // HWI stderr can contain device paths and transaction details. It is deliberately
         // discarded here; callers expose a stable error without leaking it to the webview.
         drop(stderr);
-        return Err(HardwareError::CommandFailed(hwi_error_code(&stdout)));
+        return Err(if hwi_reports_wrong_network(&stdout) {
+            HardwareError::WrongNetwork
+        } else {
+            HardwareError::CommandFailed(hwi_error_code(&stdout))
+        });
     }
     Ok(stdout)
 }
@@ -1780,6 +1793,7 @@ mod tests {
             (HardwareError::Unavailable, "hardware_unavailable"),
             (HardwareError::TimedOut, "hardware_timeout"),
             (HardwareError::OutputTooLarge, "hardware_response_too_large"),
+            (HardwareError::WrongNetwork, "hardware_wrong_network"),
             (
                 HardwareError::CommandFailed(Some(-12)),
                 "hardware_command_failed",
@@ -1789,6 +1803,41 @@ mod tests {
         for (error, code) in errors {
             assert_eq!(error.code(), code);
         }
+    }
+
+    #[test]
+    fn classifies_only_the_known_hwi_network_mismatch_message() {
+        assert!(hwi_reports_wrong_network(
+            br#"{"error":"Jade returned error: Network type inconsistent with prior usage","code":-3}"#
+        ));
+        assert!(!hwi_reports_wrong_network(
+            br#"{"error":"Device is locked","code":-3}"#
+        ));
+        assert!(!hwi_reports_wrong_network(b"not json"));
+    }
+
+    #[test]
+    fn failed_hwi_process_returns_the_sanitized_network_mismatch() {
+        let script = test_script(
+            "wrong-network",
+            "IFS= read -r command\nprintf '%s\\n' '{\"error\":\"Jade returned error: Network type inconsistent with prior usage\",\"code\":-3}'\nexit 1",
+        );
+        let operation =
+            HardwareOperation::acquire(HardwareOperationKind::Interactive, Duration::from_secs(5))
+                .unwrap();
+        assert_eq!(
+            run_program_in_operation(
+                &script,
+                &HwiSource::External,
+                &["enumerate".into()],
+                &operation,
+                None,
+                None,
+            ),
+            Err(HardwareError::WrongNetwork)
+        );
+        drop(operation);
+        std::fs::remove_file(script).unwrap();
     }
 
     #[test]

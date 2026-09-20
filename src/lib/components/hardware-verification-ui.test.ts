@@ -348,6 +348,8 @@ describe('hardware receive verification UI', () => {
   it('distinguishes discovery failures from account-key failures', () => {
     expect(hardwareSetup).toContain("errorTitle = $state('Could not scan hardware')");
     expect(hardwareSetup).toContain("errorTitle = 'Could not read the account key'");
+    expect(hardwareSetup).toContain("errorCode === 'hardware_wrong_network'");
+    expect(hardwareSetup).toContain("errorTitle = 'Jade is on a different network'");
     expect(hardwareSetup).toContain("errorTitle = 'Could not start hardware unlock'");
     expect(hardwareSetup).toContain('{:else if devices.length || !error}<HardwareDeviceList');
     expect(hardwareSetup).toContain('title={translate($locale, errorTitle)}');

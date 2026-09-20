@@ -69,6 +69,7 @@ export const WALLET_ERROR_CODES = [
   'hardware_busy',
   'hardware_cancelled',
   'hardware_response_too_large',
+  'hardware_wrong_network',
   'invalid_hardware_response',
   'hardware_command_failed',
   'hardware_io_error',

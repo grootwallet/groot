@@ -760,6 +760,10 @@ export const multisigCopy = {
     fr: 'Impossible de lire la clé du compte',
     es: 'No se pudo leer la clave de la cuenta'
   },
+  'Jade is on a different network': {
+    fr: 'Jade utilise un autre réseau',
+    es: 'Jade usa otra red'
+  },
   'Create a multisig wallet': {
     fr: 'Créer un portefeuille multisignature',
     es: 'Crear una cartera multifirma'

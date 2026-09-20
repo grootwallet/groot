@@ -2646,6 +2646,7 @@ fn command_boundary_error_translation_is_complete_and_stable() {
         HardwareError::Unavailable,
         HardwareError::TimedOut,
         HardwareError::OutputTooLarge,
+        HardwareError::WrongNetwork,
         HardwareError::CommandFailed(Some(-12)),
         HardwareError::Io,
     ] {
@@ -3020,6 +3021,13 @@ fn hwi_response_codes_become_safe_actionable_errors() {
     assert!(trezor_timeout
         .message
         .contains("proposal and its signatures are unchanged"));
+
+    let jade_network = hardware_device_api_error(HardwareError::WrongNetwork, "jade");
+    assert_eq!(jade_network.code, "hardware_wrong_network");
+    assert!(jade_network
+        .message
+        .contains("Jade is set to another network"));
+    assert!(jade_network.message.contains("factory-reset"));
 
     let ledger = missing_hardware_xpub("ledger", "m/48'/1'/0'/2'", None, None, "fallback");
     assert_eq!(ledger.code, "hardware_unavailable");

@@ -1,5 +1,14 @@
 # Implementation status
 
+The Jade onboarding follow-up distinguishes HWI's exact persisted-network
+mismatch from ordinary lock, disconnect, and application-contention failures.
+Native code emits the stable `hardware_wrong_network` code without forwarding
+raw HWI output; hardware onboarding presents a specific Jade/network heading,
+concise recovery guidance, and a close action through the shared warning
+component. The HWI dependency, discovery strategy, signer identity checks,
+descriptors, derivations, PSBTs, persisted formats, and migration state are
+unchanged.
+
 The hardware-onboarding follow-up prevents an unrelated out-of-scope HWI model
 from invalidating an approved signer returned by the same aggregate enumeration.
 Rust still bounds every record, issues capabilities only for the exact network

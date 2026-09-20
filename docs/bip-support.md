@@ -509,6 +509,10 @@ support impact. Approved signers retain the same BIP84/BIP48 derivations and
 live fingerprint/account-key proof; no descriptor, PSBT, signing, recovery, or
 interoperability claim changes.
 
+Classifying Jade's persisted-network mismatch as a dedicated presentation error
+has no BIP support impact. Network derivation, account-key validation,
+descriptors, PSBTs, signing, and interoperability behavior are unchanged.
+
 Every feature, interoperability, signer, descriptor, transaction, payment request,
 backup/recovery, sync/backend, network, or dependency change must assess BIP impact.
 If it adds, removes, expands, narrows, or changes evidence for a BIP:

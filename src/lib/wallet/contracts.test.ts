@@ -17,6 +17,7 @@ const remediationErrorCodes = [
   'hardware_pairing_required',
   'hardware_not_approved',
   'hardware_response_too_large',
+  'hardware_wrong_network',
   'hardware_command_failed',
   'hardware_io_error',
   'unknown_spending_path',
