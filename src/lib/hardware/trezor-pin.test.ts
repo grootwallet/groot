@@ -54,9 +54,11 @@ describe('Trezor PIN presentation', () => {
     });
     expect(trezorPinError('hardware_challenge_expired', 'raw').title).toBe('PIN matrix expired');
     expect(trezorPinError('hardware_unavailable', 'raw')).toEqual({
-      title: 'Device disconnected',
-      detail: 'Reconnect the hardware signer, then ask for a new layout.'
+      title: 'Trezor session ended',
+      detail: 'raw'
     });
+    expect(trezorPinError('hardware_busy', 'Close Sparrow.').title).toBe('Trezor is busy');
+    expect(trezorPinError('hardware_cancelled', '').title).toBe('Unlock cancelled');
     expect(trezorPinError('internal_error', 'USB unavailable').detail).toBe('USB unavailable');
     expect(trezorPinError('', '').detail).toBe(
       'Reconnect the hardware signer and start a new PIN matrix.'

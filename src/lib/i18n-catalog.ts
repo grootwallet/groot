@@ -259,6 +259,10 @@ export const copyCatalog = {
     fr: 'Choisissez maintenant son portefeuille standard ou masqué.',
     es: 'Elige ahora su cartera estándar u oculta.'
   },
+  'Reading its public account key now.': {
+    fr: 'Lecture de sa clé publique de compte.',
+    es: 'Leyendo ahora su clave pública de cuenta.'
+  },
   'PDF not saved': { fr: 'PDF non enregistré', es: 'PDF no guardado' },
   'PDF saved': { fr: 'PDF enregistré', es: 'PDF guardado' },
   'PSBT copied': { fr: 'PSBT copiée', es: 'PSBT copiada' },

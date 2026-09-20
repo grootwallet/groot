@@ -1462,6 +1462,7 @@ struct RecentHardwareScan {
 #[derive(Deserialize)]
 struct HwiSuccess {
     success: Option<bool>,
+    error: Option<String>,
     code: Option<i64>,
 }
 

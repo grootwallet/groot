@@ -149,6 +149,18 @@ describe('hardware receive verification UI', () => {
     );
     expect(pinModal).not.toContain('pin-grid-heading');
     expect(pinModal).not.toContain('recovery words or a hardware passphrase');
+    expect(pinModal).toContain("import WarningNotice from '$lib/components/WarningNotice.svelte'");
+    expect(pinModal).not.toContain('pin-error-card');
+  });
+
+  it('continues Trezor import without a second aggregate discovery', () => {
+    const pinSubmission = hardwareSetup.slice(
+      hardwareSetup.indexOf('async function submitHardwarePin()'),
+      hardwareSetup.indexOf('async function parseImport()')
+    );
+    expect(pinSubmission).toContain('await useDevice(unlockedDevice, false, true)');
+    expect(pinSubmission).not.toContain('await walletService.listHardwareDevices()');
+    expect(hardwareSetup).toContain("errorCode === 'hardware_wallet_selection_required'");
   });
 
   it('blocks every modal dismissal while a Trezor PIN challenge is active', () => {

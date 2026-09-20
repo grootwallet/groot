@@ -46,8 +46,20 @@ export function trezorPinError(
   }
   if (code === 'hardware_unavailable' || code === 'hardware_io_error') {
     return {
-      title: 'Device disconnected',
-      detail: 'Reconnect the hardware signer, then ask for a new layout.'
+      title: 'Trezor session ended',
+      detail: fallback || 'Reconnect Trezor, quit other wallet apps, then ask for a new layout.'
+    };
+  }
+  if (code === 'hardware_busy') {
+    return {
+      title: 'Trezor is busy',
+      detail: fallback || 'Quit other wallet apps, then ask for a new layout.'
+    };
+  }
+  if (code === 'hardware_cancelled') {
+    return {
+      title: 'Unlock cancelled',
+      detail: fallback || 'Ask Trezor for a fresh layout when you are ready.'
     };
   }
   return {

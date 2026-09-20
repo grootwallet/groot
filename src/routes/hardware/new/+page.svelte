@@ -135,8 +135,12 @@
     busy = false;
     scanOpen = false;
   }
-  async function useDevice(device: HardwareDevice, allowEmptyPassphrase = false) {
-    if (device.action === 'prompt_pin') {
+  async function useDevice(
+    device: HardwareDevice,
+    allowEmptyPassphrase = false,
+    pinResolved = false
+  ) {
+    if (device.action === 'prompt_pin' && !pinResolved) {
       await startHardwarePin(device);
       return;
     }
@@ -150,7 +154,8 @@
       device.status !== 'ready' &&
       device.status !== 'detected' &&
       device.action !== 'unlock' &&
-      !allowEmptyPassphrase
+      !allowEmptyPassphrase &&
+      !pinResolved
     ) {
       error = device.message;
       return;
@@ -182,6 +187,18 @@
       lastAttemptAllowedEmptyPassphrase = false;
     } catch (cause) {
       errorCode = cause instanceof WalletError ? cause.code : 'internal_error';
+      if (errorCode === 'hardware_wallet_selection_required' && pinResolved) {
+        error = '';
+        standardWalletDevice = {
+          ...device,
+          status: 'detected',
+          action: 'import',
+          message: 'Unlocked. Choose the standard wallet or a hidden wallet.'
+        };
+        scanOpen = false;
+        standardWalletOpen = true;
+        return;
+      }
       if (errorCode === 'hardware_wrong_network') errorTitle = 'Jade is on a different network';
       error = localizedError(cause, $locale, 'Could not import the public account key.');
     } finally {
@@ -220,6 +237,7 @@
     pinError = '';
     pinErrorCode = '';
     let positions = pinPositions;
+    const unlockedDevice = pinDevice;
     pinPositions = '';
     try {
       await walletService.sendHardwarePin(pinChallenge, positions);
@@ -228,10 +246,18 @@
       pinDevice = null;
       toast({
         title: 'Hardware signer unlocked',
-        description: 'Now choose its standard or hidden wallet.',
+        description: 'Reading its public account key now.',
         tone: 'success'
       });
-      await scan();
+      if (!unlockedDevice) {
+        await scan();
+      } else {
+        // The opaque scanned capability remains valid after HWI accepts the
+        // one-time PIN challenge. Continue on that exact path instead of
+        // launching another slow aggregate scan across every HWI backend.
+        scanOpen = true;
+        await useDevice(unlockedDevice, false, true);
+      }
     } catch (cause) {
       pinChallenge = '';
       pinErrorCode = cause instanceof WalletError ? cause.code : 'internal_error';

@@ -804,6 +804,32 @@ mod targeted_scan_tests {
         assert!(retain_requested_hwi_devices(vec![unrelated], &["jade".into()]).is_empty());
     }
 
+    #[test]
+    fn trezor_pin_errors_distinguish_rejection_from_session_failures() {
+        let rejected = hardware_pin_response_error(HwiSuccess {
+            success: None,
+            error: Some("Failure_PinInvalid".into()),
+            code: Some(-13),
+        });
+        assert_eq!(rejected.code, "hardware_pin_rejected");
+
+        let stale = hardware_pin_response_error(HwiSuccess {
+            success: None,
+            error: Some("The PIN has already been sent to this device".into()),
+            code: Some(-11),
+        });
+        assert_eq!(stale.code, "hardware_unavailable");
+        assert!(stale.message.contains("another client session"));
+
+        let generic = hardware_pin_response_error(HwiSuccess {
+            success: None,
+            error: Some("Unexpected message".into()),
+            code: Some(-13),
+        });
+        assert_eq!(generic.code, "hardware_unavailable");
+        assert!(!generic.message.to_ascii_lowercase().contains("wrong pin"));
+    }
+
     #[cfg(unix)]
     #[test]
     fn three_or_seven_family_requests_and_concurrent_callers_each_use_one_enumerate() {
@@ -1410,15 +1436,51 @@ pub async fn hardware_send_pin(
             .map_err(hardware_api_error)?;
         let response: HwiSuccess = serde_json::from_slice(&output).map_err(internal)?;
         if response.success != Some(true) {
-            return Err(api_error(
-                "hardware_pin_rejected",
-                "Trezor did not accept that matrix entry. Check the remaining attempts on the device, then start a new matrix and tap positions—not PIN digits.",
-            ));
+            return Err(hardware_pin_response_error(response));
         }
         Ok(())
     })
     .await
     .map_err(internal)?
+}
+
+fn hardware_pin_response_error(response: HwiSuccess) -> ApiError {
+    let detail = response.error.unwrap_or_default().to_ascii_lowercase();
+    // HWI 3.2.0 maps Trezor protocol failures to its generic -13 code. Only
+    // the explicit PinInvalid failure is evidence that the entered matrix was
+    // rejected. A stale client session, another wallet app owning USB, or a
+    // disconnect must never be presented as a wrong PIN.
+    if response.code == Some(-13)
+        && detail.contains("pin")
+        && (detail.contains("invalid") || detail.contains("wrong"))
+    {
+        return api_error(
+            "hardware_pin_rejected",
+            "Trezor did not accept that matrix entry. Check the remaining attempts on the device, then start a new matrix and tap positions—not PIN digits.",
+        );
+    }
+    match response.code {
+        Some(-3) => api_error(
+            "hardware_unavailable",
+            "The Trezor connection was lost. Reconnect it, quit other wallet apps, and start a new Groot PIN matrix.",
+        ),
+        Some(-11) => api_error(
+            "hardware_unavailable",
+            "Trezor was unlocked in another client session. Quit other wallet apps, then scan and unlock it inside Groot.",
+        ),
+        Some(-14) => api_error(
+            "hardware_cancelled",
+            "The Trezor unlock was cancelled. Start a new PIN matrix when you are ready.",
+        ),
+        Some(-15) => api_error(
+            "hardware_busy",
+            "Trezor is busy in another wallet app. Quit that app, then start a new Groot PIN matrix.",
+        ),
+        _ => api_error(
+            "hardware_unavailable",
+            "Trezor could not complete this unlock session. Quit other wallet apps, reconnect it, and start a new Groot PIN matrix.",
+        ),
+    }
 }
 
 #[tauri::command]
