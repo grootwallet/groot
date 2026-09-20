@@ -42,6 +42,7 @@
   import Modal from '$lib/components/Modal.svelte';
   import PermanentLabelTags from '$lib/components/PermanentLabelTags.svelte';
   import InsightTip from '$lib/components/InsightTip.svelte';
+  import WarningNotice from '$lib/components/WarningNotice.svelte';
   import { goto } from '$app/navigation';
 
   const walletShell = useWalletShellContext();
@@ -492,7 +493,11 @@
     />
   {:else if sortedUtxos.length}
     <section class="coin-list selectable">
-      {#if maturitySummary}<aside class="warning-box coin-timeline-note" aria-live="polite">
+      {#if maturitySummary}<WarningNotice
+          element="aside"
+          class="coin-timeline-note"
+          ariaLive="polite"
+        >
           <AlertTriangle size={15} />
           <span>
             <strong>{translate($locale, 'Each coin has its own protection timeline.')}</strong>
@@ -513,7 +518,7 @@
                 onclick={syncNow}><RefreshCw size={14} />{translate($locale, 'Sync now')}</Button
               >{/if}
           </span>
-        </aside>{/if}
+        </WarningNotice>{/if}
       {#each sortedUtxos as utxo (utxo.outpoint)}
         {@const reuse = reuseFor(utxo.outpoint)}
         {@const linkedCoins = linkedCoinsFor(utxo.outpoint)}

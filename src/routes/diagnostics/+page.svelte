@@ -173,72 +173,115 @@
     </Button>
   </header>
 
-  <section class="diagnostics-summary" aria-label={translate($locale, 'App log summary')}>
-    <div>
-      <strong>{translate($locale, '{count} events', { count: records.length })}</strong>
-      <small
-        >{translate(
-          $locale,
-          'Stored locally as append-only JSONL. New records stop at the 16 MiB safety limit.'
-        )}</small
-      >
-    </div>
-    <div class="diagnostics-actions">
-      <Button
-        variant="secondary"
-        size="small"
-        loading={exporting === 'csv'}
-        onclick={() => exportLog('csv')}
-      >
-        <Download size={15} />{translate($locale, 'Export CSV')}
-      </Button>
-      <Button
-        variant="secondary"
-        size="small"
-        loading={exporting === 'json'}
-        onclick={() => exportLog('json')}
-      >
-        <Download size={15} />{translate($locale, 'Export JSON')}
-      </Button>
-    </div>
-  </section>
-
-  <details class="diagnostic-event-catalog">
-    <summary id="recorded-event-types">
-      <span>{translate($locale, 'Recorded event types')}</span><ChevronRight
-        class="catalog-chevron"
-        size={14}
-      />
-    </summary>
-    <div class="diagnostic-event-catalog-content">
-      <p>
-        {translate(
-          $locale,
-          'Only these durable lifecycle and operation categories are recorded. Sensitive values and passive polling are excluded.'
-        )}
-      </p>
-      <ul>
-        {#each supportedEventKinds as event}
-          <li>{eventLabel(event)}</li>
-        {/each}
-      </ul>
-    </div>
-  </details>
-
   {#if loading}
-    <div class="diagnostics-state" role="status">{translate($locale, 'Loading diagnostics…')}</div>
-  {:else if error}
+    <div class="diagnostics-loading" role="status">
+      <span class="sr-only">{translate($locale, 'Loading diagnostics…')}</span>
+      <section
+        class="diagnostics-summary diagnostics-summary-skeleton wallet-skeleton"
+        aria-hidden="true"
+      >
+        <div class="skeleton-copy">
+          <span class="skeleton-line primary"></span>
+          <span class="skeleton-line secondary"></span>
+        </div>
+        <div class="diagnostics-actions">
+          <span class="skeleton-control"></span><span class="skeleton-control"></span>
+        </div>
+      </section>
+      <span class="diagnostics-catalog-skeleton skeleton-line" aria-hidden="true"></span>
+      <section class="diagnostics-browser-skeleton wallet-skeleton" aria-hidden="true">
+        <div class="diagnostics-controls-skeleton">
+          <span></span><span></span><span></span><span></span><span></span>
+        </div>
+        <span class="diagnostics-results-skeleton skeleton-line"></span>
+      </section>
+      <div class="diagnostics-table-skeleton wallet-skeleton" aria-hidden="true">
+        {#each [1, 2, 3, 4] as row (row)}
+          <div class="skeleton-row">
+            <span class="skeleton-copy"
+              ><span class="skeleton-line primary"></span><span class="skeleton-line secondary"
+              ></span></span
+            >
+            <span class="skeleton-copy"
+              ><span class="skeleton-line primary"></span><span class="skeleton-line secondary"
+              ></span></span
+            >
+            <span class="skeleton-copy end"
+              ><span class="skeleton-line primary"></span><span class="skeleton-line secondary"
+              ></span></span
+            >
+          </div>
+        {/each}
+      </div>
+    </div>
+  {/if}
+
+  {#if !loading}
+    <section class="diagnostics-summary" aria-label={translate($locale, 'App log summary')}>
+      <div>
+        <strong>{translate($locale, '{count} events', { count: records.length })}</strong>
+        <small
+          >{translate(
+            $locale,
+            'Stored locally as append-only JSONL. New records stop at the 16 MiB safety limit.'
+          )}</small
+        >
+      </div>
+      <div class="diagnostics-actions">
+        <Button
+          variant="secondary"
+          size="small"
+          loading={exporting === 'csv'}
+          onclick={() => exportLog('csv')}
+        >
+          <Download size={15} />{translate($locale, 'Export CSV')}
+        </Button>
+        <Button
+          variant="secondary"
+          size="small"
+          loading={exporting === 'json'}
+          onclick={() => exportLog('json')}
+        >
+          <Download size={15} />{translate($locale, 'Export JSON')}
+        </Button>
+      </div>
+    </section>
+
+    <details class="diagnostic-event-catalog">
+      <summary id="recorded-event-types">
+        <span>{translate($locale, 'Recorded event types')}</span><ChevronRight
+          class="catalog-chevron"
+          size={14}
+        />
+      </summary>
+      <div class="diagnostic-event-catalog-content">
+        <p>
+          {translate(
+            $locale,
+            'Only these durable lifecycle and operation categories are recorded. Sensitive values and passive polling are excluded.'
+          )}
+        </p>
+        <ul>
+          {#each supportedEventKinds as event}
+            <li>{eventLabel(event)}</li>
+          {/each}
+        </ul>
+      </div>
+    </details>
+  {/if}
+
+  {#if !loading && error}
     <div class="diagnostics-state form-error" role="alert">
       <span>{error}</span>
       <Button variant="secondary" size="small" onclick={load}
         ><RefreshCw size={15} />{translate($locale, 'Try again')}</Button
       >
     </div>
-  {:else if records.length === 0}
+  {:else if !loading && records.length === 0}
     <div class="diagnostics-state">
       {translate($locale, 'No diagnostic events have been recorded yet.')}
     </div>
-  {:else}
+  {:else if !loading}
     <section class="log-browser" aria-label={translate($locale, 'Browse app logs')}>
       <div class="log-controls">
         <label class="log-search">
@@ -537,6 +580,50 @@
     display: flex;
     gap: 8px;
     flex-wrap: wrap;
+  }
+  .diagnostics-loading {
+    display: grid;
+  }
+  .diagnostics-summary-skeleton {
+    min-height: 76px;
+  }
+  .diagnostics-summary-skeleton .skeleton-copy {
+    width: min(520px, 58vw);
+  }
+  .skeleton-control {
+    width: 96px;
+    height: 34px;
+    border-radius: var(--radius-control);
+    background: color-mix(in srgb, var(--muted-2) 14%, var(--surface-inset));
+  }
+  .diagnostics-catalog-skeleton {
+    width: 132px;
+    margin-top: 18px;
+  }
+  .diagnostics-browser-skeleton {
+    min-height: 90px;
+    margin-top: 16px;
+    padding: 14px;
+  }
+  .diagnostics-controls-skeleton {
+    display: grid;
+    grid-template-columns: minmax(190px, 1fr) 142px 126px 126px 104px;
+    gap: 10px;
+  }
+  .diagnostics-controls-skeleton span {
+    height: 38px;
+    border-radius: var(--radius-control);
+    background: color-mix(in srgb, var(--muted-2) 14%, var(--surface-inset));
+  }
+  .diagnostics-results-skeleton {
+    width: 145px;
+    margin-top: 12px;
+  }
+  .diagnostics-table-skeleton {
+    margin-top: 8px;
+  }
+  .diagnostics-table-skeleton .skeleton-row {
+    grid-template-columns: 160px 180px minmax(0, 1fr);
   }
   .diagnostic-event-catalog {
     margin-top: 16px;
@@ -921,6 +1008,13 @@
     .log-controls {
       grid-template-columns: 1fr 1fr;
     }
+    .diagnostics-controls-skeleton {
+      grid-template-columns: 1fr 1fr;
+    }
+    .diagnostics-controls-skeleton span:first-child,
+    .diagnostics-controls-skeleton span:last-child {
+      grid-column: 1 / -1;
+    }
     .log-search {
       grid-column: 1 / -1;
     }
@@ -943,6 +1037,19 @@
     }
     .diagnostics-actions :global(.button) {
       flex: 1;
+    }
+    .diagnostics-summary-skeleton .skeleton-copy {
+      width: 100%;
+    }
+    .diagnostics-summary-skeleton .diagnostics-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+    }
+    .skeleton-control {
+      width: 100%;
+    }
+    .diagnostics-table-skeleton .skeleton-row {
+      grid-template-columns: 104px minmax(0, 1fr) 76px;
     }
     .diagnostics-table {
       min-width: 650px;

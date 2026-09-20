@@ -25,6 +25,7 @@
   import MultisigDescriptorsModal from '$lib/components/MultisigDescriptorsModal.svelte';
   import TrezorPinModal from '$lib/components/TrezorPinModal.svelte';
   import PermanentLabelTags from '$lib/components/PermanentLabelTags.svelte';
+  import WarningNotice from '$lib/components/WarningNotice.svelte';
   import {
     walletService,
     WalletError,
@@ -460,11 +461,13 @@
         </p>
       </div>
     </header>
-    {#if statusError}<div class="warning-box" role="status">
-        <strong>{translate($locale, 'Wallet data is unavailable')}</strong>
-        <span>{statusError}</span>
+    {#if statusError}<WarningNotice
+        role="status"
+        title={translate($locale, 'Wallet data is unavailable')}
+        body={statusError}
+      >
         <a href="/settings">{translate($locale, 'Open network settings')}</a>
-      </div>{/if}
+      </WarningNotice>{/if}
     <section class="vault-hero">
       <span><ShieldCheck size={22} /></span>
       <div class="vault-summary">

@@ -26,6 +26,7 @@
   import HardwareVerificationStatus from '$lib/components/HardwareVerificationStatus.svelte';
   import HardwareReceiveVerification from '$lib/components/HardwareReceiveVerification.svelte';
   import PermanentLabelTags from '$lib/components/PermanentLabelTags.svelte';
+  import WarningNotice from '$lib/components/WarningNotice.svelte';
   import { compactAddress } from '$lib/address-display';
   import { goto } from '$app/navigation';
   import { walletService, WalletError } from '$lib/wallet';
@@ -541,7 +542,7 @@
     discardTarget = null;
   }}
 >
-  <div class="warning-box">{translate($locale, 'Discarded addresses remain monitored.')}</div>
+  <WarningNotice body={translate($locale, 'Discarded addresses remain monitored.')} />
   <div class="modal-footer">
     <Button
       variant="secondary"

@@ -36,6 +36,7 @@
   import TrezorPinModal from '$lib/components/TrezorPinModal.svelte';
   import SignerPolicyReview from '$lib/components/SignerPolicyReview.svelte';
   import ColdcardPolicySetup from '$lib/components/ColdcardPolicySetup.svelte';
+  import WarningNotice from '$lib/components/WarningNotice.svelte';
   import { copyText } from '$lib/clipboard';
   import { shortSats } from '$lib/data';
   import { toast } from '$lib/stores/toasts';
@@ -2981,10 +2982,10 @@
       discardDraftError = '';
     }
   }}
-  ><div class="warning-box">
-    <strong>{translate($locale, 'Only the draft will be removed.')}</strong>
-    {translate($locale, 'No transaction or signature exists yet.')}
-  </div>
+  ><WarningNotice
+    title={translate($locale, 'Only the draft will be removed.')}
+    body={translate($locale, 'No transaction or signature exists yet.')}
+  />
   <dl class="details-list cancel-proposal-details">
     <div>
       <dt>{translate($locale, 'Payment')}</dt>
@@ -3022,10 +3023,10 @@
       cancelError = '';
     }
   }}
-  >{#if proposal}<div class="warning-box">
-      <strong>{translate($locale, 'This cannot be undone.')}</strong>
-      {translate($locale, 'You will need to prepare and sign this payment again.')}
-    </div>
+  >{#if proposal}<WarningNotice
+      title={translate($locale, 'This cannot be undone.')}
+      body={translate($locale, 'You will need to prepare and sign this payment again.')}
+    />
     <dl class="details-list cancel-proposal-details">
       <div>
         <dt>{translate($locale, 'Payment')}</dt>
@@ -3067,14 +3068,14 @@
       discardError = '';
     }
   }}
-  >{#if proposal && discardSigner}<div class="warning-box danger">
-      <strong>{translate($locale, 'This does not revoke the signature.')}</strong><span
-        >{translate(
-          $locale,
-          'Any PSBT copy already exported or shared may still contain it and can remain broadcastable\n        if it has enough signatures.'
-        )}</span
-      >
-    </div>
+  >{#if proposal && discardSigner}<WarningNotice
+      tone="danger"
+      title={translate($locale, 'This does not revoke the signature.')}
+      body={translate(
+        $locale,
+        'Any PSBT copy already exported or shared may still contain it and can remain broadcastable\n        if it has enough signatures.'
+      )}
+    />
     <dl class="details-list cancel-proposal-details">
       <div>
         <dt>{translate($locale, 'Signer')}</dt>

@@ -337,6 +337,10 @@ impact. Adding outcome filtering, fixed sanitized failure explanations, structur
 pruned-history block heights, and the matching recovery-error presentation does not
 change descriptor derivation, recovery inputs, scanning semantics, transaction data,
 or any BIP support/evidence and therefore likewise has no BIP impact.
+The warning-copy hierarchy, optional privacy/security insight, credential spacing,
+and shape-matched App Logs loading skeletons are renderer-only changes. They do not
+alter BIP329 records, recovery material, descriptors, scanning, native diagnostic
+records, or interoperability evidence and therefore have no BIP impact.
 
 The 2026-09-13 Mainnet send-responsiveness and review-spacing follow-up has no
 BIP support or interoperability impact. It moves existing PSBT preparation,

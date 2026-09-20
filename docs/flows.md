@@ -4,7 +4,9 @@
 
 1. Open **Settings → App logs → View app logs**. It appears immediately before wallet
    deletion. App logs is not a separate navigation destination, but the regular
-   unlocked rail or mobile tabs remain visible with Settings selected.
+   unlocked rail or mobile tabs remain visible with Settings selected. The destination
+   header and shape-matched summary, controls, and table skeletons appear while native
+   records load; no blank content area or provisional zero-event state is shown.
 2. Groot reads only sanitized app-level records; wallet snapshot, descriptor, node,
    signer, transaction, and address APIs are not called.
 3. Optionally expand the complete allowlisted event-category inventory. Search event

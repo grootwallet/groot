@@ -657,7 +657,7 @@ test('requires explicit confirmation before discarding a multisig proposal', asy
   expect(await lastRow.evaluate((element) => getComputedStyle(element).borderBottomWidth)).toBe(
     '0px'
   );
-  const warning = dialog.locator('.warning-box');
+  const warning = dialog.locator('.warning-notice');
   expect(await firstRow.boundingBox()).not.toBeNull();
   expect(
     (await firstRow.boundingBox())!.y -

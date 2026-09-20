@@ -699,17 +699,26 @@ export const settingsCopy = {
     fr: 'Mots de récupération non vérifiés',
     es: 'Palabras de recuperación sin verificar'
   },
-  'Recovery words stay inside the trusted native window.': {
-    fr: 'Les mots de récupération restent dans la fenêtre native de confiance.',
-    es: 'Las palabras de recuperación permanecen en la ventana nativa de confianza.'
+  'Your recovery words stay private': {
+    fr: 'Vos mots de récupération restent privés',
+    es: 'Tus palabras de recuperación siguen siendo privadas'
   },
+  'Groot checks them securely on this device.': {
+    fr: 'Groot les vérifie en toute sécurité sur cet appareil.',
+    es: 'Groot las comprueba de forma segura en este dispositivo.'
+  },
+  'About recovery-word privacy': {
+    fr: 'À propos de la confidentialité des mots de récupération',
+    es: 'Acerca de la privacidad de las palabras de recuperación'
+  },
+  'Groot reveals and verifies the words in a separate trusted native window. They never enter the webview or leave this device.':
+    {
+      fr: 'Groot affiche et vérifie les mots dans une fenêtre native de confiance distincte. Ils n’entrent jamais dans la vue web et ne quittent pas cet appareil.',
+      es: 'Groot muestra y verifica las palabras en una ventana nativa de confianza independiente. Nunca entran en la vista web ni salen de este dispositivo.'
+    },
   'Remote TLS': { fr: 'TLS distant', es: 'TLS remoto' },
   'Remove only': { fr: 'Supprimer uniquement', es: 'Solo eliminar' },
   'Required peers': { fr: 'Pairs requis', es: 'Pares requeridos' },
-  'Revealing or verifying them never sends the words into the webview.': {
-    fr: 'Les afficher ou les vérifier n’envoie jamais les mots dans la vue web.',
-    es: 'Mostrarlas o verificarlas nunca envía las palabras a la vista web.'
-  },
   'RPC URL': { fr: 'URL RPC', es: 'URL RPC' },
   'RPC username': { fr: 'Nom d’utilisateur RPC', es: 'Usuario RPC' },
   'Save & rescan': { fr: 'Enregistrer et analyser', es: 'Guardar y volver a escanear' },
@@ -760,13 +769,21 @@ export const settingsCopy = {
   },
   'Use setup': { fr: 'Utiliser la configuration', es: 'Usar configuración' },
   'Unlock first': { fr: 'Déverrouiller d’abord', es: 'Desbloquear primero' },
-  'Unlock the source wallet first.': {
-    fr: 'Déverrouillez d’abord le portefeuille source.',
-    es: 'Desbloquea primero la cartera de origen.'
+  'Unlock the source wallet first': {
+    fr: 'Déverrouillez d’abord le portefeuille source',
+    es: 'Desbloquea primero la cartera de origen'
   },
-  'Open and unlock that wallet, then return here. Its saved credentials never enter this screen.': {
-    fr: 'Ouvrez et déverrouillez ce portefeuille, puis revenez ici. Ses identifiants enregistrés ne sont jamais affichés sur cet écran.',
-    es: 'Abre y desbloquea esa cartera y vuelve aquí. Sus credenciales guardadas nunca aparecen en esta pantalla.'
+  'Open that wallet, unlock it, then return here.': {
+    fr: 'Ouvrez ce portefeuille, déverrouillez-le, puis revenez ici.',
+    es: 'Abre esa cartera, desbloquéala y vuelve aquí.'
+  },
+  'About copied network credentials': {
+    fr: 'À propos des identifiants réseau copiés',
+    es: 'Acerca de las credenciales de red copiadas'
+  },
+  'Saved node credentials stay in Groot’s trusted native code and never appear on this screen.': {
+    fr: 'Les identifiants du nœud restent dans le code natif de confiance de Groot et ne sont jamais affichés sur cet écran.',
+    es: 'Las credenciales del nodo permanecen en el código nativo de confianza de Groot y nunca aparecen en esta pantalla.'
   },
   Ready: { fr: 'Prêt', es: 'Listo' },
   'Username and password': { fr: 'Nom d’utilisateur et mot de passe', es: 'Usuario y contraseña' },
@@ -845,18 +862,26 @@ export const settingsCopy = {
     fr: 'Déplacez les libellés compatibles sans modifier les clés ni les descripteurs de ce portefeuille.',
     es: 'Transfiere etiquetas compatibles sin cambiar las claves ni los descriptores de esta cartera.'
   },
-  'Private financial metadata.': {
-    fr: 'Métadonnées financières privées.',
-    es: 'Metadatos financieros privados.'
+  'Private financial metadata': {
+    fr: 'Métadonnées financières privées',
+    es: 'Metadatos financieros privados'
   },
   'Saved {count} BIP329 label records.': {
     fr: '{count} enregistrements de libellés BIP329 enregistrés.',
     es: 'Se guardaron {count} registros de etiquetas BIP329.'
   },
-  'The file can expose labels, addresses, transaction references, public account keys, and relationships in your wallet history. Store and transfer it privately, then delete copies you no longer need.':
+  'This file can reveal your wallet activity. Keep it private.': {
+    fr: 'Ce fichier peut révéler l’activité de votre portefeuille. Gardez-le privé.',
+    es: 'Este archivo puede revelar la actividad de tu cartera. Mantenlo privado.'
+  },
+  'About label-file privacy': {
+    fr: 'À propos de la confidentialité du fichier de libellés',
+    es: 'Acerca de la privacidad del archivo de etiquetas'
+  },
+  'A BIP329 file can include labels, addresses, transaction references, public account keys, and links in your wallet history. Store and transfer it privately, then delete copies you no longer need.':
     {
-      fr: 'Le fichier peut révéler des libellés, adresses, références de transaction, clés de compte publiques et relations dans l’historique du portefeuille. Stockez-le et transférez-le de manière privée, puis supprimez les copies inutiles.',
-      es: 'El archivo puede revelar etiquetas, direcciones, referencias de transacciones, claves públicas de cuenta y relaciones del historial. Guárdalo y transfiérelo de forma privada, y elimina las copias que ya no necesites.'
+      fr: 'Un fichier BIP329 peut contenir des libellés, des adresses, des références de transaction, des clés de compte publiques et des liens dans l’historique du portefeuille. Stockez-le et transférez-le de manière privée, puis supprimez les copies inutiles.',
+      es: 'Un archivo BIP329 puede incluir etiquetas, direcciones, referencias de transacciones, claves públicas de cuenta y vínculos del historial. Guárdalo y transfiérelo de forma privada, y elimina las copias que ya no necesites.'
     },
   'Use the BIP329 JSONL format with another compatible wallet.': {
     fr: 'Utilisez le format JSONL BIP329 avec un autre portefeuille compatible.',

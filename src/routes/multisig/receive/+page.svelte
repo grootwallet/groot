@@ -27,6 +27,7 @@
   import HardwareVerificationStatus from '$lib/components/HardwareVerificationStatus.svelte';
   import HardwareReceiveVerification from '$lib/components/HardwareReceiveVerification.svelte';
   import PermanentLabelTags from '$lib/components/PermanentLabelTags.svelte';
+  import WarningNotice from '$lib/components/WarningNotice.svelte';
   import { compactAddress } from '$lib/address-display';
   import { walletService, WalletError } from '$lib/wallet';
   import { awaitingPaymentAddresses } from '$lib/wallet/policy';
@@ -335,19 +336,17 @@
           ><Trash2 size={16} />{translate($locale, 'Discard')}</Button
         >
       </div>
-      {#if wallet?.recoveryTemplate}<div class="warning-box" role="note">
-          <strong
-            >{translate(
-              $locale,
-              'Hardware address display is unavailable for this delayed policy.'
-            )}</strong
-          ><span
-            >{translate(
-              $locale,
-              'Verify the descriptor and address with an independent Miniscript-aware tool. Groot’s pinned HWI release cannot display this policy safely.'
-            )}</span
-          >
-        </div>{/if}
+      {#if wallet?.recoveryTemplate}<WarningNotice
+          role="note"
+          title={translate(
+            $locale,
+            'Hardware address display is unavailable for this delayed policy.'
+          )}
+          body={translate(
+            $locale,
+            'Verify the descriptor and address with an independent Miniscript-aware tool. Groot’s pinned HWI release cannot display this policy safely.'
+          )}
+        />{/if}
       <button class="insight-toggle" onclick={() => (showDetails = !showDetails)}
         >{translate($locale, showDetails ? 'Hide' : 'Show')}
         {translate($locale, 'address details')}

@@ -20,6 +20,7 @@
   import Button from '$lib/components/Button.svelte';
   import Modal from '$lib/components/Modal.svelte';
   import PasswordField from '$lib/components/PasswordField.svelte';
+  import WarningNotice from '$lib/components/WarningNotice.svelte';
   import TxList from '$lib/components/TxList.svelte';
   import TxDetailsModal from '$lib/components/TxDetailsModal.svelte';
   import DeviceDetailsModal from '$lib/components/DeviceDetailsModal.svelte';
@@ -1409,10 +1410,10 @@
       discardDraftError = '';
     }
   }}
-  >{#if activeDraft}<div class="warning-box">
-      <strong>{translate($locale, 'Only the draft will be removed.')}</strong>
-      {translate($locale, 'No transaction or signature exists yet.')}
-    </div>
+  >{#if activeDraft}<WarningNotice
+      title={translate($locale, 'Only the draft will be removed.')}
+      body={translate($locale, 'No transaction or signature exists yet.')}
+    />
     <dl class="details-list cancel-proposal-details">
       <div>
         <dt>{translate($locale, 'Payment')}</dt>
@@ -1679,10 +1680,17 @@
     verifyError = '';
   }}
 >
-  <div class="warning-box verify-backup-warning">
-    <strong>{translate($locale, 'Recovery words stay inside the trusted native window.')}</strong>
-    {translate($locale, 'Revealing or verifying them\n    never sends the words into the webview.')}
-  </div>
+  <WarningNotice
+    class="verify-backup-warning"
+    credentialSpacing
+    title={translate($locale, 'Your recovery words stay private')}
+    body={translate($locale, 'Groot checks them securely on this device.')}
+    insightLabel={translate($locale, 'About recovery-word privacy')}
+    insightText={translate(
+      $locale,
+      'Groot reveals and verifies the words in a separate trusted native window. They never enter the webview or leave this device.'
+    )}
+  />
   <PasswordField
     label={translate($locale, 'Wallet passphrase')}
     bind:value={verifyCredential}

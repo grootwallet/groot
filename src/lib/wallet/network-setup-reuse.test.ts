@@ -160,7 +160,7 @@ describe('protected network setup reuse', () => {
     expect(settings).toContain('Use an existing network setup');
     expect(settings).toContain('walletService.adoptNetworkSetup(');
     expect(settings).toContain('Wallet data stays separate.');
-    expect(settings).toContain('Unlock the source wallet first.');
+    expect(settings).toContain('Unlock the source wallet first');
     expect(settings).toContain('source.ready');
     expect(settings).not.toContain(
       "defaultConfig.network === 'mainnet'\n        ? Promise.resolve([])"
@@ -191,7 +191,7 @@ describe('protected network setup reuse', () => {
     expect(settings).toContain('Groot managed · activity, fees, and broadcast');
     expect(settings).toContain('This Mac · activity, fees, and broadcast');
     expect(settings).toContain('Custom remote · activity, fees, and broadcast');
-    expect(settings).toContain('class="warning-box managed-privacy-warning"');
+    expect(settings).toContain('class="managed-privacy-warning"');
     expect(settings).toContain('Privacy tradeoff');
     expect(settings).toContain('class="node-wallet-credential"');
   });

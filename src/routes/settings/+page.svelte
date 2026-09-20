@@ -32,6 +32,7 @@
   import FieldCounter from '$lib/components/FieldCounter.svelte';
   import Modal from '$lib/components/Modal.svelte';
   import PasswordField from '$lib/components/PasswordField.svelte';
+  import WarningNotice from '$lib/components/WarningNotice.svelte';
   import LanguageToggle from '$lib/components/LanguageToggle.svelte';
   import IdentifierDetailsModal from '$lib/components/IdentifierDetailsModal.svelte';
   import DeviceDetailsModal from '$lib/components/DeviceDetailsModal.svelte';
@@ -1701,13 +1702,13 @@
     networkSwitchError = '';
   }}
 >
-  {#if networkSwitchTarget === 'mainnet'}<div class="warning-box">
-      <strong>{translate($locale, 'Mainnet uses real bitcoin.')}</strong>
-      {translate(
+  {#if networkSwitchTarget === 'mainnet'}<WarningNotice
+      title={translate($locale, 'Mainnet uses real bitcoin.')}
+      body={translate(
         $locale,
         'Confirm the Bitcoin Core network and every address before receiving, signing, or broadcasting.'
       )}
-    </div>{:else}<p class="modal-supporting-copy">
+    />{:else}<p class="modal-supporting-copy">
       {translate(
         $locale,
         'The current network stays unchanged on disk. Switching back restores its wallets exactly as they were.'
@@ -1746,13 +1747,16 @@
     if (!labelInterchangeBusy) labelInterchangeOpen = false;
   }}
 >
-  <div class="warning-box">
-    <strong>{translate($locale, 'Private financial metadata.')}</strong>
-    {translate(
+  <WarningNotice
+    class="label-privacy-warning"
+    title={translate($locale, 'Private financial metadata')}
+    body={translate($locale, 'This file can reveal your wallet activity. Keep it private.')}
+    insightLabel={translate($locale, 'About label-file privacy')}
+    insightText={translate(
       $locale,
-      'The file can expose labels, addresses, transaction references, public account keys, and relationships in your wallet history. Store and transfer it privately, then delete copies you no longer need.'
+      'A BIP329 file can include labels, addresses, transaction references, public account keys, and links in your wallet history. Store and transfer it privately, then delete copies you no longer need.'
     )}
-  </div>
+  />
   <p class="modal-supporting-copy">
     {translate(
       $locale,
@@ -1881,10 +1885,11 @@
   description={translate($locale, 'This permanently removes wallet data from this device.')}
   onclose={closeDeleteWallet}
 >
-  <div class="warning-box danger">
-    <strong>{translate($locale, 'Make sure your recovery phrase is backed up.')}</strong>
-    {translate($locale, 'Without it, your bitcoin cannot be recovered.')}
-  </div>
+  <WarningNotice
+    tone="danger"
+    title={translate($locale, 'Make sure your recovery phrase is backed up.')}
+    body={translate($locale, 'Without it, your bitcoin cannot be recovered.')}
+  />
   <PasswordField
     label={credentialLabel}
     bind:value={deleteCredential}
@@ -1920,10 +1925,17 @@
     verifyError = '';
   }}
 >
-  <div class="warning-box verify-backup-warning">
-    <strong>{translate($locale, 'Recovery words stay inside the trusted native window.')}</strong>
-    {translate($locale, 'Revealing or verifying them\n    never sends the words into the webview.')}
-  </div>
+  <WarningNotice
+    class="verify-backup-warning"
+    credentialSpacing
+    title={translate($locale, 'Your recovery words stay private')}
+    body={translate($locale, 'Groot checks them securely on this device.')}
+    insightLabel={translate($locale, 'About recovery-word privacy')}
+    insightText={translate(
+      $locale,
+      'Groot reveals and verifies the words in a separate trusted native window. They never enter the webview or leave this device.'
+    )}
+  />
   <PasswordField
     label={translate($locale, 'Wallet passphrase')}
     bind:value={verifyCredential}
@@ -1978,13 +1990,13 @@
 >
   {#if !hardwareBackup}
     <div class="modal-form">
-      <div class="warning-box">
-        <strong>{translate($locale, 'Public, not harmless.')}</strong>
-        {translate(
+      <WarningNotice
+        title={translate($locale, 'Public, not harmless.')}
+        body={translate(
           $locale,
           'This descriptor cannot spend bitcoin, but it reveals every\n        wallet address and transaction. Store it privately.'
         )}
-      </div>
+      />
       <PasswordField
         label={translate($locale, 'App PIN')}
         bind:value={hardwareBackupPin}
@@ -2072,21 +2084,22 @@
       >
     </div>{/if}
   {#if defaultConfig.network === 'mainnet'}
-    <div class="warning-box danger">
-      <strong>{translate($locale, 'Mainnet requires an admitted Bitcoin Core node.')}</strong>
-      {translate(
+    <WarningNotice
+      tone="danger"
+      title={translate($locale, 'Mainnet requires an admitted Bitcoin Core node.')}
+      body={translate(
         $locale,
         'Compact-filter fallbacks are disabled. Activity, fees, and broadcast use only the Core endpoint you explicitly configure.'
       )}
-    </div>
+    />
   {:else if syncSourceType === 'compact_filters'}
-    <div class="warning-box">
-      <strong>{translate($locale, 'Confirmed activity only.')}</strong>
-      {translate(
+    <WarningNotice
+      title={translate($locale, 'Confirmed activity only.')}
+      body={translate(
         $locale,
         'BIP157/158 peers provide public filters and matching blocks.\n      Groot validates them locally; pending incoming payments are not discoverable through this source.\n      This build keeps the public chain index in memory, so filters are downloaded again after an app\n      restart; wallet history and checkpoints remain durable.'
       )}
-    </div>
+    />
     <label class="field"
       ><span>{translate($locale, 'Peer selection')}</span><select
         bind:value={syncDiscoverPeers}
@@ -2140,18 +2153,15 @@
         ></label
       >{/if}
   {:else}
-    <div class="warning-box">
-      <strong>{translate($locale, 'Bitcoin Core activity sync.')}</strong>
-      {' '}
-      <span
-        >{translate(
-          $locale,
-          node.backend.type === 'remote_core'
-            ? 'Fast remote sync sends this wallet’s public output scripts to the trusted server. The server can associate those scripts and wallet activity with your connection. No private keys, labels, or signing material are sent. Bitcoin Core 29+ and a synced basic block-filter index are required.'
-            : 'Local Core sync matches wallet activity on this Mac. A pruned node can sync while it still retains every block newer than this wallet’s checkpoint; an older rescan needs an archival node or a reindex/re-download with enough history.'
-        )}</span
-      >
-    </div>
+    <WarningNotice
+      title={translate($locale, 'Bitcoin Core activity sync.')}
+      body={translate(
+        $locale,
+        node.backend.type === 'remote_core'
+          ? 'Fast remote sync sends this wallet’s public output scripts to the trusted server. The server can associate those scripts and wallet activity with your connection. No private keys, labels, or signing material are sent. Bitcoin Core 29+ and a synced basic block-filter index are required.'
+          : 'Local Core sync matches wallet activity on this Mac. A pruned node can sync while it still retains every block newer than this wallet’s checkpoint; an older rescan needs an archival node or a reindex/re-download with enough history.'
+      )}
+    />
   {/if}
   <PasswordField
     label={credentialLabel}
@@ -2188,13 +2198,13 @@
   onclose={closeFullRescan}
 >
   <div class="scan-form">
-    <div class="warning-box">
-      <strong>{translate($locale, 'Earlier is safer; later is faster.')}</strong>
-      {translate(
+    <WarningNotice
+      title={translate($locale, 'Earlier is safer; later is faster.')}
+      body={translate(
         $locale,
         'A birthday after the wallet’s first payment\n      can miss funds. A larger gap increases work and memory use.'
       )}
-    </div>
+    />
     <label class="field"
       ><span class="field-label"
         >{translate($locale, 'Wallet birthday block')}<InsightTip
@@ -2394,16 +2404,17 @@
     ></label
   >
   {#if selectedNetworkReuseSource && !selectedNetworkReuseSource.ready}
-    <div class="warning-box" role="status">
-      <strong>{translate($locale, 'Unlock the source wallet first.')}</strong>
-      {' '}
-      <span
-        >{translate(
-          $locale,
-          'Open and unlock that wallet, then return here. Its saved credentials never enter this screen.'
-        )}</span
-      >
-    </div>
+    <WarningNotice
+      role="status"
+      credentialSpacing
+      title={translate($locale, 'Unlock the source wallet first')}
+      body={translate($locale, 'Open that wallet, unlock it, then return here.')}
+      insightLabel={translate($locale, 'About copied network credentials')}
+      insightText={translate(
+        $locale,
+        'Saved node credentials stay in Groot’s trusted native code and never appear on this screen.'
+      )}
+    />
   {/if}
   <PasswordField
     label={credentialLabel}
@@ -2465,15 +2476,14 @@
         >
       </div>
     </div>
-    <div class="warning-box managed-privacy-warning">
-      <strong>{translate($locale, 'Privacy tradeoff')}</strong>
-      <span
-        >{translate(
-          $locale,
-          'The service sees connection timing and requested blocks. Recovery words, private keys, labels, and addresses stay in Groot.'
-        )}</span
-      >
-    </div>
+    <WarningNotice
+      class="managed-privacy-warning"
+      title={translate($locale, 'Privacy tradeoff')}
+      body={translate(
+        $locale,
+        'The service sees connection timing and requested blocks. Recovery words, private keys, labels, and addresses stay in Groot.'
+      )}
+    />
   {:else}<label class="field"
       ><span>{translate($locale, 'RPC URL')}</span><input
         bind:value={node.backend.url}

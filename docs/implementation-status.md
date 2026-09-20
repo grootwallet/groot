@@ -1,5 +1,15 @@
 # Implementation status
 
+The warning-copy and App Logs loading follow-up is presentation-only. Recovery-word
+verification, BIP329 label exchange, and saved network-setup reuse now lead with a
+short title and one plain-language sentence; the existing insight tooltip retains
+the fuller security or privacy detail. Credential fields keep a full control-space
+gap below those warnings. App Logs paints its destination header and shape-matched
+summary, controls, and table skeletons while native sanitized records load, instead
+of leaving the content area blank or briefly claiming zero events. Wallet secrets,
+log contents, native commands, persisted formats, dependencies, and protocol support
+are unchanged; no migration is required.
+
 The application-wide readability follow-up raises shared supporting copy to 13
 pixels, removes remaining sub-12-pixel non-print copy, strengthens secondary-text
 contrast in both themes, and increases the hierarchy of wallet, transaction,

@@ -2683,32 +2683,11 @@ code {
   border-color: var(--focus);
   background: color-mix(in srgb, var(--focus) 10%, var(--surface-control));
 }
-.warning-box {
-  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
-  background: var(--accent-soft);
-  color: var(--warning-text);
-  border-radius: var(--radius-control);
-  padding: 12px 14px;
-  font-size: var(--font-size-meta);
-  line-height: 1.55;
-}
-.verify-backup-warning {
-  margin-bottom: 16px;
-}
 .verify-backup-actions {
   flex-wrap: wrap;
 }
 .verify-backup-actions .show-words-action {
   margin-right: auto;
-}
-.warning-box.danger {
-  border-color: rgba(239, 100, 100, 0.25);
-  background: rgba(239, 100, 100, 0.06);
-  color: var(--danger);
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  margin-bottom: 20px;
 }
 
 .send-progress {
@@ -3420,7 +3399,7 @@ code {
 .proposal-review-details > .details-list > div:last-child {
   border-bottom: 0;
 }
-.form-card > .warning-box {
+.form-card > .warning-notice {
   margin-top: 19px;
 }
 .split-actions {
@@ -7819,7 +7798,7 @@ code {
   gap: 6px;
   margin: 0 0 20px;
 }
-.policy-lab .warning-box.danger {
+.policy-lab .warning-notice.danger {
   gap: 8px;
 }
 .template-explainer {

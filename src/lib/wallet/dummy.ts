@@ -86,6 +86,12 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     return draft ? structuredClone(draft) : null;
   }
   async diagnostics() {
+    if (
+      typeof location !== 'undefined' &&
+      new URLSearchParams(location.search).has('fixture-delayed-diagnostics')
+    ) {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
     const timestamp = Math.floor(Date.now() / 1000);
     return [
       {

@@ -204,7 +204,7 @@ test('browses, copies, and exports app logs inside the regular shell', async ({ 
   await toast.getByRole('button', { name: 'Show in Finder' }).click();
 
   await page.goto('/settings');
-  const logSetting = page.locator('a.setting-row[href="/diagnostics"]');
+  const logSetting = page.getByRole('link', { name: /View app logs/ });
   await expect(logSetting.getByText('View app logs')).toBeVisible();
   const iconSizes = await logSetting
     .locator('.setting-icon, .setting-icon svg')
@@ -214,6 +214,22 @@ test('browses, copies, and exports app logs inside the regular shell', async ({ 
   await page.goto('/diagnostics?fixture-locked-wallet-switch=1');
   await expect(page.getByRole('heading', { name: 'App logs' })).toBeVisible();
   await expect(page.locator(mobile ? '.mobile-nav' : '.side-nav')).toBeHidden();
+});
+
+test('shows app-log skeletons immediately while native records load', async ({ page }) => {
+  await page.goto('/settings');
+  const logSetting = page.getByRole('link', { name: /View app logs/ });
+  await logSetting.evaluate((element) => {
+    element.setAttribute('href', '/diagnostics?fixture-delayed-diagnostics=1');
+  });
+  await logSetting.click();
+
+  await expect(page.getByRole('heading', { name: 'App logs' })).toBeVisible();
+  await expect(page.locator('.diagnostics-loading')).toBeVisible();
+  await expect(page.locator('.diagnostics-summary-skeleton')).toBeVisible();
+  await expect(page.locator('.diagnostics-table-skeleton .skeleton-row')).toHaveCount(4);
+  await expect(page.locator('.log-browser')).toBeVisible();
+  await expect(page.locator('.diagnostics-loading')).toHaveCount(0);
 });
 
 test('creates a 24-word wallet and clears onboarding secrets', async ({ page }) => {
@@ -345,6 +361,17 @@ test('can defer seed verification and complete it later from the wallet', async 
   await expect(backupStatus.getByText('Recovery backup not verified')).toBeVisible();
   await backupStatus.getByRole('button', { name: 'Verify now' }).click();
   const verifyDialog = page.getByRole('dialog', { name: 'Verify recovery backup' });
+  const recoveryWarning = verifyDialog.locator('.verify-backup-warning');
+  await expect(recoveryWarning.getByText('Your recovery words stay private')).toBeVisible();
+  await expect(
+    recoveryWarning.getByText('Groot checks them securely on this device.')
+  ).toBeVisible();
+  const recoveryInfo = recoveryWarning.getByRole('button', {
+    name: 'About recovery-word privacy'
+  });
+  if ((page.viewportSize()?.width ?? 1180) <= 760) await recoveryInfo.click();
+  else await recoveryInfo.hover();
+  await expect(recoveryWarning.getByRole('tooltip')).toContainText('never enter the webview');
   await verifyDialog.getByLabel('Wallet passphrase', { exact: true }).fill('wrong-passphrase');
   await verifyDialog.getByRole('button', { name: 'Continue' }).click();
   await expect(verifyDialog.getByText('Incorrect wallet passphrase.')).toBeVisible();
@@ -880,7 +907,7 @@ test('creates an external-signer wallet, signs by cable, and configures its isol
   const descriptorDialog = page.getByRole('dialog', { name: 'Export public descriptor' });
   await expect
     .poll(async () => {
-      const warningBox = await descriptorDialog.locator('.warning-box').boundingBox();
+      const warningBox = await descriptorDialog.locator('.warning-notice').boundingBox();
       const pinLabel = await descriptorDialog.locator('.password-field .field-label').boundingBox();
       return (pinLabel?.y ?? 0) - ((warningBox?.y ?? 0) + (warningBox?.height ?? 0));
     })
@@ -1441,8 +1468,17 @@ test('BIP329 label interchange discloses privacy and keeps durable results', asy
   await page.goto('/settings');
   await page.getByRole('button', { name: 'Import or export wallet labels' }).click();
   const dialog = page.getByRole('dialog', { name: 'BIP329 wallet labels' });
-  await expect(dialog.getByText('Private financial metadata.')).toBeVisible();
-  await expect(dialog).toContainText(
+  const privacyWarning = dialog.locator('.label-privacy-warning');
+  await expect(
+    privacyWarning.getByText('Private financial metadata', { exact: true })
+  ).toBeVisible();
+  await expect(
+    privacyWarning.getByText('This file can reveal your wallet activity. Keep it private.')
+  ).toBeVisible();
+  const privacyInfo = privacyWarning.getByRole('button', { name: 'About label-file privacy' });
+  if ((page.viewportSize()?.width ?? 1180) <= 760) await privacyInfo.click();
+  else await privacyInfo.hover();
+  await expect(privacyWarning.getByRole('tooltip')).toContainText(
     'labels, addresses, transaction references, public account keys'
   );
   await expect(dialog).toContainText('additive and atomic');
@@ -1806,8 +1842,16 @@ test('Settings keeps saved locked network setups visible with unlock guidance', 
 
   const reuse = page.getByRole('dialog', { name: 'Use existing network setup' });
   await expect(reuse.getByLabel('Copy from')).toContainText('Unlock first');
-  await expect(reuse.getByText('Unlock the source wallet first.')).toBeVisible();
-  await expect(reuse.getByLabel('Wallet passphrase', { exact: true })).toBeDisabled();
+  const warning = reuse.getByRole('status');
+  await expect(warning.getByText('Unlock the source wallet first', { exact: true })).toBeVisible();
+  await expect(warning.getByText('Open that wallet, unlock it, then return here.')).toBeVisible();
+  const credential = reuse.getByLabel('Wallet passphrase', { exact: true });
+  await expect(credential).toBeDisabled();
+  const warningBox = await warning.boundingBox();
+  const credentialLabelBox = await credential.locator('xpath=ancestor::label').boundingBox();
+  expect(
+    (credentialLabelBox?.y ?? 0) - ((warningBox?.y ?? 0) + (warningBox?.height ?? 0))
+  ).toBeGreaterThanOrEqual(20);
   await expect(reuse.getByRole('button', { name: 'Use setup' })).toBeDisabled();
 });
 

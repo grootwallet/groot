@@ -10,7 +10,7 @@ test('shows security-accurate delayed-policy state across overview, coins, and p
   await expect(overview).toContainText('Next key change in 820 blocks');
   await overview.getByRole('link', { name: 'Review coins' }).click();
 
-  const timelineNote = page.locator('.coin-list > .warning-box.coin-timeline-note');
+  const timelineNote = page.locator('.coin-list > .warning-notice.coin-timeline-note');
   await expect(timelineNote).toContainText('Each coin has its own protection timeline.');
   await expect(timelineNote).toContainText('Your normal keys keep working.');
   await expect(page.getByText('Recovery key can spend', { exact: true }).first()).toBeVisible();

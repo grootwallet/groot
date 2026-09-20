@@ -37,6 +37,7 @@
   import SetupTask from '$lib/components/SetupTask.svelte';
   import TrezorPinModal from '$lib/components/TrezorPinModal.svelte';
   import SignerPolicyReview from '$lib/components/SignerPolicyReview.svelte';
+  import WarningNotice from '$lib/components/WarningNotice.svelte';
   import { toast } from '$lib/stores/toasts';
   import {
     walletService,
@@ -1280,11 +1281,13 @@
     current={creationStep}
     label={translate($locale, 'Wallet creation progress')}
   />
-  {#if draftSaveError}<div class="warning-box danger" role="alert">
-      <AlertTriangle size={16} /><strong
-        >{translate($locale, 'Setup progress could not be saved')}</strong
-      ><span>{draftSaveError}</span>
-    </div>{/if}
+  {#if draftSaveError}<WarningNotice
+      tone="danger"
+      role="alert"
+      icon
+      title={translate($locale, 'Setup progress could not be saved')}
+      body={draftSaveError}
+    />{/if}
 
   {#if !draftReady}
     <section class="form-card">
@@ -2171,11 +2174,11 @@
   onclose={() => (signerPendingRemoval = null)}
 >
   {#if signerPendingRemoval}
-    <div class="warning-box">
-      <AlertTriangle size={17} /><strong
-        >{translate($locale, 'You will need to add this signer again.')}</strong
-      ><span>{translate($locale, 'Its hardware signer and seed are not changed.')}</span>
-    </div>
+    <WarningNotice
+      icon
+      title={translate($locale, 'You will need to add this signer again.')}
+      body={translate($locale, 'Its hardware signer and seed are not changed.')}
+    />
     <div class="modal-footer">
       <Button variant="secondary" onclick={() => (signerPendingRemoval = null)}
         >{translate($locale, 'Keep signer')}</Button
@@ -2202,19 +2205,18 @@
             )}</small
           ></span
         ><ChevronRight size={15} /></button
-      >{:else}<div class="warning-box" role="note">
-        <AlertTriangle size={17} /><strong
-          >{translate(
-            $locale,
-            'USB hardware signing is not available for delayed policies yet.'
-          )}</strong
-        ><span
-          >{translate(
-            $locale,
-            'Groot’s pinned HWI release supports standard multisig only. Add public keys by file or manual entry and use the offline PSBT workflow.'
-          )}</span
-        >
-      </div>{/if}
+      >{:else}<WarningNotice
+        role="note"
+        icon
+        title={translate(
+          $locale,
+          'USB hardware signing is not available for delayed policies yet.'
+        )}
+        body={translate(
+          $locale,
+          'Groot’s pinned HWI release supports standard multisig only. Add public keys by file or manual entry and use the offline PSBT workflow.'
+        )}
+      />{/if}
     <label class="source-button"
       ><FileUp size={18} /><span
         ><strong>{translate($locale, 'Import public-key file')}</strong><small

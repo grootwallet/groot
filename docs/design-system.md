@@ -53,6 +53,11 @@ disabled. Their asymmetric ring has a distinct moving point, so long device
 operations do not resemble a static or repeatedly restarting icon. Reduced
 motion intentionally leaves that ring still while retaining the text status.
 
+Warning surfaces use the shared `WarningNotice` component on every route. It owns
+warning/danger tone, title/body hierarchy, optional insight tooltip, semantic role,
+icon treatment, and credential-field spacing; routes provide content and actions but
+must not recreate the panel markup or styling.
+
 Tokens live in `src/app.css`. Component surfaces must use semantic tokens such as `--panel`, `--surface-control`, `--surface-inset`, and `--surface-icon`; hard-coded dark neutral backgrounds are prohibited because they break light mode. Reusable behavior belongs in `src/lib/components`; route files may compose components but must not introduce wallet policy.
 
 ## Layout
@@ -62,7 +67,9 @@ Desktop uses a 224-pixel persistent navigation rail and a centered content area.
 App logs is a Settings utility, not a separate wallet destination or navigation
 item. Its only normal entry is a standalone Settings section immediately before
 wallet deletion, and opening it retains the regular unlocked desktop rail or mobile
-tabs with Settings selected. The page leads with the privacy boundary and durable
+tabs with Settings selected. While native records load, the destination header and
+shape-matched summary, controls, and table skeletons render immediately; the page
+must never show a blank content area or a false zero-event summary. The page leads with the privacy boundary and durable
 event count. The complete allowlisted category inventory is optional insight behind
 the standard blue disclosure label and a chevron that turns 90 degrees when open.
 Search covers event names and every displayed safe-context value; event and outcome

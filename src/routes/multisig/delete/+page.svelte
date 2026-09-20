@@ -7,6 +7,7 @@
   import Button from '$lib/components/Button.svelte';
   import Modal from '$lib/components/Modal.svelte';
   import PasswordField from '$lib/components/PasswordField.svelte';
+  import WarningNotice from '$lib/components/WarningNotice.svelte';
   import { recoveryDrillNotice } from '$lib/backup-presentation';
   import { toast } from '$lib/stores/toasts';
   import { readTransferFile } from '$lib/transfer';
@@ -190,11 +191,11 @@
         </div>
         <Trash2 size={19} />
       </div>
-      {#if !drillVerified}<div class="warning-box delete-prerequisite">
-          <strong>{translate($locale, 'Recovery test required')}</strong><span
-            >{translate($locale, 'Complete step 1 before deletion can be authorized.')}</span
-          >
-        </div>{/if}
+      {#if !drillVerified}<WarningNotice
+          class="delete-prerequisite"
+          title={translate($locale, 'Recovery test required')}
+          body={translate($locale, 'Complete step 1 before deletion can be authorized.')}
+        />{/if}
       <label class="field"
         ><span
           >{translate($locale, 'Type')} <q>{wallet.name}</q> {translate($locale, 'exactly')}</span
@@ -236,12 +237,14 @@
   description={translate($locale, 'This cannot be undone on this device.')}
   onclose={() => (deleteConfirmOpen = false)}
 >
-  <div class="warning-box danger">
-    <strong>{translate($locale, 'Final confirmation')}</strong>{translate(
+  <WarningNotice
+    tone="danger"
+    title={translate($locale, 'Final confirmation')}
+    body={translate(
       $locale,
       'The local wallet record, labels, and coordinator metadata\n    will be removed. Recovery requires the descriptor backup you verified.'
     )}
-  </div>
+  />
   <div class="modal-footer">
     <Button variant="secondary" onclick={() => (deleteConfirmOpen = false)}
       >{translate($locale, 'Keep wallet')}</Button

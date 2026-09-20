@@ -3,6 +3,7 @@
   import { translate } from '$lib/i18n-catalog';
   import Button from './Button.svelte';
   import Modal from './Modal.svelte';
+  import WarningNotice from './WarningNotice.svelte';
 
   let {
     open,
@@ -27,11 +28,11 @@
     if (!busy) onclose();
   }}
 >
-  <div class="warning-box danger">
-    <strong>{translate($locale, 'You will need to add the signers again.')}</strong><span
-      >{translate($locale, 'No wallet, signer seed, or bitcoin is deleted.')}</span
-    >
-  </div>
+  <WarningNotice
+    tone="danger"
+    title={translate($locale, 'You will need to add the signers again.')}
+    body={translate($locale, 'No wallet, signer seed, or bitcoin is deleted.')}
+  />
   {#if error}<p class="inline-error" role="alert">{error}</p>{/if}
   <div class="modal-footer">
     <Button variant="secondary" disabled={busy} onclick={onclose}

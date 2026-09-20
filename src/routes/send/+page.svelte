@@ -36,6 +36,7 @@
   import RecipientAddressModal from '$lib/components/RecipientAddressModal.svelte';
   import SendProgress from '$lib/components/SendProgress.svelte';
   import SignerSummary from '$lib/components/SignerSummary.svelte';
+  import WarningNotice from '$lib/components/WarningNotice.svelte';
   import { psbtFilename, readTransferFile } from '$lib/transfer';
   import { copyText } from '$lib/clipboard';
   import { shortSats } from '$lib/data';
@@ -1658,12 +1659,12 @@
         interactiveAmounts
         onChangeAddress={() => (changeAddressOpen = true)}
       />
-      <div class="warning-box">
-        {translate(
+      <WarningNotice
+        body={translate(
           $locale,
           'Bitcoin transactions cannot be reversed. Verify the address and amount before signing.'
         )}
-      </div>
+      />
       <div class="split-actions">
         <Button
           variant="danger-outline"
@@ -2177,10 +2178,10 @@
       discardDraftError = '';
     }
   }}
-  ><div class="warning-box">
-    <strong>{translate($locale, 'Only the draft will be removed.')}</strong>
-    {translate($locale, 'No transaction or signature exists yet.')}
-  </div>
+  ><WarningNotice
+    title={translate($locale, 'Only the draft will be removed.')}
+    body={translate($locale, 'No transaction or signature exists yet.')}
+  />
   <dl class="details-list cancel-proposal-details">
     <div>
       <dt>{translate($locale, 'Payment')}</dt>
@@ -2221,14 +2222,14 @@
       discardSignatureError = '';
     }
   }}
-  >{#if proposal && externalProposal}<div class="warning-box danger">
-      <strong>{translate($locale, 'This does not revoke the signature.')}</strong><span
-        >{translate(
-          $locale,
-          'Any PSBT copy already exported or shared may still contain it and remain broadcastable.'
-        )}</span
-      >
-    </div>
+  >{#if proposal && externalProposal}<WarningNotice
+      tone="danger"
+      title={translate($locale, 'This does not revoke the signature.')}
+      body={translate(
+        $locale,
+        'Any PSBT copy already exported or shared may still contain it and remain broadcastable.'
+      )}
+    />
     <dl class="details-list cancel-proposal-details">
       <div>
         <dt>{translate($locale, 'Payment')}</dt>
@@ -2269,10 +2270,10 @@
       cancelError = '';
     }
   }}
-  >{#if proposal}<div class="warning-box">
-      <strong>{translate($locale, 'This cannot be undone.')}</strong>
-      {translate($locale, 'You will need to prepare and sign this payment again.')}
-    </div>
+  >{#if proposal}<WarningNotice
+      title={translate($locale, 'This cannot be undone.')}
+      body={translate($locale, 'You will need to prepare and sign this payment again.')}
+    />
     <dl class="details-list cancel-proposal-details">
       <div>
         <dt>{translate($locale, 'Payment')}</dt>

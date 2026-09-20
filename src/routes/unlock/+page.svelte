@@ -8,6 +8,7 @@
   import Button from '$lib/components/Button.svelte';
   import Modal from '$lib/components/Modal.svelte';
   import PasswordField from '$lib/components/PasswordField.svelte';
+  import WarningNotice from '$lib/components/WarningNotice.svelte';
   import { defaultConfig } from '$lib/config';
   import { isPrototypeWallet, walletService } from '$lib/wallet';
   import { page } from '$app/state';
@@ -135,18 +136,16 @@
           )}{:else}{translate($locale, 'Enter this\n          wallet’s app PIN to continue.')}{/if}
       </p>
       {#if compatibility && !compatibility.supported}
-        <div class="warning-box">
-          <strong
-            >{translate(
-              $locale,
-              'This profile predates the current hardware-signer storage format.'
-            )}</strong
-          >
-          {translate(
+        <WarningNotice
+          title={translate(
+            $locale,
+            'This profile predates the current hardware-signer storage format.'
+          )}
+          body={translate(
             $locale,
             'Groot will not guess missing metadata or reset its app PIN. Because Regtest wallets are disposable,\n          delete this test wallet and recreate or recover it from a public wallet backup. Its existing\n          files remain untouched until you explicitly delete it.'
           )}
-        </div>
+        />
       {/if}
       {#if isPrototypeWallet}<p class="prototype-hint">
           {translate($locale, 'UI prototype PIN:')}
@@ -215,17 +214,16 @@
     resetConfirmation = '';
   }}
 >
-  <div class="warning-box danger">
-    <strong>{translate($locale, 'This removes the encrypted wallet data from this device.')}</strong
-    >
-    {#if isSoftwareWallet}{translate(
-        $locale,
-        'It cannot be undone unless you have the correct 24 recovery words and\n      wallet passphrase.'
-      )}{:else}{translate(
-        $locale,
-        'It cannot be undone unless you have the public wallet backup and\n      access to the required signer or signers.'
-      )}{/if}
-  </div>
+  <WarningNotice
+    tone="danger"
+    title={translate($locale, 'This removes the encrypted wallet data from this device.')}
+    body={translate(
+      $locale,
+      isSoftwareWallet
+        ? 'It cannot be undone unless you have the correct 24 recovery words and\n      wallet passphrase.'
+        : 'It cannot be undone unless you have the public wallet backup and\n      access to the required signer or signers.'
+    )}
+  />
   <label class="field"
     ><span>{translate($locale, 'Type RESET REGTEST to confirm')}</span><input
       bind:value={resetConfirmation}

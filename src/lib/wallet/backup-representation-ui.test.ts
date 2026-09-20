@@ -14,7 +14,7 @@ describe('deferred backup re-presentation', () => {
     (route) => {
       expect(route).toContain('View recovery words first');
       expect(route).toContain('walletService.revealAndVerifyBackup(verifyCredential)');
-      expect(route).toContain('Recovery words stay inside the trusted native window.');
+      expect(route).toContain('Your recovery words stay private');
     }
   );
 
