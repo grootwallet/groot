@@ -102,6 +102,14 @@ export const hardwareCopy = {
     fr: 'Recherche de tous les signataires matériels USB…',
     es: 'Buscando todos los firmantes físicos USB…'
   },
+  'Finish unlocking the signer': {
+    fr: 'Terminez le déverrouillage du signataire',
+    es: 'Termina de desbloquear el firmante'
+  },
+  'The scan ended during device unlock. Finish on-device, then scan again.': {
+    fr: 'La recherche s’est terminée pendant le déverrouillage. Terminez sur l’appareil, puis relancez la recherche.',
+    es: 'La búsqueda terminó durante el desbloqueo. Termina en el dispositivo y vuelve a buscar.'
+  },
   scan: { fr: 'analyser', es: 'buscar' },
   unlock: { fr: 'déverrouiller', es: 'desbloquear' },
   'Unlock & continue': { fr: 'Déverrouiller et continuer', es: 'Desbloquear y continuar' },
@@ -432,6 +440,19 @@ export const hardwareCopy = {
   },
   'Validate public key': { fr: 'Valider la clé publique', es: 'Validar clave pública' },
   'Verify the fingerprint.': { fr: 'Vérifiez l’empreinte.', es: 'Verifica la huella.' },
+  'This public identity came from the connected BitBox.': {
+    fr: 'Cette identité publique provient de la BitBox connectée.',
+    es: 'Esta identidad pública proviene de la BitBox conectada.'
+  },
+  'BitBox does not show its fingerprint during this import. Verify the first receive address on-device before accepting bitcoin.':
+    {
+      fr: 'BitBox n’affiche pas son empreinte pendant cet import. Vérifiez la première adresse de réception sur l’appareil avant d’accepter du bitcoin.',
+      es: 'BitBox no muestra su huella durante esta importación. Verifica la primera dirección de recepción en el dispositivo antes de aceptar bitcoin.'
+    },
+  'Use this BitBox wallet': {
+    fr: 'Utiliser ce portefeuille BitBox',
+    es: 'Usar esta cartera BitBox'
+  },
   'Want to use a Ledger passphrase?': {
     fr: 'Vous souhaitez utiliser une phrase secrète Ledger ?',
     es: '¿Quieres usar una frase de contraseña de Ledger?'

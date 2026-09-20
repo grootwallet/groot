@@ -482,20 +482,30 @@ describe('hardware receive verification UI', () => {
     expect(normalizedSetup).toContain("isTrezor ? 'Use this Trezor wallet'");
   });
 
-  it('does not require an unverifiable fingerprint attestation for Nova imports', () => {
+  it('does not require an unverifiable fingerprint attestation for BitBox imports', () => {
     const normalizedSetup = hardwareSetup.replace(/\s+/g, ' ');
     expect(normalizedSetup).toContain(
-      "signer?.deviceType?.toLowerCase().includes('bitbox') && signer.label.toLowerCase().includes('nova')"
+      "let isBitBox = $derived(Boolean(signer?.deviceType?.toLowerCase().includes('bitbox')))"
     );
     expect(normalizedSetup).toContain(
-      'Nova does not show its fingerprint during this import, so no fingerprint comparison'
+      'BitBox does not show its fingerprint during this import. Verify the first receive'
     );
-    expect(normalizedSetup).toContain('is required here. After setup');
-    expect(normalizedSetup).toContain("isBitBoxNova ? 'Use this Nova wallet'");
+    expect(normalizedSetup).toContain('address on-device before accepting bitcoin.');
+    expect(normalizedSetup).toContain("isBitBox ? isBitBoxNova ? 'Use this Nova wallet'");
+    expect(normalizedSetup).toContain(": 'Use this BitBox wallet'");
     expect(normalizedSetup).toContain(
       "description={translate( $locale, 'Connect one initialized and unlocked signer directly to this computer.' )}"
     );
     expect(normalizedSetup).toContain("'Keep the signer connected and unlocked.'");
+  });
+
+  it('explains an interrupted interactive scan without calling it a device rejection', () => {
+    const normalizedSetup = hardwareSetup.replace(/\s+/g, ' ');
+    expect(normalizedSetup).toContain("errorCode === 'hardware_command_failed'");
+    expect(normalizedSetup).toContain("errorTitle = 'Finish unlocking the signer'");
+    expect(normalizedSetup).toContain(
+      'The scan ended during device unlock. Finish on-device, then scan again.'
+    );
   });
 
   it('gives Coldcard users an on-device fingerprint comparison guide', () => {

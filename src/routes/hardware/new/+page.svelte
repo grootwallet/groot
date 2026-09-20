@@ -75,12 +75,8 @@
   let isLedger = $derived(Boolean(signer?.deviceType?.toLowerCase().includes('ledger')));
   let isTrezor = $derived(Boolean(signer?.deviceType?.toLowerCase().includes('trezor')));
   let isColdcard = $derived(Boolean(signer?.deviceType?.toLowerCase().includes('coldcard')));
-  let isBitBoxNova = $derived(
-    Boolean(
-      signer?.deviceType?.toLowerCase().includes('bitbox') &&
-      signer.label.toLowerCase().includes('nova')
-    )
-  );
+  let isBitBox = $derived(Boolean(signer?.deviceType?.toLowerCase().includes('bitbox')));
+  let isBitBoxNova = $derived(Boolean(isBitBox && signer?.label.toLowerCase().includes('nova')));
   let isFileImport = $derived(signer?.source === 'file');
   let networkSetupSource = $state<NetworkSetupSource | null>(null);
   let reuseNetworkSetup = $state(true);
@@ -120,7 +116,16 @@
     } catch (cause) {
       if (generation !== hardwareScanGeneration) return;
       devices = [];
-      error = localizedError(cause, $locale, 'Could not scan hardware.');
+      errorCode = cause instanceof WalletError ? cause.code : 'internal_error';
+      if (errorCode === 'hardware_command_failed') {
+        errorTitle = 'Finish unlocking the signer';
+        error = translate(
+          $locale,
+          'The scan ended during device unlock. Finish on-device, then scan again.'
+        );
+      } else {
+        error = localizedError(cause, $locale, 'Could not scan hardware.');
+      }
     } finally {
       if (generation === hardwareScanGeneration) busy = false;
     }
@@ -510,16 +515,16 @@
             >
           </p>
         </div>
-      {:else if isBitBoxNova}
+      {:else if isBitBox}
         <div class="credential-warning">
           <ShieldCheck size={17} />
           <p>
             <strong
-              >{translate($locale, 'This public identity came from the connected Nova.')}</strong
+              >{translate($locale, 'This public identity came from the connected BitBox.')}</strong
             ><span
               >{translate(
                 $locale,
-                'Nova does not show its fingerprint during this import, so no fingerprint comparison\n              is required here. After setup, verify the first receive address on Nova before\n              accepting bitcoin.'
+                'BitBox does not show its fingerprint during this import. Verify the first receive\n              address on-device before accepting bitcoin.'
               )}</span
             >
           </p>
@@ -603,8 +608,10 @@
               ? 'Use this Ledger wallet'
               : isTrezor
                 ? 'Use this Trezor wallet'
-                : isBitBoxNova
-                  ? 'Use this Nova wallet'
+                : isBitBox
+                  ? isBitBoxNova
+                    ? 'Use this Nova wallet'
+                    : 'Use this BitBox wallet'
                   : isFileImport
                     ? 'Use this public backup'
                     : 'Fingerprint matches'

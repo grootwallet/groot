@@ -1140,3 +1140,17 @@ to the resumable scan without flashing the manual warning. Existing profiles are
 not rewritten; wallet, descriptor, key, credential, node, proposal, backup, and
 database formats remain compatible and no migration is required. Physical retest
 on the replacement package remains required.
+
+The subsequent original-BitBox02 review corrects two remaining setup messages.
+If aggregate HWI discovery exits while the user is completing BitBox unlock,
+the shared inline error now describes an interrupted unlock and retains the
+explicit rescan action instead of claiming a wallet request was rejected.
+Original BitBox02 and Nova single-key review both state that the device does not
+display its master fingerprint during import, use a device-specific continue
+action, and defer the meaningful physical check to the first receive address.
+Discovery still invokes the pinned HWI 3.2.0 aggregate enumerator exactly once;
+that executable initializes every backend and owns the remaining device-scan
+latency. Reaching Sparrow-class BitBox timing requires a separately reviewed
+native vendor transport and physical certification, not additional automatic
+HWI retries. No wallet, profile, descriptor, key, credential, node, proposal,
+backup, database, or stable DTO format changes; no migration is required.

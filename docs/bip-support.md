@@ -518,6 +518,12 @@ scan has no BIP support impact. It changes only the persisted initial birthday
 choice and scheduler wake-up; the same BIP84 descriptors, BIP158 matching, gap
 discovery, PSBT, signing, and recovery paths remain authoritative.
 
+The BitBox02 unlock and public-identity copy correction has no BIP support or
+interoperability-evidence impact. It changes only error and review presentation;
+the pinned HWI discovery call count, BIP84 derivation, complete live
+fingerprint/account-key validation, first-address proof, descriptors, PSBTs,
+signing, and persisted formats are unchanged.
+
 Every feature, interoperability, signer, descriptor, transaction, payment request,
 backup/recovery, sync/backend, network, or dependency change must assess BIP impact.
 If it adds, removes, expands, narrows, or changes evidence for a BIP:
