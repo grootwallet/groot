@@ -401,6 +401,8 @@ Confirmed, non-replaceable, below-minimum, insufficient-value, stale-node-policy
 
 `Settings → Import or export wallet labels → privacy warning → native JSONL picker → Rust BIP329 validation/export → durable inline result + toast`
 
+`Settings → View app logs → immediate shared diagnostics skeleton during navigation and native loading → sanitized App Logs browser`
+
 Export orders the representable permanent label subset deterministically. Import preflights the entire bounded file, appends only new immutable assignments, treats duplicates as unchanged, and commits label plus coin-spendability changes atomically. Cancellation changes nothing; foreign-wallet/network, private-material, schema, signer-name, spendability, and capacity conflicts change nothing. The file creates no live phone/desktop synchronization state.
 
 `Transaction details → privacy disclosure → View on mempool.space → Rust validates txid and constructs allowlisted public-test-network URL → OS browser or durable failure`

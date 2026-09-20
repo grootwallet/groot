@@ -1089,3 +1089,12 @@ correction; and the Mainnet-only Core controls are shown as one connection row.
 The managed-service warning and credential spacing are also tightened. These
 are UI/orchestration changes only: existing profiles and databases remain
 compatible, and there is no BIP-support impact.
+
+The next presentation-only follow-up moves every reusable warning insight into
+a viewport-clamped body portal so modal overflow cannot crop its text, shortens
+the managed-node warning to state that keys and wallet data remain locally in
+Groot, and renders the shared App Logs skeleton both during route navigation and
+while native diagnostics load. Signet is not part of ADR 0069's selectable GA
+application and is therefore no longer tracked as a Mainnet GA release blocker;
+Regtest, Testnet4, and Mainnet evidence remain network-specific. No wallet,
+profile, credential, node-setting, database, DTO, or BIP behavior changes.

@@ -2481,7 +2481,7 @@
       title={translate($locale, 'Privacy tradeoff')}
       body={translate(
         $locale,
-        'The service sees connection timing and requested blocks. Recovery words, private keys, labels, and addresses stay in Groot.'
+        'The service sees connection timing and requested blocks. Your keys and wallet data stay locally in Groot.'
       )}
     />
   {:else}<label class="field"

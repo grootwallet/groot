@@ -20,6 +20,7 @@
   import ThemeToggle from './ThemeToggle.svelte';
   import DiscreetModeToggle from './DiscreetModeToggle.svelte';
   import ResumeSetupNotice from './ResumeSetupNotice.svelte';
+  import WalletSkeleton from './WalletSkeleton.svelte';
   import {
     APP_VERSION,
     applyRuntimeNetwork,
@@ -97,6 +98,7 @@
   const startupStartedAt = Date.now();
   const minimumStartupGateMs = isPrototypeWallet ? 0 : 1_800;
   let navigationPending = $state(false);
+  let pendingDestination = $state('');
   let commandModifier = false;
   let desktopPlatform = false;
   let currentZoom = 1;
@@ -306,6 +308,7 @@
 
   beforeNavigate(({ to }) => {
     navigationPending = Boolean(to && to.url.href !== page.url.href);
+    pendingDestination = navigationPending && to ? to.url.pathname : '';
     const preserveMainnetAdmission = Boolean(
       defaultConfig.network === 'mainnet' && to && walletSetupRoutes.has(to.url.pathname)
     );
@@ -316,6 +319,7 @@
 
   afterNavigate(({ from }) => {
     navigationPending = false;
+    pendingDestination = '';
     const previousPath = from?.url?.pathname;
     // Routine navigation must not repeat registry and setup-draft reads that
     // every destination performs independently. Refresh only after a flow that
@@ -660,11 +664,17 @@
           }}
         />
       {/if}
-      {#key `${selectedWalletId ?? 'none'}:${page.url.pathname}`}
-        <div class="route-transition" in:fade={{ duration: 180 }}>
-          {@render children?.()}
+      {#if navigationPending && pendingDestination === '/diagnostics'}
+        <div class="page diagnostics-navigation-skeleton">
+          <WalletSkeleton variant="diagnostics" count={4} header />
         </div>
-      {/key}
+      {:else}
+        {#key `${selectedWalletId ?? 'none'}:${page.url.pathname}`}
+          <div class="route-transition" in:fade={{ duration: 180 }}>
+            {@render children?.()}
+          </div>
+        {/key}
+      {/if}
     </main>
 
     {#if onboardingRoute}<BuildIdentity runtime={runtimeIdentity} placement="onboarding" />{/if}

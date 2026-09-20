@@ -118,47 +118,8 @@ a[aria-disabled='true'] {
 }
 .insight-tip > button:hover,
 .insight-tip > button:focus-visible,
-.insight-tip.open > button {
+.insight-tip > button[aria-expanded='true'] {
   color: var(--text);
-}
-.insight-tip > span {
-  position: absolute;
-  z-index: 100;
-  left: 50%;
-  bottom: calc(100% + 8px);
-  width: min(270px, calc(100vw - 32px));
-  padding: 10px 12px;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-control);
-  color: var(--text);
-  background: var(--panel-2);
-  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.3);
-  font-size: var(--font-size-meta);
-  font-weight: 500;
-  line-height: 1.5;
-  opacity: 0;
-  visibility: hidden;
-  transform: translate(-50%, 4px);
-  transition:
-    opacity 0.14s ease,
-    transform 0.14s ease;
-  pointer-events: none;
-}
-.insight-tip:hover > span,
-.insight-tip > button:focus-visible + span,
-.insight-tip.open > span {
-  opacity: 1;
-  visibility: visible;
-  transform: translate(-50%, 0);
-}
-.scan-form .insight-tip > span {
-  left: 0;
-  transform: translate(0, 4px);
-}
-.scan-form .insight-tip:hover > span,
-.scan-form .insight-tip > button:focus-visible + span,
-.scan-form .insight-tip.open > span {
-  transform: translate(0, 0);
 }
 @media (hover: hover) and (pointer: fine) {
   .insight-tip > button {
@@ -1859,6 +1820,87 @@ code {
 .wallet-skeleton.coins {
   display: grid;
 }
+.wallet-skeleton.diagnostics {
+  display: grid;
+  gap: 16px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.diagnostics-skeleton-header,
+.diagnostics-skeleton-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+.diagnostics-skeleton-header {
+  min-height: 94px;
+  margin-bottom: 3px;
+}
+.diagnostics-skeleton-header .skeleton-copy {
+  width: min(300px, 55vw);
+}
+.diagnostics-skeleton-header .eyebrow {
+  width: 68px;
+  height: 7px;
+}
+.diagnostics-skeleton-header .heading {
+  width: 168px;
+  height: 26px;
+}
+.diagnostics-skeleton-header .subtitle {
+  width: 244px;
+}
+.skeleton-control {
+  display: block;
+  width: 96px;
+  height: 34px;
+  border-radius: var(--radius-control);
+  background: color-mix(in srgb, var(--muted-2) 14%, var(--surface-inset));
+}
+.skeleton-control.back {
+  width: 72px;
+}
+.diagnostics-skeleton-summary,
+.diagnostics-skeleton-controls,
+.diagnostics-skeleton-rows {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-panel);
+  background: var(--panel);
+}
+.diagnostics-skeleton-summary {
+  min-height: 76px;
+  padding: 14px 16px;
+}
+.diagnostics-skeleton-summary > .skeleton-copy {
+  width: min(520px, 58vw);
+}
+.diagnostics-skeleton-actions {
+  display: flex;
+  gap: 8px;
+}
+.diagnostics-skeleton-catalog {
+  width: 132px;
+}
+.diagnostics-skeleton-controls {
+  display: grid;
+  grid-template-columns: minmax(190px, 1fr) 142px 126px 126px 104px;
+  gap: 10px;
+  padding: 14px;
+}
+.diagnostics-skeleton-controls span {
+  height: 38px;
+  border-radius: var(--radius-control);
+  background: color-mix(in srgb, var(--muted-2) 14%, var(--surface-inset));
+}
+.diagnostics-skeleton-results {
+  width: 145px;
+}
+.diagnostics-skeleton-rows .skeleton-row {
+  grid-template-columns: 160px 180px minmax(0, 1fr);
+}
 .skeleton-row {
   min-height: 72px;
   display: grid;
@@ -1924,6 +1966,38 @@ code {
   55%,
   100% {
     transform: translateX(100%);
+  }
+}
+@media (max-width: 900px) {
+  .diagnostics-skeleton-controls {
+    grid-template-columns: 1fr 1fr;
+  }
+  .diagnostics-skeleton-controls span:first-child,
+  .diagnostics-skeleton-controls span:last-child {
+    grid-column: 1 / -1;
+  }
+}
+@media (max-width: 640px) {
+  .diagnostics-skeleton-header .skeleton-copy,
+  .diagnostics-skeleton-summary > .skeleton-copy {
+    width: 100%;
+  }
+  .diagnostics-skeleton-header {
+    align-items: start;
+  }
+  .diagnostics-skeleton-summary {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .diagnostics-skeleton-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+  .diagnostics-skeleton-actions .skeleton-control {
+    width: 100%;
+  }
+  .diagnostics-skeleton-rows .skeleton-row {
+    grid-template-columns: 104px minmax(0, 1fr) 76px;
   }
 }
 .load-failure {
@@ -10519,21 +10593,16 @@ code {
   .acceleration-quote-details {
     grid-template-columns: 1fr;
   }
-  .insight-tip > span {
-    position: fixed;
+  .ui-tooltip.insight-tooltip.mobile {
     left: 16px;
     right: 16px;
+    top: auto;
     bottom: calc(16px + env(safe-area-inset-bottom));
     width: auto;
     max-width: none;
     padding: 14px 15px;
     border-radius: var(--radius-inset);
-    transform: translateY(6px);
-  }
-  .insight-tip:hover > span,
-  .insight-tip > button:focus-visible + span,
-  .insight-tip.open > span {
-    transform: translateY(0);
+    transform: none;
   }
   .activity-controls {
     grid-template-columns: 1fr;

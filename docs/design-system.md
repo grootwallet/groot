@@ -165,6 +165,8 @@ durable retry surface and must never display a hardware wallet as a software sig
 - Counts use locale-aware grammar. Never render forms such as “1 confirmations” or build translated plurals by appending an English suffix.
 - Recovery words, credentials, descriptors, disabled actions, overlays, navigation, modals, and mobile controls must meet the same contrast requirements in both themes. Theme selection is applied before first paint.
 - Toast: broadcast, received payment, first confirmation, copy, creation, deletion, connectivity, and recoverable failure.
+- Reusable insight tooltips render through a body-level portal, remain fully inside the viewport, and support hover, focus, click, outside-click, and Escape dismissal. Dialog overflow must never clip tooltip content; routes must use the shared component instead of inline tooltip markup.
+- Slow App Logs navigation immediately replaces the current route with the shared diagnostics skeleton. The destination keeps the same skeleton until native records resolve, so desktop and mobile never show a blank content pane.
 
 - A Rust-proven wallet-owned recipient adds one calm, always-visible **Self-transfer** status above the technical disclosure. It says that only the network fee leaves the wallet and includes the Rust-derived **Consolidating** total of all wallet-controlled PSBT outputs for direct hardware-signer comparison. Neither ownership nor that total is inferred from labels, matching text, renderer-side address scanning, or renderer arithmetic.
 

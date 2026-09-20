@@ -11,6 +11,7 @@
     Search
   } from '@lucide/svelte';
   import Button from '$lib/components/Button.svelte';
+  import WalletSkeleton from '$lib/components/WalletSkeleton.svelte';
   import { copyText } from '$lib/clipboard';
   import LocalTimestamp from '$lib/components/LocalTimestamp.svelte';
   import { formatInteger, locale } from '$lib/i18n';
@@ -174,46 +175,7 @@
   </header>
 
   {#if loading}
-    <div class="diagnostics-loading" role="status">
-      <span class="sr-only">{translate($locale, 'Loading diagnostics…')}</span>
-      <section
-        class="diagnostics-summary diagnostics-summary-skeleton wallet-skeleton"
-        aria-hidden="true"
-      >
-        <div class="skeleton-copy">
-          <span class="skeleton-line primary"></span>
-          <span class="skeleton-line secondary"></span>
-        </div>
-        <div class="diagnostics-actions">
-          <span class="skeleton-control"></span><span class="skeleton-control"></span>
-        </div>
-      </section>
-      <span class="diagnostics-catalog-skeleton skeleton-line" aria-hidden="true"></span>
-      <section class="diagnostics-browser-skeleton wallet-skeleton" aria-hidden="true">
-        <div class="diagnostics-controls-skeleton">
-          <span></span><span></span><span></span><span></span><span></span>
-        </div>
-        <span class="diagnostics-results-skeleton skeleton-line"></span>
-      </section>
-      <div class="diagnostics-table-skeleton wallet-skeleton" aria-hidden="true">
-        {#each [1, 2, 3, 4] as row (row)}
-          <div class="skeleton-row">
-            <span class="skeleton-copy"
-              ><span class="skeleton-line primary"></span><span class="skeleton-line secondary"
-              ></span></span
-            >
-            <span class="skeleton-copy"
-              ><span class="skeleton-line primary"></span><span class="skeleton-line secondary"
-              ></span></span
-            >
-            <span class="skeleton-copy end"
-              ><span class="skeleton-line primary"></span><span class="skeleton-line secondary"
-              ></span></span
-            >
-          </div>
-        {/each}
-      </div>
-    </div>
+    <div class="diagnostics-loading"><WalletSkeleton variant="diagnostics" count={4} /></div>
   {/if}
 
   {#if !loading}
@@ -580,50 +542,6 @@
     display: flex;
     gap: 8px;
     flex-wrap: wrap;
-  }
-  .diagnostics-loading {
-    display: grid;
-  }
-  .diagnostics-summary-skeleton {
-    min-height: 76px;
-  }
-  .diagnostics-summary-skeleton .skeleton-copy {
-    width: min(520px, 58vw);
-  }
-  .skeleton-control {
-    width: 96px;
-    height: 34px;
-    border-radius: var(--radius-control);
-    background: color-mix(in srgb, var(--muted-2) 14%, var(--surface-inset));
-  }
-  .diagnostics-catalog-skeleton {
-    width: 132px;
-    margin-top: 18px;
-  }
-  .diagnostics-browser-skeleton {
-    min-height: 90px;
-    margin-top: 16px;
-    padding: 14px;
-  }
-  .diagnostics-controls-skeleton {
-    display: grid;
-    grid-template-columns: minmax(190px, 1fr) 142px 126px 126px 104px;
-    gap: 10px;
-  }
-  .diagnostics-controls-skeleton span {
-    height: 38px;
-    border-radius: var(--radius-control);
-    background: color-mix(in srgb, var(--muted-2) 14%, var(--surface-inset));
-  }
-  .diagnostics-results-skeleton {
-    width: 145px;
-    margin-top: 12px;
-  }
-  .diagnostics-table-skeleton {
-    margin-top: 8px;
-  }
-  .diagnostics-table-skeleton .skeleton-row {
-    grid-template-columns: 160px 180px minmax(0, 1fr);
   }
   .diagnostic-event-catalog {
     margin-top: 16px;
@@ -1008,13 +926,6 @@
     .log-controls {
       grid-template-columns: 1fr 1fr;
     }
-    .diagnostics-controls-skeleton {
-      grid-template-columns: 1fr 1fr;
-    }
-    .diagnostics-controls-skeleton span:first-child,
-    .diagnostics-controls-skeleton span:last-child {
-      grid-column: 1 / -1;
-    }
     .log-search {
       grid-column: 1 / -1;
     }
@@ -1037,19 +948,6 @@
     }
     .diagnostics-actions :global(.button) {
       flex: 1;
-    }
-    .diagnostics-summary-skeleton .skeleton-copy {
-      width: 100%;
-    }
-    .diagnostics-summary-skeleton .diagnostics-actions {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-    }
-    .skeleton-control {
-      width: 100%;
-    }
-    .diagnostics-table-skeleton .skeleton-row {
-      grid-template-columns: 104px minmax(0, 1fr) 76px;
     }
     .diagnostics-table {
       min-width: 650px;

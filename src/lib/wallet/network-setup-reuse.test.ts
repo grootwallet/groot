@@ -193,6 +193,7 @@ describe('protected network setup reuse', () => {
     expect(settings).toContain('Custom remote · activity, fees, and broadcast');
     expect(settings).toContain('class="managed-privacy-warning"');
     expect(settings).toContain('Privacy tradeoff');
+    expect(settings).toContain('Your keys and wallet data stay locally in Groot.');
     expect(settings).toContain('class="node-wallet-credential"');
   });
 

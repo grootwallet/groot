@@ -224,12 +224,12 @@ test('shows app-log skeletons immediately while native records load', async ({ p
   });
   await logSetting.click();
 
+  await expect(page.locator('.wallet-skeleton.diagnostics')).toBeVisible();
+  await expect(page.locator('.diagnostics-skeleton-summary')).toBeVisible();
+  await expect(page.locator('.diagnostics-skeleton-rows .skeleton-row')).toHaveCount(4);
   await expect(page.getByRole('heading', { name: 'App logs' })).toBeVisible();
-  await expect(page.locator('.diagnostics-loading')).toBeVisible();
-  await expect(page.locator('.diagnostics-summary-skeleton')).toBeVisible();
-  await expect(page.locator('.diagnostics-table-skeleton .skeleton-row')).toHaveCount(4);
   await expect(page.locator('.log-browser')).toBeVisible();
-  await expect(page.locator('.diagnostics-loading')).toHaveCount(0);
+  await expect(page.locator('.wallet-skeleton.diagnostics')).toHaveCount(0);
 });
 
 test('creates a 24-word wallet and clears onboarding secrets', async ({ page }) => {
@@ -371,7 +371,13 @@ test('can defer seed verification and complete it later from the wallet', async 
   });
   if ((page.viewportSize()?.width ?? 1180) <= 760) await recoveryInfo.click();
   else await recoveryInfo.hover();
-  await expect(recoveryWarning.getByRole('tooltip')).toContainText('never enter the webview');
+  const recoveryTooltip = page.getByRole('tooltip');
+  await expect(recoveryTooltip).toContainText('never enter the webview');
+  const recoveryTooltipBounds = await recoveryTooltip.boundingBox();
+  expect(recoveryTooltipBounds?.y ?? -1).toBeGreaterThanOrEqual(8);
+  expect(
+    (recoveryTooltipBounds?.y ?? 0) + (recoveryTooltipBounds?.height ?? Number.MAX_SAFE_INTEGER)
+  ).toBeLessThanOrEqual(page.viewportSize()?.height ?? 780);
   await verifyDialog.getByLabel('Wallet passphrase', { exact: true }).fill('wrong-passphrase');
   await verifyDialog.getByRole('button', { name: 'Continue' }).click();
   await expect(verifyDialog.getByText('Incorrect wallet passphrase.')).toBeVisible();
@@ -1478,9 +1484,15 @@ test('BIP329 label interchange discloses privacy and keeps durable results', asy
   const privacyInfo = privacyWarning.getByRole('button', { name: 'About label-file privacy' });
   if ((page.viewportSize()?.width ?? 1180) <= 760) await privacyInfo.click();
   else await privacyInfo.hover();
-  await expect(privacyWarning.getByRole('tooltip')).toContainText(
+  const privacyTooltip = page.getByRole('tooltip');
+  await expect(privacyTooltip).toContainText(
     'labels, addresses, transaction references, public account keys'
   );
+  const privacyTooltipBounds = await privacyTooltip.boundingBox();
+  expect(privacyTooltipBounds?.y ?? -1).toBeGreaterThanOrEqual(8);
+  expect(
+    (privacyTooltipBounds?.y ?? 0) + (privacyTooltipBounds?.height ?? Number.MAX_SAFE_INTEGER)
+  ).toBeLessThanOrEqual(page.viewportSize()?.height ?? 780);
   await expect(dialog).toContainText('additive and atomic');
   await expect(dialog.locator('.modal-supporting-copy')).toContainText('additive and atomic');
 

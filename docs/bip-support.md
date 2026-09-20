@@ -499,6 +499,11 @@ matching, BIP84 descriptors, gap discovery, PSBT, signing, and recovery paths
 remain in use; recovered/imported wallets still require an explicit history
 choice and existing database schemas remain compatible.
 
+The portaled insight-tooltip correction, concise managed-node privacy copy, and
+shared App Logs navigation/loading skeleton have no BIP support impact. They
+change presentation only; descriptors, derivation, scanning, PSBTs, signing,
+broadcast, recovery, persistence, and interoperability remain unchanged.
+
 Every feature, interoperability, signer, descriptor, transaction, payment request,
 backup/recovery, sync/backend, network, or dependency change must assess BIP impact.
 If it adds, removes, expands, narrows, or changes evidence for a BIP:

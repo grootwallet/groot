@@ -50,6 +50,10 @@ describe('diagnostic event boundary', () => {
     );
     expect(route).toContain('walletService.diagnostics()');
     expect(route).not.toContain('walletService.snapshot()');
+    expect(shell).toContain("pendingDestination === '/diagnostics'");
+    expect(shell).toContain('<WalletSkeleton variant="diagnostics" count={4} header />');
+    expect(route).toContain('<WalletSkeleton variant="diagnostics" count={4} />');
+    expect(route).not.toContain('diagnostics-summary-skeleton');
   });
 
   it('records receive creation and discard without address or label values', () => {
