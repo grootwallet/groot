@@ -1,6 +1,6 @@
 # ADR 0070: Use server-side script scanning for remote Core
 
-- Status: accepted for internal testing; live gateway deployment and release evidence pending
+- Status: accepted for custom remote Core; superseded by ADR 0073 for the fixed managed endpoint
 - Date: 2026-09-17
 - Supersedes: ADR 0067's no-script remote discovery boundary
 - Extends: ADR 0009, ADR 0031, ADR 0061, and ADR 0067

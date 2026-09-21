@@ -210,7 +210,7 @@ describe('protected network setup reuse', () => {
     expect(settings).not.toContain("translate($locale, 'Fee and broadcast node')");
     expect(settings).toContain('class="managed-privacy-warning"');
     expect(settings).toContain('Privacy tradeoff');
-    expect(settings).toContain('Your keys and wallet data stay locally in Groot.');
+    expect(settings).toContain('Recovery words, private keys, and labels stay on this device.');
     expect(settings).toContain('class="node-wallet-credential"');
   });
 

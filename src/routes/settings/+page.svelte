@@ -2470,7 +2470,7 @@
       title={translate($locale, 'Privacy tradeoff')}
       body={translate(
         $locale,
-        'The service sees connection timing and requested blocks. Your keys and wallet data stay locally in Groot.'
+        'The service sees connection timing and wallet scripts queried for history. Recovery words, private keys, and labels stay on this device.'
       )}
     />
   {:else}<label class="field"

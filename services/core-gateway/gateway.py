@@ -14,6 +14,7 @@ import json
 import os
 import re
 import secrets
+import socket
 import stat
 import tempfile
 import threading
@@ -32,6 +33,9 @@ MAX_HANDLER_CONCURRENCY = 16
 MAX_ENROLL_REQUEST_BYTES = 64
 MAX_ENROLLED_PRINCIPALS = 10_000
 MAX_CREDENTIAL_FILE_BYTES = 4 * 1024 * 1024
+MAX_HISTORY_SCRIPTHASHES = 256
+MAX_HISTORY_ENTRIES = 10_000
+MAX_HISTORY_RESPONSE_BYTES = 4 * 1024 * 1024
 BUSY_RESPONSE_BODY = b'{"error":"gateway_busy"}'
 BUSY_RESPONSE = (
     b"HTTP/1.1 503 Service Unavailable\r\n"
@@ -266,6 +270,9 @@ class GatewayConfig:
     core_port: int = 8332
     core_timeout_seconds: float = 10.0
     scan_timeout_seconds: float = 120.0
+    history_host: str = "127.0.0.1"
+    history_port: int = 50001
+    history_timeout_seconds: float = 10.0
 
 
 class Gateway:
@@ -294,6 +301,11 @@ class Gateway:
         if not self.principal_limits.allow(principal):
             raise RequestRejected(429, "rate_limited")
         requests, is_batch = validate_payload(body)
+        history_requests = [request for request in requests if request["method"] == "groot_getscripthistory"]
+        if history_requests:
+            if is_batch or len(requests) != 1:
+                raise RequestRejected(400, "invalid_batch")
+            return self._call_history(history_requests[0])
         upstream_requests, identities = self._reconstruct(requests, is_batch)
         response = self._call_core(upstream_requests)
         return restore_response_identities(response, identities, is_batch)
@@ -394,6 +406,129 @@ class Gateway:
         if response.status != 200 or len(response_body) > MAX_RESPONSE_BYTES:
             raise RequestRejected(502, "core_unavailable")
         return response_body
+
+    def _call_history(self, request: dict[str, Any]) -> bytes:
+        version, scripthashes = request["params"]
+        messages = [
+            {"id": 0, "method": "server.version", "params": ["Groot", "1.4"]},
+            {"id": 1, "method": "blockchain.headers.subscribe", "params": []},
+        ]
+        messages.extend(
+            {
+                "id": index + 2,
+                "method": "blockchain.scripthash.get_history",
+                "params": [scripthash],
+            }
+            for index, scripthash in enumerate(scripthashes)
+        )
+        encoded = b"".join(
+            json.dumps(message, separators=(",", ":"), ensure_ascii=True).encode("ascii") + b"\n"
+            for message in messages
+        )
+        if not self.upstream_slots.acquire(blocking=False):
+            raise RequestRejected(503, "gateway_busy")
+        connection: socket.socket | None = None
+        reader = None
+        try:
+            try:
+                connection = socket.create_connection(
+                    (self.config.history_host, self.config.history_port),
+                    timeout=self.config.history_timeout_seconds,
+                )
+                connection.settimeout(self.config.history_timeout_seconds)
+                connection.sendall(encoded)
+                reader = connection.makefile("rb")
+                responses: dict[int, Any] = {}
+                consumed = 0
+                while len(responses) < len(messages):
+                    line = reader.readline(MAX_HISTORY_RESPONSE_BYTES + 1)
+                    consumed += len(line)
+                    if not line or len(line) > MAX_HISTORY_RESPONSE_BYTES or consumed > MAX_HISTORY_RESPONSE_BYTES:
+                        raise ValueError("invalid history response")
+                    response = json.loads(line)
+                    if (
+                        not isinstance(response, dict)
+                        or not set(response).issubset({"jsonrpc", "id", "result", "error"})
+                        or not isinstance(response.get("id"), int)
+                        or response["id"] in responses
+                        or response["id"] < 0
+                        or response["id"] >= len(messages)
+                        or response.get("error") is not None
+                    ):
+                        raise ValueError("invalid history response")
+                    responses[response["id"]] = response.get("result")
+            except (OSError, ValueError, json.JSONDecodeError):
+                raise RequestRejected(502, "history_unavailable") from None
+        finally:
+            if reader is not None:
+                reader.close()
+            if connection is not None:
+                connection.close()
+            self.upstream_slots.release()
+
+        server_version = responses.get(0)
+        if (
+            not isinstance(server_version, list)
+            or len(server_version) != 2
+            or not all(isinstance(item, str) and 1 <= len(item) <= 128 for item in server_version)
+            or not server_version[0].startswith("Fulcrum ")
+            or server_version[1] != "1.4"
+        ):
+            raise RequestRejected(502, "invalid_history_response")
+        tip = responses.get(1)
+        if (
+            not isinstance(tip, dict)
+            or not isinstance(tip.get("height"), int)
+            or isinstance(tip.get("height"), bool)
+            or not 0 <= tip["height"] <= 10_000_000
+            or not isinstance(tip.get("hex"), str)
+            or len(tip["hex"]) != 160
+            or TX_HEX.fullmatch(tip["hex"]) is None
+        ):
+            raise RequestRejected(502, "invalid_history_response")
+        histories = []
+        total_entries = 0
+        for index, scripthash in enumerate(scripthashes):
+            raw_entries = responses.get(index + 2)
+            if not isinstance(raw_entries, list):
+                raise RequestRejected(502, "invalid_history_response")
+            entries = []
+            for entry in raw_entries:
+                if (
+                    not isinstance(entry, dict)
+                    or not {"height", "tx_hash"}.issubset(entry)
+                    or not set(entry).issubset({"height", "tx_hash", "fee"})
+                    or not hash_value(entry["tx_hash"])
+                    or not isinstance(entry["height"], int)
+                    or isinstance(entry["height"], bool)
+                    or not -1 <= entry["height"] <= tip["height"]
+                    or (
+                        "fee" in entry
+                        and (
+                            not isinstance(entry["fee"], int)
+                            or isinstance(entry["fee"], bool)
+                            or entry["fee"] < 0
+                        )
+                    )
+                ):
+                    raise RequestRejected(502, "invalid_history_response")
+                entries.append({"txid": entry["tx_hash"].lower(), "height": entry["height"]})
+            total_entries += len(entries)
+            if total_entries > MAX_HISTORY_ENTRIES:
+                raise RequestRejected(502, "history_response_too_large")
+            histories.append({"scripthash": scripthash, "entries": entries})
+        result = {
+            "version": version,
+            "tip_height": tip["height"],
+            "histories": histories,
+        }
+        output: dict[str, Any] = {"result": result, "error": None, "id": request["id"]}
+        if request.get("jsonrpc") == "2.0":
+            output["jsonrpc"] = "2.0"
+        encoded_output = json.dumps(output, separators=(",", ":"), ensure_ascii=True).encode("ascii")
+        if len(encoded_output) > MAX_HISTORY_RESPONSE_BYTES:
+            raise RequestRejected(502, "history_response_too_large")
+        return encoded_output
 
 
 def decode_b64(value: Any, minimum: int, maximum: int) -> bytes:
@@ -565,6 +700,17 @@ def send_transaction_params(params: list[Any]) -> bool:
     )
 
 
+def script_history_params(params: list[Any]) -> bool:
+    return (
+        len(params) == 2
+        and params[0] == 1
+        and isinstance(params[1], list)
+        and 1 <= len(params[1]) <= MAX_HISTORY_SCRIPTHASHES
+        and len(set(params[1])) == len(params[1])
+        and all(hash_value(item) and item == item.lower() for item in params[1])
+    )
+
+
 METHOD_VALIDATORS: dict[str, Callable[[list[Any]], bool]] = {
     "getblockchaininfo": no_params,
     "getblockcount": no_params,
@@ -581,6 +727,7 @@ METHOD_VALIDATORS: dict[str, Callable[[list[Any]], bool]] = {
     "getindexinfo": index_info_params,
     "estimatesmartfee": smart_fee_params,
     "sendrawtransaction": send_transaction_params,
+    "groot_getscripthistory": script_history_params,
 }
 
 

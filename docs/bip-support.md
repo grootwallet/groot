@@ -555,6 +555,14 @@ If it adds, removes, expands, narrows, or changes evidence for a BIP:
 5. never promote fixture, dependency, Regtest, or physical-device evidence into a
    stronger release claim.
 
+ADR 0073's managed-history acceleration has no descriptor, derivation, address,
+transaction, PSBT, signing, recovery-format, or interoperability BIP impact.
+Electrum protocol script hashes are a private transport/index lookup detail, not
+a new wallet standard claim. BIP84/BIP48 scripts remain locally derived, Core
+full blocks remain authoritative for every claimed transaction, and BDK retains
+wallet accounting. Custom remote Core keeps ADR 0070's BIP158 `scanblocks` path;
+the explicit BIP157/BIP158 peer source is unchanged.
+
 If a change has no BIP impact, its pull request records that explicit assessment.
 Upstream status changes alone may update this document without changing Groot's
 implementation status.

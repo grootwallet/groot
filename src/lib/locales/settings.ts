@@ -607,10 +607,10 @@ export const settingsCopy = {
     fr: 'Compromis de confidentialité',
     es: 'Compromiso de privacidad'
   },
-  'The service sees connection timing and requested blocks. Your keys and wallet data stay locally in Groot.':
+  'The service sees connection timing and wallet scripts queried for history. Recovery words, private keys, and labels stay on this device.':
     {
-      fr: 'Le service voit les horaires de connexion et les blocs demandés. Vos clés et données restent localement dans Groot.',
-      es: 'El servicio ve los tiempos de conexión y los bloques solicitados. Tus claves y datos permanecen localmente en Groot.'
+      fr: 'Le service voit les horaires de connexion et les scripts du portefeuille interrogés pour l’historique. Les mots de récupération, clés privées et libellés restent sur cet appareil.',
+      es: 'El servicio ve los tiempos de conexión y los scripts de la cartera consultados para el historial. Las palabras de recuperación, claves privadas y etiquetas permanecen en este dispositivo.'
     },
   'Renew managed access': { fr: 'Renouveler l’accès géré', es: 'Renovar acceso gestionado' },
   'Check managed status': { fr: 'Vérifier l’état géré', es: 'Comprobar estado gestionado' },

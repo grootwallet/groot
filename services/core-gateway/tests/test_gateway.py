@@ -4,6 +4,7 @@ import base64
 import hashlib
 import http.client
 import json
+import socketserver
 import sys
 import tempfile
 import threading
@@ -70,6 +71,34 @@ class FakeCore(ThreadingHTTPServer):
         super().__init__(("127.0.0.1", 0), FakeCoreHandler)
 
 
+class FakeFulcrumHandler(socketserver.StreamRequestHandler):
+    def handle(self) -> None:
+        while line := self.rfile.readline():
+            request = json.loads(line)
+            method = request["method"]
+            if method == "server.version":
+                result = ["Fulcrum 2.1.2", "1.4"]
+            elif method == "blockchain.headers.subscribe":
+                result = {"height": 967_973, "hex": "00" * 80}
+            elif method == "blockchain.scripthash.get_history":
+                result = self.server.histories.get(request["params"][0], [])  # type: ignore[attr-defined]
+            else:
+                self.server.unexpected.append(request)  # type: ignore[attr-defined]
+                result = None
+            response = {"id": request["id"], "result": result, "error": None}
+            self.wfile.write(json.dumps(response).encode() + b"\n")
+
+
+class FakeFulcrum(socketserver.ThreadingTCPServer):
+    allow_reuse_address = True
+    daemon_threads = True
+
+    def __init__(self):
+        self.histories = {}
+        self.unexpected = []
+        super().__init__(("127.0.0.1", 0), FakeFulcrumHandler)
+
+
 def credential_document(password: bytes = PASSWORD) -> dict:
     salt = b"0123456789abcdef"
     digest = hashlib.scrypt(password, salt=salt, n=1 << 14, r=8, p=1, dklen=32)
@@ -107,12 +136,16 @@ class GatewayIntegrationTests(unittest.TestCase):
         self.core = FakeCore()
         self.core_thread = threading.Thread(target=self.core.serve_forever, daemon=True)
         self.core_thread.start()
+        self.fulcrum = FakeFulcrum()
+        self.fulcrum_thread = threading.Thread(target=self.fulcrum.serve_forever, daemon=True)
+        self.fulcrum_thread.start()
         self.gateway = Gateway(
             GatewayConfig(
                 clients=CredentialStore((self.clients, self.enrolled)),
                 core_cookie=CoreCookie(self.cookie),
                 enrollment=enrollment,
                 core_port=self.core.server_port,
+                history_port=self.fulcrum.server_address[1],
             )
         )
         self.server = GatewayServer(("127.0.0.1", 0), self.gateway)
@@ -124,6 +157,8 @@ class GatewayIntegrationTests(unittest.TestCase):
         self.server.server_close()
         self.core.shutdown()
         self.core.server_close()
+        self.fulcrum.shutdown()
+        self.fulcrum.server_close()
         self.temporary.cleanup()
 
     def request(
@@ -180,6 +215,88 @@ class GatewayIntegrationTests(unittest.TestCase):
             self.assertEqual(status, 201)
         status, result, _ = self.request({"version": 1}, path="/enroll")
         self.assertEqual((status, result), (429, {"error": "rate_limited"}))
+
+    def test_returns_bounded_versioned_script_history_without_exposing_fulcrum(self) -> None:
+        used = "11" * 32
+        empty = "22" * 32
+        txid = "aa" * 32
+        mempool_txid = "bb" * 32
+        self.fulcrum.histories[used] = [
+            {"tx_hash": txid, "height": 800_000},
+            {"tx_hash": mempool_txid, "height": 0, "fee": 1_234},
+        ]
+        status, result, headers = self.request(
+            {
+                "jsonrpc": "2.0",
+                "id": "history",
+                "method": "groot_getscripthistory",
+                "params": [1, [used, empty]],
+            },
+            auth=authorization(),
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(headers["Cache-Control"], "no-store")
+        self.assertEqual(result["id"], "history")
+        self.assertEqual(result["jsonrpc"], "2.0")
+        self.assertEqual(result["result"]["version"], 1)
+        self.assertEqual(result["result"]["tip_height"], 967_973)
+        self.assertEqual(
+            result["result"]["histories"],
+            [
+                {
+                    "scripthash": used,
+                    "entries": [
+                        {"txid": txid, "height": 800_000},
+                        {"txid": mempool_txid, "height": 0},
+                    ],
+                },
+                {"scripthash": empty, "entries": []},
+            ],
+        )
+        self.assertEqual(self.fulcrum.unexpected, [])
+        self.assertEqual(self.core.requests, [])
+
+    def test_rejects_unbounded_or_ambiguous_script_history_requests(self) -> None:
+        valid = "11" * 32
+        invalid_requests = (
+            [1, []],
+            [2, [valid]],
+            [1, [valid, valid]],
+            [1, ["AA" * 32]],
+            [1, ["not-a-hash"]],
+            [1, [f"{index:064x}" for index in range(257)]],
+        )
+        for params in invalid_requests:
+            status, result, _ = self.request(
+                {"id": 1, "method": "groot_getscripthistory", "params": params},
+                auth=authorization(),
+            )
+            self.assertEqual((status, result), (400, {"error": "invalid_params"}))
+
+        status, result, _ = self.request(
+            [
+                {"id": 1, "method": "groot_getscripthistory", "params": [1, [valid]]},
+                {"id": 2, "method": "getblockcount", "params": []},
+            ],
+            auth=authorization(),
+        )
+        self.assertEqual((status, result), (400, {"error": "invalid_batch"}))
+
+    def test_rejects_malformed_fulcrum_history_without_forwarding_it(self) -> None:
+        scripthash = "33" * 32
+        self.fulcrum.histories[scripthash] = [
+            {"tx_hash": "44" * 32, "height": 800_000, "unexpected": "data"}
+        ]
+        status, result, _ = self.request(
+            {
+                "id": 1,
+                "method": "groot_getscripthistory",
+                "params": [1, [scripthash]],
+            },
+            auth=authorization(),
+        )
+        self.assertEqual((status, result), (502, {"error": "invalid_history_response"}))
+        self.assertEqual(self.core.requests, [])
 
     def test_allows_only_validated_groot_method_and_hides_core_cookie(self) -> None:
         status, result, _ = self.request(

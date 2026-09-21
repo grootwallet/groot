@@ -13,10 +13,12 @@ Groot client -- HTTPS/Basic --> NGINX :443
                                   +-- HTTP loopback --> gateway :8432
                                                           |
                                                           +-- cookie RPC loopback --> Core :8332
+                                                          +-- Electrum TCP loopback --> Fulcrum :50001
 ```
 
 - Public: NGINX ports 80/443 only. Port 80 redirects to 443.
-- Private: gateway `127.0.0.1:8432` and Core `127.0.0.1:8332` only.
+- Private: gateway `127.0.0.1:8432`, Core `127.0.0.1:8332`, and Fulcrum
+  `127.0.0.1:50001` only.
 - Bitcoin P2P 8333 is independent of RPC and may remain public.
 - Firewall rules must not restrict 443 to one wallet user's changing IP. Abuse
   control belongs at TLS, per-principal authentication, rate limits, and the
@@ -54,6 +56,12 @@ Groot client -- HTTPS/Basic --> NGINX :443
    gateway's Core whitelist. `help` is accepted by the gateway only for those
    two indexed-sync method names so clients can fail capability checks before
    a wallet scan. The remote node must run Bitcoin Core 29 or newer.
+7. For the fixed managed endpoint only, install the pinned Fulcrum release and
+   configuration in `services/fulcrum/`. Verify its signed checksum, run it as
+   the unprivileged `fulcrum` account, and give only that account a dedicated
+   least-privilege Core RPC principal plus read-only block access. Wait for its
+   indexed height to equal Core before enabling `groot_getscripthistory`. Do not
+   publish TCP 50001, admin 8000, TLS, WebSocket, peer, or stats listeners.
 
 ## Pre-cutover verification
 
@@ -76,12 +84,16 @@ Then verify on the host and from a separate network:
    `gateway_busy` response, never an upstream-looking 502.
    A second concurrent `scanblocks` request also returns that bounded busy
    response without reaching Core.
-5. Groot connects, verifies exact Mainnet genesis, loads the last committed
+5. A bounded history request succeeds only when Fulcrum is at the independently
+   observed Core tip. Malformed, duplicate, excessive, and unavailable-history
+   responses fail closed. For each returned history entry, verify that Groot
+   retrieves the claimed active-chain block from Core and finds the exact txid.
+6. Groot connects, verifies exact Mainnet genesis, loads the last committed
    state, completes a birthday-bounded rescan including mempool reconciliation,
    estimates fees, relaunches, and reconnects.
-6. A disposable signed transaction is broadcast only after all read-only checks
+7. A disposable signed transaction is broadcast only after all read-only checks
    pass. Confirm the expected txid independently.
-7. Review NGINX, gateway, systemd, and Core logs: no credentials, request bodies,
+8. Review NGINX, gateway, Fulcrum, systemd, and Core logs: no credentials, request bodies,
    transaction ids, block hashes, descriptors, or addresses may appear.
 
 After the live and independent review gates pass, replace the direct proxy to
@@ -90,8 +102,8 @@ add an automatic client fallback.
 
 ## Failure and rollback
 
-On a gateway failure, keep Core and wallet data untouched, restore the previous
-root-owned NGINX site atomically, validate with `nginx -t`, and reload NGINX.
-For a shared service, rollback means an outage until the gateway is restored;
-it never means exposing Core directly. User-owned direct Core endpoints remain
-separate ADR 0061 configurations.
+On a gateway or Fulcrum failure, keep Core and wallet data untouched and disable
+the managed history route. For a shared service, rollback means an outage until
+the reviewed service is restored; it never means exposing Core or Fulcrum
+directly or silently starting a long alternate scan. User-owned direct Core
+endpoints remain separate ADR 0061 configurations.

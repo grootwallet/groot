@@ -1218,7 +1218,7 @@ fn managed_mainnet_node_admission(
     let client = candidate_rpc_client(&managed.config, managed.password.as_str()).ok()?;
     let status = checked_node_status(&client, managed.config.clone()).ok()?;
     ensure_mainnet_core_ready_for_admission(status.initial_block_download).ok()?;
-    ensure_remote_core_sync_capabilities(&client).ok()?;
+    ensure_remote_core_sync_capabilities(&client, true).ok()?;
     Some(PendingMainnetNodeAdmission {
         config: managed.config,
         password: managed.password,
@@ -1506,6 +1506,7 @@ pub async fn wallet_full_rescan(
             cancel,
             rpc,
             remote_scan_rpc,
+            managed_history,
             delayed_policy,
         ) = {
             let _operation = operation_guard(&state)?;
@@ -1538,12 +1539,12 @@ pub async fn wallet_full_rescan(
             let run_id = Uuid::new_v4().to_string();
             let cancel = Arc::new(AtomicBool::new(false));
             let rpc = Arc::new(rpc_client(&app, &state)?);
-            let remote_core = matches!(
-                read_node_config(&app)?.backend,
-                ChainBackend::RemoteCore { .. }
-            );
+            let node_config = read_node_config(&app)?;
+            let remote_core = matches!(&node_config.backend, ChainBackend::RemoteCore { .. });
+            let managed_history =
+                remote_core && crate::managed_gateway::is_managed_config(&node_config);
             if remote_core {
-                ensure_remote_core_sync_capabilities(rpc.as_ref())?;
+                ensure_remote_core_sync_capabilities(rpc.as_ref(), managed_history)?;
             }
             let remote_scan_rpc = if remote_core {
                 Some(rpc_client_with_timeout(
@@ -1586,14 +1587,22 @@ pub async fn wallet_full_rescan(
                 cancel,
                 rpc,
                 remote_scan_rpc,
+                managed_history,
                 delayed_policy,
             )
         };
         let scan_result: ApiResult<WalletSnapshotDto> = (|| {
             let remote_core = remote_scan_rpc.is_some();
+            let remote_history = remote_scan_rpc.as_ref().map(|scan_rpc| {
+                if managed_history {
+                    RemoteHistorySource::Managed
+                } else {
+                    RemoteHistorySource::CoreScan(scan_rpc)
+                }
+            });
             let mempool_snapshot = full_rescan_loaded_wallet(
                 rpc,
-                remote_scan_rpc.as_ref(),
+                remote_history,
                 &mut wallet,
                 &mut db,
                 &settings,
@@ -2023,10 +2032,13 @@ pub(crate) fn node_test(app: &AppHandle, state: &State<'_, AppState>) -> ApiResu
     let config = read_node_config(app)?;
     let client = rpc_client_with_timeout(app, state, NODE_HEALTH_RPC_TIMEOUT)?;
     let status = checked_node_status(&client, config.clone())?;
-    if matches!(config.backend, ChainBackend::RemoteCore { .. })
+    if matches!(&config.backend, ChainBackend::RemoteCore { .. })
         && matches!(read_sync_source(app)?, WalletSyncSource::BitcoinCore)
     {
-        ensure_remote_core_sync_capabilities(&client)?;
+        ensure_remote_core_sync_capabilities(
+            &client,
+            crate::managed_gateway::is_managed_config(&config),
+        )?;
     }
     mark_selected_mainnet_node_verified(app, state)?;
     update_public_network_status(app, None, Some(status.blocks))?;

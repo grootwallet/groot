@@ -109,6 +109,7 @@ const CORE_BLOCK_HASH_BATCH_SIZE: usize = 256;
 const CORE_BLOCK_FILTER_BATCH_SIZE: usize = 8;
 const CORE_SERVER_SCAN_RANGE_SIZE: u32 = 100_000;
 const MAX_CORE_SCAN_SCRIPTS: usize = 4_096;
+const MANAGED_HISTORY_QUERY_SIZE: usize = 256;
 const MEMPOOL_RPC_BATCH_SIZE: usize = 256;
 const MIN_NEW_WALLET_PASSPHRASE_CHARACTERS: usize = 16;
 const MAX_MNEMONIC_INPUT_BYTES: usize = 4_096;
@@ -2916,6 +2917,8 @@ fn retry_transient_core_rpc<T>(
 struct CoreFilterBlockPlan {
     checkpoint: CheckPoint,
     matched_blocks: Vec<(u32, BlockHash, BlockHash)>,
+    expected_transactions: BTreeMap<u32, HashSet<Txid>>,
+    last_active_indices: BTreeMap<KeychainKind, u32>,
 }
 
 #[derive(Deserialize)]
@@ -2936,6 +2939,28 @@ struct CoreDescriptorActivityResult {
 enum CoreDescriptorActivity {
     Receive { txid: Txid },
     Spend { spend_txid: Txid },
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ManagedHistoryResponse {
+    version: u8,
+    tip_height: u32,
+    histories: Vec<ManagedScriptHistory>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ManagedScriptHistory {
+    scripthash: String,
+    entries: Vec<ManagedHistoryEntry>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ManagedHistoryEntry {
+    txid: Txid,
+    height: i64,
 }
 
 fn core_batch_call<T: serde::de::DeserializeOwned>(
@@ -2982,6 +3007,231 @@ fn wallet_filter_scripts(wallet: &Wallet) -> Vec<bdk_wallet::bitcoin::ScriptBuf>
         .collect()
 }
 
+fn electrum_scripthash(script: &bdk_wallet::bitcoin::Script) -> String {
+    let mut digest = sha256::Hash::hash(script.as_bytes()).to_byte_array();
+    digest.reverse();
+    digest.iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
+fn managed_history_for_scripts(
+    client: &Client,
+    scripts: &[(u32, bdk_wallet::bitcoin::ScriptBuf)],
+    target_height: u32,
+) -> ApiResult<Vec<(u32, Vec<ManagedHistoryEntry>)>> {
+    let hashes = scripts
+        .iter()
+        .map(|(_, script)| electrum_scripthash(script))
+        .collect::<Vec<_>>();
+    let response = client
+        .call::<ManagedHistoryResponse>(
+            "groot_getscripthistory",
+            &[serde_json::json!(1), serde_json::json!(hashes)],
+        )
+        .map_err(rpc_api_error)?;
+    if response.version != 1
+        || response.tip_height != target_height
+        || response.histories.len() != scripts.len()
+    {
+        return Err(api_error(
+            "network_unavailable",
+            "The managed history index is unavailable or behind Bitcoin Core.",
+        ));
+    }
+    let mut seen = HashSet::new();
+    response
+        .histories
+        .into_iter()
+        .zip(scripts)
+        .map(|(history, (index, script))| {
+            let expected = electrum_scripthash(script);
+            if history.scripthash != expected || !seen.insert(history.scripthash) {
+                return Err(internal(
+                    "The managed history index returned mismatched script history.",
+                ));
+            }
+            Ok((*index, history.entries))
+        })
+        .collect()
+}
+
+fn managed_history_block_plan(
+    client: &Client,
+    wallet: &Wallet,
+    wallet_tip: &CheckPoint,
+    target_height: u32,
+    cancel: Option<&AtomicBool>,
+) -> ApiResult<CoreFilterBlockPlan> {
+    let start_height = wallet_tip.height();
+    if start_height >= target_height {
+        return Ok(CoreFilterBlockPlan {
+            checkpoint: wallet_tip.clone(),
+            matched_blocks: Vec::new(),
+            expected_transactions: BTreeMap::new(),
+            last_active_indices: BTreeMap::new(),
+        });
+    }
+    let lookahead = wallet.spk_index().lookahead().max(1);
+    let mut expected_transactions = BTreeMap::<u32, HashSet<Txid>>::new();
+    let mut last_active_indices = BTreeMap::<KeychainKind, u32>::new();
+    let mut queried_scripts = 0usize;
+    for keychain in [KeychainKind::External, KeychainKind::Internal] {
+        let revealed_count = wallet
+            .spk_index()
+            .last_revealed_index(keychain)
+            .map_or(0, |index| index.saturating_add(1));
+        let mut required_count = revealed_count.saturating_add(lookahead).max(lookahead);
+        let mut next_index = 0u32;
+        while next_index < required_count {
+            ensure_foreground_sync_not_cancelled(cancel)?;
+            let remaining = required_count.saturating_sub(next_index);
+            let batch_size = usize::try_from(remaining)
+                .unwrap_or(usize::MAX)
+                .min(MANAGED_HISTORY_QUERY_SIZE);
+            if queried_scripts.saturating_add(batch_size) > MAX_CORE_SCAN_SCRIPTS {
+                return Err(api_error(
+                    "invalid_scan_settings",
+                    "The wallet script range exceeds the managed history limit.",
+                ));
+            }
+            let scripts = wallet
+                .unbounded_spk_iter(keychain)
+                .skip(usize::try_from(next_index).unwrap_or(usize::MAX))
+                .take(batch_size)
+                .collect::<Vec<_>>();
+            if scripts.len() != batch_size {
+                return Err(internal(
+                    "The wallet could not derive its history script range.",
+                ));
+            }
+            let histories = managed_history_for_scripts(client, &scripts, target_height)?;
+            queried_scripts = queried_scripts.saturating_add(histories.len());
+            for (index, entries) in histories {
+                if !entries.is_empty() {
+                    last_active_indices
+                        .entry(keychain)
+                        .and_modify(|current| *current = (*current).max(index))
+                        .or_insert(index);
+                    required_count =
+                        required_count.max(index.saturating_add(1).saturating_add(lookahead));
+                }
+                for entry in entries {
+                    if entry.height <= 0 {
+                        continue;
+                    }
+                    let height = u32::try_from(entry.height).map_err(|_| {
+                        internal("The managed history index returned an unsupported height.")
+                    })?;
+                    if height > target_height {
+                        return Err(internal(
+                            "The managed history index returned history above Bitcoin Core.",
+                        ));
+                    }
+                    if height > start_height {
+                        expected_transactions
+                            .entry(height)
+                            .or_default()
+                            .insert(entry.txid);
+                    }
+                }
+            }
+            next_index = next_index.saturating_add(u32::try_from(batch_size).unwrap_or(u32::MAX));
+        }
+    }
+
+    let heights = expected_transactions.keys().copied().collect::<Vec<_>>();
+    let mut hashes = Vec::with_capacity(heights.len());
+    for batch in heights.chunks(CORE_BLOCK_HASH_BATCH_SIZE) {
+        ensure_foreground_sync_not_cancelled(cancel)?;
+        let params = batch
+            .iter()
+            .map(|height| serde_json::json!([height]))
+            .collect::<Vec<_>>();
+        hashes.extend(
+            core_batch_call::<BlockHash>(client, "getblockhash", &params)
+                .ok_or_else(rpc_unavailable)?,
+        );
+    }
+    if hashes.len() != heights.len() {
+        return Err(internal(
+            "Bitcoin Core returned incomplete managed-history block hashes.",
+        ));
+    }
+    let mut matched_blocks = Vec::with_capacity(hashes.len());
+    for (height_batch, hash_batch) in heights
+        .chunks(CORE_BLOCK_HASH_BATCH_SIZE)
+        .zip(hashes.chunks(CORE_BLOCK_HASH_BATCH_SIZE))
+    {
+        let params = hash_batch
+            .iter()
+            .map(|hash| serde_json::json!([hash.to_string(), 1]))
+            .collect::<Vec<_>>();
+        let blocks = core_batch_call::<GetBlockResult>(client, "getblock", &params)
+            .ok_or_else(rpc_unavailable)?;
+        if blocks.len() != hash_batch.len() {
+            return Err(internal(
+                "Bitcoin Core returned incomplete managed-history block metadata.",
+            ));
+        }
+        for ((height, expected_hash), block) in height_batch.iter().zip(hash_batch).zip(blocks) {
+            let block_height = u32::try_from(block.height)
+                .map_err(|_| internal("Bitcoin Core returned an unsupported block height."))?;
+            let previous_hash = block.previousblockhash.ok_or_else(|| {
+                internal("Bitcoin Core returned relevant block metadata without a parent.")
+            })?;
+            if block.hash != *expected_hash || block_height != *height || block.confirmations < 0 {
+                return Err(internal(
+                    "Bitcoin Core rejected a managed-history block reference.",
+                ));
+            }
+            matched_blocks.push((*height, block.hash, previous_hash));
+        }
+    }
+    let target_hash = retry_transient_core_rpc(
+        || client.get_block_hash(u64::from(target_height)),
+        std::thread::sleep,
+    )?;
+    let mut checkpoint = wallet_tip.clone();
+    for (height, hash, _) in &matched_blocks {
+        checkpoint = checkpoint
+            .push(BlockId {
+                height: *height,
+                hash: *hash,
+            })
+            .map_err(|_| internal("The managed-history checkpoint could not be constructed."))?;
+    }
+    if checkpoint.height() < target_height {
+        checkpoint = checkpoint
+            .push(BlockId {
+                height: target_height,
+                hash: target_hash,
+            })
+            .map_err(|_| internal("The managed-history checkpoint could not be constructed."))?;
+    } else if checkpoint.hash() != target_hash {
+        return Err(internal(
+            "The managed history index conflicted with the Bitcoin Core tip.",
+        ));
+    }
+    let active_start = retry_transient_core_rpc(
+        || client.get_block_hash(u64::from(start_height)),
+        std::thread::sleep,
+    )?;
+    let active_target = retry_transient_core_rpc(
+        || client.get_block_hash(u64::from(target_height)),
+        std::thread::sleep,
+    )?;
+    if active_start != wallet_tip.hash() || active_target != checkpoint.hash() {
+        return Err(internal(
+            "Bitcoin Core changed chains during refresh. Refresh the wallet again.",
+        ));
+    }
+    Ok(CoreFilterBlockPlan {
+        checkpoint,
+        matched_blocks,
+        expected_transactions,
+        last_active_indices,
+    })
+}
+
 fn core_scan_objects(wallet: &Wallet) -> ApiResult<Vec<String>> {
     let mut scan_objects = wallet_filter_scripts(wallet)
         .into_iter()
@@ -3012,6 +3262,8 @@ fn core_server_scan_block_plan(
         return Ok(CoreFilterBlockPlan {
             checkpoint: wallet_tip.clone(),
             matched_blocks: Vec::new(),
+            expected_transactions: BTreeMap::new(),
+            last_active_indices: BTreeMap::new(),
         });
     }
     let filter_index_ready = client
@@ -3153,6 +3405,8 @@ fn core_server_scan_block_plan(
     Ok(CoreFilterBlockPlan {
         checkpoint,
         matched_blocks: relevant_blocks,
+        expected_transactions: BTreeMap::new(),
+        last_active_indices: BTreeMap::new(),
     })
 }
 
@@ -3242,6 +3496,8 @@ fn try_core_filter_block_plan(
         return Ok(Some(CoreFilterBlockPlan {
             checkpoint: wallet_tip.clone(),
             matched_blocks: Vec::new(),
+            expected_transactions: BTreeMap::new(),
+            last_active_indices: BTreeMap::new(),
         }));
     }
     let filter_index_ready = client
@@ -3347,6 +3603,8 @@ fn try_core_filter_block_plan(
     Ok(Some(CoreFilterBlockPlan {
         checkpoint,
         matched_blocks,
+        expected_transactions: BTreeMap::new(),
+        last_active_indices: BTreeMap::new(),
     }))
 }
 
@@ -3571,9 +3829,14 @@ fn checked_node_status(client: &Client, backend: CoreNodeConfig) -> ApiResult<No
     )
 }
 
-fn ensure_remote_core_sync_capabilities(client: &Client) -> ApiResult<()> {
+fn ensure_remote_core_sync_capabilities(client: &Client, managed_history: bool) -> ApiResult<()> {
     let jsonrpc = client.get_jsonrpc_client();
-    let raw_params = ["scanblocks", "getdescriptoractivity"]
+    let methods = if managed_history {
+        vec!["getdescriptoractivity"]
+    } else {
+        vec!["scanblocks", "getdescriptoractivity"]
+    };
+    let raw_params = methods
         .into_iter()
         .map(|method| serde_json::value::to_raw_value(&[method]).map_err(internal))
         .collect::<ApiResult<Vec<_>>>()?;
@@ -6015,12 +6278,11 @@ fn sync_wallet_with_core(
         target_height,
     );
     let uncancelled = AtomicBool::new(false);
-    let remote_core = matches!(
-        read_node_config(app)?.backend,
-        ChainBackend::RemoteCore { .. }
-    );
+    let node_config = read_node_config(app)?;
+    let remote_core = matches!(node_config.backend, ChainBackend::RemoteCore { .. });
+    let managed_history = remote_core && crate::managed_gateway::is_managed_config(&node_config);
     if remote_core {
-        ensure_remote_core_sync_capabilities(rpc.as_ref())?;
+        ensure_remote_core_sync_capabilities(rpc.as_ref(), managed_history)?;
     }
     let remote_scan_rpc = if remote_core {
         Some(rpc_client_with_timeout(
@@ -6031,7 +6293,15 @@ fn sync_wallet_with_core(
     } else {
         None
     };
-    let block_plan = if remote_core {
+    let block_plan = if managed_history {
+        Some(managed_history_block_plan(
+            rpc.as_ref(),
+            &wallet,
+            &wallet_tip,
+            target_height,
+            cancel,
+        )?)
+    } else if remote_core {
         Some(core_server_scan_block_plan(
             rpc.as_ref(),
             remote_scan_rpc
@@ -6063,6 +6333,8 @@ fn sync_wallet_with_core(
     };
     if let Some(plan) = block_plan {
         let mut matched_blocks = Vec::with_capacity(plan.matched_blocks.len());
+        let expected_transactions = plan.expected_transactions;
+        let last_active_indices = plan.last_active_indices;
         for (height, expected_hash, expected_previous_hash) in plan.matched_blocks {
             ensure_foreground_sync_not_cancelled(cancel)?;
             let block =
@@ -6073,6 +6345,18 @@ fn sync_wallet_with_core(
                 return Err(internal(
                     "Bitcoin Core returned a block outside the verified compact-filter chain.",
                 ));
+            }
+            if let Some(expected) = expected_transactions.get(&height) {
+                let observed = block
+                    .txdata
+                    .iter()
+                    .map(Transaction::compute_txid)
+                    .collect::<HashSet<_>>();
+                if !expected.is_subset(&observed) {
+                    return Err(internal(
+                        "The managed history index returned a transaction outside its Bitcoin Core block.",
+                    ));
+                }
             }
             matched_blocks.push((height, block));
         }
@@ -6089,6 +6373,7 @@ fn sync_wallet_with_core(
         wallet
             .apply_update(Update {
                 chain: Some(plan.checkpoint),
+                last_active_indices,
                 ..Default::default()
             })
             .map_err(internal)?;
@@ -6315,9 +6600,14 @@ fn recovery_scan_error(error: ApiError) -> ApiError {
     }
 }
 
+enum RemoteHistorySource<'a> {
+    CoreScan(&'a Client),
+    Managed,
+}
+
 fn full_rescan_loaded_wallet(
     rpc: Arc<Client>,
-    remote_scan_rpc: Option<&Client>,
+    remote_history: Option<RemoteHistorySource<'_>>,
     wallet: &mut PersistedWallet<Connection>,
     db: &mut Connection,
     settings: &RecoveryScanSettingsDto,
@@ -6369,27 +6659,38 @@ fn full_rescan_loaded_wallet(
         })
         .map_err(internal)?;
 
-    if let Some(scan_rpc) = remote_scan_rpc {
-        let plan = core_server_scan_block_plan(
-            rpc.as_ref(),
-            scan_rpc,
-            wallet,
-            &checkpoint,
-            target_height,
-            Some(cancel),
-            |current_height| {
-                update_recovery_scan_progress(
-                    db,
-                    run_id,
-                    current_height,
-                    current_height
-                        .saturating_sub(settings.birthday_height)
-                        .saturating_add(1),
-                )
-            },
-        )
+    if let Some(history_source) = remote_history {
+        let plan = match history_source {
+            RemoteHistorySource::Managed => managed_history_block_plan(
+                rpc.as_ref(),
+                wallet,
+                &checkpoint,
+                target_height,
+                Some(cancel),
+            ),
+            RemoteHistorySource::CoreScan(scan_rpc) => core_server_scan_block_plan(
+                rpc.as_ref(),
+                scan_rpc,
+                wallet,
+                &checkpoint,
+                target_height,
+                Some(cancel),
+                |current_height| {
+                    update_recovery_scan_progress(
+                        db,
+                        run_id,
+                        current_height,
+                        current_height
+                            .saturating_sub(settings.birthday_height)
+                            .saturating_add(1),
+                    )
+                },
+            ),
+        }
         .map_err(recovery_scan_error)?;
         let mut matched_blocks = Vec::with_capacity(plan.matched_blocks.len());
+        let expected_transactions = plan.expected_transactions;
+        let last_active_indices = plan.last_active_indices;
         for (height, expected_hash, expected_previous_hash) in plan.matched_blocks {
             ensure_foreground_sync_not_cancelled(Some(cancel)).map_err(recovery_scan_error)?;
             let block =
@@ -6402,11 +6703,24 @@ fn full_rescan_loaded_wallet(
                     "Bitcoin Core returned a block outside the verified recovery-scan range.",
                 ));
             }
+            if let Some(expected) = expected_transactions.get(&height) {
+                let observed = block
+                    .txdata
+                    .iter()
+                    .map(Transaction::compute_txid)
+                    .collect::<HashSet<_>>();
+                if !expected.is_subset(&observed) {
+                    return Err(internal(
+                        "The managed history index returned a transaction outside its Bitcoin Core block.",
+                    ));
+                }
+            }
             matched_blocks.push((height, block));
         }
         wallet
             .apply_update(Update {
                 chain: Some(plan.checkpoint),
+                last_active_indices,
                 ..Default::default()
             })
             .map_err(internal)?;

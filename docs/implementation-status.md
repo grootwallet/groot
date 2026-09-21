@@ -1183,3 +1183,31 @@ identity checks are unchanged. No wallet, descriptor, key, credential, node,
 proposal, backup, database, DTO, or stable-error format changes; no migration is
 required. Exact packaged Trezor and managed-node timing remains a physical
 acceptance gate.
+
+## 2026-09-21 Managed Mainnet Fulcrum history acceleration
+
+Physical hardware-wallet imports showed that ADR 0070's Core `scanblocks` path
+can take several minutes for a genesis or old-birthday Mainnet scan even though
+ordinary incremental scans are small. ADR 0073 replaces only the fixed
+Groot-managed endpoint's confirmed-history discovery with a pinned private
+Fulcrum index behind the existing authenticated HTTPS gateway. Custom remote
+Core retains `scanblocks`; local Core and the explicit compact-filter source are
+unchanged.
+
+The client derives Electrum script hashes locally, queries them adaptively until
+the wallet gap limit is satisfied, requires exact Fulcrum/Core tip agreement,
+then fetches each matching full block from Core and verifies every claimed txid
+is present before BDK applies it. The index can omit activity and is therefore a
+trusted managed-service availability component, but it cannot manufacture a
+confirmed transaction or balance. Stale, malformed, excessive, or unavailable
+history fails closed without silently starting a long fallback scan. The UI now
+states that the service sees queried wallet scripts; it no longer claims that
+all wallet data stays local.
+
+The existing Hetzner archival Core data is reused. Fulcrum 2.1.2 is installed
+with a verified signed checksum, dedicated service account and RPC principal,
+loopback-only listeners, bounded memory, and its own derived index on the
+existing data volume. Initial indexing and exact-candidate live timing, stale
+index, reorg, restart, recovery, fee, broadcast, route-observation, and
+no-fallback evidence remain open before GA. No wallet/profile/database format
+changes and no migration are required.

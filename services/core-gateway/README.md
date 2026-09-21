@@ -11,12 +11,15 @@ Validated JSON-RPC batches are capped at 256 items; request and response byte
 limits still apply to the complete batch.
 
 It accepts only bounded raw public output scripts for Core's read-only
-`scanblocks` and mempool-only `getdescriptoractivity` methods. It does not accept address or key descriptors, wallet
+`scanblocks` and mempool-only `getdescriptoractivity` methods. For the fixed
+managed service it also accepts a versioned `groot_getscripthistory` request
+containing at most 256 unique Electrum script hashes, which it resolves through
+the private loopback Fulcrum service. It does not accept address or key descriptors, wallet
 names, wallet RPC methods, notifications, arbitrary Core methods, redirects,
 or URL-selected upstreams.
 Request logging is disabled in both the service and supplied NGINX location.
 The node operator can still correlate a client's IP and timing with requested
-blocks or transaction identifiers, and sees transactions submitted for
+script hashes, blocks, or transaction identifiers, and sees transactions submitted for
 broadcast. Groot must continue to describe the service as trusted.
 
 ## Provision and run
@@ -84,6 +87,15 @@ location keeps its outer read timeout at 125 seconds, above that gateway bound.
 The gateway also admits only one `scanblocks` request at a time because Core's
 indexed scanner is process-wide; a concurrent request receives a bounded busy
 response before Core is contacted.
+
+The managed Mainnet deployment additionally runs the pinned private service in
+`services/fulcrum/`. Its TCP and admin listeners stay on loopback. The gateway
+pipelines one `server.version`, one tip subscription, and the bounded history
+lookups over a single connection, validates every response id and exact schema,
+caps the aggregate at 10,000 entries and 4 MiB, and returns only transaction ids
+and heights. It exposes no raw Electrum subscription, peer, fee, transaction,
+broadcast, or administration method. Groot independently checks the returned tip
+against Core and each claimed transaction against its full Core block.
 
 Run the dependency-free tests directly with:
 

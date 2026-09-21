@@ -38,6 +38,45 @@ struct RemoteCapabilityFixture {
     supported: bool,
 }
 
+struct ManagedHistoryFixture {
+    tip_height: u32,
+    entries: Vec<serde_json::Value>,
+}
+
+impl jsonrpc::client::Transport for ManagedHistoryFixture {
+    fn send_request(
+        &self,
+        request: jsonrpc::Request<'_>,
+    ) -> Result<jsonrpc::Response, jsonrpc::Error> {
+        assert_eq!(request.method, "groot_getscripthistory");
+        let params: Vec<serde_json::Value> =
+            serde_json::from_str(request.params.expect("history parameters").get())?;
+        let hashes = params[1].as_array().unwrap();
+        BlockFilterBatchFixture::response(
+            &request,
+            serde_json::json!({
+                "version": 1,
+                "tip_height": self.tip_height,
+                "histories": hashes.iter().map(|hash| serde_json::json!({
+                    "scripthash": hash,
+                    "entries": self.entries,
+                })).collect::<Vec<_>>(),
+            }),
+        )
+    }
+
+    fn send_batch(
+        &self,
+        _requests: &[jsonrpc::Request<'_>],
+    ) -> Result<Vec<jsonrpc::Response>, jsonrpc::Error> {
+        Err(jsonrpc::Error::WrongBatchResponseSize)
+    }
+
+    fn fmt_target(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("managed history fixture")
+    }
+}
+
 impl jsonrpc::client::Transport for RemoteCapabilityFixture {
     fn send_request(
         &self,
@@ -414,7 +453,7 @@ fn remote_core_capabilities_use_one_batch_and_fail_closed() {
             supported: true,
         },
     ));
-    ensure_remote_core_sync_capabilities(&rpc).unwrap();
+    ensure_remote_core_sync_capabilities(&rpc, false).unwrap();
     assert_eq!(batches.load(Ordering::Relaxed), 1);
 
     let rpc = Client::from_jsonrpc(jsonrpc::client::Client::with_transport(
@@ -423,9 +462,38 @@ fn remote_core_capabilities_use_one_batch_and_fail_closed() {
             supported: false,
         },
     ));
-    let error = ensure_remote_core_sync_capabilities(&rpc).unwrap_err();
+    let error = ensure_remote_core_sync_capabilities(&rpc, false).unwrap_err();
     assert_eq!(error.code, "invalid_node_config");
     assert_eq!(error.message, RPC_REMOTE_CAPABILITY_MESSAGE);
+}
+
+#[test]
+fn managed_history_uses_electrum_scripthashes_and_requires_core_tip_agreement() {
+    let script = bdk_wallet::bitcoin::ScriptBuf::new();
+    assert_eq!(
+        electrum_scripthash(&script),
+        "55b852781b9995a44c939b64e441ae2724b96f99c8f4fb9a141cfc9842c4b0e3"
+    );
+    let txid = Txid::all_zeros();
+    let rpc = Client::from_jsonrpc(jsonrpc::client::Client::with_transport(
+        ManagedHistoryFixture {
+            tip_height: 42,
+            entries: vec![serde_json::json!({"txid": txid, "height": 21})],
+        },
+    ));
+    let histories = managed_history_for_scripts(&rpc, &[(7, script.clone())], 42).unwrap();
+    assert_eq!(histories.len(), 1);
+    assert_eq!(histories[0].0, 7);
+    assert_eq!(histories[0].1[0].txid, txid);
+
+    let stale = Client::from_jsonrpc(jsonrpc::client::Client::with_transport(
+        ManagedHistoryFixture {
+            tip_height: 41,
+            entries: Vec::new(),
+        },
+    ));
+    let error = managed_history_for_scripts(&stale, &[(7, script)], 42).unwrap_err();
+    assert_eq!(error.code, "network_unavailable");
 }
 
 #[test]
