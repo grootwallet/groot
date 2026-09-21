@@ -112,6 +112,7 @@ export const hardwareCopy = {
   },
   scan: { fr: 'analyser', es: 'buscar' },
   unlock: { fr: 'déverrouiller', es: 'desbloquear' },
+  Locked: { fr: 'Verrouillé', es: 'Bloqueado' },
   'Unlock & continue': { fr: 'Déverrouiller et continuer', es: 'Desbloquear y continuar' },
   'Try this signer again': {
     fr: 'Réessayer avec ce signataire',
@@ -228,6 +229,18 @@ export const hardwareCopy = {
   'Could not start the PIN matrix.': {
     fr: 'Impossible de démarrer la matrice du PIN.',
     es: 'No se pudo iniciar la matriz del PIN.'
+  },
+  'Trezor unavailable': {
+    fr: 'Trezor indisponible',
+    es: 'Trezor no disponible'
+  },
+  'Close other wallet apps, reconnect Trezor, and try again.': {
+    fr: 'Fermez les autres applications de portefeuille, reconnectez Trezor et réessayez.',
+    es: 'Cierra las demás aplicaciones de cartera, vuelve a conectar Trezor e inténtalo de nuevo.'
+  },
+  'Close other wallet apps and try again.': {
+    fr: 'Fermez les autres applications de portefeuille et réessayez.',
+    es: 'Cierra las demás aplicaciones de cartera e inténtalo de nuevo.'
   },
   'Trezor did not accept that matrix entry.': {
     fr: 'Trezor n’a pas accepté cette saisie dans la matrice.',

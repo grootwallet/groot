@@ -27,6 +27,7 @@
   } = $props();
 
   function detail(device: HardwareDevice) {
+    if (device.action === 'prompt_pin') return '';
     return detailedStatus && device.fingerprint
       ? translate($locale, 'Fingerprint {fingerprint} · {message}', {
           fingerprint: device.fingerprint,
@@ -36,6 +37,7 @@
   }
 
   function status(device: HardwareDevice) {
+    if (device.action === 'prompt_pin') return 'Locked';
     if (device.status === 'ready') return 'Ready';
     if (device.status === 'detected') return 'Detected';
     if (device.action === 'unlock') return 'Unlock & continue';
@@ -51,17 +53,21 @@
     <Button variant="secondary" onclick={onrescan}>{translate($locale, 'Scan again')}</Button>
   </div>
 {:else}
-  <div class="source-list" class:hardware-device-list={detailedStatus}>
+  <div
+    class="source-list"
+    class:hardware-device-list={detailedStatus ||
+      devices.some((device) => device.action === 'prompt_pin')}
+  >
     {#each devices as device (device.id)}
+      {@const deviceDetail = detail(device)}
       <button onclick={() => onselect(device)} {disabled}>
         <Cpu size={18} />
         <span
-          ><strong>{hardwareDeviceDisplayName(device, savedSigners)}</strong><small
-            >{translate($locale, detail(device))}</small
-          ></span
+          ><strong>{hardwareDeviceDisplayName(device, savedSigners)}</strong
+          >{#if deviceDetail}<small>{translate($locale, deviceDetail)}</small>{/if}</span
         >
-        {#if detailedStatus}<em class:ready={device.status === 'ready'}
-            >{translate($locale, status(device))}</em
+        {#if detailedStatus || device.action === 'prompt_pin'}<em
+            class:ready={device.status === 'ready'}>{translate($locale, status(device))}</em
           >{/if}
       </button>
     {/each}

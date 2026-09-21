@@ -1,5 +1,14 @@
 # Bitcoin Improvement Proposal support
 
+The 2026-09-21 Trezor and initial-history follow-up has no BIP support or
+evidence impact. It replaces stale aggregate-discovery presentation with the
+shared exact-device PIN/loading state and adds an idempotent Overview request to
+the existing native full-history scan single-flight. BIP32/BIP84 identity,
+descriptors, addresses, HWI key extraction, Core `scanblocks`, gap-limit
+discovery, recovery correctness, and persisted formats are unchanged. Physical
+timing on the replacement package remains required and is not inferred from UI
+or automated tests.
+
 The 2026-09-19 transaction-detail refresh and Network Services presentation
 follow-up has no BIP support or evidence impact. An open detail modal now
 re-resolves its selected transaction from each authoritative wallet snapshot,

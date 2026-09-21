@@ -414,6 +414,27 @@ describe('hardware receive verification UI', () => {
       "'BitBox may request its password again for this new secure connection. Enter it only on BitBox.'"
     );
     expect(hardwareDeviceList).toContain("if (device.status === 'detected') return 'Detected'");
+    expect(hardwareDeviceList).toContain("if (device.action === 'prompt_pin') return 'Locked'");
+    expect(hardwareDeviceList).toContain("if (device.action === 'prompt_pin') return ''");
+  });
+
+  it('moves selected Trezor work into the shared targeted PIN flow', () => {
+    for (const route of [hardwareSetup, multisigSetup, multisigSend]) {
+      const start = route.indexOf('async function startHardwarePin(');
+      const end = route.indexOf('async function submitHardwarePin()', start);
+      const selectedFlow = route.slice(start, end);
+      expect(selectedFlow).toContain('pinBusy = true');
+      expect(selectedFlow.indexOf('pinDevice = device')).toBeLessThan(
+        selectedFlow.indexOf('walletService.promptHardwarePin(device.id)')
+      );
+      expect(selectedFlow.indexOf('pinOpen = true')).toBeLessThan(
+        selectedFlow.indexOf('walletService.promptHardwarePin(device.id)')
+      );
+      expect(selectedFlow).not.toContain('listHardwareDevices');
+    }
+    expect(hardwareSetup).toContain(
+      "hardwareProgress = $state('Scanning all USB hardware signers…')"
+    );
   });
 
   it('shows saved signer names only after matching scanned fingerprints', () => {

@@ -997,26 +997,23 @@
   }
 
   async function startHardwarePin(device: HardwareDevice, purpose: 'import' | 'health' = 'import') {
-    const retrying = pinOpen;
     hardwareBusy = true;
-    pinBusy = retrying;
+    pinBusy = true;
     error = '';
     pinError = '';
     pinErrorCode = '';
     pinPositions = '';
     pinChallenge = '';
+    pinDevice = device;
+    pinPurpose = purpose;
+    hardwareOpen = false;
+    pinOpen = true;
     try {
       pinChallenge = await walletService.promptHardwarePin(device.id);
-      pinDevice = device;
-      pinPurpose = purpose;
-      hardwareOpen = false;
-      pinOpen = true;
     } catch (cause) {
       const message = localizedError(cause, $locale, 'Could not start the PIN matrix.');
-      if (retrying) {
-        pinErrorCode = cause instanceof WalletError ? cause.code : 'internal_error';
-        pinError = message;
-      } else error = message;
+      pinErrorCode = cause instanceof WalletError ? cause.code : 'internal_error';
+      pinError = message;
     } finally {
       hardwareBusy = false;
       pinBusy = false;
@@ -2357,9 +2354,11 @@
                 $locale,
                 addedSigner
                   ? `Fingerprint ${device.fingerprint} · Already added as ${addedSigner.label}.`
-                  : device.fingerprint
-                    ? `Fingerprint ${device.fingerprint} · ${device.message}`
-                    : device.message
+                  : device.action === 'prompt_pin'
+                    ? ''
+                    : device.fingerprint
+                      ? `Fingerprint ${device.fingerprint} · ${device.message}`
+                      : device.message
               )}</small
             ><em
               class:ready={!addedSigner && device.status === 'ready'}
@@ -2368,12 +2367,12 @@
                 $locale,
                 addedSigner
                   ? 'Already added'
-                  : device.status === 'ready' || device.status === 'detected'
-                    ? 'Ready'
-                    : device.action === 'unlock'
-                      ? 'Unlock & continue'
-                      : device.status === 'needs_pin'
-                        ? 'Unlock'
+                  : device.action === 'prompt_pin'
+                    ? 'Locked'
+                    : device.status === 'ready' || device.status === 'detected'
+                      ? 'Ready'
+                      : device.action === 'unlock'
+                        ? 'Unlock & continue'
                         : device.action === 'confirm_empty_passphrase'
                           ? 'Choose wallet'
                           : device.action === 'retry'

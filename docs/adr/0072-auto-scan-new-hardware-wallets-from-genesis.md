@@ -25,6 +25,11 @@ Overview opens in automatic full-history mode, attaches to native progress, and 
 not flash the manual history-choice warning before the scan starts. **Scan settings**
 remains available after creation, so a user who knows an authoritative birthday can
 cancel and deliberately choose it. Groot never invents a recent lookback window.
+Overview also makes one idempotent request into the same native scan single-flight.
+This is a safety net for a missed shell wake, not a second scan; native admission
+coalesces an already running operation. The automatic-start placeholder ends after
+the bounded admission window, while an admitted scan shows its persisted percentage
+and processed/total block counts.
 
 Generated software wallets retain their creation-tip birthday. Native recovery and
 other imported profiles retain their explicit birthday choice. Existing hardware
@@ -37,3 +42,8 @@ The safe automatic path may take longer than a user-selected birthday scan, but 
 cannot silently omit prior wallet history. The change adds one row already supported
 by the existing schema and changes no wallet, descriptor, key, credential, node,
 proposal, or backup format. No migration or discard is required.
+
+Groot does not promise Electrum-style full-history latency when the selected source
+is Bitcoin Core: remote Core scans use the reviewed indexed `scanblocks` path and
+persist resumable progress. A separate pre-indexed address/history service would be
+a different privacy and trust architecture and requires its own decision and review.

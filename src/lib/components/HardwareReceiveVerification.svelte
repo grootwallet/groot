@@ -204,31 +204,26 @@
   }
 
   async function startPin(device: HardwareDevice) {
-    const retrying = pinOpen;
     verifyBusy = true;
-    pinBusy = retrying;
+    pinBusy = true;
     verifyError = '';
     pinError = '';
     pinErrorCode = '';
     pinPositions = '';
     pinChallenge = '';
+    pinDevice = device;
+    verifyOpen = false;
+    pinOpen = true;
     try {
       pinChallenge = await walletService.promptHardwarePin(device.id);
-      pinDevice = device;
-      verifyOpen = false;
-      pinOpen = true;
     } catch (cause) {
       const failure = localizedReceiveVerificationFailure(
         cause,
         $locale,
         'Could not start the PIN matrix.'
       );
-      if (retrying) {
-        pinErrorCode = failure.code;
-        pinError = failure.message;
-      } else {
-        verifyError = failure.message;
-      }
+      pinErrorCode = failure.code;
+      pinError = failure.message;
     } finally {
       verifyBusy = false;
       pinBusy = false;
@@ -420,7 +415,9 @@
           <Cpu size={18} />
           <span>
             <strong>{hardwareDeviceDisplayName(device, savedSigners)}</strong>
-            <small>{translate($locale, device.fingerprint ?? device.message)}</small>
+            {#if device.action !== 'prompt_pin'}<small
+                >{translate($locale, device.fingerprint ?? device.message)}</small
+              >{/if}
             <em
               class:ready={device.status === 'ready' || device.status === 'detected'}
               class:attention={device.action === 'prompt_pin' ||
@@ -428,7 +425,7 @@
               >{translate(
                 $locale,
                 device.action === 'prompt_pin'
-                  ? 'Unlock'
+                  ? 'Locked'
                   : device.action === 'unlock'
                     ? 'Unlock & continue'
                     : device.action === 'confirm_empty_passphrase'

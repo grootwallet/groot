@@ -240,7 +240,7 @@ test('keeps multisig receive verification disclosure visibly expandable', async 
   await expect(details).not.toHaveAttribute('open', '');
   const lockedTrezor = dialog.getByRole('button', { name: /Virtual Trezor One/ });
   await expect(lockedTrezor).toBeEnabled();
-  await expect(lockedTrezor).toContainText('Unlock');
+  await expect(lockedTrezor).toContainText('Locked');
   await lockedTrezor.click();
   const pinDialog = page.getByRole('dialog', { name: 'Unlock Trezor' });
   await expect(pinDialog.getByText('Match locations, not numbers')).toBeVisible();
@@ -1212,10 +1212,13 @@ test('unlocks a detected Trezor with the bounded PIN-position flow', async ({ pa
   await page.getByRole('button', { name: 'Connect hardware device' }).click();
   const scan = page.getByRole('dialog', { name: 'Connect hardware device' });
   await expect(scan.getByText('Virtual Trezor One')).toBeVisible();
-  await expect(scan.getByText('Unlock', { exact: true })).toBeVisible();
+  await expect(scan.getByText('Locked', { exact: true })).toBeVisible();
+  await expect(scan.getByText(/Start the PIN matrix/)).toHaveCount(0);
   await scan.getByRole('button', { name: /Virtual Trezor One/ }).click();
 
   const pin = page.getByRole('dialog', { name: 'Unlock Trezor' });
+  await expect(scan).toBeHidden();
+  await expect(page.getByText('Scanning all USB hardware signers…')).toHaveCount(0);
   await expect(
     pin.getByText('For each PIN digit on Trezor, tap the blank cell in the same location.')
   ).toBeVisible();
@@ -1247,12 +1250,8 @@ test('unlocks a detected Trezor with the bounded PIN-position flow', async ({ pa
     'Waiting for Trezor'
   );
   await expect(page.getByText('Hardware signer unlocked')).toBeVisible();
-  const rescanned = page.getByRole('dialog', { name: 'Connect hardware device' });
-  await expect(rescanned).toBeVisible();
-  const unlocked = rescanned.getByRole('button', { name: /Virtual Trezor One/ });
-  await expect(unlocked.getByText('Choose wallet')).toBeVisible();
-  await unlocked.click();
   const standard = page.getByRole('dialog', { name: 'Use Trezor standard wallet?' });
+  await expect(standard).toBeVisible();
   await standard.getByRole('button', { name: 'Use standard wallet' }).click();
   await expect(page.getByRole('button', { name: 'View Virtual Trezor One details' })).toBeVisible();
   await expect(page.getByText('c0ffee03', { exact: true })).toBeVisible();

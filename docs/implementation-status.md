@@ -1166,3 +1166,20 @@ avoidable pinned-HWI startup work without weakening identity checks, changing
 wallet data, or migrating existing profiles. Physical timing on the replacement
 package remains required; the aggregate HWI enumerator is still the first-scan
 latency floor.
+
+The next Trezor and initial-history follow-up corrects two presentation and
+orchestration defects without changing either trusted operation. A locked Trezor
+row is now compact and labeled **Locked**; selecting it immediately opens the
+shared targeted PIN/loading dialog, so stale aggregate-discovery copy is never
+shown while Groot calls the exact opaque Trezor capability. Exclusive ownership
+by Sparrow or another wallet remains a concise fail-closed error: Groot does not
+terminate or preempt another process. After external-hardware creation, Overview
+makes one idempotent request into the existing native scan single-flight and ends
+its bounded startup placeholder if admission does not begin. This prevents a
+missed shell wake from leaving an indefinite skeleton and exposes the existing
+persisted percentage and processed/total block progress once the scan runs.
+Genesis, gap-limit, indexed remote-Core `scanblocks`, cancellation, resume, and
+identity checks are unchanged. No wallet, descriptor, key, credential, node,
+proposal, backup, database, DTO, or stable-error format changes; no migration is
+required. Exact packaged Trezor and managed-node timing remains a physical
+acceptance gate.

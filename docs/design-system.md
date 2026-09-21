@@ -114,6 +114,7 @@ durable retry surface and must never display a hardware wallet as a software sig
 - Buttons: default, secondary, ghost, danger, and danger-outline. Disabled means unavailable for a visible reason—not a placeholder interaction.
 - Fields: visible label, optional short help, inline error. Credential fields clear after each use.
 - Hardware device discovery uses `HardwareDeviceList`; flows supply their selection action, empty-state guidance, and whether readiness or rescan presentation is needed.
+- A detected Trezor that requires Groot's PIN matrix shows only its model and the **Locked** state. Selecting it immediately replaces aggregate-discovery presentation with the shared targeted Trezor PIN/loading dialog; selected-device work must never continue to say that all USB signers are being scanned. Another wallet application's exclusive USB session is reported concisely and Groot never attempts to terminate or preempt that application.
 - Modals: one decision or compact data-entry task; Escape/backdrop close; destructive confirmation names the consequence.
 - Long modal bodies scroll independently while their headers remain visible. Nested or rapidly replaced dialogs must restore document scrolling after the last dialog closes.
 - Desktop dialogs re-anchor to the visible viewport after window or fullscreen resizing; the backdrop must continue covering the complete viewport and actions must remain reachable through the internal scroll body.

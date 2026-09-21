@@ -1063,26 +1063,23 @@
     await sign(device);
   }
   async function startHardwarePin(device: HardwareDevice) {
-    const retrying = pinOpen;
     busy = true;
-    pinBusy = retrying;
+    pinBusy = true;
     deviceError = '';
     pinError = '';
     pinErrorCode = '';
     pinPositions = '';
     pinChallenge = '';
+    pinDevice = device;
+    deviceOpen = false;
+    pinOpen = true;
     try {
       pinChallenge = await walletService.promptHardwarePin(device.id);
-      pinDevice = device;
-      deviceOpen = false;
-      pinOpen = true;
     } catch (cause) {
       if (await redirectExpiredHardwareSession(cause)) return;
       const message = localizedError(cause, $locale, 'Could not start the PIN matrix.');
-      if (retrying) {
-        pinErrorCode = cause instanceof WalletError ? cause.code : 'internal_error';
-        pinError = message;
-      } else deviceError = message;
+      pinErrorCode = cause instanceof WalletError ? cause.code : 'internal_error';
+      pinError = message;
     } finally {
       busy = false;
       pinBusy = false;
@@ -2768,9 +2765,10 @@
             policyRegistrationProfile(device).registration === 'unsupported'}
           onclick={() => handleHardware(device)}
           ><Cpu size={18} /><span
-            ><strong>{hardwareDeviceDisplayName(device, wallet?.cosigners ?? [])}</strong><small
-              >{translate($locale, device.fingerprint ?? device.message)}</small
-            ><em
+            ><strong>{hardwareDeviceDisplayName(device, wallet?.cosigners ?? [])}</strong
+            >{#if device.action !== 'prompt_pin'}<small
+                >{translate($locale, device.fingerprint ?? device.message)}</small
+              >{/if}<em
               class:ready={!alreadySigned &&
                 (device.status === 'ready' || device.status === 'detected') &&
                 (!policyRequired || !!policyVerified)}
@@ -2790,7 +2788,7 @@
                     : device.action === 'unlock'
                       ? 'Unlock & continue'
                       : device.action === 'prompt_pin'
-                        ? 'Unlock'
+                        ? 'Locked'
                         : device.action === 'retry'
                           ? 'Scan again'
                           : 'Attention'

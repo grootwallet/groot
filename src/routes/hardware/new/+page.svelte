@@ -206,26 +206,23 @@
     }
   }
   async function startHardwarePin(device: HardwareDevice) {
-    const retrying = pinOpen;
     busy = true;
-    pinBusy = retrying;
+    pinBusy = true;
     errorTitle = 'Could not start hardware unlock';
     error = '';
     pinError = '';
     pinErrorCode = '';
     pinPositions = '';
     pinChallenge = '';
+    pinDevice = device;
+    scanOpen = false;
+    pinOpen = true;
     try {
       pinChallenge = await walletService.promptHardwarePin(device.id);
-      pinDevice = device;
-      scanOpen = false;
-      pinOpen = true;
     } catch (cause) {
       const message = localizedError(cause, $locale, 'Could not start the PIN matrix.');
-      if (retrying) {
-        pinErrorCode = cause instanceof WalletError ? cause.code : 'internal_error';
-        pinError = message;
-      } else error = message;
+      pinErrorCode = cause instanceof WalletError ? cause.code : 'internal_error';
+      pinError = message;
     } finally {
       busy = false;
       pinBusy = false;

@@ -1014,7 +1014,7 @@ test('unlocks a Trezor before choosing its standard single-key wallet', async ({
       gap: previousBounds ? bounds.top - previousBounds.bottom : 0
     };
   });
-  expect(setupGuideStyle.fontSize).toBe(12);
+  expect(setupGuideStyle.fontSize).toBe(13);
   expect(setupGuideStyle.height).toBeGreaterThanOrEqual(38);
   expect(setupGuideStyle.gap).toBeGreaterThanOrEqual(12);
   await setupGuides.click();
@@ -1041,11 +1041,8 @@ test('unlocks a Trezor before choosing its standard single-key wallet', async ({
   await pin.getByRole('button', { name: 'Top right position' }).click();
   await pin.getByRole('button', { name: 'Unlock Trezor' }).click();
 
-  const rescanned = page.getByRole('dialog', { name: 'Connect hardware signer' });
-  const unlocked = rescanned.getByRole('button', { name: /Virtual Trezor One/ });
-  await expect(unlocked.getByText('Choose wallet')).toBeVisible();
-  await unlocked.click();
   const standard = page.getByRole('dialog', { name: 'Use Trezor standard wallet?' });
+  await expect(standard).toBeVisible();
   await expect(standard.getByText('Your hidden wallet is unchanged.')).toBeVisible();
   await expect(standard).toContainText('They have different fingerprints and addresses.');
   await standard.getByRole('button', { name: 'Use standard wallet' }).click();

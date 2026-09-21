@@ -46,14 +46,14 @@ export function trezorPinError(
   }
   if (code === 'hardware_unavailable' || code === 'hardware_io_error') {
     return {
-      title: 'Trezor session ended',
-      detail: fallback || 'Reconnect Trezor, quit other wallet apps, then ask for a new layout.'
+      title: 'Trezor unavailable',
+      detail: 'Close other wallet apps, reconnect Trezor, and try again.'
     };
   }
   if (code === 'hardware_busy') {
     return {
       title: 'Trezor is busy',
-      detail: fallback || 'Quit other wallet apps, then ask for a new layout.'
+      detail: 'Close other wallet apps and try again.'
     };
   }
   if (code === 'hardware_cancelled') {

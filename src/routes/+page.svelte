@@ -145,6 +145,7 @@
   let initialScanStarting = $state(false);
   let nodeReady = $state(false);
   let automaticInitialScanPending = $state(page.url.searchParams.has('initial'));
+  let automaticInitialScanRequested = false;
   const recoveryScanIsActive = (status: RecoveryScanStatus) =>
     ['running', 'cancelling'].includes(status.status);
   let recoveryPercent = $derived(
@@ -165,6 +166,7 @@
   );
   let walletAwaitingAutomaticScan = $derived(
     page.url.searchParams.has('initial') &&
+      automaticInitialScanPending &&
       initialHistoryRequired &&
       !recoveryScanIsActive(recoveryStatus) &&
       !savedRecoveryCanResume
@@ -634,12 +636,13 @@
         automaticInitialScanPending = false;
         startRecoveryStatusPolling();
       } else if (!snapshot?.syncedAt && nodeReady) {
-        // The shell owns automatic first-sync startup. Watch briefly for its
-        // native recovery scan so this route attaches even when admission and
-        // scan startup finish just after the initial status read.
+        // The shell wakes the first scan after setup. Start the same native
+        // single-flight here as a route-level safety net, then attach to its
+        // persisted progress even if the shell wake was missed.
         initialScanMode = page.url.searchParams.get('initial') === 'new' ? 'new' : 'full';
         showManualScanOptions = false;
         showAdvancedScanOptions = false;
+        requestAutomaticInitialScan();
         startRecoveryStatusPolling(true);
       }
     } catch (cause) {
@@ -652,6 +655,34 @@
       initialScanErrorCode = cause instanceof WalletError ? cause.code : 'internal_error';
       initialScanErrorDetails = cause instanceof WalletError ? cause.details : null;
     }
+  }
+  function requestAutomaticInitialScan() {
+    if (
+      automaticInitialScanRequested ||
+      !['new', 'full'].includes(page.url.searchParams.get('initial') ?? '')
+    )
+      return;
+    automaticInitialScanRequested = true;
+    void walletService
+      .fullRescan('')
+      .then(async () => {
+        await loadSnapshot();
+      })
+      .catch((cause) => {
+        if (
+          cause instanceof WalletError &&
+          ['sync_in_progress', 'scan_in_progress'].includes(cause.code)
+        )
+          return;
+        automaticInitialScanPending = false;
+        initialScanError = localizedError(
+          cause,
+          $locale,
+          'The wallet-history scan could not start.'
+        );
+        initialScanErrorCode = cause instanceof WalletError ? cause.code : 'internal_error';
+        initialScanErrorDetails = cause instanceof WalletError ? cause.details : null;
+      });
   }
   async function refreshRecoveryStatus() {
     try {

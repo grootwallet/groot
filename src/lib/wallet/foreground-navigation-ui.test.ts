@@ -209,6 +209,9 @@ describe('foreground wallet navigation', () => {
     expect(overview).toContain("'Address discovery options'");
     expect(overview).toContain('!snapshot?.syncedAt && nodeReady');
     expect(overview).toContain("page.url.searchParams.has('initial')");
+    expect(overview).toContain('automaticInitialScanPending &&');
+    expect(overview).toContain('requestAutomaticInitialScan();');
+    expect(overview).toContain(".fullRescan('')");
     expect(overview).toContain('startRecoveryStatusPolling(true)');
     expect(overview).toContain('const startupDeadline = Date.now() + 10_000');
     expect(overview).toContain(

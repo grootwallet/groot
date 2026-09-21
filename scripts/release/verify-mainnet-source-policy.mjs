@@ -162,7 +162,7 @@ const pinnedPolicySources = new Map([
     'src/routes/unlock/+page.svelte',
     'b4758e27251a4d493bca8c12a35962b8ea910398293c4f35c8da103baf13e519'
   ],
-  ['src/routes/+page.svelte', '2d747ac6ea83fd33d35f4010219c054f14c55c41baaa1f49cf1a0cb425229a0c'],
+  ['src/routes/+page.svelte', 'd9da44c98e72ce44afaa8a77cdb1febfd6afb8dd4876b3baab11bbd9dca47198'],
   [
     'src/routes/activity/+page.svelte',
     '38104eee15def811c78e25623978361cde42c80bf4bec20035c0d41b8df0483c'
@@ -205,11 +205,11 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src/routes/hardware/new/+page.svelte',
-    '9149a90e114c666162cf1f68ef0864680264512d02d477aa22b57f85f4e677e6'
+    'dd9a5f8c07ea36be6f53107ae9fc1de82e19758300b4539d3e9e58cacc58899a'
   ],
   [
     'src/routes/multisig/new/+page.svelte',
-    '5a286ce8dc299eca5cc6d29f766627ea471c1340880d9caf7d3aeb09e34d8ff1'
+    'd22ac2bfc5ae10fcfde85a06c3d9e9d531d8b271fb3566ef72698b9838387d3f'
   ],
   [
     'src/lib/multisig/policy.ts',

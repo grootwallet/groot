@@ -130,7 +130,7 @@
         body={errorPresentation.detail}
       />
       <Button class="full" variant="secondary" onclick={onretry}
-        >{translate($locale, 'Ask Trezor for a fresh layout')}</Button
+        >{translate($locale, 'Try again')}</Button
       >
     {:else if busy}
       <HardwareActionPrompt
