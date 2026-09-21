@@ -75,11 +75,12 @@ exists. External-signer and recovery admission are unchanged. No persisted
 format changes or physical certification evidence transfer; exact packaged
 restart/resume and funding tests are still required (ADR 0065).
 
-The 2026-09-12 hardware follow-up corrects two Mainnet-candidate blockers found
-on older internal build `v0.4.94 · 27f821be`. HWI 3.2.0 identifies Trezor Safe 3
-revisions as `trezor_t2b1`/`trezor_t3b1`, not `trezor_safe_3`; the trusted
-allowlist now admits those exact revisions while continuing to reject other
-Trezor models. Saved-signer discovery no longer destroys the other exact,
+The hardware follow-up corrects Mainnet-candidate blockers found through physical
+testing. HWI 3.2.0 identifies Trezor Safe 3 revisions as
+`trezor_t2b1`/`trezor_t3b1`, and a later physical probe returned the exact
+`trezor_safe 3` retail-string representation. The trusted allowlist admits only
+those exact Safe 3 representations while continuing to reject other Trezor
+models and fuzzy aliases. Saved-signer discovery no longer destroys the other exact,
 time-bounded admissions accumulated for one multisig draft, and a successful
 live policy/address proof renews only the proven signer. No renderer metadata can
 create admission. Shared dialogs now portal through the existing reusable modal,

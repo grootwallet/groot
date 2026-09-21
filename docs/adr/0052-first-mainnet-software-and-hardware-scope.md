@@ -68,16 +68,12 @@ restart, while Rust gates new Mainnet receive addresses on durable hardware
 policy/first-address evidence. External-signer creation and recovery admission
 are unchanged.
 
-HWI's Trezor model identifier is derived from the device protocol code rather
-than its retail name. For the accepted scope, Model One is `trezor_1`; Safe 3
-revision A is `trezor_t2b1` and revision B is `trezor_t3b1`. The earlier
-`trezor_safe_3` spelling was not emitted by HWI 3.2.0 and is not an admitted
-alias. This corrects the implementation identifier without expanding the model
-scope or transferring evidence between revisions.
-
-HWI's Trezor model identifier is derived from the device protocol code rather
-than its retail name. For the accepted scope, Model One is `trezor_1`; Safe 3
-revision A is `trezor_t2b1` and revision B is `trezor_t3b1`. The earlier
-`trezor_safe_3` spelling was not emitted by HWI 3.2.0 and is not an admitted
-alias. This corrects the implementation identifier without expanding the model
-scope or transferring evidence between revisions.
+HWI's Trezor model identifier is normally derived from the device protocol code.
+For the accepted scope, Model One is `trezor_1`; Safe 3 revision A is
+`trezor_t2b1` and revision B is `trezor_t3b1`. A later physical Mainnet probe
+with the same pinned HWI 3.2.0 returned the exact model string `trezor_safe 3`
+for an initialized Safe 3. The trusted boundary therefore admits that exact
+retail-string representation as an alias for the already-approved Safe 3, while
+continuing to reject underscore, hyphen, Safe 5, Model T, and other fuzzy family
+matches. This does not expand the exact-model scope or transfer certification
+evidence between firmware, revisions, or candidates.

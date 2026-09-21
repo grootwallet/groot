@@ -3202,6 +3202,22 @@ fn hwi_response_codes_become_safe_actionable_errors() {
 
 #[test]
 fn not_ready_hardware_remains_visible_with_safe_device_specific_actions() {
+    let safe_3 = hardware_device_dto(HwiDevice {
+        capability: "opaque-safe-3".to_owned(),
+        fingerprint: Some("a1b2c3d4".to_owned()),
+        device_type: "trezor".to_owned(),
+        model: "trezor_safe 3".to_owned(),
+        path: "webusb:sensitive-safe-3-path".to_owned(),
+        code: None,
+        error: None,
+        needs_pin_sent: false,
+        needs_passphrase_sent: false,
+        warnings: vec![],
+    });
+    assert_eq!(safe_3.label, "Trezor Safe 3");
+    assert_eq!(safe_3.status, "ready");
+    assert!(!safe_3.message.contains("sensitive-safe-3-path"));
+
     let unsupported_safe_3 = hardware_device_dto(HwiDevice {
         capability: "opaque-device".to_owned(),
         fingerprint: None,

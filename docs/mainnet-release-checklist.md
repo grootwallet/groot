@@ -100,8 +100,11 @@ fallback rejected; its review and exact-candidate evidence are open.
 Internal build `v0.4.94 · 27f821be` supplied limited release-owner preparation
 evidence and exposed two release blockers: HWI Safe 3 protocol identifiers were
 not admitted, and saved-signer scans erased other verified signers' pending
-Mainnet admissions before final multisig creation. Corrected source accepts only
-Safe 3's exact `trezor_t2b1`/`trezor_t3b1` identifiers and preserves/renews only
+Mainnet admissions before final multisig creation. Physical testing of internal
+`v0.4.95 · a2588f4d` then showed HWI 3.2.0 returning the exact retail-string
+identifier `trezor_safe 3`; that candidate discarded the otherwise valid record
+and failed discovery. Corrected source accepts only Safe 3's exact
+`trezor_t2b1`/`trezor_t3b1`/`trezor_safe 3` representations and preserves/renews only
 exact, memory-only, time-bounded admissions. Jade Classic still requires a
 physical retry because its old-build login failed before the PIN flow completed.
 No checkbox is closed; follow the exact-build repetition in

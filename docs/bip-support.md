@@ -1,5 +1,13 @@
 # Bitcoin Improvement Proposal support
 
+The 2026-09-21 Safe 3 discovery correction has no BIP or persisted-format
+impact. A physical Mainnet probe showed the pinned HWI 3.2.0 returning the exact
+model string `trezor_safe 3`; the trusted boundary now treats only that spelling
+as the same already-approved Safe 3 model alongside its protocol-code revision
+identifiers. BIP32/BIP84 derivation, account keys, descriptors, addresses, PSBTs,
+signing, and HWI chain selection are unchanged. The failing `a2588f4d` physical
+result does not transfer to the replacement package.
+
 The 2026-09-21 Trezor and initial-history follow-up has no BIP support or
 evidence impact. It replaces stale aggregate-discovery presentation with the
 shared exact-device PIN/loading state and adds an idempotent Overview request to

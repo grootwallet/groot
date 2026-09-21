@@ -177,10 +177,15 @@ fn approved_hwi_model(network: Network, device_type: &str, model: &str) -> bool 
     }
     match device_type.as_str() {
         "ledger" => model == "ledger_nano_s_plus",
-        // HWI forms this identifier from Trezor's protocol-level model code.
-        // Safe 3 revision A reports T2B1 and revision B reports T3B1; it never
-        // reports the retail name `safe_3` here.
-        "trezor" => matches!(model.as_str(), "trezor_1" | "trezor_t2b1" | "trezor_t3b1"),
+        // HWI normally forms this identifier from Trezor's protocol-level
+        // model code. Safe 3 revision A reports T2B1 and revision B reports
+        // T3B1, while firmware observed with the same pinned HWI 3.2.0 can
+        // expose the exact retail string `Safe 3`. Admit only those three
+        // exact representations; do not normalize arbitrary Trezor names.
+        "trezor" => matches!(
+            model.as_str(),
+            "trezor_1" | "trezor_t2b1" | "trezor_t3b1" | "trezor_safe 3"
+        ),
         "bitbox02" => matches!(model.as_str(), "bitbox02_btconly" | "bitbox02_nova_btconly"),
         // ADR 0054 deliberately approves HWI 3.2.0's family-level identities
         // for Coldcard and Jade. Physical evidence remains model-specific,
@@ -1080,6 +1085,11 @@ mod targeted_scan_tests {
         ));
         assert!(approved_hwi_model(
             Network::Bitcoin,
+            "trezor",
+            "trezor_safe 3"
+        ));
+        assert!(approved_hwi_model(
+            Network::Bitcoin,
             "bitbox02",
             "bitbox02_nova_btconly"
         ));
@@ -1088,6 +1098,8 @@ mod targeted_scan_tests {
         for (device_type, model) in [
             ("ledger", "ledger_nano_x"),
             ("trezor", "trezor_safe_3"),
+            ("trezor", "trezor_safe-3"),
+            ("trezor", "trezor_safe 5"),
             ("trezor", "trezor_t3t1"),
             ("coldcard", "coldcard_q"),
             ("jade", "jade_plus"),
