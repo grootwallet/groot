@@ -1094,6 +1094,7 @@
     pinError = '';
     pinErrorCode = '';
     let positions = pinPositions;
+    const unlockedDevice = pinDevice;
     pinPositions = '';
     try {
       await walletService.sendHardwarePin(pinChallenge, positions);
@@ -1102,10 +1103,18 @@
       pinDevice = null;
       toast({
         title: 'Hardware signer unlocked',
-        description: 'Scanning again so you can select this signer.',
+        description: 'Continuing with this signer now.',
         tone: 'success'
       });
-      await scan();
+      if (unlockedDevice) {
+        deviceOpen = true;
+        await handleHardware({
+          ...unlockedDevice,
+          status: 'detected',
+          action: 'import',
+          message: 'Unlocked and ready.'
+        });
+      } else await scan();
     } catch (cause) {
       if (await redirectExpiredHardwareSession(cause)) return;
       pinChallenge = '';

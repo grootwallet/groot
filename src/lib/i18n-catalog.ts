@@ -206,6 +206,10 @@ export const copyCatalog = {
     fr: 'Signataire matériel déverrouillé',
     es: 'Firmante físico desbloqueado'
   },
+  'Continuing with this signer now.': {
+    fr: 'Poursuite avec ce signataire.',
+    es: 'Continuando ahora con este firmante.'
+  },
   'Health check needs attention': {
     fr: 'Le contrôle d’état requiert votre attention',
     es: 'La comprobación de estado requiere atención'
@@ -294,6 +298,10 @@ export const copyCatalog = {
   'Resuming the signer health check.': {
     fr: 'Reprise du contrôle d’état du signataire.',
     es: 'Reanudando la comprobación del firmante.'
+  },
+  'Verifying the address now.': {
+    fr: 'Vérification de l’adresse.',
+    es: 'Verificando ahora la dirección.'
   },
   'Return when your written recovery words are available.': {
     fr: 'Revenez lorsque vos mots de récupération écrits sont disponibles.',

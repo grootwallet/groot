@@ -786,7 +786,7 @@
     });
   }
 
-  async function runDraftHealthCheck() {
+  async function runDraftHealthCheck(unlockedDevice?: HardwareDevice) {
     if (!selectedSigner || checkingSigner) return;
     const signer = selectedSigner;
     checkingSigner = true;
@@ -796,7 +796,7 @@
           'hardware_unavailable',
           'This signer has no interactive USB device type.'
         );
-      const device = await walletService.findSavedHardwareDevice(signer);
+      const device = unlockedDevice ?? (await walletService.findSavedHardwareDevice(signer));
       const result = await walletService.checkHardwareCosigner(signer, device.id);
       healthChecks[signer.id] = result;
       toast({
@@ -928,7 +928,11 @@
     }
   }
 
-  async function importHardware(device: HardwareDevice, allowEmptyPassphrase = false) {
+  async function importHardware(
+    device: HardwareDevice,
+    allowEmptyPassphrase = false,
+    pinResolved = false
+  ) {
     const profile = policyRegistrationProfile(device);
     if (!profile.supported && profile.registration === 'unsupported') {
       error = translate(
@@ -960,6 +964,19 @@
       standardWalletDevice = null;
       label = '';
     } catch (cause) {
+      const errorCode = cause instanceof WalletError ? cause.code : 'internal_error';
+      if (errorCode === 'hardware_wallet_selection_required' && pinResolved) {
+        error = '';
+        standardWalletDevice = {
+          ...device,
+          status: 'detected',
+          action: 'import',
+          message: 'Unlocked. Choose the standard wallet or a hidden wallet.'
+        };
+        hardwareOpen = false;
+        standardWalletOpen = true;
+        return;
+      }
       error = localizedError(cause, $locale, 'Could not read the public key.');
     } finally {
       hardwareBusy = false;
@@ -1012,6 +1029,7 @@
     pinError = '';
     pinErrorCode = '';
     let positions = pinPositions;
+    const unlockedDevice = pinDevice;
     pinPositions = '';
     try {
       await walletService.sendHardwarePin(pinChallenge, positions);
@@ -1025,14 +1043,16 @@
           description: 'Resuming the signer health check.',
           tone: 'success'
         });
-        await runDraftHealthCheck();
+        if (unlockedDevice) await runDraftHealthCheck(unlockedDevice);
+        else await runDraftHealthCheck();
       } else {
         toast({
           title: 'Hardware signer unlocked',
-          description: 'Scanning again for its public fingerprint.',
+          description: 'Reading its public account key now.',
           tone: 'success'
         });
-        await scanHardware();
+        if (unlockedDevice) await importHardware(unlockedDevice, false, true);
+        else await scanHardware();
       }
     } catch (cause) {
       pinChallenge = '';

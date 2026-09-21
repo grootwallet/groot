@@ -1154,3 +1154,15 @@ latency. Reaching Sparrow-class BitBox timing requires a separately reviewed
 native vendor transport and physical certification, not additional automatic
 HWI retries. No wallet, profile, descriptor, key, credential, node, proposal,
 backup, database, or stable DTO format changes; no migration is required.
+
+The follow-up HWI continuation audit removes the remaining aggregate rescans
+after a successful Trezor PIN challenge in receive verification, multisig
+signer import, multisig signing, and saved/draft signer health checks. Each flow
+redeems the already admitted opaque capability and immediately runs the same
+native live fingerprint, derivation, and complete account-xpub proof before the
+requested action. Explicit **Scan again**, missing transient state, and genuine
+ambiguity still fail closed or start a fresh bounded discovery. This removes
+avoidable pinned-HWI startup work without weakening identity checks, changing
+wallet data, or migrating existing profiles. Physical timing on the replacement
+package remains required; the aggregate HWI enumerator is still the first-scan
+latency floor.

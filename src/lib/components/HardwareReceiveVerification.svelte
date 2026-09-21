@@ -144,15 +144,11 @@
     );
   }
 
-  function isTrezor(device: HardwareDevice) {
-    return `${device.label} ${device.model}`.toLowerCase().includes('trezor');
-  }
-
   function isColdcard(device: HardwareDevice) {
     return `${device.label} ${device.model}`.toLowerCase().includes('coldcard');
   }
 
-  async function runScan(afterPin: boolean) {
+  async function runScan() {
     const generation = ++hardwareScanGeneration;
     verifyOpen = true;
     verificationAction = 'scan';
@@ -163,21 +159,9 @@
     try {
       await waitForHardwareCancellation();
       if (generation !== hardwareScanGeneration || !verifyOpen) return;
-      let discovered = await walletService.listHardwareDevicesForTypes(eligibleDeviceTypes);
+      const discovered = await walletService.listHardwareDevicesForTypes(eligibleDeviceTypes);
       if (generation !== hardwareScanGeneration || !verifyOpen) return;
-      let eligible = eligibleDevices(discovered);
-      if (
-        afterPin &&
-        eligible.some(
-          (device) => isTrezor(device) && receiveVerificationIntent(device) === 'prompt_pin'
-        )
-      ) {
-        await new Promise((resolve) => setTimeout(resolve, 500));
-        if (generation !== hardwareScanGeneration || !verifyOpen) return;
-        discovered = await walletService.listHardwareDevicesForTypes(eligibleDeviceTypes);
-        if (generation !== hardwareScanGeneration || !verifyOpen) return;
-        eligible = eligibleDevices(discovered);
-      }
+      const eligible = eligibleDevices(discovered);
       devices = eligible;
       if (hasAmbiguousUnidentifiedHardware(devices)) {
         devices = [];
@@ -185,15 +169,6 @@
           $locale,
           'More than one locked wallet of an eligible type is connected. Disconnect the extra device, then scan again.'
         );
-      } else if (afterPin) {
-        const trezors = devices.filter(isTrezor);
-        if (trezors.length === 1 && trezors[0].action === 'confirm_empty_passphrase') {
-          standardWalletDevice = trezors[0];
-          standardWalletOpen = true;
-          verifyOpen = false;
-        } else if (trezors.length === 1 && receiveVerificationIntent(trezors[0]) === 'verify') {
-          await verifyAddress(trezors[0]);
-        }
       }
     } catch (cause) {
       if (generation !== hardwareScanGeneration) return;
@@ -209,11 +184,7 @@
   }
 
   async function scan() {
-    await runScan(false);
-  }
-
-  async function scanAfterPin() {
-    await runScan(true);
+    await runScan();
   }
 
   async function chooseDevice(device: HardwareDevice) {
@@ -271,6 +242,7 @@
     pinError = '';
     pinErrorCode = '';
     const positions = pinPositions;
+    const unlockedDevice = pinDevice;
     pinPositions = '';
     try {
       await walletService.sendHardwarePin(pinChallenge, positions);
@@ -278,7 +250,12 @@
       pinOpen = false;
       pinDevice = null;
       verifyOpen = true;
-      await scanAfterPin();
+      toast({
+        title: translate($locale, 'Hardware signer unlocked'),
+        description: translate($locale, 'Verifying the address now.'),
+        tone: 'success'
+      });
+      await verifyAddress(unlockedDevice);
     } catch (cause) {
       pinChallenge = '';
       const failure = localizedReceiveVerificationFailure(

@@ -524,13 +524,14 @@ the pinned HWI discovery call count, BIP84 derivation, complete live
 fingerprint/account-key validation, first-address proof, descriptors, PSBTs,
 signing, and persisted formats are unchanged.
 
-The Trezor Model One PIN-session and continuation correction has no BIP support
-or interoperability-evidence impact. It removes a redundant aggregate discovery
-after a successful PIN challenge and classifies only HWI's explicit PIN-invalid
-failure as a rejected PIN. The same BIP84 path, live fingerprint/account-key
-binding, descriptor construction, first-address proof, PSBT, signing, sync, and
-persisted formats remain authoritative; physical replacement-build evidence is
-still required.
+The Trezor Model One PIN-session and continuation corrections have no BIP support
+or interoperability-evidence impact. They remove redundant aggregate discovery
+after a successful PIN challenge across single-key import, receive verification,
+multisig import and signing, and signer health checks, and classify only HWI's
+explicit PIN-invalid failure as a rejected PIN. The same BIP84/BIP48 paths, live
+fingerprint/account-key binding, descriptor construction, first-address proof,
+PSBT, signing, sync, and persisted formats remain authoritative; physical
+replacement-build evidence is still required.
 
 Every feature, interoperability, signer, descriptor, transaction, payment request,
 backup/recovery, sync/backend, network, or dependency change must assess BIP impact.

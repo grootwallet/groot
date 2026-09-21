@@ -163,6 +163,40 @@ describe('hardware receive verification UI', () => {
     expect(hardwareSetup).toContain("errorCode === 'hardware_wallet_selection_required'");
   });
 
+  it('continues every Trezor PIN flow on the admitted capability without rescanning', () => {
+    const receivePin = verificationFlow.slice(
+      verificationFlow.indexOf('async function submitPin()'),
+      verificationFlow.indexOf('async function verifyAddress')
+    );
+    const multisigImportPin = multisigSetup.slice(
+      multisigSetup.indexOf('async function submitHardwarePin()'),
+      multisigSetup.indexOf('async function openDraftPolicyVerification')
+    );
+    const multisigSendPin = multisigSend.slice(
+      multisigSend.indexOf('async function submitHardwarePin()'),
+      multisigSend.indexOf('function closeHardwareReviewOverlays')
+    );
+    const multisigHealthPin = multisigPolicy.slice(
+      multisigPolicy.indexOf('async function submitHealthPin()'),
+      multisigPolicy.indexOf('function closeHealthPin')
+    );
+    const multisigDraftHealthPin = multisigSetup.slice(
+      multisigSetup.indexOf('async function submitHardwarePin()'),
+      multisigSetup.indexOf('async function openDraftPolicyVerification')
+    );
+
+    expect(receivePin).toContain('await verifyAddress(unlockedDevice)');
+    expect(receivePin).not.toContain('listHardwareDevices');
+    expect(multisigImportPin).toContain('await importHardware(unlockedDevice, false, true)');
+    expect(multisigImportPin).not.toContain('listHardwareDevices');
+    expect(multisigSendPin).toContain('await handleHardware({');
+    expect(multisigSendPin).not.toContain('listHardwareDevices');
+    expect(multisigHealthPin).toContain('await runHealthCheck(unlockedDevice)');
+    expect(multisigHealthPin).not.toContain('findSavedHardwareDevice');
+    expect(multisigDraftHealthPin).toContain('await runDraftHealthCheck(unlockedDevice)');
+    expect(multisigDraftHealthPin).not.toContain('findSavedHardwareDevice');
+  });
+
   it('blocks every modal dismissal while a Trezor PIN challenge is active', () => {
     const pinModal = readFileSync(new URL('./TrezorPinModal.svelte', import.meta.url), 'utf8');
     expect(pinModal).toContain('if (challengeReady || busy)');
@@ -264,8 +298,8 @@ describe('hardware receive verification UI', () => {
     expect(verificationFlow).toContain('walletService.promptHardwarePin(device.id)');
     expect(verificationFlow).toContain('walletService.sendHardwarePin(pinChallenge, positions)');
     expect(verificationFlow).toContain('<TrezorPinModal');
-    expect(verificationFlow).toContain('await scanAfterPin();');
-    expect(verificationFlow).toContain("trezors[0].action === 'confirm_empty_passphrase'");
+    expect(verificationFlow).toContain('await verifyAddress(unlockedDevice)');
+    expect(verificationFlow).toContain("device.action === 'confirm_empty_passphrase'");
     expect(verificationFlow).toContain("title={translate($locale, 'Use Trezor standard wallet?')}");
     expect(verificationFlow).toContain('onclick={confirmStandardWallet}');
     expect(verificationFlow).not.toContain(

@@ -238,7 +238,7 @@
       tone: 'success'
     });
   }
-  async function runHealthCheck() {
+  async function runHealthCheck(unlockedDevice?: HardwareDevice) {
     if (!selectedSigner || checking) return;
     const signer = selectedSigner;
     checking = true;
@@ -248,7 +248,7 @@
           'hardware_unavailable',
           'This signer has no interactive USB device type.'
         );
-      const device = await walletService.findSavedHardwareDevice(signer);
+      const device = unlockedDevice ?? (await walletService.findSavedHardwareDevice(signer));
       const result = await walletService.checkHardwareCosigner(signer, device.id);
       await saveHardwareHealthCheck(signer.fingerprint, result);
       toast({
@@ -296,6 +296,7 @@
     healthPinError = '';
     healthPinErrorCode = '';
     const positions = healthPinPositions;
+    const unlockedDevice = healthPinDevice;
     healthPinPositions = '';
     try {
       await walletService.sendHardwarePin(healthPinChallenge, positions);
@@ -307,7 +308,8 @@
         description: 'Resuming the signer health check.',
         tone: 'success'
       });
-      await runHealthCheck();
+      if (unlockedDevice) await runHealthCheck(unlockedDevice);
+      else await runHealthCheck();
     } catch (cause) {
       healthPinChallenge = '';
       healthPinErrorCode = cause instanceof WalletError ? cause.code : 'internal_error';
