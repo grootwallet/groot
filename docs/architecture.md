@@ -28,6 +28,11 @@ heuristic, prohibited data classes, append-only size bound, and compatibility
 decision; ADR 0059 supersedes only its shell-presentation choice, and ADR 0060 defines
 structured failure context.
 
+Diagnostic file parsing runs on a native blocking worker. The table initially
+renders 100 records and loads more on request; search, raw JSON, and native
+exports still cover the complete bounded history. Storage and BIP behavior
+are unchanged.
+
 Brand adoption and the intentionally stable storage namespace are recorded in [`groot-rename-audit.md`](groot-rename-audit.md) and ADR 0023.
 
 ## Product boundary

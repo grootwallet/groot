@@ -95,8 +95,6 @@
   let sessionMonitor: SessionMonitorController | undefined;
   let activeHardwareReviews = 0;
   let startupState = $state<'checking' | 'ready' | 'failed'>('checking');
-  const startupStartedAt = Date.now();
-  const minimumStartupGateMs = isPrototypeWallet ? 0 : 1_800;
   let navigationPending = $state(false);
   let pendingDestination = $state('');
   let commandModifier = false;
@@ -469,7 +467,6 @@
       await refreshSetupDraft();
       if (!(await walletService.exists())) {
         if (!diagnosticsRoute) await goto('/welcome');
-        await holdStartupGate();
         startupState = 'ready';
         return;
       }
@@ -487,7 +484,6 @@
       } else if (selection.unlocked && lockedRoute) {
         await goto('/');
       }
-      await holdStartupGate();
       startupState = 'ready';
       if (!syncPausedRoute && !isPrototypeWallet && automaticSyncPauseCount === 0)
         liveSync?.start();
@@ -496,11 +492,6 @@
         startupFailure = translate($locale, 'Groot could not verify the wallet lock state.');
       startupState = 'failed';
     }
-  }
-
-  async function holdStartupGate() {
-    const remaining = minimumStartupGateMs - (Date.now() - startupStartedAt);
-    if (remaining > 0) await new Promise((resolve) => setTimeout(resolve, remaining));
   }
 
   onMount(() => {

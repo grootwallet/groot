@@ -8,7 +8,7 @@ use std::{
     io::{BufRead, BufReader, Write},
     path::{Path, PathBuf},
 };
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, Manager};
 use tauri_plugin_dialog::DialogExt as _;
 
 const LOG_FILENAME: &str = "diagnostics-v1.jsonl";
@@ -381,11 +381,13 @@ fn read_records(app: &AppHandle, state: &AppState) -> ApiResult<Vec<DiagnosticRe
 }
 
 #[tauri::command]
-pub fn diagnostics_list(
-    app: AppHandle,
-    state: State<'_, AppState>,
-) -> ApiResult<Vec<DiagnosticRecordDto>> {
-    read_records(&app, &state)
+pub async fn diagnostics_list(app: AppHandle) -> ApiResult<Vec<DiagnosticRecordDto>> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        read_records(&app, &state)
+    })
+    .await
+    .map_err(internal)?
 }
 
 fn csv_cell(value: &str) -> String {

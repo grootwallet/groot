@@ -216,6 +216,23 @@ test('browses, copies, and exports app logs inside the regular shell', async ({ 
   await expect(page.locator(mobile ? '.mobile-nav' : '.side-nav')).toBeHidden();
 });
 
+test('large app logs keep rendering bounded and search the complete history', async ({ page }) => {
+  const started = Date.now();
+  await page.goto('/diagnostics?fixture-large-diagnostics=1');
+  await expect(page.getByRole('table').locator('tbody tr').first()).toBeVisible();
+  console.info(`App logs first rows (${test.info().project.name}): ${Date.now() - started} ms`);
+  const rows = page.getByRole('table').locator('tbody tr');
+  await expect(rows).toHaveCount(100);
+  await page.getByRole('button', { name: 'Load more', exact: true }).click();
+  await expect(rows).toHaveCount(200);
+  await page.getByLabel('Search logs').fill('"itemCount":1999');
+  await expect(rows).toHaveCount(1);
+  await expect(rows).toContainText('1999 items');
+  await page.getByLabel('Search logs').fill('');
+  await expect(rows).toHaveCount(100);
+  await page.screenshot({ path: test.info().outputPath('app-logs.png') });
+});
+
 test('shows app-log skeletons immediately while native records load', async ({ page }) => {
   await page.goto('/settings');
   const logSetting = page.getByRole('link', { name: /View app logs/ });

@@ -93,7 +93,7 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
       await new Promise((resolve) => setTimeout(resolve, 500));
     }
     const timestamp = Math.floor(Date.now() / 1000);
-    return [
+    const records = [
       {
         schemaVersion: 1 as const,
         timestamp: timestamp - 120,
@@ -153,6 +153,17 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
         platform: 'browser' as const
       }
     ];
+    if (
+      typeof location !== 'undefined' &&
+      new URLSearchParams(location.search).has('fixture-large-diagnostics')
+    ) {
+      return Array.from({ length: 2000 }, (_, index) => ({
+        ...records[index % records.length],
+        timestamp: timestamp - index,
+        itemCount: index
+      }));
+    }
+    return records;
   }
   async exportDiagnostics(_format: 'json' | 'csv') {
     return {

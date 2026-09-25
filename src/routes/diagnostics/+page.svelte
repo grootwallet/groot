@@ -34,6 +34,7 @@
   let selectedOutcomes = $state<DiagnosticRecord['outcome'][]>([]);
   let sortOrder = $state<DiagnosticSortOrder>('newest');
   let view = $state<'table' | 'raw'>('table');
+  let visibleCount = $state(100);
 
   const eventLabels = {
     app_started: 'App started',
@@ -78,7 +79,14 @@
       eventLabel
     )
   );
-  const rawJson = $derived(JSON.stringify(visibleRecords, null, 2));
+  const tableRecords = $derived(visibleRecords.slice(0, visibleCount));
+  const rawJson = $derived(view === 'raw' ? JSON.stringify(visibleRecords, null, 2) : '');
+
+  $effect(() => {
+    // A changed result starts from the first batch; searching still covers every record.
+    void visibleRecords;
+    visibleCount = 100;
+  });
 
   function toggleEventKind(event: DiagnosticRecord['event']) {
     selectedEventKinds = selectedEventKinds.includes(event)
@@ -352,7 +360,7 @@
       </div>
       <p class="log-results" aria-live="polite">
         {translate($locale, 'Showing {visible} of {total} events', {
-          visible: visibleRecords.length,
+          visible: view === 'raw' ? visibleRecords.length : tableRecords.length,
           total: records.length
         })}
       </p>
@@ -403,7 +411,7 @@
             </tr>
           </thead>
           <tbody>
-            {#each visibleRecords as record}
+            {#each tableRecords as record}
               <tr>
                 <td><LocalTimestamp value={String(record.timestamp)} /></td>
                 <td><strong>{eventLabel(record.event)}</strong></td>
@@ -503,6 +511,11 @@
           </tbody>
         </table>
       </div>
+      {#if tableRecords.length < visibleRecords.length}
+        <Button variant="secondary" onclick={() => (visibleCount += 100)}
+          >{translate($locale, 'Load more')}</Button
+        >
+      {/if}
     {/if}
   {/if}
 </div>

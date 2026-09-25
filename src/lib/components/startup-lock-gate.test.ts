@@ -92,9 +92,8 @@ describe('startup wallet lock gate', () => {
     expect(appCss).toContain('.onboarding-settings:focus-visible');
   });
 
-  it('holds the native launch mark briefly without slowing the browser prototype', () => {
-    expect(shell).toContain('const minimumStartupGateMs = isPrototypeWallet ? 0 : 1_800');
-    expect(shell).toContain('await holdStartupGate()');
+  it('shows the launch mark during trusted startup without an artificial delay', () => {
+    expect(shell).not.toContain('holdStartupGate');
     expect(shell).toContain('<BrandLockup animated />');
     expect(brandLockup).toContain('animation: brand-lockup-reveal 900ms');
     expect(brandLockup).toContain('clip-path: inset(0 100% 0 0)');
