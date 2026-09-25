@@ -76,7 +76,7 @@ describe('startup wallet lock gate', () => {
     expect(settings).toContain(
       '{#if walletUnlocked}<section class="settings-group wallet-details">'
     );
-    expect(settings).toContain('Wallet locked · App settings only.');
+    expect(settings).toContain(": translate($locale, 'Settings')");
     expect(settings).toContain('Wallet-specific network details are locked');
     expect(appCss).toContain('.locked-settings-link:focus-visible');
   });

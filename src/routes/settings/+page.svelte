@@ -1189,22 +1189,13 @@
 <div class="page narrow-page settings-page">
   <header class="page-header">
     <div>
-      <p class="eyebrow">
-        {translate($locale, walletUnlocked ? 'WALLET SETTINGS' : 'APP SETTINGS')}
-      </p>
       <h1>
         {walletUnlocked
-          ? (selectedProfile?.name ?? translate($locale, 'Settings'))
+          ? translate($locale, '{walletName} settings', {
+              walletName: selectedProfile?.name ?? translate($locale, 'Wallet')
+            })
           : translate($locale, 'Settings')}
       </h1>
-      <p class="subtitle">
-        {translate(
-          $locale,
-          walletUnlocked
-            ? 'Security and connection for this wallet.'
-            : 'Wallet locked · App settings only.'
-        )}
-      </p>
     </div>
   </header>
   {#if walletUnlocked}<section class="settings-group wallet-details">

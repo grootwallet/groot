@@ -163,11 +163,7 @@
 <div class="page diagnostics-page">
   <header class="page-header diagnostics-header">
     <div>
-      <p class="eyebrow">{translate($locale, 'APP LOGS')}</p>
       <h1>{translate($locale, 'App logs')}</h1>
-      <p class="subtitle">
-        {translate($locale, 'Sanitized activity for troubleshooting.')}
-      </p>
     </div>
     <Button variant="secondary" onclick={() => history.back()}>
       <ArrowLeft size={16} />{translate($locale, 'Back')}

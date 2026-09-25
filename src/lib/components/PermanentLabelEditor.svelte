@@ -18,6 +18,7 @@
     title,
     placeholder,
     hint = '',
+    showCounter = true,
     discreet = false,
     suggestions,
     labels = $bindable<string[]>(),
@@ -28,6 +29,7 @@
     title: string;
     placeholder: string;
     hint?: string;
+    showCounter?: boolean;
     discreet?: boolean;
     suggestions: LabelSuggestion[];
     labels: string[];
@@ -90,7 +92,7 @@
       maxlength="48"
     />
   </div>
-  <FieldCounter {value} max={48} {hint} />
+  {#if showCounter}<FieldCounter {value} max={48} {hint} />{/if}
 </div>
 {#if !discreet}<div class="label-suggestions">
     {#each suggestions as suggestion}<Tooltip

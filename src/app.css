@@ -56,6 +56,11 @@
   --on-blue: #ffffff;
   --focus: #a9c7ff;
   --fr-blue-soft: color-mix(in srgb, var(--link) 10%, transparent);
+  --tooltip-bg: #f7f3e9;
+  --tooltip-fg: #102a4c;
+  --step-complete-bg: #dbe8ff;
+  --step-complete-fg: #194faa;
+  --step-complete-border: #a9c7ff;
   --modal-document-top: -32px;
 }
 
@@ -428,8 +433,8 @@ code {
   padding: 7px 9px;
   border: 0;
   border-radius: 4px;
-  color: var(--text);
-  background: var(--panel-2);
+  color: var(--tooltip-fg);
+  background: var(--tooltip-bg);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.24);
   font-size: var(--font-size-meta);
   line-height: 1.4;
@@ -2834,9 +2839,9 @@ code {
   color: var(--muted);
 }
 .send-progress li.complete > span {
-  color: var(--success);
-  border-color: color-mix(in srgb, var(--success) 40%, var(--border));
-  background: color-mix(in srgb, var(--success) 9%, var(--bg));
+  color: var(--step-complete-fg);
+  border-color: var(--step-complete-border);
+  background: var(--step-complete-bg);
 }
 .send-signers {
   margin: 0 0 14px;
@@ -4776,15 +4781,15 @@ code {
   left: 50%;
   width: 100%;
   height: 2px;
-  background: var(--success);
+  background: var(--step-complete-border);
 }
 .setup-progress li.complete:last-child::after {
   display: none;
 }
 .setup-progress li.complete .setup-progress-number {
-  color: var(--panel);
-  background: var(--success);
-  border-color: var(--success);
+  color: var(--step-complete-fg);
+  background: var(--step-complete-bg);
+  border-color: var(--step-complete-border);
 }
 .setup-progress li.current {
   color: var(--text);
@@ -10592,6 +10597,8 @@ code {
   --warning-text: #795200;
   --danger-fg: #fff;
   --focus: #194faa;
+  --tooltip-bg: #102a4c;
+  --tooltip-fg: #ffffff;
 }
 :root[data-theme='light'] .onboarding-card {
   box-shadow: 0 30px 100px rgba(49, 43, 32, 0.13);

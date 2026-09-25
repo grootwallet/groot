@@ -241,11 +241,7 @@
 <div class="page narrow-page backup-page">
   <header class="page-header">
     <div>
-      <p class="eyebrow">{translate($locale, 'WALLET BACKUP')}</p>
       <h1>{translate($locale, 'Export & verify')}</h1>
-      <p class="subtitle">
-        {translate($locale, 'Export a public, watch-only wallet backup.')}
-      </p>
     </div>
     <Button variant="secondary" href="/multisig">{translate($locale, 'Back to policy')}</Button>
   </header>

@@ -94,11 +94,7 @@
 <div class="page narrow-page">
   <header class="page-header">
     <div>
-      <p class="eyebrow">{translate($locale, 'DESCRIPTOR RECOVERY')}</p>
       <h1>{translate($locale, 'Recover multisig wallet')}</h1>
-      <p class="subtitle">
-        {translate($locale, 'Restore this wallet from a public backup.')}
-      </p>
     </div>
     <Button variant="secondary" href="/settings">{translate($locale, 'Cancel')}</Button>
   </header>

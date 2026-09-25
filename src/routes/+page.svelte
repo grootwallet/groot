@@ -958,7 +958,6 @@
 <div class="page dashboard-page">
   <header class="page-header">
     <div>
-      <p class="eyebrow">{translate($locale, 'WALLET')}</p>
       <h1>{translate($locale, 'Overview')}</h1>
     </div>
     <button

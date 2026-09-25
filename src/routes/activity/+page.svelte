@@ -186,7 +186,6 @@
 <div class="page activity-page">
   <header class="page-header">
     <div>
-      <p class="eyebrow">{translate($locale, 'HISTORY')}</p>
       <h1>{translate($locale, 'Activity')}</h1>
     </div>
     <div class="page-header-actions activity-header-actions">

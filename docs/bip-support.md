@@ -583,6 +583,13 @@ Coins selection refinement has no BIP support impact. It changes only renderer
 presentation and navigation; descriptor, address, transaction, PSBT, signing,
 recovery, and interoperability behavior are unchanged.
 
+The single-title page headers, inverted tooltip contrast, light-blue completed
+steps, compact fee attribution, hidden payment-label counter, and interactive
+Coins summary amounts have no BIP support impact. They change only renderer
+presentation and the existing global denomination preference; integer-satoshi
+accounting, descriptors, addresses, transactions, PSBTs, signing, recovery, and
+interoperability remain unchanged.
+
 If a change has no BIP impact, its pull request records that explicit assessment.
 Upstream status changes alone may update this document without changing Groot's
 implementation status.

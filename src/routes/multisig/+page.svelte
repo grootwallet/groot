@@ -456,11 +456,7 @@
   {#if wallet}
     <header class="page-header">
       <div>
-        <p class="eyebrow">{translate($locale, 'WALLET POLICY')}</p>
         <h1>{wallet.name}</h1>
-        <p class="subtitle">
-          {translate($locale, 'Independent keys enforce this wallet’s spending policy.')}
-        </p>
       </div>
     </header>
     {#if statusError}<WarningNotice

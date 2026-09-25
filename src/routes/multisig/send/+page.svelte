@@ -1493,12 +1493,12 @@
   }
 </script>
 
-{#snippet labelTokenPicker(id: string, title: string, placeholder: string, hint: string)}
+{#snippet labelTokenPicker(id: string, title: string, placeholder: string)}
   <PermanentLabelEditor
     {id}
     {title}
     {placeholder}
-    {hint}
+    showCounter={false}
     discreet={$discreetMode}
     suggestions={visibleSuggestions}
     bind:labels={selectedLabels}
@@ -1520,24 +1520,6 @@
               : 'Send bitcoin'
         )}
       </h1>
-      {#if renewalMode || delayedSpendMode}<p class="subtitle">
-          {translate(
-            $locale,
-            renewalMode
-              ? proposal
-                ? 'Review the renewal, then approve it with your usual keys.'
-                : 'Move this coin within your wallet to restart its protection.'
-              : proposal
-                ? translate($locale, 'Review once, then approve with the {key}.', {
-                    key: delayedSpendKeyName
-                  })
-                : translate(
-                    $locale,
-                    'Send this coin with the {key}. The fee is deducted automatically.',
-                    { key: delayedSpendKeyName }
-                  )
-          )}
-        </p>{/if}
     </div>
     <div class="page-header-actions">
       {#if hasPaymentDraft && !proposal && !renewalMode && !delayedSpendMode && !accelerationRequest}<Button
@@ -1969,8 +1951,7 @@
           {@render labelTokenPicker(
             'delayed-spend-label-input',
             translate($locale, 'Label'),
-            translate($locale, 'e.g. Emergency recovery'),
-            translate($locale, 'Required · cannot be changed')
+            translate($locale, 'e.g. Emergency recovery')
           )}
           <details class="selection-technical">
             <summary
@@ -2036,8 +2017,7 @@
           {@render labelTokenPicker(
             'renewal-label-input',
             translate($locale, 'Transaction label'),
-            translate($locale, 'e.g. Renew savings protection'),
-            translate($locale, 'Required · cannot be changed; reuse is intentional')
+            translate($locale, 'e.g. Renew savings protection')
           )}
           <details class="selection-technical">
             <summary
@@ -2087,8 +2067,7 @@
           {@render labelTokenPicker(
             'multisig-send-label-input',
             translate($locale, 'Payment label'),
-            translate($locale, 'e.g. Hardware purchase, Pay Alex, Test transaction'),
-            translate($locale, 'Required · cannot be changed')
+            translate($locale, 'e.g. Hardware purchase, Pay Alex, Test transaction')
           )}
           <div class="field">
             <span>{translate($locale, 'Bitcoin address')}</span>

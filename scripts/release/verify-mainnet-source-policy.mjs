@@ -152,7 +152,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src/routes/diagnostics/+page.svelte',
-    'c177b320cae4fb12010ef93f4470a157a9f2e29f92d2d160ec4a0591468f1d77'
+    'd0cf855d621563a784c6ac0f3c61d64d9493c45bfa13203d589eff53ca42474e'
   ],
   [
     'src/routes/welcome/+page.svelte',
@@ -162,22 +162,22 @@ const pinnedPolicySources = new Map([
     'src/routes/unlock/+page.svelte',
     'b4758e27251a4d493bca8c12a35962b8ea910398293c4f35c8da103baf13e519'
   ],
-  ['src/routes/+page.svelte', '088a14fcfd325977163fb0a7d595d32e92fef412a472c367092683ef6d803158'],
+  ['src/routes/+page.svelte', '54f51228e6f50f71bbc1a8bd655200f776c544087cde1033aa0e191ff8726b9f'],
   [
     'src/routes/activity/+page.svelte',
-    '38104eee15def811c78e25623978361cde42c80bf4bec20035c0d41b8df0483c'
+    'e9139fabf8456f5c7bb692cf91a612c49dcb875a715acafcd5ec9420e5e692f6'
   ],
   [
     'src/routes/receive/+page.svelte',
-    '34d269f4c289858be014d2e484cd857d55df20b751eabe9f0e3c74cfe5c25408'
+    'eb57200cdf1df99fca60d5208e71526d64f367f7497570289cf711e90fb17ae6'
   ],
   [
     'src/routes/multisig/receive/+page.svelte',
-    '752e99f7bdef7735cf5f2bb84a212b4c42af6f5817561fede0e75693408559f7'
+    '4b8da74a69c36950b3dcf1d8e361c96eda71c81de4128faad2e4559ec535d35f'
   ],
   [
     'src/routes/settings/+page.svelte',
-    'd03e34c661c7c0560071114599534f854fd1d119618a4195f55e53ca8e200f4e'
+    'e2e68576ae1cd1ab57c68dfc653d4db9b0fb7b540dcc2ceac9468884ac7b9d64'
   ],
   [
     'services/core-gateway/gateway.py',
@@ -205,11 +205,11 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src/routes/hardware/new/+page.svelte',
-    'dd9a5f8c07ea36be6f53107ae9fc1de82e19758300b4539d3e9e58cacc58899a'
+    'e230ad49df223800983ab5ebe1d6372cb55c2f4ab16e4883a67fc2cad06c7c51'
   ],
   [
     'src/routes/multisig/new/+page.svelte',
-    'd22ac2bfc5ae10fcfde85a06c3d9e9d531d8b271fb3566ef72698b9838387d3f'
+    '9ff60e7a8c7cb99a87121b09a29d34ace2222e7709565bb92c29d6c44659d6cc'
   ],
   [
     'src/lib/multisig/policy.ts',

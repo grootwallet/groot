@@ -269,9 +269,7 @@
 <div class="page narrow-page receive-page">
   <header class="page-header">
     <div>
-      <p class="eyebrow">{translate($locale, 'RECEIVE')}</p>
       <h1>{translate($locale, 'Receive bitcoin')}</h1>
-      <p class="subtitle">{translate($locale, 'Create a labeled address for one payment.')}</p>
     </div>
     <div class="page-header-actions">
       <button class="sync-button" disabled={syncing || busy || !ready} onclick={syncNow}

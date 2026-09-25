@@ -1067,7 +1067,7 @@ does not select a fallback node or fee.
 
 The same follow-up fixes the recorded locked-route bounce. Startup and the
 session monitor both treat Settings and App logs as intentional locked utility
-routes, so the reduced **APP SETTINGS** surface remains stable instead of briefly
+routes, so the reduced **Settings** surface remains stable instead of briefly
 rendering before redirecting to Unlock. It exposes only appearance, language,
 denomination, shortcuts, Bitcoin network selection, build identity, and sanitized
 app logs. Wallet-specific node, sync, backup, recovery, export, and deletion

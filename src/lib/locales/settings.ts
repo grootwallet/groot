@@ -1,6 +1,10 @@
 import type { CatalogSection } from './types';
 
 export const settingsCopy = {
+  '{walletName} settings': {
+    fr: 'Réglages de {walletName}',
+    es: 'Ajustes de {walletName}'
+  },
   'APP SETTINGS': { fr: 'RÉGLAGES DE L’APP', es: 'AJUSTES DE LA APP' },
   'Wallet locked · App settings only.': {
     fr: 'Portefeuille verrouillé · Réglages de l’app uniquement.',

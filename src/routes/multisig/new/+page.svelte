@@ -1262,18 +1262,7 @@
 <div class="page coordinator-page">
   <header class="page-header">
     <div>
-      <p class="eyebrow">{translate($locale, 'MULTISIG WALLET')}</p>
       <h1>{translate($locale, 'Create a multisig wallet')}</h1>
-      <p class="subtitle">
-        {translate(
-          $locale,
-          stage === 'policy' && policyStep === 'choose'
-            ? 'Set the spending rules.'
-            : stage === 'policy'
-              ? 'Name and configure the policy before adding signers.'
-              : 'Add independent signers, verify the policy, and back it up.'
-        )}
-      </p>
     </div>
     <div class="page-header-actions">
       {#if hasDraft}<Button

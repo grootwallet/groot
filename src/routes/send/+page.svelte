@@ -1306,7 +1306,7 @@
             id="send-label-input"
             title={translate($locale, 'Payment label')}
             placeholder={translate($locale, 'e.g. Hardware purchase, Pay Alex, Test transaction')}
-            hint={translate($locale, 'Required · cannot be changed')}
+            showCounter={false}
             discreet={$discreetMode}
             suggestions={visibleSuggestions}
             bind:labels={selectedLabels}

@@ -355,11 +355,7 @@
 <div class="page narrow-page hardware-setup-page">
   <header class="page-header">
     <div>
-      <p class="eyebrow">{translate($locale, 'EXTERNAL SIGNER')}</p>
       <h1>{translate($locale, 'Add hardware signer')}</h1>
-      <p class="subtitle">
-        {translate($locale, 'One key. Signing stays on your hardware device.')}
-      </p>
     </div>
     <Button variant="secondary" href="/welcome?add=1"
       ><ArrowLeft size={16} />{translate($locale, 'Cancel')}</Button

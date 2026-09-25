@@ -92,11 +92,7 @@
 <div class="page coordinator-page policy-lab" class:policy-lab-loading={loading}>
   <header class="page-header">
     <div>
-      <p class="eyebrow">{translate($locale, 'V2 POLICY LAB')}</p>
       <h1>{translate($locale, 'Guided recovery policy')}</h1>
-      <p class="subtitle">
-        {translate($locale, 'Explore recovery paths without changing this wallet.')}
-      </p>
     </div>
     <Button variant="secondary" href="/multisig">{translate($locale, 'Back to policy')}</Button>
   </header>

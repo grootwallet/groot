@@ -373,7 +373,11 @@
     </div>
     <div class="stat-pill">
       <span>{utxos.length} {translate($locale, 'coins')}</span><strong
-        ><Amount value={utxos.reduce((a, u) => a + u.amount, 0)} hidden={$discreetMode} /></strong
+        ><Amount
+          value={utxos.reduce((a, u) => a + u.amount, 0)}
+          hidden={$discreetMode}
+          interactive
+        /></strong
       >
     </div>
   </header>
@@ -382,7 +386,7 @@
     <div>
       {#key selected.length}<span class="coin-selection-count" in:fly={{ y: -4, duration: 140 }}
           ><strong>{selected.length} {translate($locale, 'selected')}</strong><span
-            ><Amount value={selectedTotal} hidden={$discreetMode} />
+            ><Amount value={selectedTotal} hidden={$discreetMode} interactive />
             {translate($locale, 'selected')}</span
           ></span
         >{/key}

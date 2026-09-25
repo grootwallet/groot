@@ -103,11 +103,7 @@
 <div class="page narrow-page backup-page">
   <header class="page-header">
     <div>
-      <p class="eyebrow">{translate($locale, 'WALLET DELETION')}</p>
       <h1>{translate($locale, 'Delete multisig wallet')}</h1>
-      <p class="subtitle">
-        {translate($locale, 'Remove this wallet from Groot on this device.')}
-      </p>
     </div>
     <Button variant="secondary" href="/settings">{translate($locale, 'Back to settings')}</Button>
   </header>

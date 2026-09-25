@@ -29,7 +29,7 @@ describe('restart-bound Bitcoin network switching', () => {
     );
     expect(settings).toContain("loadingLabel={translate($locale, 'Restarting…')}");
     expect(settings).toContain('walletService.session()');
-    expect(settings).toContain("walletUnlocked ? 'WALLET SETTINGS' : 'APP SETTINGS'");
+    expect(settings).toContain("translate($locale, '{walletName} settings'");
     expect(welcome).toContain('class="onboarding-settings"');
     expect(welcome).toContain('href="/settings"');
   });

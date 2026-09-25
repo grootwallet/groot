@@ -2219,6 +2219,29 @@ test('discreet mode hides coin labels and amounts without leaking them through c
   );
 });
 
+test('page headers stay concise and Coins summary amounts toggle denomination', async ({
+  page
+}) => {
+  for (const path of ['/', '/activity', '/receive', '/settings']) {
+    await page.goto(path);
+    const header = page.locator('.page-header').first();
+    await expect(header.locator('h1')).toHaveCount(1);
+    await expect(header.locator('.eyebrow, .subtitle')).toHaveCount(0);
+  }
+
+  await page.goto('/coins');
+  const total = page.locator('.stat-pill .interactive-amount');
+  await expect(total).toContainText('sats');
+  await total.click();
+  await expect(total).toContainText('BTC');
+
+  await page.locator('.coin-check input[type="checkbox"]').first().check();
+  const selected = page.locator('.coin-selection-count .interactive-amount');
+  await expect(selected).toContainText('BTC');
+  await selected.click();
+  await expect(selected).toContainText('sats');
+});
+
 test('send reviews a proposal and rejects a wrong credential', async ({ page }) => {
   await page.goto('/send');
   const paymentProgress = page.getByRole('navigation', { name: 'Payment progress' });
@@ -2446,35 +2469,33 @@ test('locked profiles use recovery-safe credential terms', async ({ page }) => {
   await expect(page.getByLabel('Wallet passphrase', { exact: true })).toBeVisible();
   const infoButton = page.getByRole('button', { name: 'More information' });
   await page.getByRole('button', { name: 'Use light mode' }).click();
-  await infoButton.hover();
+  if ((page.viewportSize()?.width ?? 1180) <= 760) await infoButton.click();
+  else await infoButton.hover();
   const lightTooltip = page.getByRole('tooltip');
   await expect(lightTooltip).toBeVisible();
   expect(
     await lightTooltip.evaluate((tooltip) => {
-      const probe = document.createElement('span');
-      probe.style.background = 'var(--panel-2)';
-      document.body.append(probe);
-      const matches =
-        getComputedStyle(tooltip).backgroundColor === getComputedStyle(probe).backgroundColor;
-      probe.remove();
-      return matches;
+      const style = getComputedStyle(tooltip);
+      return {
+        background: style.backgroundColor,
+        color: style.color
+      };
     })
-  ).toBe(true);
+  ).toEqual({ background: 'rgb(16, 42, 76)', color: 'rgb(255, 255, 255)' });
   await page.getByRole('button', { name: 'Use dark mode' }).click();
-  await infoButton.hover();
+  if ((page.viewportSize()?.width ?? 1180) <= 760) await infoButton.click();
+  else await infoButton.hover();
   const darkTooltip = page.getByRole('tooltip');
   await expect(darkTooltip).toBeVisible();
   expect(
     await darkTooltip.evaluate((tooltip) => {
-      const probe = document.createElement('span');
-      probe.style.background = 'var(--panel-2)';
-      document.body.append(probe);
-      const matches =
-        getComputedStyle(tooltip).backgroundColor === getComputedStyle(probe).backgroundColor;
-      probe.remove();
-      return matches;
+      const style = getComputedStyle(tooltip);
+      return {
+        background: style.backgroundColor,
+        color: style.color
+      };
     })
-  ).toBe(true);
+  ).toEqual({ background: 'rgb(247, 243, 233)', color: 'rgb(16, 42, 76)' });
   await expect(
     page.getByText(/BIP39 passphrase is required with your 24 recovery words/)
   ).toBeVisible();
