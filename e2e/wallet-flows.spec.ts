@@ -590,6 +590,16 @@ test('switching between locked wallets never renders an intermediate wallet scre
 }) => {
   const isMobile = (page.viewportSize()?.width ?? 1180) <= 760;
   test.skip(isMobile, 'The locked mobile shell does not expose wallet switching.');
+
+  await page.goto('/settings?fixture-locked-wallet-switch=1');
+  await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
+  await page
+    .getByRole('complementary')
+    .getByRole('button', { name: /Everyday wallet/ })
+    .click();
+  await expect(page).toHaveURL(/\/unlock(?:\?|$)/);
+  await expect(page.getByRole('heading', { name: 'Everyday wallet' })).toBeVisible();
+
   await page.goto('/unlock?fixture-locked-wallet-switch=1');
   await expect(page.getByRole('heading', { name: 'Everyday wallet' })).toBeVisible();
 
@@ -2063,7 +2073,7 @@ test('receive keeps multiple labeled payment requests and discards them independ
   await expect(qrDialog.getByRole('button', { name: 'Copy exact address' })).toBeVisible();
   await expect(
     qrDialog.getByText('Spaces are visual only. Copy always uses the exact address.')
-  ).toBeVisible();
+  ).toHaveCount(0);
   const visualGroups = qrDialog.locator('.readable-address-groups > span');
   await expect(visualGroups).toHaveCount(12);
   expect((await visualGroups.allTextContents()).join('')).toBe(
@@ -2113,7 +2123,9 @@ test('single-key receive and send cap manual label drafts at five', async ({ pag
 test('coin control selects, freezes, and carries coins into send', async ({ page }) => {
   await page.goto('/coins');
   const first = page.getByRole('checkbox', { name: 'Select Savings', exact: true });
-  await first.check();
+  const firstRow = page.locator('.coin-row').filter({ has: first });
+  await firstRow.getByRole('button', { name: 'Select Savings', exact: true }).click();
+  await expect(firstRow).toHaveClass(/selected/);
   await expect(page.getByText('1 selected')).toBeVisible();
   await expect(page.locator('.coin-toolbar')).toContainText('1,250,000 sats selected');
   await page.getByRole('button', { name: 'More actions for selected coin' }).click();

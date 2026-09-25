@@ -352,8 +352,11 @@
   });
 
   async function selectWallet(walletId: string) {
-    if (shortcutLockPending || walletSelectionTask || !walletId || walletId === selectedWalletId)
+    if (shortcutLockPending || walletSelectionTask || !walletId) return;
+    if (walletId === selectedWalletId) {
+      if (!selectedWalletUnlocked && page.url.pathname !== '/unlock') await goto('/unlock');
       return;
+    }
     const task = performWalletSelection(walletId);
     walletSelectionTask = task;
     try {

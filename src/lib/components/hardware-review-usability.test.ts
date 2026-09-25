@@ -55,6 +55,8 @@ describe('hardware signing review usability', () => {
 
   it('does not repeat address-comparison guidance in the hardware address modal', () => {
     expect(recipientAddressModal).not.toContain('The brighter first and last groups');
+    expect(recipientAddressModal).not.toContain('status-dot');
+    expect(recipientAddressModal).not.toContain('{detail}');
     for (const source of [singleSend, multisigSend]) {
       const hardwareAddressStart = source.indexOf('open={hardwareAddressOpen}');
       const hardwareAddressEnd = source.indexOf('/>', hardwareAddressStart);
@@ -62,6 +64,11 @@ describe('hardware signing review usability', () => {
       expect(hardwareAddressModal).toContain('description=""');
       expect(hardwareAddressModal).toContain('detail=""');
     }
+  });
+
+  it('does not offer QR transfer controls to a directly connected Ledger signer', () => {
+    expect(singleSend).toContain('!/ledger/i.test(hardwareSignerIdentity)');
+    expect(singleSend).toContain('{#if hardwareQrTransferAvailable}');
   });
 
   it('does not place a decorative divider above hardware review details', () => {

@@ -386,7 +386,8 @@ test('discards a resumed payment draft without creating a proposal', async ({ pa
   await expect(page.getByRole('button', { name: 'Discard draft' })).toBeVisible();
   await page.getByRole('button', { name: 'Discard draft' }).click();
   const dialog = page.getByRole('dialog', { name: 'Discard this payment draft?' });
-  await expect(dialog).toContainText('No transaction or signature exists yet.');
+  await expect(dialog.getByText('No transaction or signature exists yet.')).toHaveCount(0);
+  await expect(dialog.getByText('Saved fields')).toHaveCount(0);
   await expect(dialog).toContainText('Draft to discard');
   await dialog.getByRole('button', { name: 'Discard draft' }).click();
 
@@ -472,7 +473,7 @@ test('spends end-to-end from the ready-made demo wallet', async ({ page }) => {
     addressDialog.getByText('Spaces are visual only. Copy always uses the exact address.', {
       exact: true
     })
-  ).toBeVisible();
+  ).toHaveCount(0);
   await addressDialog.getByRole('button', { name: 'Close' }).click();
   const psbtDownload = page.waitForEvent('download');
   await page.getByRole('button', { name: 'Save PSBT' }).click();

@@ -233,14 +233,6 @@
   const frozenAmount = $derived(
     coins.filter((coin) => coin.frozen).reduce((total, coin) => total + coin.amount, 0)
   );
-  const proposalHasPrivacyWarning = $derived(
-    Boolean(
-      proposal &&
-      (proposal.selectionImpact.newClusterLinks > 0 ||
-        proposal.selectionImpact.hasUnknownProvenance ||
-        proposal.selectionImpact.hasAddressReuse)
-    )
-  );
   const selectedReadyCoins = $derived(
     coins.filter((coin) => {
       const maturity = validPolicyMaturity(coin);
@@ -1515,10 +1507,9 @@
   />
 {/snippet}
 
-<div class="page narrow-page send-page" class:signing-page={Boolean(proposal)}>
+<div class="page narrow-page send-page signing-page">
   <header class="page-header">
     <div>
-      <p class="eyebrow">{translate($locale, 'SEND')}</p>
       <h1>
         {translate(
           $locale,
@@ -1529,15 +1520,14 @@
               : 'Send bitcoin'
         )}
       </h1>
-      <p class="subtitle">
-        {translate(
-          $locale,
-          renewalMode
-            ? proposal
-              ? 'Review the renewal, then approve it with your usual keys.'
-              : 'Move this coin within your wallet to restart its protection.'
-            : delayedSpendMode
+      {#if renewalMode || delayedSpendMode}<p class="subtitle">
+          {translate(
+            $locale,
+            renewalMode
               ? proposal
+                ? 'Review the renewal, then approve it with your usual keys.'
+                : 'Move this coin within your wallet to restart its protection.'
+              : proposal
                 ? translate($locale, 'Review once, then approve with the {key}.', {
                     key: delayedSpendKeyName
                   })
@@ -1546,13 +1536,8 @@
                     'Send this coin with the {key}. The fee is deducted automatically.',
                     { key: delayedSpendKeyName }
                   )
-              : !proposal && draftStep === 1
-                ? 'Name the payment and choose its recipient.'
-                : !proposal
-                  ? 'Choose the amount, coins, and network fee.'
-                  : `Review once, then collect ${wallet?.threshold ?? 'the required'} signatures.`
-        )}
-      </p>
+          )}
+        </p>{/if}
     </div>
     <div class="page-header-actions">
       {#if hasPaymentDraft && !proposal && !renewalMode && !delayedSpendMode && !accelerationRequest}<Button
@@ -1573,1059 +1558,1061 @@
   </header>
   {#if !txid && ((!renewalMode && !delayedSpendMode) || proposal)}<SendProgress
       current={progressStep}
-    />{#if accelerationLoading}<SignerSummary
-        signers={[]}
-        loading
-      />{:else if wallet && !proposal && !renewalMode && !delayedSpendMode}<SignerSummary
-        signers={signerItems}
-        required={regularRequired}
-        signedFingerprints={[]}
-        collecting={false}
-      />{/if}{/if}
-  {#if !txid && !proposal && !renewalMode && !delayedSpendMode && recoveryReadyCoins.length}<section
-      class="recovery-key-option"
-      aria-live="polite"
-    >
-      <span><LockKeyhole size={17} /></span>
-      <div>
-        <strong
-          >{translate(
-            $locale,
-            recoveryReadyCoins.length === 1
-              ? 'Your {key} can spend 1 coin'
-              : 'Your {key} can spend {count} coins',
-            { key: recoveryReadyKeyName, count: recoveryReadyCoins.length }
-          )}</strong
-        ><small
-          >{translate(
-            $locale,
-            'Use the one-key recovery flow, or continue here with your normal 2-of-3 keys.'
-          )}</small
+    />{/if}
+  <div
+    class="send-flow-layout"
+    class:with-signers={Boolean(wallet && !proposal && !renewalMode && !delayedSpendMode)}
+  >
+    <div class="send-flow-content">
+      {#if !txid && !proposal && !renewalMode && !delayedSpendMode && recoveryReadyCoins.length}<section
+          class="recovery-key-option"
+          aria-live="polite"
         >
-      </div>
-      <Button
-        size="small"
-        variant="secondary"
-        onclick={recoveryReadyCoins.length === 1
-          ? () => activateDelayedSpend(recoveryReadyCoins[0])
-          : undefined}
-        href={recoveryReadyCoins.length === 1
-          ? `/multisig/send?coins=${encodeURIComponent(recoveryReadyCoins[0].outpoint)}&delayedSpend=1${typeof window !== 'undefined' && new URL(window.location.href).searchParams.get('fixture-policy-maturity') === '1' ? '&fixture-policy-maturity=1' : ''}`
-          : '/coins'}
-        >{translate($locale, recoveryReadyCoins.length === 1 ? 'Use {key}' : 'Choose a coin', {
-          key: recoveryReadyKeyName
-        })}</Button
-      >
-    </section>{/if}
-  {#if delayedSpendMode && delayedSpendCoin && delayedSpendMaturity}<section
-      class="policy-renewal-banner"
-      aria-live="polite"
-    >
-      <span><LockKeyhole size={18} /></span>
-      <div>
-        <strong>{translate($locale, 'The {key} is ready', { key: delayedSpendKeyName })}</strong>
-        <p>
-          {translate(
-            $locale,
-            'It can now move this coin by itself. Your usual 2-of-3 keys still work too.'
-          )}
-        </p>
-        <details>
-          <summary>{translate($locale, 'What happens')}</summary>
-          <ul>
-            <li>
-              {translate(
+          <span><LockKeyhole size={17} /></span>
+          <div>
+            <strong
+              >{translate(
                 $locale,
-                'This sends one coin to the address you choose. No other wallet coins are combined.'
-              )}
-            </li>
-            <li>
-              {translate(
+                recoveryReadyCoins.length === 1
+                  ? 'Your {key} can spend 1 coin'
+                  : 'Your {key} can spend {count} coins',
+                { key: recoveryReadyKeyName, count: recoveryReadyCoins.length }
+              )}</strong
+            ><small
+              >{translate(
                 $locale,
-                'The network fee is deducted from that coin, so the recipient gets the remainder.'
-              )}
-            </li>
-            <li>{translate($locale, 'Only the extra key signs this payment.')}</li>
-          </ul>
-        </details>
-      </div>
-    </section>
-  {:else if renewalMode && renewalCoin && renewalMaturity}<section
-      class="policy-renewal-banner"
-      aria-live="polite"
-    >
-      <span><RefreshCw size={18} /></span>
-      <div>
-        <strong>{translate($locale, 'Lock the extra key again')}</strong>
-        <p>
-          {translate(
-            $locale,
-            'Only this coin moves. Its protection restarts after the new coin confirms.'
-          )}
-        </p>
-        <details>
-          <summary>{translate($locale, 'How it works')}</summary>
-          <ul>
-            <li>
-              {translate(
-                $locale,
-                'Your usual 2-of-3 keys approve the move. The {key} is not used.',
-                { key: translate($locale, renewalKeyName) }
-              )}
-            </li>
-            <li>
-              {translate(
-                $locale,
-                'After confirmation, the new coin gets a fresh {count}-block wait.',
-                { count: renewalMaturity.delayBlocks.toLocaleString() }
-              )}
-            </li>
-            <li>
-              {translate(
-                $locale,
-                'The fee comes from this coin. No other coin is combined, but the move remains visible onchain.'
-              )}
-            </li>
-          </ul>
-        </details>
-      </div>
-    </section>{/if}
-  {#if txid}<section class="empty-state success-state">
-      <span class="empty-icon success"><Check size={25} /></span>
-      <h2>
-        {translate(
-          $locale,
-          renewalMode
-            ? 'Protection renewal broadcast'
-            : delayedSpendMode
-              ? 'Recovery-key payment broadcast'
-              : proposal?.acceleration
-                ? 'Transaction accelerated'
-                : 'Transaction broadcast'
-        )}
-      </h2>
-      {#if proposal}<div class="success-amount">
-          <Amount
-            value={proposal.acceleration?.method === 'cpfp'
-              ? Number(proposal.fee)
-              : Number(proposal.amount)}
-            interactive
-          />
-        </div>{/if}
-      <p>
-        {#if proposal?.acceleration?.method === 'rbf'}{translate(
-            $locale,
-            'The higher fee was accepted. Your payment amount and recipient stayed the same.'
-          )}{:else if proposal?.acceleration?.method === 'cpfp'}{translate(
-            $locale,
-            'The additional fee was accepted. Your payment is waiting for confirmation.'
-          )}{:else}{translate($locale, 'The signed transaction was accepted by the')}
-          {networkName(defaultConfig.network)}
-          {translate($locale, 'network.')}{/if}
-      </p>
-      <button class="hash-box" type="button" onclick={copyBroadcastTxid}
-        ><span>{translate($locale, 'Transaction ID')}</span><code>{compactIdentifier(txid)}</code
-        ><Copy size={16} /></button
-      >
-      <div class="success-actions">
-        <Button href="/multisig">{translate($locale, 'Return to wallet')}</Button>
-        <Button variant="secondary" href="/activity"
-          >{translate($locale, 'View transaction')}</Button
+                'Use the one-key recovery flow, or continue here with your normal 2-of-3 keys.'
+              )}</small
+            >
+          </div>
+          <Button
+            size="small"
+            variant="secondary"
+            onclick={recoveryReadyCoins.length === 1
+              ? () => activateDelayedSpend(recoveryReadyCoins[0])
+              : undefined}
+            href={recoveryReadyCoins.length === 1
+              ? `/multisig/send?coins=${encodeURIComponent(recoveryReadyCoins[0].outpoint)}&delayedSpend=1${typeof window !== 'undefined' && new URL(window.location.href).searchParams.get('fixture-policy-maturity') === '1' ? '&fixture-policy-maturity=1' : ''}`
+              : '/coins'}
+            >{translate($locale, recoveryReadyCoins.length === 1 ? 'Use {key}' : 'Choose a coin', {
+              key: recoveryReadyKeyName
+            })}</Button
+          >
+        </section>{/if}
+      {#if delayedSpendMode && delayedSpendCoin && delayedSpendMaturity}<section
+          class="policy-renewal-banner"
+          aria-live="polite"
         >
-      </div>
-      {#if broadcastExplorerUrl}<div class="explorer-panel">
-          <button class="explorer-link" type="button" onclick={openBroadcastExplorer}
-            >{translate($locale, 'View on mempool.space')} <ExternalLink size={14} /></button
-          >{#if broadcastExplorerError}<p class="form-error" role="alert">
-              {broadcastExplorerError}
-            </p>{/if}
-          <p class="explorer-privacy">
-            {translate($locale, 'Opening this shares the transaction lookup with mempool.space.')}
-          </p>
-        </div>{/if}
-    </section>
-  {:else if accelerationLoading}<section
-      class="form-card send-stage-card acceleration-loading-card"
-      aria-live="polite"
-    >
-      <RefreshCw class="spin" size={28} />
-      <div class="send-stage-heading">
-        <span>{translate($locale, 'FEE ACCELERATION')}</span>
-        <h2>{translate($locale, 'Preparing fee acceleration')}</h2>
-        <p>
-          {translate(
-            $locale,
-            'Reading the original transaction and current fee policy from Bitcoin Core.'
-          )}
-        </p>
-      </div>
-      <div class="acceleration-loading-lines" aria-hidden="true"><i></i><i></i><i></i></div>
-    </section>
-  {:else if accelerationRequest}<form
-      class="form-card send-stage-card"
-      onsubmit={(event) => {
-        event.preventDefault();
-        prepareCustomAcceleration();
-      }}
-    >
-      <div class="send-stage-heading">
-        <span>{translate($locale, 'FEE ACCELERATION')}</span>
-        <h2>
-          {translate(
-            $locale,
-            (accelerationRequest.method === 'rbf' && rbfQuote) ||
-              (accelerationRequest.method === 'cpfp' && cpfpQuote)
-              ? 'Speed up transaction'
-              : 'Enter a custom fee rate'
-          )}
-        </h2>
-        <p>
-          {translate(
-            $locale,
-            (accelerationRequest.method === 'rbf' && rbfQuote) ||
-              (accelerationRequest.method === 'cpfp' && cpfpQuote)
-              ? 'Confirm the additional fee, then continue to sign.'
-              : 'Bitcoin Core has no usable estimate. Groot will not invent one; choose the sat/vB rate\n          every signer will review.'
-          )}
-        </p>
-      </div>
-      {#if (accelerationRequest.method === 'rbf' && rbfQuote) || (accelerationRequest.method === 'cpfp' && cpfpQuote)}
-        <div class="acceleration-default-choice">
-          <span>{translate($locale, 'You will spend this much more')}</span>
-          <Amount
-            value={accelerationRequest.method === 'rbf'
-              ? (rbfQuote?.incrementalFee ?? 0)
-              : (cpfpQuote?.childFee ?? 0)}
-            interactive
-          />
-          <p>
+          <span><LockKeyhole size={18} /></span>
+          <div>
+            <strong>{translate($locale, 'The {key} is ready', { key: delayedSpendKeyName })}</strong
+            >
+            <p>
+              {translate(
+                $locale,
+                'It can now move this coin by itself. Your usual 2-of-3 keys still work too.'
+              )}
+            </p>
+            <details>
+              <summary>{translate($locale, 'What happens')}</summary>
+              <ul>
+                <li>
+                  {translate(
+                    $locale,
+                    'This sends one coin to the address you choose. No other wallet coins are combined.'
+                  )}
+                </li>
+                <li>
+                  {translate(
+                    $locale,
+                    'The network fee is deducted from that coin, so the recipient gets the remainder.'
+                  )}
+                </li>
+                <li>{translate($locale, 'Only the extra key signs this payment.')}</li>
+              </ul>
+            </details>
+          </div>
+        </section>
+      {:else if renewalMode && renewalCoin && renewalMaturity}<section
+          class="policy-renewal-banner"
+          aria-live="polite"
+        >
+          <span><RefreshCw size={18} /></span>
+          <div>
+            <strong>{translate($locale, 'Lock the extra key again')}</strong>
+            <p>
+              {translate(
+                $locale,
+                'Only this coin moves. Its protection restarts after the new coin confirms.'
+              )}
+            </p>
+            <details>
+              <summary>{translate($locale, 'How it works')}</summary>
+              <ul>
+                <li>
+                  {translate(
+                    $locale,
+                    'Your usual 2-of-3 keys approve the move. The {key} is not used.',
+                    { key: translate($locale, renewalKeyName) }
+                  )}
+                </li>
+                <li>
+                  {translate(
+                    $locale,
+                    'After confirmation, the new coin gets a fresh {count}-block wait.',
+                    { count: renewalMaturity.delayBlocks.toLocaleString() }
+                  )}
+                </li>
+                <li>
+                  {translate(
+                    $locale,
+                    'The fee comes from this coin. No other coin is combined, but the move remains visible onchain.'
+                  )}
+                </li>
+              </ul>
+            </details>
+          </div>
+        </section>{/if}
+      {#if txid}<section class="empty-state success-state">
+          <span class="empty-icon success"><Check size={25} /></span>
+          <h2>
             {translate(
               $locale,
-              accelerationRequest.method === 'rbf'
-                ? 'Your payment amount and recipient will not change.'
-                : 'This child fee helps the parent and child confirm together.'
+              renewalMode
+                ? 'Protection renewal broadcast'
+                : delayedSpendMode
+                  ? 'Recovery-key payment broadcast'
+                  : proposal?.acceleration
+                    ? 'Transaction accelerated'
+                    : 'Transaction broadcast'
             )}
-          </p>
-        </div>
-        <details class="acceleration-optional-control">
-          <summary>{translate($locale, 'Change fee rate')}</summary>
-          <label class="field"
-            ><span
-              >{translate(
-                $locale,
-                accelerationRequest.method === 'cpfp' ? 'Package fee rate' : 'New fee rate'
-              )}</span
-            >
-            <div class="amount-input fee-rate-input">
-              <input
-                aria-label={translate($locale, 'Custom acceleration fee rate')}
-                bind:value={selectedRate}
-                onblur={async () => {
-                  if (!accelerationRequest || !customFeeValid) return;
-                  try {
-                    if (accelerationRequest.method === 'rbf') {
-                      rbfQuote = await walletService.quoteRbf(
-                        accelerationRequest.txid,
-                        feeRate(selectedRateNumber)
-                      );
-                      selectedRate = Number(rbfQuote.targetFeeRate);
-                    } else {
-                      cpfpQuote = await walletService.quoteCpfp(
-                        accelerationRequest.txid,
-                        feeRate(selectedRateNumber)
-                      );
-                      selectedRate = Number(cpfpQuote.targetFeeRate);
-                    }
-                    feeEstimateError = '';
-                  } catch (cause) {
-                    feeEstimateError = accelerationUnavailableDescription(
-                      accelerationRequest.method,
-                      cause,
-                      $locale
-                    );
-                  }
-                }}
-                inputmode="decimal"
-                placeholder={translate($locale, 'Enter a fee rate')}
-              /><b>{translate($locale, 'sat/vB')}</b>
-            </div>
-            <small
-              >{translate($locale, 'Minimum {rate} sat/vB', {
-                rate:
-                  accelerationRequest.method === 'rbf'
-                    ? (rbfQuote?.minimumFeeRate ?? 0)
-                    : (cpfpQuote?.minimumFeeRate ?? 0)
-              })}</small
-            ></label
-          >
-        </details>
-        <details class="acceleration-optional-control">
-          <summary>{translate($locale, 'View fee details')}</summary>
-          {#if accelerationRequest.method === 'rbf' && rbfQuote}<dl
-              class="details-list acceleration-quote-details"
-            >
-              <div>
-                <dt>{translate($locale, 'Original fee rate')}</dt>
-                <dd>{rbfQuote.originalEffectiveFeeRate} {translate($locale, 'sat/vB')}</dd>
-              </div>
-              <div>
-                <dt>{translate($locale, 'Minimum fee rate')}</dt>
-                <dd>{rbfQuote.minimumFeeRate} {translate($locale, 'sat/vB')}</dd>
-              </div>
-              <div>
-                <dt>{translate($locale, 'New fee rate')}</dt>
-                <dd>{rbfQuote.targetFeeRate} {translate($locale, 'sat/vB')}</dd>
-              </div>
-              <div>
-                <dt>{translate($locale, 'New network fee')}</dt>
-                <dd><Amount value={rbfQuote.estimatedReplacementFee} /></dd>
-              </div>
-              <div>
-                <dt>{translate($locale, 'Additional fee')}</dt>
-                <dd><Amount value={rbfQuote.incrementalFee} /></dd>
-              </div>
-              <div>
-                <dt>{translate($locale, 'Effective fee rate')}</dt>
-                <dd>{rbfQuote.resultingEffectiveFeeRate} {translate($locale, 'sat/vB')}</dd>
-              </div>
-            </dl>{:else if cpfpQuote}<dl class="details-list acceleration-quote-details">
-              <div>
-                <dt>{translate($locale, 'Parent fee rate')}</dt>
-                <dd>{cpfpQuote.parentEffectiveFeeRate} {translate($locale, 'sat/vB')}</dd>
-              </div>
-              <div>
-                <dt>{translate($locale, 'Minimum package rate')}</dt>
-                <dd>{cpfpQuote.minimumFeeRate} {translate($locale, 'sat/vB')}</dd>
-              </div>
-              <div>
-                <dt>{translate($locale, 'Target package rate')}</dt>
-                <dd>{cpfpQuote.targetFeeRate} {translate($locale, 'sat/vB')}</dd>
-              </div>
-              <div>
-                <dt>{translate($locale, 'Child network fee')}</dt>
-                <dd><Amount value={cpfpQuote.childFee} /></dd>
-              </div>
-              <div>
-                <dt>{translate($locale, 'Package network fee')}</dt>
-                <dd><Amount value={cpfpQuote.packageFee} /></dd>
-              </div>
-              <div>
-                <dt>{translate($locale, 'Effective package rate')}</dt>
-                <dd>{cpfpQuote.resultingPackageFeeRate} {translate($locale, 'sat/vB')}</dd>
-              </div>
-            </dl>{/if}
-        </details>
-      {:else}
-        <label class="field"
-          ><span>{translate($locale, 'Custom fee rate')}</span>
-          <div class="amount-input fee-rate-input">
-            <input
-              aria-label={translate($locale, 'Custom acceleration fee rate')}
-              bind:value={selectedRate}
-              inputmode="decimal"
-              placeholder={translate($locale, 'Enter a fee rate')}
-            /><b>{translate($locale, 'sat/vB')}</b>
-          </div>
-          <small>{translate($locale, 'Required · greater than 0 and at most 10,000 sat/vB')}</small
-          ></label
-        >
-      {/if}
-      {#if feeEstimateError}<LoadFailure
-          title={accelerationUnavailableTitle(accelerationRequest.method)}
-          description={feeEstimateError}
-          onretry={() => window.location.reload()}
-        />{/if}<Button
-        type="submit"
-        size="large"
-        class="full"
-        disabled={!customFeeValid}
-        loading={busy}
-        loadingLabel={translate($locale, 'Preparing acceleration…')}
-        >{translate($locale, 'Continue to sign')}</Button
-      >
-    </form>
-  {:else if delayedSpendMode && delayedSpendCoin && !proposal}<form
-      class="form-card send-stage-card"
-      onsubmit={(event) => {
-        event.preventDefault();
-        prepareDelayedSpend();
-      }}
-      in:fly={{ x: 8, duration: 180 }}
-    >
-      <div class="send-stage-heading">
-        <span>{translate($locale, 'RECOVERY PAYMENT')}</span>
-        <h2>{translate($locale, 'Where should this coin go?')}</h2>
-        <p>
-          {translate($locale, 'The {key} signs alone. The fee is deducted from this coin.', {
-            key: delayedSpendKeyName
-          })}
-        </p>
-      </div>
-      <div class="renewal-coin-summary">
-        <span>{translate($locale, 'Coin available')}</span>
-        <strong><Amount value={delayedSpendCoin.amount} hidden={$discreetMode} /></strong>
-        <small>{translate($locale, 'Ready for the {key}', { key: delayedSpendKeyName })}</small>
-      </div>
-      <label class="field"
-        ><span>{translate($locale, 'Send to')}</span><input
-          aria-label={translate($locale, 'Bitcoin address')}
-          bind:value={address}
-          oninput={clearDraftError}
-          placeholder="{addressPrefixForNetwork(defaultConfig.network)}q…"
-        />{#if address && !addressValid}<em
-            >{translate($locale, 'Enter a valid')}
-            {networkName(defaultConfig.network)}
-            {translate($locale, 'address')}</em
-          >{/if}</label
-      >
-      {@render labelTokenPicker(
-        'delayed-spend-label-input',
-        translate($locale, 'Label'),
-        translate($locale, 'e.g. Emergency recovery'),
-        translate($locale, 'Required · cannot be changed')
-      )}
-      <details class="selection-technical">
-        <summary
-          >{translate($locale, 'Network fee · {rate} sat/vB', {
-            rate: selectedRateNumber || '—'
-          })}</summary
-        >
-        <FeeSelector
-          {estimates}
-          value={selectedRateNumber}
-          {estimatedFee}
-          error={feeEstimateError}
-          onchange={(rate) => {
-            selectedRate = rate;
-            clearDraftError();
-          }}
-        />
-      </details>
-      {#if error}<div class="hardware-inline-error send-form-error" role="alert">
-          <AlertTriangle size={18} /><span
-            ><strong>{translate($locale, 'Payment could not be prepared')}</strong><small
-              >{error}</small
-            ></span
-          >
-        </div>{/if}
-      <Button
-        type="submit"
-        size="large"
-        class="full"
-        disabled={!delayedSpendValid}
-        loading={busy}
-        loadingLabel={translate($locale, 'Preparing payment…')}
-        >{translate($locale, 'Review {key} payment', { key: delayedSpendKeyName })}</Button
-      >
-    </form>
-  {:else if renewalMode && renewalCoin && !proposal}<form
-      class="form-card send-stage-card"
-      onsubmit={(event) => {
-        event.preventDefault();
-        prepareRenewal();
-      }}
-      in:fly={{ x: 8, duration: 180 }}
-    >
-      <div class="send-stage-heading">
-        <span>{translate($locale, 'COIN PROTECTION')}</span>
-        <h2>{translate($locale, 'Renew this coin’s protection')}</h2>
-        <p>
-          {translate($locale, 'Choose a label and fee. You will review everything before signing.')}
-        </p>
-      </div>
-      <div class="renewal-coin-summary">
-        <span>{translate($locale, 'Coin being renewed')}</span>
-        <strong><Amount value={renewalCoin.amount} hidden={$discreetMode} /></strong>
-        <small
-          >{translate($locale, '{key} can spend now', {
-            key: translate($locale, renewalKeyName)
-          })}</small
-        >
-      </div>
-      {@render labelTokenPicker(
-        'renewal-label-input',
-        translate($locale, 'Transaction label'),
-        translate($locale, 'e.g. Renew savings protection'),
-        translate($locale, 'Required · cannot be changed; reuse is intentional')
-      )}
-      <details class="selection-technical">
-        <summary
-          >{translate($locale, 'Network fee · {rate} sat/vB', {
-            rate: selectedRateNumber || '—'
-          })}</summary
-        >
-        <FeeSelector
-          {estimates}
-          value={selectedRateNumber}
-          {estimatedFee}
-          error={feeEstimateError}
-          onchange={(rate) => {
-            selectedRate = rate;
-            clearDraftError();
-          }}
-        />
-      </details>
-      {#if error}<div class="hardware-inline-error send-form-error" role="alert">
-          <AlertTriangle size={18} /><span
-            ><strong>{translate($locale, 'Protection renewal could not be prepared')}</strong><small
-              >{error}</small
-            ></span
-          >
-        </div>{/if}
-      <Button
-        type="submit"
-        size="large"
-        class="full"
-        disabled={!renewalValid}
-        loading={busy}
-        loadingLabel={translate($locale, 'Preparing renewal…')}
-        >{translate($locale, 'Review protection renewal')}</Button
-      >
-    </form>
-  {:else if !proposal && draftStep === 1}
-    <form
-      class="form-card send-stage-card"
-      onsubmit={(e) => {
-        e.preventDefault();
-        continueToAmount();
-      }}
-      in:fly={{ x: 8, duration: 180 }}
-    >
-      <div class="send-stage-heading">
-        <span>{translate($locale, 'STEP 1')}</span>
-        <h2>{translate($locale, 'What is this payment for?')}</h2>
-        <p>
-          {translate($locale, 'Labels help every signer recognize the transaction.')}
-        </p>
-      </div>
-      {@render labelTokenPicker(
-        'multisig-send-label-input',
-        translate($locale, 'Payment label'),
-        translate($locale, 'e.g. Hardware purchase, Pay Alex, Test transaction'),
-        translate($locale, 'Required · cannot be changed')
-      )}
-      <div class="field">
-        <span>{translate($locale, 'Bitcoin address')}</span>
-        <div class="address-input-control">
-          <input
-            aria-label={translate($locale, 'Bitcoin address')}
-            bind:value={address}
-            oninput={() => {
-              clearDraftError();
-              paymentRequestNotice = '';
-            }}
-            onkeydown={submitIntentOnEnter}
-            placeholder="{addressPrefixForNetwork(defaultConfig.network)}q…"
-          /><button
-            type="button"
-            aria-label={translate($locale, 'Scan Bitcoin payment QR')}
-            title={translate($locale, 'Scan Bitcoin payment QR')}
-            onclick={() => {
-              paymentScanError = '';
-              paymentScanOpen = true;
-            }}><QrCode size={19} /></button
-          >
-        </div>
-        {#if address && !addressValid}<em
-            >{translate($locale, 'Enter a valid')}
-            {networkName(defaultConfig.network)}
-            {translate($locale, 'address')}</em
-          >{/if}{#if paymentRequestNotice}<small class="payment-request-result" role="status"
-            >{paymentRequestNotice}</small
-          >{/if}
-      </div>
-      <Button type="submit" size="large" class="full" disabled={!intentValid}
-        >{translate($locale, 'Continue to amount')}</Button
-      >
-      {#if error}<div class="hardware-inline-error send-form-error" role="alert">
-          <AlertTriangle size={18} /><span
-            ><strong>{translate($locale, 'Could not save payment draft')}</strong><small
-              >{error}</small
-            ></span
-          >
-        </div>{/if}
-    </form>
-  {:else if !proposal}
-    <form
-      class="form-card send-stage-card"
-      onsubmit={(e) => {
-        e.preventDefault();
-        prepare();
-      }}
-      in:fly={{ x: 8, duration: 180 }}
-    >
-      <div class="send-stage-heading">
-        <span>{translate($locale, 'STEP 2')}</span>
-        <h2>{translate($locale, 'Fund the payment')}</h2>
-        <p>
-          {translate(
-            $locale,
-            'Set the amount, then keep automatic selection or choose specific coins.'
-          )}
-        </p>
-      </div>
-      <label class="field"
-        ><span>{translate($locale, 'Amount')}</span>
-        <div class="amount-input">
-          <input
-            aria-label={translate($locale, 'Amount')}
-            bind:value={amount}
-            oninput={() => {
-              if (maxSpendFeeTimer) clearTimeout(maxSpendFeeTimer);
-              maxSpendRequestRevision += 1;
-              maxSpendActive = false;
-              maxSpendRefreshing = false;
-              maxSpendQuote = null;
-              clearDraftError();
-            }}
-            inputmode={$denomination === 'btc' ? 'decimal' : 'numeric'}
-            placeholder="0"
-          /><button
-            class="amount-unit-toggle"
-            type="button"
-            aria-label={translate(
-              $locale,
-              $denomination === 'btc'
-                ? 'Show transaction amount in sats'
-                : 'Show transaction amount in BTC'
-            )}
-            onclick={toggleAmountInputDenomination}
-            >{translate($locale, $denomination === 'btc' ? 'BTC' : 'sats')}</button
-          ><button class="amount-max-action" type="button" onclick={() => void useMaxAmount()}
-            >{translate($locale, 'Max')}</button
-          >
-        </div>
-        <small class="available-balance-summary"
-          ><span
-            >{translate($locale, 'Available:')}
-            <Amount value={available} hidden={$discreetMode} /></span
-          >{#if frozenAmount > 0}<span class="frozen-balance-guidance"
-              ><Amount value={frozenAmount} hidden={$discreetMode} />
-              {translate($locale, 'frozen')} ·
-              <a href="/coins">{translate($locale, 'Review frozen coins')}</a></span
-            >{/if}</small
-        ></label
-      >
-      {#if maxSpendActive}<p class="max-spend-guidance" role="status">
-          {translate(
-            $locale,
-            frozenAmount > 0
-              ? 'Maximum spendable amount selected. Frozen coins remain in this wallet.'
-              : 'Maximum spendable amount selected after the network fee.'
-          )}
-        </p>{/if}
-      <div class="coin-control-field">
-        <span>{translate($locale, 'Coin selection')}</span><button
-          type="button"
-          class="coin-mode"
-          class:open={showCoins}
-          aria-expanded={showCoins}
-          onclick={() => (showCoins = !showCoins)}
-          ><CircleDot size={16} /><span
-            ><strong
-              >{selectedCoins.length
-                ? translate(
-                    $locale,
-                    selectedCoins.length === 1 ? 'Manual · {count} coin' : 'Manual · {count} coins',
-                    { count: selectedCoins.length }
-                  )
-                : translate($locale, 'Automatic selection')}</strong
-            ><small
-              >{selectedCoins.length
-                ? translate($locale, '{amount} {unit} available', {
-                    amount: $discreetMode ? '••••••' : formatAmount(available, $denomination),
-                    unit: amountUnit($denomination)
-                  })
-                : translate($locale, '{strategy} · Frozen coins stay untouched', {
-                    strategy: automaticStrategyLabel
-                  })}</small
-            ></span
-          ><b>{translate($locale, showCoins ? 'Done' : 'Choose')}</b></button
-        >{#if showCoins}<div class="send-coin-picker">
-            <fieldset class="automatic-strategies">
-              <legend>{translate($locale, 'Automatic strategy')}</legend
-              >{#each [{ id: 'balanced', name: 'Balanced', detail: 'Limit privacy merges without excessive fees' }, { id: 'private', name: 'More private', detail: 'Avoid reused, unknown, and unrelated coins' }, { id: 'lower_fee', name: 'Lower fee', detail: 'Prefer fewer, larger inputs' }] as option}<button
-                  type="button"
-                  class:active={automaticStrategy === option.id && !selectedCoins.length}
-                  onclick={() => {
-                    automaticStrategy = option.id as AutomaticSelectionStrategy;
-                    selectedCoins = [];
-                    updateAvailable();
-                  }}><strong>{option.name}</strong><small>{option.detail}</small></button
-                >{/each}
-            </fieldset>
-            {#each coins as coin}<label class:frozen={coin.frozen}
-                ><input
-                  type="checkbox"
-                  checked={selectedCoins.includes(coin.outpoint)}
-                  disabled={coin.frozen}
-                  onchange={(event) => toggleCoin(coin.outpoint, event.currentTarget.checked)}
-                /><span
-                  ><span class="coin-picker-title-line"
-                    ><PermanentLabelTags
-                      labels={coin.provenance.labels.length ? coin.provenance.labels : [coin.label]}
-                      hidden={$discreetMode}
-                      prominent
-                    /></span
-                  ><small
-                    >{translate(
-                      $locale,
-                      $discreetMode
-                        ? '•••••• · Provenance hidden'
-                        : `${formatAmount(coin.amount, $denomination)} ${amountUnit($denomination)}${coin.provenance.state === 'unknown' ? ' · Source unknown' : ''}${coin.provenance.addressReused ? ' · Address reused' : ''}`
-                    )}{translate(
-                      $locale,
-                      coin.frozen
-                        ? ' · Frozen'
-                        : validPolicyMaturity(coin)?.state === 'mature'
-                          ? ' · Backup key available'
-                          : ''
-                    )}</small
-                  ></span
-                ></label
-              >{/each}<button type="button" onclick={useAutomatic}
-              >{translate($locale, 'Use automatic selection')}</button
-            >
-          </div>{/if}
-      </div>
-      {#if selectionPreview}<div
-          class:warning={selectionPreview.newClusterLinks > 0 ||
-            selectionPreview.hasUnknownProvenance ||
-            selectionPreview.hasAddressReuse}
-          class="selection-review manual-selection-preview"
-        >
-          <strong
-            >{selectionPreview.selectedInputCount}
-            {translate($locale, 'selected ·')}
-            <Amount value={selectionPreview.selectedAmount} hidden={$discreetMode} /></strong
-          >{#if $discreetMode}<span
-              >{translate($locale, 'Funding provenance hidden in discreet mode.')}</span
-            >{:else}<div class="selection-labels">
-              <span>{translate($locale, 'Funding labels')}</span><PermanentLabelTags
-                labels={selectionPreview.fundingLabels}
+          </h2>
+          {#if proposal}<div class="success-amount">
+              <Amount
+                value={proposal.acceleration?.method === 'cpfp'
+                  ? Number(proposal.fee)
+                  : Number(proposal.amount)}
+                interactive
               />
-            </div>
-            <span
-              >{translate(
+            </div>{/if}
+          <p>
+            {#if proposal?.acceleration?.method === 'rbf'}{translate(
                 $locale,
-                selectionPreview.newClusterLinks
-                  ? `${selectionPreview.newClusterLinks} new public link${selectionPreview.newClusterLinks === 1 ? '' : 's'}.`
-                  : 'No new links between existing groups.'
-              )}</span
-            >{#if selectionPreview.oneExistingGroupCanFund && selectionPreview.newClusterLinks > 0}<div
-                class="selection-recommendation"
-              >
-                <strong>{translate($locale, 'Privacy recommendation')}</strong><span
+                'The higher fee was accepted. Your payment amount and recipient stayed the same.'
+              )}{:else if proposal?.acceleration?.method === 'cpfp'}{translate(
+                $locale,
+                'The additional fee was accepted. Your payment is waiting for confirmation.'
+              )}{:else}{translate($locale, 'The signed transaction was accepted by the')}
+              {networkName(defaultConfig.network)}
+              {translate($locale, 'network.')}{/if}
+          </p>
+          <button class="hash-box" type="button" onclick={copyBroadcastTxid}
+            ><span>{translate($locale, 'Transaction ID')}</span><code
+              >{compactIdentifier(txid)}</code
+            ><Copy size={16} /></button
+          >
+          <div class="success-actions">
+            <Button href="/multisig">{translate($locale, 'Return to wallet')}</Button>
+            <Button variant="secondary" href="/activity"
+              >{translate($locale, 'View transaction')}</Button
+            >
+          </div>
+          {#if broadcastExplorerUrl}<div class="explorer-panel">
+              <button class="explorer-link" type="button" onclick={openBroadcastExplorer}
+                >{translate($locale, 'View on mempool.space')} <ExternalLink size={14} /></button
+              >{#if broadcastExplorerError}<p class="form-error" role="alert">
+                  {broadcastExplorerError}
+                </p>{/if}
+              <p class="explorer-privacy">
+                {translate(
+                  $locale,
+                  'Opening this shares the transaction lookup with mempool.space.'
+                )}
+              </p>
+            </div>{/if}
+        </section>
+      {:else if accelerationLoading}<section
+          class="form-card send-stage-card acceleration-loading-card"
+          aria-live="polite"
+        >
+          <RefreshCw class="spin" size={28} />
+          <div class="send-stage-heading">
+            <span>{translate($locale, 'FEE ACCELERATION')}</span>
+            <h2>{translate($locale, 'Preparing fee acceleration')}</h2>
+            <p>
+              {translate(
+                $locale,
+                'Reading the original transaction and current fee policy from Bitcoin Core.'
+              )}
+            </p>
+          </div>
+          <div class="acceleration-loading-lines" aria-hidden="true"><i></i><i></i><i></i></div>
+        </section>
+      {:else if accelerationRequest}<form
+          class="form-card send-stage-card"
+          onsubmit={(event) => {
+            event.preventDefault();
+            prepareCustomAcceleration();
+          }}
+        >
+          <div class="send-stage-heading">
+            <span>{translate($locale, 'FEE ACCELERATION')}</span>
+            <h2>
+              {translate(
+                $locale,
+                (accelerationRequest.method === 'rbf' && rbfQuote) ||
+                  (accelerationRequest.method === 'cpfp' && cpfpQuote)
+                  ? 'Speed up transaction'
+                  : 'Enter a custom fee rate'
+              )}
+            </h2>
+            <p>
+              {translate(
+                $locale,
+                (accelerationRequest.method === 'rbf' && rbfQuote) ||
+                  (accelerationRequest.method === 'cpfp' && cpfpQuote)
+                  ? 'Confirm the additional fee, then continue to sign.'
+                  : 'Bitcoin Core has no usable estimate. Groot will not invent one; choose the sat/vB rate\n          every signer will review.'
+              )}
+            </p>
+          </div>
+          {#if (accelerationRequest.method === 'rbf' && rbfQuote) || (accelerationRequest.method === 'cpfp' && cpfpQuote)}
+            <div class="acceleration-default-choice">
+              <span>{translate($locale, 'You will spend this much more')}</span>
+              <Amount
+                value={accelerationRequest.method === 'rbf'
+                  ? (rbfQuote?.incrementalFee ?? 0)
+                  : (cpfpQuote?.childFee ?? 0)}
+                interactive
+              />
+              <p>
+                {translate(
+                  $locale,
+                  accelerationRequest.method === 'rbf'
+                    ? 'Your payment amount and recipient will not change.'
+                    : 'This child fee helps the parent and child confirm together.'
+                )}
+              </p>
+            </div>
+            <details class="acceleration-optional-control">
+              <summary>{translate($locale, 'Change fee rate')}</summary>
+              <label class="field"
+                ><span
                   >{translate(
                     $locale,
-                    'One existing group can fund this payment without linking these groups.'
+                    accelerationRequest.method === 'cpfp' ? 'Package fee rate' : 'New fee rate'
                   )}</span
-                ><button
-                  type="button"
-                  onclick={() => {
-                    automaticStrategy = 'private';
-                    useAutomatic();
-                  }}>{translate($locale, 'Use privacy-first selection')}</button
                 >
-              </div>{/if}
-            <details class="selection-technical">
-              <summary>{translate($locale, 'Input details')}</summary><span
-                >{translate($locale, 'Estimated input weight:')}
-                {shortSats(selectionPreview.estimatedInputWeight)} WU</span
+                <div class="amount-input fee-rate-input">
+                  <input
+                    aria-label={translate($locale, 'Custom acceleration fee rate')}
+                    bind:value={selectedRate}
+                    onblur={async () => {
+                      if (!accelerationRequest || !customFeeValid) return;
+                      try {
+                        if (accelerationRequest.method === 'rbf') {
+                          rbfQuote = await walletService.quoteRbf(
+                            accelerationRequest.txid,
+                            feeRate(selectedRateNumber)
+                          );
+                          selectedRate = Number(rbfQuote.targetFeeRate);
+                        } else {
+                          cpfpQuote = await walletService.quoteCpfp(
+                            accelerationRequest.txid,
+                            feeRate(selectedRateNumber)
+                          );
+                          selectedRate = Number(cpfpQuote.targetFeeRate);
+                        }
+                        feeEstimateError = '';
+                      } catch (cause) {
+                        feeEstimateError = accelerationUnavailableDescription(
+                          accelerationRequest.method,
+                          cause,
+                          $locale
+                        );
+                      }
+                    }}
+                    inputmode="decimal"
+                    placeholder={translate($locale, 'Enter a fee rate')}
+                  /><b>{translate($locale, 'sat/vB')}</b>
+                </div>
+                <small
+                  >{translate($locale, 'Minimum {rate} sat/vB', {
+                    rate:
+                      accelerationRequest.method === 'rbf'
+                        ? (rbfQuote?.minimumFeeRate ?? 0)
+                        : (cpfpQuote?.minimumFeeRate ?? 0)
+                  })}</small
+                ></label
               >
-            </details>{/if}
-        </div>{/if}
-      {#if selectedReadyCoins.length}<div class="selection-review renewal-review">
-          <strong
-            >{translate(
-              $locale,
-              selectedReadyCoins.length === 1
-                ? 'This coin already has its backup key available'
-                : '{count} selected coins already have their backup keys available',
-              { count: selectedReadyCoins.length }
-            )}</strong
+            </details>
+            <details class="acceleration-optional-control">
+              <summary>{translate($locale, 'View fee details')}</summary>
+              {#if accelerationRequest.method === 'rbf' && rbfQuote}<dl
+                  class="details-list acceleration-quote-details"
+                >
+                  <div>
+                    <dt>{translate($locale, 'Original fee rate')}</dt>
+                    <dd>{rbfQuote.originalEffectiveFeeRate} {translate($locale, 'sat/vB')}</dd>
+                  </div>
+                  <div>
+                    <dt>{translate($locale, 'Minimum fee rate')}</dt>
+                    <dd>{rbfQuote.minimumFeeRate} {translate($locale, 'sat/vB')}</dd>
+                  </div>
+                  <div>
+                    <dt>{translate($locale, 'New fee rate')}</dt>
+                    <dd>{rbfQuote.targetFeeRate} {translate($locale, 'sat/vB')}</dd>
+                  </div>
+                  <div>
+                    <dt>{translate($locale, 'New network fee')}</dt>
+                    <dd><Amount value={rbfQuote.estimatedReplacementFee} /></dd>
+                  </div>
+                  <div>
+                    <dt>{translate($locale, 'Additional fee')}</dt>
+                    <dd><Amount value={rbfQuote.incrementalFee} /></dd>
+                  </div>
+                  <div>
+                    <dt>{translate($locale, 'Effective fee rate')}</dt>
+                    <dd>{rbfQuote.resultingEffectiveFeeRate} {translate($locale, 'sat/vB')}</dd>
+                  </div>
+                </dl>{:else if cpfpQuote}<dl class="details-list acceleration-quote-details">
+                  <div>
+                    <dt>{translate($locale, 'Parent fee rate')}</dt>
+                    <dd>{cpfpQuote.parentEffectiveFeeRate} {translate($locale, 'sat/vB')}</dd>
+                  </div>
+                  <div>
+                    <dt>{translate($locale, 'Minimum package rate')}</dt>
+                    <dd>{cpfpQuote.minimumFeeRate} {translate($locale, 'sat/vB')}</dd>
+                  </div>
+                  <div>
+                    <dt>{translate($locale, 'Target package rate')}</dt>
+                    <dd>{cpfpQuote.targetFeeRate} {translate($locale, 'sat/vB')}</dd>
+                  </div>
+                  <div>
+                    <dt>{translate($locale, 'Child network fee')}</dt>
+                    <dd><Amount value={cpfpQuote.childFee} /></dd>
+                  </div>
+                  <div>
+                    <dt>{translate($locale, 'Package network fee')}</dt>
+                    <dd><Amount value={cpfpQuote.packageFee} /></dd>
+                  </div>
+                  <div>
+                    <dt>{translate($locale, 'Effective package rate')}</dt>
+                    <dd>{cpfpQuote.resultingPackageFeeRate} {translate($locale, 'sat/vB')}</dd>
+                  </div>
+                </dl>{/if}
+            </details>
+          {:else}
+            <label class="field"
+              ><span>{translate($locale, 'Custom fee rate')}</span>
+              <div class="amount-input fee-rate-input">
+                <input
+                  aria-label={translate($locale, 'Custom acceleration fee rate')}
+                  bind:value={selectedRate}
+                  inputmode="decimal"
+                  placeholder={translate($locale, 'Enter a fee rate')}
+                /><b>{translate($locale, 'sat/vB')}</b>
+              </div>
+              <small
+                >{translate($locale, 'Required · greater than 0 and at most 10,000 sat/vB')}</small
+              ></label
+            >
+          {/if}
+          {#if feeEstimateError}<LoadFailure
+              title={accelerationUnavailableTitle(accelerationRequest.method)}
+              description={feeEstimateError}
+              onretry={() => window.location.reload()}
+            />{/if}<Button
+            type="submit"
+            size="large"
+            class="full"
+            disabled={!customFeeValid}
+            loading={busy}
+            loadingLabel={translate($locale, 'Preparing acceleration…')}
+            >{translate($locale, 'Continue to sign')}</Button
           >
-          <span
-            >{translate(
-              $locale,
-              'Spending them is safe with your normal keys. Any wallet change starts a fresh wait after confirmation.'
-            )}</span
-          >
-        </div>{/if}
-      <FeeSelector
-        {estimates}
-        value={selectedRateNumber}
-        {estimatedFee}
-        error={feeEstimateError}
-        onchange={updatePaymentFeeRate}
-      />
-      {#if maxSpendRefreshing}<p class="available-balance-summary" role="status">
-          {translate($locale, 'Updating the maximum spendable amount for this fee…')}
-        </p>{/if}
-      {#if error}<div class="hardware-inline-error send-form-error" role="alert">
-          <AlertTriangle size={18} /><span
-            ><strong>{translate($locale, 'Payment could not be prepared')}</strong><small
-              >{error}</small
-            ></span
-          >
-        </div>{/if}
-      <div class="split-actions">
-        <Button
-          variant="secondary"
-          size="large"
-          onclick={() => {
-            error = '';
-            draftStep = 1;
-          }}>{translate($locale, 'Back')}</Button
-        ><Button
-          type="submit"
-          size="large"
-          disabled={!valid}
-          loading={busy}
-          loadingLabel={translate($locale, 'Preparing payment…')}
-          >{translate($locale, 'Review payment')}</Button
+        </form>
+      {:else if delayedSpendMode && delayedSpendCoin && !proposal}<form
+          class="form-card send-stage-card"
+          onsubmit={(event) => {
+            event.preventDefault();
+            prepareDelayedSpend();
+          }}
+          in:fly={{ x: 8, duration: 180 }}
         >
-      </div>
-    </form>
-  {:else}<div class="multisig-signing-layout">
-      <section
-        class="form-card"
-        aria-label={translate(
-          $locale,
-          proposal.canFinalize ? 'Signed transaction review' : 'Transaction review'
-        )}
-      >
-        <div class="review-amount">
-          <span
-            >{translate(
-              $locale,
-              renewalMode
-                ? 'New protected coin'
-                : delayedSpendMode
-                  ? 'Recipient receives'
-                  : 'You send'
-            )}</span
-          ><Amount value={Number(proposal.amount)} interactive />
-        </div>
-        <dl class="details-list proposal-review-primary">
-          <div>
-            <dt>{translate($locale, renewalMode ? 'New wallet address' : 'To')}</dt>
-            <dd>
-              <button
-                class="address-review-trigger mono"
-                aria-label={translate($locale, 'View complete recipient address')}
-                onclick={() => (addressOpen = true)}>{compactAddress(proposal.recipient)}</button
-              >
-            </dd>
+          <div class="send-stage-heading">
+            <span>{translate($locale, 'RECOVERY PAYMENT')}</span>
+            <h2>{translate($locale, 'Where should this coin go?')}</h2>
+            <p>
+              {translate($locale, 'The {key} signs alone. The fee is deducted from this coin.', {
+                key: delayedSpendKeyName
+              })}
+            </p>
           </div>
-          <div class="label-details-row">
-            <dt>{translate($locale, 'Label')}</dt>
-            <dd><PermanentLabelTags labels={proposal.labels ?? [proposal.label]} prominent /></dd>
+          <div class="renewal-coin-summary">
+            <span>{translate($locale, 'Coin available')}</span>
+            <strong><Amount value={delayedSpendCoin.amount} hidden={$discreetMode} /></strong>
+            <small>{translate($locale, 'Ready for the {key}', { key: delayedSpendKeyName })}</small>
           </div>
-          <div>
-            <dt>{translate($locale, 'Network')}</dt>
-            <dd>{proposal.network}</dd>
-          </div>
-          <div>
-            <dt>{translate($locale, 'Network fee')}</dt>
-            <dd><Amount value={Number(proposal.fee)} interactive /></dd>
-          </div>
-          <div class="total">
-            <dt>{translate($locale, 'Total')}</dt>
-            <dd><Amount value={Number(proposal.total)} interactive /></dd>
-          </div>
-        </dl>
-        {#if delayedSpendMode}<div class="selection-review renewal-review">
-            <strong
-              >{translate($locale, 'Signed by the {key}', { key: delayedSpendKeyName })}</strong
-            >
-            <span
-              >{translate(
-                $locale,
-                'One coin goes to one address. The network fee is deducted from it.'
-              )}</span
-            >
-          </div>{:else}<div class:warning={proposalHasPrivacyWarning} class="selection-review">
-            <strong
-              >{proposal.selectionImpact.selectedInputCount}
-              {translate($locale, 'funding coin')}{translate(
-                $locale,
-                proposal.selectionImpact.selectedInputCount === 1 ? '' : 's'
-              )} · {proposal.selectionImpact.strategy.replace('_', ' ')}</strong
-            ><span
-              >{translate(
-                $locale,
-                proposalHasPrivacyWarning
-                  ? `Review: ${proposal.selectionImpact.newClusterLinks} new cluster link${proposal.selectionImpact.newClusterLinks === 1 ? '' : 's'}; unknown or reused sources are called out.`
-                  : 'No new cluster link, unknown provenance, or address-reuse warning.'
-              )}</span
-            >
-          </div>{/if}
-        {#if renewalMode}<div class="selection-review renewal-review">
-            <strong>{translate($locale, 'Protection restarts after confirmation')}</strong><span
-              >{translate(
-                $locale,
-                'Only this coin moves. The network fee is the only amount leaving your wallet.'
-              )}</span
-            >
-          </div>{/if}
-        {#if !renewalMode && !delayedSpendMode && proposalReadyCoins.length}<div
-            class="selection-review renewal-review"
+          <label class="field"
+            ><span>{translate($locale, 'Send to')}</span><input
+              aria-label={translate($locale, 'Bitcoin address')}
+              bind:value={address}
+              oninput={clearDraftError}
+              placeholder="{addressPrefixForNetwork(defaultConfig.network)}q…"
+            />{#if address && !addressValid}<em
+                >{translate($locale, 'Enter a valid')}
+                {networkName(defaultConfig.network)}
+                {translate($locale, 'address')}</em
+              >{/if}</label
           >
-            <strong
-              >{translate(
-                $locale,
-                proposalReadyCoins.length === 1
-                  ? 'One recovery-ready coin is being spent'
-                  : '{count} recovery-ready coins are being spent',
-                { count: proposalReadyCoins.length }
-              )}</strong
+          {@render labelTokenPicker(
+            'delayed-spend-label-input',
+            translate($locale, 'Label'),
+            translate($locale, 'e.g. Emergency recovery'),
+            translate($locale, 'Required · cannot be changed')
+          )}
+          <details class="selection-technical">
+            <summary
+              >{translate($locale, 'Network fee · {rate} sat/vB', {
+                rate: selectedRateNumber || '—'
+              })}</summary
             >
-            <span
-              >{translate(
-                $locale,
-                'Your normal keys approve this payment. Any wallet change begins a fresh wait after confirmation.'
-              )}</span
-            >
-          </div>{/if}
-        {#if proposal.selectionImpact.feeDifferenceVsPrivate !== null}<div class="selection-review">
-            <strong>{translate($locale, 'Exact strategy comparison')}</strong><span
-              ><Amount value={Math.abs(proposal.selectionImpact.feeDifferenceVsPrivate)} />
-              {translate(
-                $locale,
-                proposal.selectionImpact.feeDifferenceVsPrivate <= 0 ? 'lower' : 'higher'
-              )}
-              {translate(
-                $locale,
-                'than the valid\n              More private candidate. Lower fee is not better privacy.'
-              )}</span
-            >
-          </div>{/if}
-        <TransactionReviewDetails
-          {proposal}
-          interactiveAmounts
-          policy={proposal.spendPath === 'delayed'
-            ? `${delayedSpendKeyName} only`
-            : wallet?.recoveryTemplate?.type === 'recovery'
-              ? '2 of 3 primary keys'
-              : `${wallet?.threshold} of ${wallet?.cosigners.length}`}
-          onChangeAddress={() => (changeAddressOpen = true)}
-        />
-        {#if proposalInputsUnavailable(proposal)}<div
-            class="hardware-inline-error signing-transport-error"
-            role="alert"
-          >
-            <AlertTriangle size={18} /><span
-              ><strong>{translate($locale, 'Payment inputs unavailable')}</strong><small
-                >{translate(
-                  $locale,
-                  'This proposal uses coins no longer available in this wallet. Sync, then cancel it and prepare a new payment. Do not sign or broadcast this PSBT.'
-                )}</small
-              ></span
-            >
-          </div>{:else}
-          {#if !proposal.canFinalize}<div class="psbt-actions">
-              {#if !wallet?.recoveryTemplate}<Button variant="secondary" onclick={scan}
-                  ><Cpu size={16} />{translate($locale, 'Sign with device')}</Button
-                >{/if}<Button variant="secondary" onclick={showPsbtQr}
-                ><QrCode size={16} />{translate($locale, 'Show unsigned QR')}</Button
-              ><Button
-                variant="secondary"
-                onclick={() => {
-                  scannedFrames = [];
-                  qrScanOpen = true;
-                }}><ScanLine size={16} />{translate($locale, 'Scan signed QR')}</Button
-              ><Button variant="secondary" onclick={openPsbtImport}
-                ><FileUp size={16} />{translate($locale, 'Import signed PSBT')}</Button
-              ><Button variant="secondary" onclick={copyPsbt}
-                ><Copy size={16} />{translate($locale, 'Copy PSBT')}</Button
-              ><Button
-                variant="secondary"
-                loading={savingPsbt}
-                loadingLabel={translate($locale, 'Saving PSBT…')}
-                onclick={saveProposalPsbt}
-                ><Download size={16} />{translate($locale, 'Save PSBT')}</Button
+            <FeeSelector
+              {estimates}
+              value={selectedRateNumber}
+              {estimatedFee}
+              error={feeEstimateError}
+              onchange={(rate) => {
+                selectedRate = rate;
+                clearDraftError();
+              }}
+            />
+          </details>
+          {#if error}<div class="hardware-inline-error send-form-error" role="alert">
+              <AlertTriangle size={18} /><span
+                ><strong>{translate($locale, 'Payment could not be prepared')}</strong><small
+                  >{error}</small
+                ></span
               >
             </div>{/if}
-          {#if !proposal.canFinalize && wallet?.recoveryTemplate}<div
-              class="selection-review"
-              role="note"
+          <Button
+            type="submit"
+            size="large"
+            class="full"
+            disabled={!delayedSpendValid}
+            loading={busy}
+            loadingLabel={translate($locale, 'Preparing payment…')}
+            >{translate($locale, 'Review {key} payment', { key: delayedSpendKeyName })}</Button
+          >
+        </form>
+      {:else if renewalMode && renewalCoin && !proposal}<form
+          class="form-card send-stage-card"
+          onsubmit={(event) => {
+            event.preventDefault();
+            prepareRenewal();
+          }}
+          in:fly={{ x: 8, duration: 180 }}
+        >
+          <div class="send-stage-heading">
+            <span>{translate($locale, 'COIN PROTECTION')}</span>
+            <h2>{translate($locale, 'Renew this coin’s protection')}</h2>
+            <p>
+              {translate(
+                $locale,
+                'Choose a label and fee. You will review everything before signing.'
+              )}
+            </p>
+          </div>
+          <div class="renewal-coin-summary">
+            <span>{translate($locale, 'Coin being renewed')}</span>
+            <strong><Amount value={renewalCoin.amount} hidden={$discreetMode} /></strong>
+            <small
+              >{translate($locale, '{key} can spend now', {
+                key: translate($locale, renewalKeyName)
+              })}</small
+            >
+          </div>
+          {@render labelTokenPicker(
+            'renewal-label-input',
+            translate($locale, 'Transaction label'),
+            translate($locale, 'e.g. Renew savings protection'),
+            translate($locale, 'Required · cannot be changed; reuse is intentional')
+          )}
+          <details class="selection-technical">
+            <summary
+              >{translate($locale, 'Network fee · {rate} sat/vB', {
+                rate: selectedRateNumber || '—'
+              })}</summary
+            >
+            <FeeSelector
+              {estimates}
+              value={selectedRateNumber}
+              {estimatedFee}
+              error={feeEstimateError}
+              onchange={(rate) => {
+                selectedRate = rate;
+                clearDraftError();
+              }}
+            />
+          </details>
+          {#if error}<div class="hardware-inline-error send-form-error" role="alert">
+              <AlertTriangle size={18} /><span
+                ><strong>{translate($locale, 'Protection renewal could not be prepared')}</strong
+                ><small>{error}</small></span
+              >
+            </div>{/if}
+          <Button
+            type="submit"
+            size="large"
+            class="full"
+            disabled={!renewalValid}
+            loading={busy}
+            loadingLabel={translate($locale, 'Preparing renewal…')}
+            >{translate($locale, 'Review protection renewal')}</Button
+          >
+        </form>
+      {:else if !proposal && draftStep === 1}
+        <form
+          class="form-card send-stage-card"
+          onsubmit={(e) => {
+            e.preventDefault();
+            continueToAmount();
+          }}
+          in:fly={{ x: 8, duration: 180 }}
+        >
+          <div class="send-stage-heading compact">
+            <h2>{translate($locale, 'What is this payment for?')}</h2>
+          </div>
+          {@render labelTokenPicker(
+            'multisig-send-label-input',
+            translate($locale, 'Payment label'),
+            translate($locale, 'e.g. Hardware purchase, Pay Alex, Test transaction'),
+            translate($locale, 'Required · cannot be changed')
+          )}
+          <div class="field">
+            <span>{translate($locale, 'Bitcoin address')}</span>
+            <div class="address-input-control">
+              <input
+                aria-label={translate($locale, 'Bitcoin address')}
+                bind:value={address}
+                oninput={() => {
+                  clearDraftError();
+                  paymentRequestNotice = '';
+                }}
+                onkeydown={submitIntentOnEnter}
+                placeholder="{addressPrefixForNetwork(defaultConfig.network)}q…"
+              /><button
+                type="button"
+                aria-label={translate($locale, 'Scan Bitcoin payment QR')}
+                title={translate($locale, 'Scan Bitcoin payment QR')}
+                onclick={() => {
+                  paymentScanError = '';
+                  paymentScanOpen = true;
+                }}><QrCode size={19} /></button
+              >
+            </div>
+            {#if address && !addressValid}<em
+                >{translate($locale, 'Enter a valid')}
+                {networkName(defaultConfig.network)}
+                {translate($locale, 'address')}</em
+              >{/if}{#if paymentRequestNotice}<small class="payment-request-result" role="status"
+                >{paymentRequestNotice}</small
+              >{/if}
+          </div>
+          <Button type="submit" size="large" class="full" disabled={!intentValid}
+            >{translate($locale, 'Continue to amount')}</Button
+          >
+          {#if error}<div class="hardware-inline-error send-form-error" role="alert">
+              <AlertTriangle size={18} /><span
+                ><strong>{translate($locale, 'Could not save payment draft')}</strong><small
+                  >{error}</small
+                ></span
+              >
+            </div>{/if}
+        </form>
+      {:else if !proposal}
+        <form
+          class="form-card send-stage-card"
+          onsubmit={(e) => {
+            e.preventDefault();
+            prepare();
+          }}
+          in:fly={{ x: 8, duration: 180 }}
+        >
+          <div class="send-stage-heading compact">
+            <h2>{translate($locale, 'Fund the payment')}</h2>
+          </div>
+          <label class="field"
+            ><span>{translate($locale, 'Amount')}</span>
+            <div class="amount-input">
+              <input
+                aria-label={translate($locale, 'Amount')}
+                bind:value={amount}
+                oninput={() => {
+                  if (maxSpendFeeTimer) clearTimeout(maxSpendFeeTimer);
+                  maxSpendRequestRevision += 1;
+                  maxSpendActive = false;
+                  maxSpendRefreshing = false;
+                  maxSpendQuote = null;
+                  clearDraftError();
+                }}
+                inputmode={$denomination === 'btc' ? 'decimal' : 'numeric'}
+                placeholder="0"
+              /><button
+                class="amount-unit-toggle"
+                type="button"
+                aria-label={translate(
+                  $locale,
+                  $denomination === 'btc'
+                    ? 'Show transaction amount in sats'
+                    : 'Show transaction amount in BTC'
+                )}
+                onclick={toggleAmountInputDenomination}
+                >{translate($locale, $denomination === 'btc' ? 'BTC' : 'sats')}</button
+              ><button class="amount-max-action" type="button" onclick={() => void useMaxAmount()}
+                >{translate($locale, 'Max')}</button
+              >
+            </div>
+            <small class="available-balance-summary"
+              ><span
+                >{translate($locale, 'Available:')}
+                <Amount value={available} hidden={$discreetMode} /></span
+              >{#if frozenAmount > 0}<span class="frozen-balance-guidance"
+                  ><Amount value={frozenAmount} hidden={$discreetMode} />
+                  {translate($locale, 'frozen')} ·
+                  <a href="/coins">{translate($locale, 'Review frozen coins')}</a></span
+                >{/if}</small
+            ></label
+          >
+          {#if maxSpendActive}<p class="max-spend-guidance" role="status">
+              {translate(
+                $locale,
+                frozenAmount > 0
+                  ? 'Maximum spendable amount selected. Frozen coins remain in this wallet.'
+                  : 'Maximum spendable amount selected after the network fee.'
+              )}
+            </p>{/if}
+          <div class="coin-control-field">
+            <span>{translate($locale, 'Coin selection')}</span><button
+              type="button"
+              class="coin-mode"
+              class:open={showCoins}
+              aria-expanded={showCoins}
+              onclick={() => (showCoins = !showCoins)}
+              ><CircleDot size={16} /><span
+                ><strong
+                  >{selectedCoins.length
+                    ? translate(
+                        $locale,
+                        selectedCoins.length === 1
+                          ? 'Manual · {count} coin'
+                          : 'Manual · {count} coins',
+                        { count: selectedCoins.length }
+                      )
+                    : translate($locale, 'Automatic selection')}</strong
+                ><small
+                  >{selectedCoins.length
+                    ? translate($locale, '{amount} {unit} available', {
+                        amount: $discreetMode ? '••••••' : formatAmount(available, $denomination),
+                        unit: amountUnit($denomination)
+                      })
+                    : translate($locale, '{strategy} · Frozen coins stay untouched', {
+                        strategy: automaticStrategyLabel
+                      })}</small
+                ></span
+              ><b>{translate($locale, showCoins ? 'Done' : 'Choose')}</b></button
+            >{#if showCoins}<div class="send-coin-picker">
+                <fieldset class="automatic-strategies">
+                  <legend>{translate($locale, 'Automatic strategy')}</legend
+                  >{#each [{ id: 'balanced', name: 'Balanced', detail: 'Limit privacy merges without excessive fees' }, { id: 'private', name: 'More private', detail: 'Avoid reused, unknown, and unrelated coins' }, { id: 'lower_fee', name: 'Lower fee', detail: 'Prefer fewer, larger inputs' }] as option}<button
+                      type="button"
+                      class:active={automaticStrategy === option.id && !selectedCoins.length}
+                      onclick={() => {
+                        automaticStrategy = option.id as AutomaticSelectionStrategy;
+                        selectedCoins = [];
+                        updateAvailable();
+                      }}><strong>{option.name}</strong><small>{option.detail}</small></button
+                    >{/each}
+                </fieldset>
+                {#each coins as coin}<label class:frozen={coin.frozen}
+                    ><input
+                      type="checkbox"
+                      checked={selectedCoins.includes(coin.outpoint)}
+                      disabled={coin.frozen}
+                      onchange={(event) => toggleCoin(coin.outpoint, event.currentTarget.checked)}
+                    /><span
+                      ><span class="coin-picker-title-line"
+                        ><PermanentLabelTags
+                          labels={coin.provenance.labels.length
+                            ? coin.provenance.labels
+                            : [coin.label]}
+                          hidden={$discreetMode}
+                          prominent
+                        /></span
+                      ><small
+                        >{translate(
+                          $locale,
+                          $discreetMode
+                            ? '•••••• · Provenance hidden'
+                            : `${formatAmount(coin.amount, $denomination)} ${amountUnit($denomination)}${coin.provenance.state === 'unknown' ? ' · Source unknown' : ''}${coin.provenance.addressReused ? ' · Address reused' : ''}`
+                        )}{translate(
+                          $locale,
+                          coin.frozen
+                            ? ' · Frozen'
+                            : validPolicyMaturity(coin)?.state === 'mature'
+                              ? ' · Backup key available'
+                              : ''
+                        )}</small
+                      ></span
+                    ></label
+                  >{/each}<button type="button" onclick={useAutomatic}
+                  >{translate($locale, 'Use automatic selection')}</button
+                >
+              </div>{/if}
+          </div>
+          {#if selectionPreview}<div
+              class:warning={selectionPreview.newClusterLinks > 0 ||
+                selectionPreview.hasUnknownProvenance ||
+                selectionPreview.hasAddressReuse}
+              class="selection-review manual-selection-preview"
             >
               <strong
-                >{translate($locale, 'Use offline PSBT signing for this delayed policy.')}</strong
-              ><span
+                >{selectionPreview.selectedInputCount}
+                {translate($locale, 'selected ·')}
+                <Amount value={selectionPreview.selectedAmount} hidden={$discreetMode} /></strong
+              >{#if $discreetMode}<span
+                  >{translate($locale, 'Funding provenance hidden in discreet mode.')}</span
+                >{:else}<div class="selection-labels">
+                  <span>{translate($locale, 'Funding labels')}</span><PermanentLabelTags
+                    labels={selectionPreview.fundingLabels}
+                  />
+                </div>
+                <span
+                  >{translate(
+                    $locale,
+                    selectionPreview.newClusterLinks
+                      ? `${selectionPreview.newClusterLinks} new public link${selectionPreview.newClusterLinks === 1 ? '' : 's'}.`
+                      : 'No new links between existing groups.'
+                  )}</span
+                >{#if selectionPreview.oneExistingGroupCanFund && selectionPreview.newClusterLinks > 0}<div
+                    class="selection-recommendation"
+                  >
+                    <strong>{translate($locale, 'Privacy recommendation')}</strong><span
+                      >{translate(
+                        $locale,
+                        'One existing group can fund this payment without linking these groups.'
+                      )}</span
+                    ><button
+                      type="button"
+                      onclick={() => {
+                        automaticStrategy = 'private';
+                        useAutomatic();
+                      }}>{translate($locale, 'Use privacy-first selection')}</button
+                    >
+                  </div>{/if}
+                <details class="selection-technical">
+                  <summary>{translate($locale, 'Input details')}</summary><span
+                    >{translate($locale, 'Estimated input weight:')}
+                    {shortSats(selectionPreview.estimatedInputWeight)} WU</span
+                  >
+                </details>{/if}
+            </div>{/if}
+          {#if selectedReadyCoins.length}<div class="selection-review renewal-review">
+              <strong
                 >{translate(
                   $locale,
-                  'USB hardware signing is blocked because Groot’s pinned HWI release cannot execute this Miniscript policy safely.'
+                  selectedReadyCoins.length === 1
+                    ? 'This coin already has its backup key available'
+                    : '{count} selected coins already have their backup keys available',
+                  { count: selectedReadyCoins.length }
+                )}</strong
+              >
+              <span
+                >{translate(
+                  $locale,
+                  'Spending them is safe with your normal keys. Any wallet change starts a fresh wait after confirmation.'
                 )}</span
               >
             </div>{/if}
-          {#if proposal.canFinalize}<div class="ready-panel">
-              <LockKeyhole size={18} />
-              <div>
-                <strong>{translate($locale, 'Ready to finalize')}</strong><small
-                  >{translate(
-                    $locale,
-                    'Enter the coordinator app PIN. Hardware signatures are already inside the PSBT.'
-                  )}</small
-                >
-              </div>
-            </div>
-            <Button
-              variant="secondary"
-              class="full signed-psbt-export"
-              loading={savingPsbt}
-              loadingLabel={translate($locale, 'Saving signed PSBT…')}
-              onclick={saveProposalPsbt}
-              ><Download size={16} />{translate($locale, 'Save signed PSBT')}</Button
-            ><PasswordField
-              label={translate($locale, 'App PIN')}
-              inputLabel="App PIN"
-              bind:value={pin}
-              autocomplete="current-password"
-            /><Button
-              size="large"
-              class="full"
-              disabled={!pin}
-              loading={busy}
-              loadingLabel={translate($locale, 'Finalizing & broadcasting…')}
-              onclick={broadcast}>{translate($locale, 'Finalize & broadcast')}</Button
-            >{:else}<Button
-              size="large"
-              class="full signature-requirement-action"
-              disabled
-              ariaLabel={signatureRequirementLabel}>{signatureRequirementLabel}</Button
-            >{/if}{#if error}<div
-              class="hardware-inline-error signing-transport-error"
-              role="alert"
-            >
+          <FeeSelector
+            {estimates}
+            value={selectedRateNumber}
+            {estimatedFee}
+            error={feeEstimateError}
+            onchange={updatePaymentFeeRate}
+          />
+          {#if maxSpendRefreshing}<p class="available-balance-summary" role="status">
+              {translate($locale, 'Updating the maximum spendable amount for this fee…')}
+            </p>{/if}
+          {#if error}<div class="hardware-inline-error send-form-error" role="alert">
               <AlertTriangle size={18} /><span
-                ><strong>{translate($locale, 'Payment action failed')}</strong><small>{error}</small
+                ><strong>{translate($locale, 'Payment could not be prepared')}</strong><small
+                  >{error}</small
                 ></span
               >
-            </div>{/if}{/if}<Button
-          variant="ghost-danger"
-          class="full proposal-cancel-action"
-          disabled={busy}
-          onclick={() => {
-            cancelError = '';
-            cancelOpen = true;
-          }}><X size={15} />{translate($locale, 'Cancel payment')}</Button
-        >
-      </section>
-      {#if wallet}<aside class="signer-side-panel">
-          <SignerSummary
-            signers={signerItems}
-            required={proposal.required}
-            signedFingerprints={proposal.signedFingerprints}
-            collecting
-            ondiscard={(signer) => {
-              discardError = '';
-              discardSigner = signer;
-            }}
-          />
-        </aside>{/if}
-    </div>{/if}
+            </div>{/if}
+          <div class="split-actions">
+            <Button
+              variant="secondary"
+              size="large"
+              onclick={() => {
+                error = '';
+                draftStep = 1;
+              }}>{translate($locale, 'Back')}</Button
+            ><Button
+              type="submit"
+              size="large"
+              disabled={!valid}
+              loading={busy}
+              loadingLabel={translate($locale, 'Preparing payment…')}
+              >{translate($locale, 'Review payment')}</Button
+            >
+          </div>
+        </form>
+      {:else}<div class="multisig-signing-layout">
+          <section
+            class="form-card"
+            aria-label={translate(
+              $locale,
+              proposal.canFinalize ? 'Signed transaction review' : 'Transaction review'
+            )}
+          >
+            <div class="review-amount">
+              <span
+                >{translate(
+                  $locale,
+                  renewalMode
+                    ? 'New protected coin'
+                    : delayedSpendMode
+                      ? 'Recipient receives'
+                      : 'You send'
+                )}</span
+              ><Amount value={Number(proposal.amount)} interactive />
+            </div>
+            <dl class="details-list proposal-review-primary">
+              <div>
+                <dt>{translate($locale, renewalMode ? 'New wallet address' : 'To')}</dt>
+                <dd>
+                  <button
+                    class="address-review-trigger mono"
+                    aria-label={translate($locale, 'View complete recipient address')}
+                    onclick={() => (addressOpen = true)}
+                    >{compactAddress(proposal.recipient)}</button
+                  >
+                </dd>
+              </div>
+              <div class="label-details-row">
+                <dt>{translate($locale, 'Label')}</dt>
+                <dd>
+                  <PermanentLabelTags labels={proposal.labels ?? [proposal.label]} prominent />
+                </dd>
+              </div>
+              <div>
+                <dt>{translate($locale, 'Network')}</dt>
+                <dd>{proposal.network}</dd>
+              </div>
+              <div>
+                <dt>{translate($locale, 'Network fee')}</dt>
+                <dd><Amount value={Number(proposal.fee)} interactive /></dd>
+              </div>
+              <div class="total">
+                <dt>{translate($locale, 'Total')}</dt>
+                <dd><Amount value={Number(proposal.total)} interactive /></dd>
+              </div>
+            </dl>
+            {#if delayedSpendMode}<div class="selection-review renewal-review">
+                <strong
+                  >{translate($locale, 'Signed by the {key}', { key: delayedSpendKeyName })}</strong
+                >
+                <span
+                  >{translate(
+                    $locale,
+                    'One coin goes to one address. The network fee is deducted from it.'
+                  )}</span
+                >
+              </div>{/if}
+            {#if renewalMode}<div class="selection-review renewal-review">
+                <strong>{translate($locale, 'Protection restarts after confirmation')}</strong><span
+                  >{translate(
+                    $locale,
+                    'Only this coin moves. The network fee is the only amount leaving your wallet.'
+                  )}</span
+                >
+              </div>{/if}
+            {#if !renewalMode && !delayedSpendMode && proposalReadyCoins.length}<div
+                class="selection-review renewal-review"
+              >
+                <strong
+                  >{translate(
+                    $locale,
+                    proposalReadyCoins.length === 1
+                      ? 'One recovery-ready coin is being spent'
+                      : '{count} recovery-ready coins are being spent',
+                    { count: proposalReadyCoins.length }
+                  )}</strong
+                >
+                <span
+                  >{translate(
+                    $locale,
+                    'Your normal keys approve this payment. Any wallet change begins a fresh wait after confirmation.'
+                  )}</span
+                >
+              </div>{/if}
+            {#if proposal.selectionImpact.feeDifferenceVsPrivate !== null}<div
+                class="selection-review"
+              >
+                <strong>{translate($locale, 'Exact strategy comparison')}</strong><span
+                  ><Amount value={Math.abs(proposal.selectionImpact.feeDifferenceVsPrivate)} />
+                  {translate(
+                    $locale,
+                    proposal.selectionImpact.feeDifferenceVsPrivate <= 0 ? 'lower' : 'higher'
+                  )}
+                  {translate(
+                    $locale,
+                    'than the valid\n              More private candidate. Lower fee is not better privacy.'
+                  )}</span
+                >
+              </div>{/if}
+            <TransactionReviewDetails
+              {proposal}
+              interactiveAmounts
+              policy={proposal.spendPath === 'delayed'
+                ? `${delayedSpendKeyName} only`
+                : wallet?.recoveryTemplate?.type === 'recovery'
+                  ? '2 of 3 primary keys'
+                  : `${wallet?.threshold} of ${wallet?.cosigners.length}`}
+              onChangeAddress={() => (changeAddressOpen = true)}
+            />
+            {#if proposalInputsUnavailable(proposal)}<div
+                class="hardware-inline-error signing-transport-error"
+                role="alert"
+              >
+                <AlertTriangle size={18} /><span
+                  ><strong>{translate($locale, 'Payment inputs unavailable')}</strong><small
+                    >{translate(
+                      $locale,
+                      'This proposal uses coins no longer available in this wallet. Sync, then cancel it and prepare a new payment. Do not sign or broadcast this PSBT.'
+                    )}</small
+                  ></span
+                >
+              </div>{:else}
+              {#if !proposal.canFinalize}<div class="psbt-actions">
+                  {#if !wallet?.recoveryTemplate}<Button variant="secondary" onclick={scan}
+                      ><Cpu size={16} />{translate($locale, 'Sign with device')}</Button
+                    >{/if}<Button variant="secondary" onclick={showPsbtQr}
+                    ><QrCode size={16} />{translate($locale, 'Show unsigned QR')}</Button
+                  ><Button
+                    variant="secondary"
+                    onclick={() => {
+                      scannedFrames = [];
+                      qrScanOpen = true;
+                    }}><ScanLine size={16} />{translate($locale, 'Scan signed QR')}</Button
+                  ><Button variant="secondary" onclick={openPsbtImport}
+                    ><FileUp size={16} />{translate($locale, 'Import signed PSBT')}</Button
+                  ><Button variant="secondary" onclick={copyPsbt}
+                    ><Copy size={16} />{translate($locale, 'Copy PSBT')}</Button
+                  ><Button
+                    variant="secondary"
+                    loading={savingPsbt}
+                    loadingLabel={translate($locale, 'Saving PSBT…')}
+                    onclick={saveProposalPsbt}
+                    ><Download size={16} />{translate($locale, 'Save PSBT')}</Button
+                  >
+                </div>{/if}
+              {#if !proposal.canFinalize && wallet?.recoveryTemplate}<div
+                  class="selection-review"
+                  role="note"
+                >
+                  <strong
+                    >{translate(
+                      $locale,
+                      'Use offline PSBT signing for this delayed policy.'
+                    )}</strong
+                  ><span
+                    >{translate(
+                      $locale,
+                      'USB hardware signing is blocked because Groot’s pinned HWI release cannot execute this Miniscript policy safely.'
+                    )}</span
+                  >
+                </div>{/if}
+              {#if proposal.canFinalize}<div class="ready-panel">
+                  <LockKeyhole size={18} />
+                  <div>
+                    <strong>{translate($locale, 'Ready to finalize')}</strong><small
+                      >{translate(
+                        $locale,
+                        'Enter the coordinator app PIN. Hardware signatures are already inside the PSBT.'
+                      )}</small
+                    >
+                  </div>
+                </div>
+                <Button
+                  variant="secondary"
+                  class="full signed-psbt-export"
+                  loading={savingPsbt}
+                  loadingLabel={translate($locale, 'Saving signed PSBT…')}
+                  onclick={saveProposalPsbt}
+                  ><Download size={16} />{translate($locale, 'Save signed PSBT')}</Button
+                ><PasswordField
+                  label={translate($locale, 'App PIN')}
+                  inputLabel="App PIN"
+                  bind:value={pin}
+                  autocomplete="current-password"
+                /><Button
+                  size="large"
+                  class="full"
+                  disabled={!pin}
+                  loading={busy}
+                  loadingLabel={translate($locale, 'Finalizing & broadcasting…')}
+                  onclick={broadcast}>{translate($locale, 'Finalize & broadcast')}</Button
+                >{:else}<Button
+                  size="large"
+                  class="full signature-requirement-action"
+                  disabled
+                  ariaLabel={signatureRequirementLabel}>{signatureRequirementLabel}</Button
+                >{/if}{#if error}<div
+                  class="hardware-inline-error signing-transport-error"
+                  role="alert"
+                >
+                  <AlertTriangle size={18} /><span
+                    ><strong>{translate($locale, 'Payment action failed')}</strong><small
+                      >{error}</small
+                    ></span
+                  >
+                </div>{/if}{/if}<Button
+              variant="ghost-danger"
+              class="full proposal-cancel-action"
+              disabled={busy}
+              onclick={() => {
+                cancelError = '';
+                cancelOpen = true;
+              }}><X size={15} />{translate($locale, 'Cancel payment')}</Button
+            >
+          </section>
+          {#if wallet}<aside class="signer-side-panel">
+              <SignerSummary
+                signers={signerItems}
+                required={proposal.required}
+                signedFingerprints={proposal.signedFingerprints}
+                collecting
+                ondiscard={(signer) => {
+                  discardError = '';
+                  discardSigner = signer;
+                }}
+              />
+            </aside>{/if}
+        </div>{/if}
+    </div>
+    {#if wallet && !proposal && !renewalMode && !delayedSpendMode}<aside class="signer-side-panel">
+        <SignerSummary
+          signers={signerItems}
+          required={regularRequired}
+          signedFingerprints={[]}
+          collecting={false}
+        />
+      </aside>{/if}
+  </div>
 </div>
 
 <Modal
@@ -2989,18 +2976,10 @@
       discardDraftError = '';
     }
   }}
-  ><WarningNotice
-    title={translate($locale, 'Only the draft will be removed.')}
-    body={translate($locale, 'No transaction or signature exists yet.')}
-  />
-  <dl class="details-list cancel-proposal-details">
+  ><dl class="details-list cancel-proposal-details">
     <div>
       <dt>{translate($locale, 'Payment')}</dt>
       <dd><PermanentLabelTags labels={submissionLabels} prominent /></dd>
-    </div>
-    <div>
-      <dt>{translate($locale, 'Saved fields')}</dt>
-      <dd>{translate($locale, 'Recipient, labels, amount, fee, and coin selection')}</dd>
     </div>
   </dl>
   {#if discardDraftError}<p class="form-error" role="alert">{discardDraftError}</p>{/if}

@@ -1,5 +1,7 @@
 # Implementation status
 
+The shared UI simplification follow-up gives every portalled tooltip a compact borderless surface in both themes, gives permanent-label tags and recent-label suggestions the same blue-tinted identity, and removes the shared modal close button's resting fill. Ordinary software, single-hardware, and multisig Send flows now keep their signer summary in a right-hand desktop column across Intent, Amount & fee, and Review & sign while stacking it safely on mobile. Repeated Send headings, draft-warning copy, address-detail decoration, and the default irreversible-transaction warning are removed; funding privacy context moves into the existing optional transaction disclosure. Single-Ledger signing omits unsupported QR controls. Clicking the selected locked wallet now returns from Settings to Unlock, and Coins exposes whole-row hover/selection behavior. This is presentation and renderer navigation only: wallet, profile, proposal, registry, backup, draft, transaction, descriptor, and database formats are unchanged, no migration is required, and there is no BIP-support impact.
+
 The local-Core confirmation-reconciliation follow-up repairs a wallet graph whose
 transaction already has a valid confirmation anchor but whose sparse persisted
 chain checkpoint omits that anchor height. Ordinary sync now verifies each missing

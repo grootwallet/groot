@@ -21,6 +21,8 @@ describe('unfinished payment resume UI', () => {
     expect(source).toContain('await walletService.clearPaymentDraft()');
     expect(source).toContain('confirmDiscardPaymentDraft');
     expect(source).toContain("'Discard this payment draft?'");
+    expect(source).not.toContain("title={translate($locale, 'Only the draft will be removed.')}");
+    expect(source).not.toContain("<dt>{translate($locale, 'Saved fields')}</dt>");
     expect(source).toContain('suppressDraftSave = true');
     expect(source).toContain('if (!suppressDraftSave) void saveCurrentDraft();');
   });
@@ -34,5 +36,7 @@ describe('unfinished payment resume UI', () => {
     expect(overview).toContain('confirmDiscardPaymentDraft');
     expect(overview).toContain("'Discard this payment draft?'");
     expect(overview).toContain('await walletService.clearPaymentDraft()');
+    expect(overview).not.toContain("title={translate($locale, 'Only the draft will be removed.')}");
+    expect(overview).not.toContain("<dt>{translate($locale, 'Saved fields')}</dt>");
   });
 });

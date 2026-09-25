@@ -1441,18 +1441,10 @@
       discardDraftError = '';
     }
   }}
-  >{#if activeDraft}<WarningNotice
-      title={translate($locale, 'Only the draft will be removed.')}
-      body={translate($locale, 'No transaction or signature exists yet.')}
-    />
-    <dl class="details-list cancel-proposal-details">
+  >{#if activeDraft}<dl class="details-list cancel-proposal-details">
       <div>
         <dt>{translate($locale, 'Payment')}</dt>
         <dd><PermanentLabelTags labels={activeDraft.labels} hidden={$discreetMode} prominent /></dd>
-      </div>
-      <div>
-        <dt>{translate($locale, 'Saved fields')}</dt>
-        <dd>{translate($locale, 'Recipient, labels, amount, fee, and coin selection')}</dd>
       </div>
     </dl>
     {#if discardDraftError}<p class="form-error" role="alert">{discardDraftError}</p>{/if}

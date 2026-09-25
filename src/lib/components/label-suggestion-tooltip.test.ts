@@ -27,4 +27,17 @@ describe('label suggestion tooltips', () => {
     expect(appCss).toMatch(/\.ui-tooltip\s*\{[\s\S]*?translate\(-50%, -100%\)/);
     expect(appCss).toMatch(/\.ui-tooltip\.below\s*\{[\s\S]*?translateX\(-50%\)/);
   });
+
+  it('uses the shared compact borderless tooltip surface', () => {
+    expect(appCss).toMatch(/\.ui-tooltip\s*\{[\s\S]*?border: 0;[\s\S]*?border-radius: 4px;/);
+  });
+
+  it('uses the same quiet blue treatment for saved suggestions and permanent labels', () => {
+    expect(appCss).toMatch(
+      /\.label-suggestions button\s*\{[\s\S]*?background: color-mix\(in srgb, var\(--fr-blue\) 8%/
+    );
+    expect(appCss).toMatch(
+      /\.permanent-label-tag,[\s\S]*?background: color-mix\(in srgb, var\(--fr-blue\) 8%/
+    );
+  });
 });

@@ -426,8 +426,8 @@ code {
   width: max-content;
   max-width: 260px;
   padding: 7px 9px;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-control);
+  border: 0;
+  border-radius: 4px;
   color: var(--text);
   background: var(--panel-2);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.24);
@@ -1283,7 +1283,7 @@ code {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: var(--accent);
+  background: var(--progress);
 }
 .active-proposal-callout {
   min-height: 54px;
@@ -1293,7 +1293,7 @@ code {
   grid-template-columns: 32px minmax(0, 1fr) auto;
   align-items: center;
   gap: 10px;
-  border: 1px solid color-mix(in srgb, var(--accent) 38%, var(--border));
+  border: 1px solid color-mix(in srgb, var(--accent) 24%, transparent);
   border-radius: var(--radius-control);
   color: var(--text);
   background: color-mix(in srgb, var(--accent) 8%, var(--panel));
@@ -1302,7 +1302,7 @@ code {
     background-color 0.15s ease;
 }
 .active-proposal-callout:hover {
-  border-color: color-mix(in srgb, var(--accent) 62%, var(--border));
+  border-color: color-mix(in srgb, var(--accent) 34%, transparent);
   background: color-mix(in srgb, var(--accent) 12%, var(--panel));
 }
 .active-proposal-icon {
@@ -2454,12 +2454,20 @@ code {
   height: 30px;
   border: 0;
   border-radius: 6px;
-  background: var(--surface-icon);
+  background: transparent;
   color: var(--muted);
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
+}
+.icon-button:hover {
+  color: var(--text);
+  background: var(--surface-hover);
+}
+.icon-button:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
 }
 .modal-body {
   min-height: 0;
@@ -2633,9 +2641,9 @@ code {
   padding: 7px 11px;
   color: var(--text);
   font-size: var(--font-size-meta);
-  border: 1px solid var(--control-border);
-  border-radius: var(--radius-control);
-  background: var(--surface-control);
+  border: 1px solid color-mix(in srgb, var(--link) 24%, var(--border));
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--fr-blue) 8%, var(--panel));
 }
 .label-suggestion-text {
   display: block;
@@ -3079,6 +3087,15 @@ code {
   align-items: start;
   gap: 16px;
 }
+.send-flow-layout.with-signers {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 250px;
+  align-items: start;
+  gap: 16px;
+}
+.send-flow-content {
+  min-width: 0;
+}
 .signer-side-panel {
   min-width: 0;
 }
@@ -3117,6 +3134,11 @@ code {
   margin: 0 0 22px;
   padding-bottom: 16px;
   border-bottom: 1px solid var(--border);
+}
+.send-stage-heading.compact {
+  margin-bottom: 18px;
+  padding-bottom: 0;
+  border-bottom: 0;
 }
 .send-stage-heading > span {
   color: var(--link);
@@ -3899,6 +3921,7 @@ code {
   overflow: hidden;
 }
 .coin-list article {
+  position: relative;
   min-height: 89px;
   background: var(--panel);
   border-bottom: 1px solid var(--border);
@@ -3907,6 +3930,41 @@ code {
   align-items: center;
   gap: 13px;
   padding: 13px 16px;
+  transition:
+    background-color 150ms ease,
+    box-shadow 150ms ease;
+}
+.coin-row-selection {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+.coin-row-selection:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -3px;
+}
+.coin-row-selection:disabled {
+  cursor: default;
+}
+.coin-check,
+.coin-row-actions,
+.coin-details {
+  position: relative;
+  z-index: 2;
+}
+.coin-list.selectable article:not(.frozen) {
+  cursor: pointer;
+}
+.coin-list.selectable article:not(.frozen):hover {
+  background: color-mix(in srgb, var(--fr-blue) 4%, var(--panel));
+}
+.coin-list.selectable article.selected {
+  background: color-mix(in srgb, var(--fr-blue) 9%, var(--panel));
+  box-shadow: inset 3px 0 0 var(--fr-blue);
 }
 .coin-list article:last-child {
   border: 0;
@@ -9025,6 +9083,10 @@ code {
 .proposal-review-inputs {
   margin-top: 10px;
 }
+.proposal-review-details > .transaction-review-funding,
+.hardware-review-details > .transaction-review-funding {
+  margin-top: 12px;
+}
 .proposal-review-inputs summary {
   cursor: pointer;
   color: var(--text-soft);
@@ -9214,6 +9276,10 @@ code {
 .coin-list article.reused {
   box-shadow: inset 3px 0 0 color-mix(in srgb, var(--accent) 68%, transparent);
 }
+.coin-list article.selected,
+.coin-list article.selected.reused {
+  box-shadow: inset 3px 0 0 var(--fr-blue);
+}
 .coin-check {
   display: grid;
   place-items: center;
@@ -9270,8 +9336,8 @@ code {
   padding: 3px 6px;
   overflow: hidden;
   color: var(--text-soft) !important;
-  background: var(--surface-control);
-  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--fr-blue) 8%, var(--panel));
+  border: 1px solid color-mix(in srgb, var(--link) 24%, var(--border));
   border-radius: 5px;
   font-size: var(--font-size-meta) !important;
   font-weight: 600;
@@ -9792,7 +9858,7 @@ code {
 }
 .address-detail-status {
   display: grid;
-  grid-template-columns: 8px 1fr;
+  grid-template-columns: 1fr;
   align-items: center;
   gap: 12px;
 }
@@ -10009,7 +10075,7 @@ code {
   font-size: var(--font-size-meta);
 }
 .selection-review.warning {
-  border-color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 30%, transparent);
   background: var(--accent-soft);
 }
 .selection-labels {
@@ -10996,6 +11062,12 @@ code {
   }
   .multisig-signing-layout {
     grid-template-columns: 1fr;
+  }
+  .send-flow-layout.with-signers {
+    grid-template-columns: 1fr;
+  }
+  .send-flow-layout.with-signers > .signer-side-panel {
+    order: -1;
   }
   .signer-side-panel {
     order: -1;

@@ -3,6 +3,7 @@
   import { translate } from '$lib/i18n-catalog';
   import { compactAddress } from '$lib/address-display';
   import Amount from './Amount.svelte';
+  import WarningNotice from './WarningNotice.svelte';
   import type { MultisigProposal, PaymentProposal } from '$lib/wallet';
 
   let {
@@ -64,6 +65,21 @@
   </aside>{/if}
 <details bind:open class:hardware-review-details={compact} class:proposal-review-details={!compact}>
   <summary>{translate($locale, open ? 'View less details' : 'View more details')}</summary>
+  <WarningNotice
+    class="transaction-review-funding"
+    title={`${proposal.selectionImpact.selectedInputCount} ${translate($locale, 'funding coin')}${translate(
+      $locale,
+      proposal.selectionImpact.selectedInputCount === 1 ? '' : 's'
+    )} · ${proposal.selectionImpact.strategy.replace('_', ' ')}`}
+    body={translate(
+      $locale,
+      proposal.selectionImpact.newClusterLinks > 0 ||
+        proposal.selectionImpact.hasUnknownProvenance ||
+        proposal.selectionImpact.hasAddressReuse
+        ? `Review: ${proposal.selectionImpact.newClusterLinks} new cluster link${proposal.selectionImpact.newClusterLinks === 1 ? '' : 's'}; unknown or reused sources are called out.`
+        : 'No new cluster link, unknown provenance, or address-reuse warning.'
+    )}
+  />
   <dl class:details-list={!compact}>
     {#if proposal.acceleration?.method === 'rbf'}
       <div>

@@ -388,7 +388,7 @@ Plain-address and BIP21 payment QR requests are parsed and network-checked only 
 
 `Coins → compact sort control → newest/oldest, largest/smallest, or label A–Z/Z–A`
 
-Newest source transaction is the default. Sorting is presentation-only and never changes selection, freeze state, labels, or spend eligibility. Date sorting leaves coins without a known source-transaction timestamp after dated coins.
+Newest source transaction is the default. Sorting is presentation-only and never changes selection, freeze state, labels, or spend eligibility. Date sorting leaves coins without a known source-transaction timestamp after dated coins. Clicking an unfrozen row or its checkbox toggles the same selection, with matching hover and selected-row feedback.
 
 ## External-signer health check
 

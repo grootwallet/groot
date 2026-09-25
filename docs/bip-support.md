@@ -578,6 +578,11 @@ exact transaction. It changes no descriptor, derivation, transaction, PSBT, sign
 recovery, wallet format, or interoperability claim; unavailable pruned history and
 inconsistent anchors fail closed.
 
+The cross-flow tooltip, label, modal, Send layout, locked-wallet navigation, and
+Coins selection refinement has no BIP support impact. It changes only renderer
+presentation and navigation; descriptor, address, transaction, PSBT, signing,
+recovery, and interoperability behavior are unchanged.
+
 If a change has no BIP impact, its pull request records that explicit assessment.
 Upstream status changes alone may update this document without changing Groot's
 implementation status.

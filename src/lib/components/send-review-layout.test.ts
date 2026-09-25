@@ -86,10 +86,29 @@ describe('send review layout', () => {
     expect(singleSend.match(/<TransactionReviewDetails[\s\S]*?interactiveAmounts/g)?.length).toBe(
       4
     );
-    expect(singleSend.match(/<Amount value=\{proposal\.amount\} interactive \/>/g)?.length).toBe(4);
+    expect(
+      singleSend.match(/<Amount\s+value=\{proposal\.amount\}\s+interactive\s*\/>/g)?.length
+    ).toBe(4);
     expect(multisigSend).toContain('<Amount value={Number(proposal.amount)} interactive />');
     expect(multisigSend.match(/<TransactionReviewDetails[\s\S]*?interactiveAmounts/g)?.length).toBe(
       2
+    );
+  });
+
+  it('keeps funding privacy context inside optional review details', () => {
+    expect(reviewDetails).toContain('class="transaction-review-funding"');
+    expect(singleSend).not.toContain('class:warning={proposalHasPrivacyWarning}');
+    expect(multisigSend).not.toContain('class:warning={proposalHasPrivacyWarning}');
+  });
+
+  it('uses the signer sidebar throughout ordinary send steps', () => {
+    for (const route of [singleSend, multisigSend]) {
+      expect(route).toContain('class="send-flow-layout"');
+      expect(route).toContain('class="signer-side-panel"');
+      expect(route).toContain('class="send-stage-heading compact"');
+    }
+    expect(appCss).toMatch(
+      /\.send-flow-layout\.with-signers\s*\{[^}]*grid-template-columns: minmax\(0, 1fr\) 250px/s
     );
   });
 

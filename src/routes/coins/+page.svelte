@@ -369,9 +369,7 @@
 <div class="page">
   <header class="page-header">
     <div>
-      <p class="eyebrow">{translate($locale, 'COINS')}</p>
       <h1>{translate($locale, 'Coins')}</h1>
-      <p class="subtitle">{translate($locale, 'Choose exactly what a payment may spend.')}</p>
     </div>
     <div class="stat-pill">
       <span>{utxos.length} {translate($locale, 'coins')}</span><strong
@@ -528,7 +526,16 @@
           class="coin-row"
           class:frozen={utxo.frozen}
           class:reused={Boolean(reuse)}
+          class:selected={selected.includes(utxo.outpoint)}
         >
+          <button
+            type="button"
+            class="coin-row-selection"
+            aria-label={translate($locale, 'Select {coin}', { coin: coinName(utxo) })}
+            aria-pressed={selected.includes(utxo.outpoint)}
+            disabled={utxo.frozen || busy}
+            onclick={() => toggle(utxo.outpoint, !selected.includes(utxo.outpoint))}
+          ></button>
           <label class="coin-check"
             ><input
               type="checkbox"

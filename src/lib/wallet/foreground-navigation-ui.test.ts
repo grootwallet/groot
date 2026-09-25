@@ -290,6 +290,15 @@ describe('foreground wallet navigation', () => {
     expect(appShell).toContain("{#key `${selectedWalletId ?? 'none'}:${page.url.pathname}`}");
   });
 
+  it('opens unlock when the already selected wallet is locked', () => {
+    const start = appShell.indexOf('async function selectWallet(walletId: string)');
+    const end = appShell.indexOf('async function performWalletSelection', start);
+    const selection = appShell.slice(start, end);
+    expect(selection).toContain('walletId === selectedWalletId');
+    expect(selection).toContain("!selectedWalletUnlocked && page.url.pathname !== '/unlock'");
+    expect(selection).toContain("await goto('/unlock')");
+  });
+
   it('stops automatic sync before selecting another wallet', () => {
     const start = appShell.indexOf('async function selectWallet(walletId: string)');
     const end = appShell.indexOf('provideWalletShellContext', start);
