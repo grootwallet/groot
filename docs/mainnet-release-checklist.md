@@ -11,6 +11,16 @@ release gate. Its fixed rehearsal build and public campaign remain optional,
 separate evidence; they must not block the Regtest, Testnet4, and Mainnet
 candidate described here.
 
+Internal multi-network build `v0.4.95 · b49d2a81` is failed diagnostic evidence,
+not a releasable candidate. On 2026-09-25 an owner-controlled fully synchronized
+pruned local Core retained and served two deeply confirmed transaction blocks while
+the affected wallet's sparse BDK checkpoint omitted their already persisted anchors;
+Groot repeatedly reported successful refreshes but presented both transactions as
+pending. The replacement candidate must restore those Core-verified anchors, reconcile
+accounting, and preserve the result across restart. Missing pruned history and
+anchor/block inconsistency must fail closed. No result from `b49d2a81` transfers to
+the replacement binary.
+
 ## 2026-09-16 GA resume point
 
 Do not restart the Mainnet campaign from Testnet4. The release owner has already

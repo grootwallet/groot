@@ -1,5 +1,18 @@
 # Implementation status
 
+The local-Core confirmation-reconciliation follow-up repairs a wallet graph whose
+transaction already has a valid confirmation anchor but whose sparse persisted
+chain checkpoint omits that anchor height. Ordinary sync now verifies each missing
+anchor height and hash against the active Bitcoin Core chain, downloads the retained
+block, requires the exact transaction to be present, and atomically restores the
+checkpoint before presenting activity. A pruned-away block fails with
+`node_history_unavailable`, while an anchor/block mismatch fails as corrupt wallet
+state; neither case can be reported as a successful current-tip refresh. This fixes
+the exact `b49d2a81` Mainnet failure where retained, deeply confirmed transactions
+remained pending despite repeated successful local-Core sync records. Wallet,
+profile, proposal, backup, registry, descriptor, and database formats are unchanged;
+no migration is required.
+
 The Jade onboarding follow-up distinguishes HWI's exact persisted-network
 mismatch from ordinary lock, disconnect, and application-contention failures.
 Native code emits the stable `hardware_wrong_network` code without forwarding

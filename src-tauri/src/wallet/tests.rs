@@ -43,6 +43,137 @@ struct ManagedHistoryFixture {
     entries: Vec<serde_json::Value>,
 }
 
+struct AnchorReconciliationFixture {
+    genesis: BlockHash,
+    block: bdk_wallet::bitcoin::Block,
+}
+
+impl jsonrpc::client::Transport for AnchorReconciliationFixture {
+    fn send_request(
+        &self,
+        request: jsonrpc::Request<'_>,
+    ) -> Result<jsonrpc::Response, jsonrpc::Error> {
+        match request.method {
+            "getblockhash" => {
+                let params: Vec<u64> =
+                    serde_json::from_str(request.params.expect("block-height parameters").get())?;
+                let hash = match params.as_slice() {
+                    [0] => self.genesis,
+                    [1] => self.block.block_hash(),
+                    other => panic!("unexpected block-height parameters: {other:?}"),
+                };
+                BlockFilterBatchFixture::response(&request, serde_json::to_value(hash)?)
+            }
+            "getblock" => BlockFilterBatchFixture::response(
+                &request,
+                serde_json::json!(bdk_wallet::bitcoin::consensus::encode::serialize_hex(
+                    &self.block
+                )),
+            ),
+            other => panic!("unexpected anchor-reconciliation RPC: {other}"),
+        }
+    }
+
+    fn send_batch(
+        &self,
+        _requests: &[jsonrpc::Request<'_>],
+    ) -> Result<Vec<jsonrpc::Response>, jsonrpc::Error> {
+        Err(jsonrpc::Error::WrongBatchResponseSize)
+    }
+
+    fn fmt_target(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("anchor-reconciliation fixture")
+    }
+}
+
+fn anchor_reconciliation_wallet(
+    entropy_byte: u8,
+    previous_tx_byte: u8,
+    tip_hash_byte: u8,
+) -> (Wallet, CheckPoint, bdk_wallet::bitcoin::Block, Txid) {
+    use bdk_wallet::bitcoin::{
+        absolute::LockTime,
+        block::{Header, Version as BlockVersion},
+        transaction::Version,
+        CompactTarget, ScriptBuf, Sequence, TxMerkleNode, TxOut, Witness,
+    };
+    use bdk_wallet::chain::TxUpdate;
+
+    let mnemonic = Mnemonic::from_entropy(&[entropy_byte; 32]).unwrap();
+    let master = root_key(&mnemonic, "anchor reconciliation fixture").unwrap();
+    let mut wallet = Wallet::create(
+        Bip84(master, KeychainKind::External),
+        Bip84(master, KeychainKind::Internal),
+    )
+    .network(Network::Regtest)
+    .create_wallet_no_persist()
+    .unwrap();
+    let receive_script = wallet
+        .reveal_next_address(KeychainKind::External)
+        .address
+        .script_pubkey();
+    let genesis = genesis_block(Network::Regtest).block_hash();
+    let transaction = Transaction {
+        version: Version::TWO,
+        lock_time: LockTime::ZERO,
+        input: vec![TxIn {
+            previous_output: OutPoint {
+                txid: Txid::from_byte_array([previous_tx_byte; 32]),
+                vout: 0,
+            },
+            script_sig: ScriptBuf::new(),
+            sequence: Sequence::MAX,
+            witness: Witness::new(),
+        }],
+        output: vec![TxOut {
+            value: Amount::from_sat(20_000),
+            script_pubkey: receive_script,
+        }],
+    };
+    let block = bdk_wallet::bitcoin::Block {
+        header: Header {
+            version: BlockVersion::ONE,
+            prev_blockhash: genesis,
+            merkle_root: TxMerkleNode::all_zeros(),
+            time: 1,
+            bits: CompactTarget::from_consensus(0),
+            nonce: 0,
+        },
+        txdata: vec![transaction.clone()],
+    };
+    let txid = transaction.compute_txid();
+    let sparse_tip = CheckPoint::new(BlockId {
+        height: 0,
+        hash: genesis,
+    })
+    .push(BlockId {
+        height: 2,
+        hash: BlockHash::from_byte_array([tip_hash_byte; 32]),
+    })
+    .unwrap();
+    let mut tx_update = TxUpdate::default();
+    tx_update.txs.push(Arc::new(transaction));
+    tx_update.anchors.insert((
+        ConfirmationBlockTime {
+            block_id: BlockId {
+                height: 1,
+                hash: block.block_hash(),
+            },
+            confirmation_time: 1,
+        },
+        txid,
+    ));
+    tx_update.seen_ats.insert((txid, 1));
+    wallet
+        .apply_update(Update {
+            chain: Some(sparse_tip.clone()),
+            tx_update,
+            ..Default::default()
+        })
+        .unwrap();
+    (wallet, sparse_tip, block, txid)
+}
+
 impl jsonrpc::client::Transport for ManagedHistoryFixture {
     fn send_request(
         &self,
@@ -1346,6 +1477,67 @@ fn wallet_history_rejects_only_blocks_absent_from_a_pruned_node() {
     let details = unavailable.details.unwrap();
     assert_eq!(details.required_block, Some(0));
     assert_eq!(details.earliest_retained_block, Some(140_000));
+}
+
+#[test]
+fn core_sync_restores_verified_transaction_anchors_missing_from_a_sparse_checkpoint() {
+    let (mut wallet, sparse_tip, block, txid) = anchor_reconciliation_wallet(47, 17, 23);
+    assert!(wallet
+        .transactions()
+        .find(|tx| tx.tx_node.txid == txid)
+        .unwrap()
+        .chain_position
+        .is_unconfirmed());
+
+    let rpc = Client::from_jsonrpc(jsonrpc::client::Client::with_transport(
+        AnchorReconciliationFixture {
+            genesis: genesis_block(Network::Regtest).block_hash(),
+            block: block.clone(),
+        },
+    ));
+    let reconciled =
+        reconcile_known_active_anchors(&rpc, &mut wallet, sparse_tip, true, Some(1)).unwrap();
+
+    assert_eq!(reconciled.get(1).unwrap().hash(), block.block_hash());
+    assert!(wallet
+        .transactions()
+        .find(|tx| tx.tx_node.txid == txid)
+        .unwrap()
+        .chain_position
+        .is_confirmed());
+}
+
+#[test]
+fn core_sync_does_not_restore_an_anchor_from_a_pruned_block() {
+    let (mut wallet, sparse_tip, block, _) = anchor_reconciliation_wallet(48, 19, 29);
+    let rpc = Client::from_jsonrpc(jsonrpc::client::Client::with_transport(
+        AnchorReconciliationFixture {
+            genesis: genesis_block(Network::Regtest).block_hash(),
+            block,
+        },
+    ));
+
+    let error =
+        reconcile_known_active_anchors(&rpc, &mut wallet, sparse_tip, true, Some(2)).unwrap_err();
+    assert_eq!(error.code, "node_history_unavailable");
+    assert_eq!(error.details.unwrap().required_block, Some(1));
+}
+
+#[test]
+fn core_sync_rejects_a_persisted_anchor_without_transaction_inclusion() {
+    let (mut wallet, sparse_tip, mut block, _) = anchor_reconciliation_wallet(49, 21, 31);
+    block.txdata.clear();
+    let rpc = Client::from_jsonrpc(jsonrpc::client::Client::with_transport(
+        AnchorReconciliationFixture {
+            genesis: genesis_block(Network::Regtest).block_hash(),
+            block,
+        },
+    ));
+
+    let error =
+        reconcile_known_active_anchors(&rpc, &mut wallet, sparse_tip, false, None).unwrap_err();
+    assert_eq!(error.code, "wallet_corrupt");
+    assert!(error.message.contains("does not match"));
 }
 
 #[test]

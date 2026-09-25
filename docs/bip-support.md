@@ -571,6 +571,13 @@ full blocks remain authoritative for every claimed transaction, and BDK retains
 wallet accounting. Custom remote Core keeps ADR 0070's BIP158 `scanblocks` path;
 the explicit BIP157/BIP158 peer source is unchanged.
 
+The local-Core sparse-checkpoint confirmation repair has no BIP support impact.
+It reactivates an already persisted BDK transaction anchor only after Bitcoin Core
+confirms the exact active-chain height/hash and the retained full block contains the
+exact transaction. It changes no descriptor, derivation, transaction, PSBT, signing,
+recovery, wallet format, or interoperability claim; unavailable pruned history and
+inconsistent anchors fail closed.
+
 If a change has no BIP impact, its pull request records that explicit assessment.
 Upstream status changes alone may update this document without changing Groot's
 implementation status.

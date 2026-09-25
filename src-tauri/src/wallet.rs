@@ -2872,6 +2872,88 @@ fn rewind_stale_core_checkpoints(
     Ok((agreement, rewound))
 }
 
+fn reconcile_known_active_anchors(
+    client: &Client,
+    wallet: &mut Wallet,
+    checkpoint: CheckPoint,
+    pruned: bool,
+    prune_height: Option<u64>,
+) -> ApiResult<CheckPoint> {
+    let mut checkpoint_blocks = checkpoint
+        .iter()
+        .map(|checkpoint| (checkpoint.height(), checkpoint.hash()))
+        .collect::<BTreeMap<_, _>>();
+    let candidate_anchors = wallet
+        .tx_graph()
+        .all_anchors()
+        .iter()
+        .flat_map(|(txid, anchors)| anchors.iter().map(move |anchor| (anchor.block_id, *txid)))
+        .filter(|(block, _)| {
+            checkpoint_blocks.get(&block.height).copied() != Some(block.hash)
+                && block.height <= checkpoint.height()
+        })
+        .fold(
+            BTreeMap::<BlockId, HashSet<Txid>>::new(),
+            |mut missing, (block, txid)| {
+                missing.entry(block).or_default().insert(txid);
+                missing
+            },
+        );
+    let mut restored = false;
+    for (block_id, expected_transactions) in candidate_anchors {
+        let active_hash = retry_transient_core_rpc(
+            || client.get_block_hash(u64::from(block_id.height)),
+            std::thread::sleep,
+        )?;
+        if active_hash != block_id.hash {
+            continue;
+        }
+        if checkpoint_blocks
+            .get(&block_id.height)
+            .is_some_and(|hash| *hash != active_hash)
+        {
+            return Err(api_error(
+                "wallet_corrupt",
+                "The wallet checkpoint conflicts with an active Bitcoin Core confirmation.",
+            ));
+        }
+        ensure_core_history_available(pruned, prune_height, block_id.height)?;
+        let block =
+            retry_transient_core_rpc(|| client.get_block(&block_id.hash), std::thread::sleep)?;
+        let observed_transactions = block
+            .txdata
+            .iter()
+            .map(Transaction::compute_txid)
+            .collect::<HashSet<_>>();
+        if block.block_hash() != block_id.hash
+            || !expected_transactions.is_subset(&observed_transactions)
+        {
+            return Err(api_error(
+                "wallet_corrupt",
+                "A persisted transaction confirmation does not match the verified Bitcoin Core block.",
+            ));
+        }
+        checkpoint_blocks.insert(block_id.height, block_id.hash);
+        restored = true;
+    }
+    if !restored {
+        return Ok(checkpoint);
+    }
+    let reconciled = CheckPoint::from_block_ids(
+        checkpoint_blocks
+            .into_iter()
+            .map(|(height, hash)| BlockId { height, hash }),
+    )
+    .map_err(|_| internal("The verified Bitcoin Core checkpoint could not be reconstructed."))?;
+    wallet
+        .apply_update(Update {
+            chain: Some(reconciled.clone()),
+            ..Default::default()
+        })
+        .map_err(internal)?;
+    Ok(reconciled)
+}
+
 fn retry_transient_node_health<T>(
     mut operation: impl FnMut() -> ApiResult<T>,
     mut pause: impl FnMut(Duration),
@@ -6264,6 +6346,13 @@ fn sync_wallet_with_core(
     let target_height = u32::try_from(chain.blocks)
         .map_err(|_| internal("The node height exceeds the supported sync range."))?;
     let (wallet_tip, _) = rewind_stale_core_checkpoints(rpc.as_ref(), &wallet)?;
+    let wallet_tip = reconcile_known_active_anchors(
+        rpc.as_ref(),
+        &mut wallet,
+        wallet_tip,
+        chain.pruned,
+        chain.prune_height,
+    )?;
     let start_height = wallet_tip.height();
     ensure_core_history_available(
         chain.pruned,

@@ -362,3 +362,26 @@ presentation correction in the subsequent source and is not hardware evidence.
 No address, transaction identifier, amount beyond the reported accounting
 comparison, fingerprint, descriptor, PSBT, credential, device path, or node
 detail is retained.
+
+## 2026-09-25 exact `b49d2a81` local-Core reconciliation failure
+
+The release owner opened internal multi-network build `v0.4.95 · b49d2a81` with
+Mainnet selected and connected an owner-controlled local Bitcoin Core node. Core
+reported Mainnet at height 968,539, `initialblockdownload=false`, pruning only below
+height 962,887, and no optional indexes. Two wallet transactions were independently
+confirmed at heights 966,931 and 966,922 and Core still served both retained blocks,
+yet Groot continued to present them as awaiting confirmation after repeated refreshes.
+
+Sanitized database inspection established that both transaction anchors were already
+persisted with the correct confirmation heights, while this wallet's sparse BDK chain
+checkpoint omitted both anchor heights and jumped to the current tip. BDK therefore
+treated the anchors as outside its active chain. The source correction verifies every
+missing anchor against Core's active height/hash, verifies exact transaction inclusion
+in the retained block, and restores the checkpoint atomically. Pruned-away history or
+an anchor/block mismatch fails closed. No wallet identifier, address, descriptor,
+fingerprint, credential, PSBT, or transaction identifier is retained here.
+
+This is a release-blocking sync-correctness failure for `b49d2a81`; that build is not
+eligible for further funded certification. The replacement build must refresh the
+preserved affected profile, show both transactions confirmed with correct accounting,
+and retain the repaired state after restart before physical testing resumes.
