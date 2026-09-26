@@ -4,6 +4,9 @@
   import { compactAddress } from '$lib/address-display';
   import Amount from './Amount.svelte';
   import WarningNotice from './WarningNotice.svelte';
+  import InsightTip from './InsightTip.svelte';
+  import PermanentLabelTags from './PermanentLabelTags.svelte';
+  import { discreetMode } from '$lib/privacy';
   import type { MultisigProposal, PaymentProposal } from '$lib/wallet';
 
   let {
@@ -31,22 +34,26 @@
 </script>
 
 {#if proposal.recipientIsWalletOwned}<aside class="self-transfer-notice">
-    <strong>{translate($locale, 'Self-transfer')}</strong>
-    <span
-      >{translate(
-        $locale,
-        'This recipient belongs to this wallet. The network fee is the only amount leaving the wallet.'
-      )}</span
-    >
+    <div class="transaction-review-insight">
+      <strong>{translate($locale, 'Self-transfer')}</strong>
+      <InsightTip
+        label={translate($locale, 'Self-transfer')}
+        text={translate(
+          $locale,
+          'This recipient belongs to this wallet. The network fee is the only amount leaving the wallet.'
+        )}
+      />
+    </div>
     {#if proposal.walletControlledOutputAmount != null}<div class="self-transfer-consolidating">
         <span>
           <strong>{translate($locale, 'Consolidating')}</strong>
-          <small
-            >{translate(
+          <InsightTip
+            label={translate($locale, 'Consolidating')}
+            text={translate(
               $locale,
               'Total staying within this wallet. Compare this amount with the hardware signer.'
-            )}</small
-          >
+            )}
+          />
         </span>
         <Amount value={proposal.walletControlledOutputAmount} interactive={interactiveAmounts} />
       </div>{/if}
@@ -67,19 +74,24 @@
   <summary>{translate($locale, open ? 'View less details' : 'View more details')}</summary>
   <WarningNotice
     class="transaction-review-funding"
-    title={`${proposal.selectionImpact.selectedInputCount} ${translate($locale, 'funding coin')}${translate(
-      $locale,
-      proposal.selectionImpact.selectedInputCount === 1 ? '' : 's'
-    )} · ${proposal.selectionImpact.strategy.replace('_', ' ')}`}
+    title={translate($locale, 'Coins spent together')}
     body={translate(
       $locale,
-      proposal.selectionImpact.newClusterLinks > 0 ||
-        proposal.selectionImpact.hasUnknownProvenance ||
-        proposal.selectionImpact.hasAddressReuse
-        ? `Review: ${proposal.selectionImpact.newClusterLinks} new cluster link${proposal.selectionImpact.newClusterLinks === 1 ? '' : 's'}; unknown or reused sources are called out.`
-        : 'No new cluster link, unknown provenance, or address-reuse warning.'
+      proposal.inputs.length > 1
+        ? 'Spending these coins together publicly links their sources. Their labels are shown below.'
+        : 'This payment spends one coin. Its labels are shown below.'
     )}
-  />
+  >
+    {#if proposal.selectionImpact.fundingLabels.length}
+      <PermanentLabelTags labels={proposal.selectionImpact.fundingLabels} hidden={$discreetMode} />
+    {:else}<span>{translate($locale, 'No local labels')}</span>{/if}
+    {#if proposal.selectionImpact.hasUnknownProvenance}<span
+        >{translate($locale, 'Some coin sources are unknown.')}</span
+      >{/if}
+    {#if proposal.selectionImpact.hasAddressReuse}<span
+        >{translate($locale, 'Some coins come from a reused address.')}</span
+      >{/if}
+  </WarningNotice>
   <dl class:details-list={!compact}>
     {#if proposal.acceleration?.method === 'rbf'}
       <div>

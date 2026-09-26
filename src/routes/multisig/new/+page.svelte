@@ -39,6 +39,7 @@
   import SignerPolicyReview from '$lib/components/SignerPolicyReview.svelte';
   import WarningNotice from '$lib/components/WarningNotice.svelte';
   import { toast } from '$lib/stores/toasts';
+  import { useWalletShellContext } from '$lib/wallet/shell-context';
   import {
     walletService,
     WalletError,
@@ -85,6 +86,8 @@
   } from '$lib/hardware/policy-readiness';
 
   type HardwareGuideId = 'coldcard' | 'bitbox02' | 'ledger' | 'trezor' | 'jade';
+  const walletShell = useWalletShellContext();
+  let existingWalletId = $state<string | null>(null);
   const ledgerAppName = defaultConfig.network === 'mainnet' ? 'Bitcoin' : 'Bitcoin Test';
   const hardwareGuides: Array<{
     id: HardwareGuideId;
@@ -797,7 +800,7 @@
           'This signer has no interactive USB device type.'
         );
       const device = unlockedDevice ?? (await walletService.findSavedHardwareDevice(signer));
-      const result = await walletService.checkHardwareCosigner(signer, device.id);
+      const result = await walletService.checkHardwareCosigner(signer, device.id, true);
       healthChecks[signer.id] = result;
       toast({
         title: 'Signer verified',
@@ -1204,6 +1207,7 @@
     busy = true;
     error = '';
     createErrorTitle = '';
+    existingWalletId = null;
     try {
       await flushCurrentDraft();
       if (reuseNetworkSetup && networkSetupSource) {
@@ -1239,6 +1243,10 @@
         });
       await goto('/multisig');
     } catch (cause) {
+      existingWalletId =
+        cause instanceof WalletError && cause.code === 'wallet_already_exists'
+          ? cause.existingWalletId
+          : null;
       if (cause instanceof WalletError && cause.code === 'wallet_corrupt') {
         createErrorTitle = 'Hardware verification needs attention';
         error =
@@ -1254,6 +1262,21 @@
     } finally {
       credential = '';
       confirmation = '';
+      busy = false;
+    }
+  }
+
+  async function openExistingWallet() {
+    if (!existingWalletId || busy) return;
+    busy = true;
+    try {
+      await flushCurrentDraft();
+      if (walletShell.selectedWalletId() === existingWalletId) await goto('/unlock');
+      else await walletShell.selectWallet(existingWalletId);
+    } catch (cause) {
+      error = localizedError(cause, $locale, 'Could not select this wallet.');
+      toast({ title: 'Wallet not switched', description: error, tone: 'danger' });
+    } finally {
       busy = false;
     }
   }
@@ -2141,7 +2164,12 @@
       {#if error}<div class="hardware-inline-error hardware-create-error" role="alert">
           <AlertTriangle size={18} /><span
             ><strong>{translate($locale, createErrorTitle || 'Wallet could not be created')}</strong
-            ><small>{error}</small></span
+            ><small>{error}</small>
+            {#if existingWalletId}<Button
+                variant="secondary"
+                loading={busy}
+                onclick={openExistingWallet}>{translate($locale, 'Open existing wallet')}</Button
+              >{/if}</span
           >
         </div>{/if}
       <Button

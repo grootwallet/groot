@@ -35,9 +35,9 @@ describe('hardware signing review usability', () => {
   });
 
   it('keeps the Ledger policy modal compact without removing trusted-display checks', () => {
-    expect(policy).toContain("'Compare every signer key and the first address on Ledger.'");
+    expect(policy).not.toContain("'Compare every signer key and the first address on Ledger.'");
     expect(policy).toContain("'Signer keys to compare'");
-    expect(policy).toContain("'Verification only. Create payment addresses in Receive.'");
+    expect(policy).toContain("'First address reference'");
     expect(policy).not.toContain(
       "Groot's current Ledger connection must authorize this policy again for each signing"
     );

@@ -1271,7 +1271,11 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     this._trezorPinUnlocked = true;
   }
   async cancelHardwareOperations(_preserveMainnetAdmission = false) {}
-  async checkHardwareCosigner(cosigner: PolicyDraft['cosigners'][number], deviceId: string) {
+  async checkHardwareCosigner(
+    cosigner: PolicyDraft['cosigners'][number],
+    deviceId: string,
+    draft = false
+  ) {
     await new Promise((resolve) => setTimeout(resolve, 200));
     const checkedAt = new Date().toISOString();
     const connected = await this.importHardwareCosigner(deviceId, cosigner.label, true);
@@ -1289,7 +1293,7 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
       checkedAt,
       summary: 'Signer matches this wallet.'
     };
-    this.persistFixtureHardwareHealth(cosigner.fingerprint, result);
+    if (!draft) this.persistFixtureHardwareHealth(cosigner.fingerprint, result);
     return result;
   }
   async checkHardwareExternalSigner(signer: ExternalSigner, deviceId: string) {
@@ -1698,6 +1702,15 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
   ): Promise<import('./contracts').MultisigCreation> {
     if (!credential) throw new WalletError('invalid_credential', 'An app PIN is required.');
     const preview = await this.previewMultisig(policy);
+    if (
+      this._multisigProfileId &&
+      this._multisig?.externalDescriptor === preview.externalDescriptor
+    )
+      throw new WalletError(
+        'wallet_already_exists',
+        'This exact descriptor wallet already exists on this device.',
+        this._multisigProfileId
+      );
     const setupDraft = this.multisigSetupDraftValue;
     this._recoveryVerified = false;
     this._multisig = {

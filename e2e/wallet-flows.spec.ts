@@ -830,9 +830,33 @@ test('creates an external-signer wallet, signs by cable, and configures its isol
   const consolidationReview = page.locator('.self-transfer-consolidating');
   await expect(consolidationReview.getByText('Consolidating', { exact: true })).toBeVisible();
   await expect(consolidationReview).toContainText(/1,200 sats|0\.00001200 BTC/);
+  await expect(
+    page.getByText('This recipient belongs to this wallet.', { exact: false })
+  ).toHaveCount(0);
+  const selfTransferTip = page.getByRole('button', { name: 'Self-transfer', exact: true });
+  if ((page.viewportSize()?.width ?? 1180) <= 760) await selfTransferTip.click();
+  else await selfTransferTip.hover();
+  await expect(page.getByRole('tooltip')).toContainText(
+    'The network fee is the only amount leaving the wallet.'
+  );
+  await selfTransferTip.click();
   await expect(page.getByText('Fee rate', { exact: true })).toBeHidden();
   await page.getByText('View more details', { exact: true }).click();
   await expect(page.getByText('Fee rate', { exact: true })).toBeVisible();
+  await expect(page.locator('.transaction-review-funding')).toContainText('Coins spent together');
+  for (const theme of ['light', 'dark']) {
+    await page.evaluate(
+      (theme) => document.documentElement.setAttribute('data-theme', theme),
+      theme
+    );
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+      true
+    );
+    await page.screenshot({
+      path: test.info().outputPath(`send-review-${theme}.png`),
+      fullPage: true
+    });
+  }
   await expect(page.getByText('Transaction inputs', { exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'Continue to sign' }).click();
   await expect(page.getByRole('heading', { name: 'Sign on your hardware' })).toBeVisible();
@@ -2337,12 +2361,19 @@ test('software payment resumes through the shared draft callout and cancellation
   });
   await expect(resume).toContainText('Payment ready to sign');
   await expect(resume).toContainText('0 of 1 signatures collected');
+  await page.evaluate(() => {
+    const observer = new MutationObserver(() => {
+      if (document.querySelector('#send-label-input')) document.body.dataset.flashedIntent = 'yes';
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+  });
   await resume.click();
 
   await expect(
     page.locator('.form-card').getByText('Saved software payment', { exact: true })
   ).toBeVisible();
   await expect(page.getByText('8,000', { exact: true })).toBeVisible();
+  await expect(page.locator('body')).not.toHaveAttribute('data-flashed-intent', 'yes');
   await page.getByRole('button', { name: 'Cancel payment' }).click();
   const cancellation = page.getByRole('dialog', { name: 'Cancel this payment?' });
   await expect(cancellation.getByText('This cannot be undone.')).toBeVisible();

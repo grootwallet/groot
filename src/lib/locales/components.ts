@@ -1,6 +1,32 @@
 import type { CatalogSection } from './types';
 
 export const componentCopy = {
+  'Open existing wallet': {
+    fr: 'Ouvrir le portefeuille existant',
+    es: 'Abrir la cartera existente'
+  },
+  'Coins spent together': { fr: 'Pièces dépensées ensemble', es: 'Monedas gastadas juntas' },
+  'Spending these coins together publicly links their sources. Their labels are shown below.': {
+    fr: 'Dépenser ces pièces ensemble relie publiquement leurs sources. Leurs libellés figurent ci-dessous.',
+    es: 'Gastar estas monedas juntas vincula públicamente sus orígenes. Sus etiquetas aparecen abajo.'
+  },
+  'This payment spends one coin. Its labels are shown below.': {
+    fr: 'Ce paiement dépense une pièce. Ses libellés figurent ci-dessous.',
+    es: 'Este pago gasta una moneda. Sus etiquetas aparecen abajo.'
+  },
+  'No local labels': { fr: 'Aucun libellé local', es: 'Sin etiquetas locales' },
+  'Some coin sources are unknown.': {
+    fr: 'Certaines sources de pièces sont inconnues.',
+    es: 'Se desconocen algunos orígenes de las monedas.'
+  },
+  'Some coins come from a reused address.': {
+    fr: 'Certaines pièces proviennent d’une adresse réutilisée.',
+    es: 'Algunas monedas proceden de una dirección reutilizada.'
+  },
+  'Enter a new device-local account name. Review the details on your device.': {
+    fr: 'Saisissez un nouveau nom de compte local à l’appareil. Vérifiez les détails sur votre appareil.',
+    es: 'Introduce un nuevo nombre de cuenta local al dispositivo. Revisa los detalles en tu dispositivo.'
+  },
   'Build information copied': {
     fr: 'Informations de version copiées',
     es: 'Información de compilación copiada'

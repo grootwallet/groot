@@ -97,6 +97,9 @@ describe('send review layout', () => {
 
   it('keeps funding privacy context inside optional review details', () => {
     expect(reviewDetails).toContain('class="transaction-review-funding"');
+    expect(reviewDetails).toContain('labels={proposal.selectionImpact.fundingLabels}');
+    expect(reviewDetails).toContain('hidden={$discreetMode}');
+    expect(reviewDetails).not.toContain('new cluster link');
     expect(singleSend).not.toContain('class:warning={proposalHasPrivacyWarning}');
     expect(multisigSend).not.toContain('class:warning={proposalHasPrivacyWarning}');
   });

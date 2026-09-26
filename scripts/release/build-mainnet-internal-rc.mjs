@@ -30,7 +30,7 @@ const buildIdentity = {
     outputDirectory: 'mainnet-internal-rc'
   },
   multi: {
-    appName: 'Groot Networks.app',
+    appName: 'Groot.app',
     config: 'src-tauri/tauri.multi.conf.json',
     outputDirectory: 'multi-network-internal-rc'
   }

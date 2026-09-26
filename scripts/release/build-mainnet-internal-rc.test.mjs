@@ -25,7 +25,7 @@ test('internal multi-network RC uses the HWI-sealed multi configuration', () => 
     packageJson.scripts['build:native:multi:internal'],
     'node scripts/release/build-mainnet-internal-rc.mjs multi'
   );
-  assert.equal(multiConfig.productName, 'Groot Networks');
+  assert.equal(multiConfig.productName, 'Groot');
   assert.equal(multiConfig.identifier, 'app.groot.wallet');
   assert.equal(multiConfig.build.beforeBuildCommand, 'pnpm build:multi');
   assert.equal(multiConfig.bundle.resources['.release-stage/hwi'], 'hwi');

@@ -1495,14 +1495,56 @@ fn hardware_pin_response_error(response: HwiSuccess) -> ApiError {
     }
 }
 
+// Setup has no wallet database yet. A live public-key proof must not read or
+// persist health against whichever unrelated wallet happens to be selected.
+fn check_draft_cosigner(
+    hwi: &HwiCli,
+    device: &HwiDevice,
+    cosigner: &CosignerInput,
+) -> ApiResult<CosignerHealthDto> {
+    cosigner.parse_for_validation().map_err(policy_api_error)?;
+    let operation = hwi
+        .begin_interactive_operation()
+        .map_err(hardware_api_error)?;
+    prove_live_cosigner_identity(hwi, &operation, device, cosigner)?;
+    operation
+        .complete_if_active(|| {
+            Ok(CosignerHealthDto {
+                status: "healthy",
+                checked_at: now().to_string(),
+                summary: "Signer matches this wallet.".to_owned(),
+            })
+        })
+        .map_err(hardware_api_error)?
+}
+
 #[tauri::command]
 pub async fn hardware_check_cosigner(
     app: AppHandle,
     state: State<'_, AppState>,
     cosigner: CosignerInput,
     device_id: String,
+    draft: Option<bool>,
 ) -> ApiResult<CosignerHealthDto> {
     cosigner.parse_for_validation().map_err(policy_api_error)?;
+    if draft.unwrap_or(false) {
+        let selection = load_registry(&app)?.selected_wallet_id;
+        let hwi = hwi_cli(&app)?;
+        let device = recently_scanned_hardware_device(&state, &device_id)?;
+        return tauri::async_runtime::spawn_blocking(move || {
+            let native_state = app.state::<AppState>();
+            let _wallet_operation = operation_guard(&native_state)?;
+            if load_registry(&app)?.selected_wallet_id != selection {
+                return Err(api_error(
+                    "wallet_selection_changed",
+                    "The selected wallet changed during the signer check.",
+                ));
+            }
+            check_draft_cosigner(&hwi, &device, &cosigner)
+        })
+        .await
+        .map_err(internal)?;
+    }
     let selected = selected_profile(&app)?;
     let authoritative = if selected.kind == WalletKind::Multisig {
         read_multisig_metadata(&app)?
@@ -3586,6 +3628,60 @@ mod health_check_tests {
             source: SignerSource::Usb,
             device_type: Some("trezor".to_owned()),
         }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn draft_health_proves_each_live_identity_without_a_wallet_database() {
+        use std::os::unix::fs::PermissionsExt as _;
+        let mut signer = signer_from_seed(41);
+        let other = signer_from_seed(42);
+        let response = serde_json::to_string(&serde_json::json!([{
+            "desc": format!("wpkh([{}/{}]{}/0/*)", signer.fingerprint,
+                signer.derivation_path.trim_start_matches("m/"), signer.xpub)
+        }]))
+        .unwrap()
+        .replace('\'', "'\"'\"'");
+        let script = std::env::temp_dir().join(format!(
+            "groot-draft-health-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        std::fs::write(&script, format!("#!/bin/sh\nprintf '%s\\n' '{response}'\n")).unwrap();
+        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let hwi = HwiCli::for_test_program(script.clone());
+        for family in ["coldcard", "bitbox02", "ledger"] {
+            signer.device_type = Some(family.to_owned());
+            let device = HwiDevice {
+                device_type: family.to_owned(),
+                path: "fixture-only".to_owned(),
+                fingerprint: Some(signer.fingerprint.clone()),
+                ..HwiDevice::default()
+            };
+            assert_eq!(
+                check_draft_cosigner(&hwi, &device, &signer).unwrap().status,
+                "healthy"
+            );
+            let mut wrong_key = signer.clone();
+            wrong_key.xpub = other.xpub.clone();
+            assert_eq!(
+                check_draft_cosigner(&hwi, &device, &wrong_key)
+                    .err()
+                    .unwrap()
+                    .code,
+                "unknown_signer"
+            );
+            let mut wrong_fingerprint = signer.clone();
+            wrong_fingerprint.fingerprint = other.fingerprint.clone();
+            assert_eq!(
+                check_draft_cosigner(&hwi, &device, &wrong_fingerprint)
+                    .err()
+                    .unwrap()
+                    .code,
+                "unknown_signer"
+            );
+        }
+        std::fs::remove_file(script).unwrap();
     }
 
     #[cfg(unix)]

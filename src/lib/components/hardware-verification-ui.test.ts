@@ -481,15 +481,16 @@ describe('hardware receive verification UI', () => {
   it('keeps BitBox policy guidance compact and device-local', () => {
     expect(policyReview).toContain('Review on BitBox');
     expect(policyReview).toContain('Enter a new device-local account name.');
-    expect(policyReview).toContain('script type, account path, every account xpub');
-    expect(policyReview).toContain('signer fingerprints remain a Groot reference');
+    expect(policyReview).toContain('Review the details on your device.');
+    expect(policyReview).toContain('<PolicySignerList');
     expect(policyReview).toContain("translate($locale, 'Review on {device}'");
     expect(policyReview).not.toContain('Before you start on');
     expect(policyReview).not.toContain('Do not reuse the name of any existing');
   });
 
   it('does not present a policy-verification address as a payment request', () => {
-    expect(policyReview).toContain('Verification only. Create payment addresses in Receive.');
+    expect(policyReview).toContain("'First address reference'");
+    expect(policyReview).not.toContain('Verification only. Create payment addresses in Receive.');
   });
 
   it('offers a one-time label only for an unlabeled received multisig output', () => {

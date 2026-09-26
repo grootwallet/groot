@@ -1,5 +1,5 @@
 {
-  "productName": "Groot Networks",
+  "productName": "Groot",
   "identifier": "app.groot.wallet",
   "build": {
     "beforeDevCommand": "pnpm dev --mode multi",

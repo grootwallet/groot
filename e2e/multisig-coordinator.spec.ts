@@ -731,9 +731,17 @@ test('surfaces partial and fully signed proposals on Overview', async ({ page })
   await expect(partialProposal).toContainText('Signing in progress');
   await expect(partialProposal).toContainText('Overview resume test');
   await expect(partialProposal).toHaveAttribute('href', /\/multisig\/send\?proposal=/);
+  await page.evaluate(() => {
+    const observer = new MutationObserver(() => {
+      if (document.querySelector('#multisig-send-label-input'))
+        document.body.dataset.flashedIntent = 'yes';
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+  });
   await partialProposal.click();
   await expect(page).toHaveURL(/\/multisig\/send\?proposal=/);
   await expect(page.getByLabel('Assigned labels')).toContainText('Overview resume test');
+  await expect(page.locator('body')).not.toHaveAttribute('data-flashed-intent', 'yes');
   await expect(
     page.getByRole('region', { name: 'Payment signers' }).getByText('1 of 2 collected')
   ).toBeVisible();
@@ -838,7 +846,7 @@ test('shows signer details and runs honest health checks', async ({ page }) => {
   await expect(
     coldcardDialog.locator('.health-card').getByText('Signer matches this wallet.')
   ).toBeVisible();
-  await expect(coldcardDialog.locator('.health-heading strong')).toHaveCSS('font-size', '11px');
+  await expect(coldcardDialog.locator('.health-heading strong')).toHaveCSS('font-size', '13px');
   await expect(coldcardDialog.getByText(/Last checked/)).toBeVisible();
   await coldcardDialog.getByRole('button', { name: 'Close' }).click();
 
@@ -1450,7 +1458,11 @@ test('creates and verifies a simple 2-of-3 descriptor wallet', async ({ page }) 
   await page.getByRole('button', { name: 'Review wallet' }).click();
   await expect(page.getByRole('link', { name: 'Recover from backup' })).toHaveCount(0);
   await expect(page.getByText('2 of 3 signatures')).toBeVisible();
-  await page.getByRole('button', { name: 'About wallet descriptors' }).hover();
+  await revealInsight(
+    page,
+    'About wallet descriptors',
+    (page.viewportSize()?.width ?? 1180) <= 760
+  );
   await expect(page.getByRole('tooltip')).toContainText('public, watch-only recipe');
   await page.getByRole('button', { name: 'Descriptor logic' }).click();
   await expect(page.getByTestId('descriptor-preview')).toContainText('wsh(sortedmulti(2,');
@@ -1541,9 +1553,9 @@ test('creates and verifies a simple 2-of-3 descriptor wallet', async ({ page }) 
   const firstSigningDialog = page.getByRole('dialog', { name: 'Sign with hardware' });
   await firstSigningDialog.getByRole('button', { name: /^Ledger / }).click();
   const signingPolicyReview = page.getByRole('dialog', { name: 'Review wallet policy' });
-  await expect(
-    signingPolicyReview.getByText('Reject if any value differs on Ledger.')
-  ).toBeVisible();
+  await expect(signingPolicyReview.getByText('Reject if any value differs on Ledger.')).toHaveCount(
+    0
+  );
   await expect(
     signingPolicyReview.getByText('Signer keys to compare', { exact: true })
   ).toBeVisible();
@@ -1551,6 +1563,18 @@ test('creates and verifies a simple 2-of-3 descriptor wallet', async ({ page }) 
     'current Ledger connection must authorize this policy again'
   );
   await expect(signingPolicyReview).not.toContainText('Do not fund this address directly');
+  await expect(signingPolicyReview).not.toContainText('Verification only.');
+  await expect(signingPolicyReview).toHaveCSS('opacity', '1');
+  for (const theme of ['light', 'dark']) {
+    await page.evaluate(
+      (theme) => document.documentElement.setAttribute('data-theme', theme),
+      theme
+    );
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+      true
+    );
+    await page.screenshot({ path: test.info().outputPath(`policy-review-${theme}.png`) });
+  }
   await expect(signingPolicyReview).toBeInViewport();
   expect(
     await signingPolicyReview.evaluate((dialog) => {
@@ -1940,6 +1964,48 @@ test('keeps assisted recovery honest and offers simple recovery waits', async ({
   await page.getByRole('button', { name: /About 3 months/ }).click();
   await expect(page.getByText('13,140 blocks', { exact: true }).first()).toBeVisible();
   await expect(page.locator('body')).not.toContainText('About one year');
+});
+
+test('opens the exact existing wallet after duplicate multisig creation', async ({ page }) => {
+  await page.goto('/multisig/new');
+  await continueToSigners(page, 'Duplicate policy');
+  for (const key of [
+    {
+      label: 'Coldcard',
+      fingerprint: 'f00dbabe',
+      xpub: 'tpubD6NzVbkrYhZ4Y-fixture-coldcard-public-key'
+    },
+    {
+      label: 'Trezor',
+      fingerprint: 'c0ffee01',
+      xpub: 'tpubD6NzVbkrYhZ4Y-fixture-trezor-public-key'
+    },
+    {
+      label: 'Offline backup',
+      fingerprint: 'deadbeef',
+      xpub: 'tpubD6NzVbkrYhZ4Y-fixture-backup-public-key'
+    }
+  ]) {
+    await page.getByRole('button', { name: 'Add a signer' }).click();
+    await page.getByRole('button', { name: 'Enter public key' }).click();
+    await page.getByLabel('Signer label').fill(key.label);
+    await page.getByLabel('Master fingerprint').fill(key.fingerprint);
+    await page.getByLabel('Account xpub').fill(key.xpub);
+    await page.getByRole('button', { name: 'Add key' }).click();
+  }
+  await page.getByRole('button', { name: 'Review wallet' }).click();
+  await page.getByRole('button', { name: 'Continue to backup' }).click();
+  await saveSetupDescriptor(page, 'duplicate-policy-descriptors.txt');
+  await page.getByRole('button', { name: 'Finish hardware setup before first signature' }).click();
+  await page.getByLabel('App PIN', { exact: true }).fill('fixture-pin');
+  await page.getByLabel('Confirm app PIN', { exact: true }).fill('fixture-pin');
+  await page.getByRole('button', { name: 'Create wallet' }).click();
+  await expect(page.getByRole('alert')).toContainText(
+    'This exact descriptor wallet already exists'
+  );
+  await page.getByRole('button', { name: 'Open existing wallet' }).click();
+  await expect(page).toHaveURL(/\/unlock$/);
+  await expect(page.getByRole('heading', { name: 'Family wallet' })).toBeVisible();
 });
 
 test('rejects duplicate signer identity before insertion', async ({ page }) => {

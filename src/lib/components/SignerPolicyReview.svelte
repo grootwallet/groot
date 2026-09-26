@@ -92,19 +92,15 @@
               })
         )}</strong
       >
-      <small
-        >{#if verification && action === 'sign'}{translate($locale, 'Signer')}
-          <code>{verification.signerFingerprint}</code>{:else if verification}{translate(
-            $locale,
-            kind === 'ledger' ? 'Previously compared' : 'Verified'
-          )}
-          <LocalTimestamp value={verification.verifiedAt} /> ·
-          <code>{verification.signerFingerprint}</code>{:else}{translate(
-            $locale,
-            'Reject if any value differs on'
-          )}
-          {deviceName}.{/if}</small
-      >
+      {#if verification}<small
+          >{#if verification && action === 'sign'}{translate($locale, 'Signer')}
+            <code>{verification.signerFingerprint}</code>{:else if verification}{translate(
+              $locale,
+              kind === 'ledger' ? 'Previously compared' : 'Verified'
+            )}
+            <LocalTimestamp value={verification.verifiedAt} /> ·
+            <code>{verification.signerFingerprint}</code>{/if}</small
+        >{/if}
     </div>
   </header>
 
@@ -125,17 +121,14 @@
           </dd>
         </div>
       </dl>
-      <p>
-        {translate($locale, 'Compare every signer key and the first address on Ledger.')}
-      </p>
     </div>
   {:else if isBitBox}
-    <div class="policy-device-warning">
+    <div class="policy-device-expectation">
       <strong>{translate($locale, 'Review on BitBox')}</strong>
       <p>
         {translate(
           $locale,
-          'Enter a new device-local account name. BitBox shows the script type, account path, every account xpub, and the first address; signer fingerprints remain a Groot reference.'
+          'Enter a new device-local account name. Review the details on your device.'
         )}
       </p>
     </div>
@@ -200,9 +193,6 @@
         copied={addressCopied}
         oncopy={copyAddress}
       />{/if}
-    <small class="policy-address-purpose">
-      {translate($locale, 'Verification only. Create payment addresses in Receive.')}
-    </small>
     {#if testnetAddressDevice}<small
         >{testnetAddressDevice}
         {translate($locale, 'displays the Regtest script with a')}

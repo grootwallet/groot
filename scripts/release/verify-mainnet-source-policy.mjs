@@ -71,7 +71,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src-tauri/src/wallet/hardware_commands.rs',
-    '6d129cbae96c190efd5e468c0468ae04619b52fc31555dfd4f4417654f78d05f'
+    '379d20e68c7227a2fe7177fb3a566769b2b0761a93e8364643d5ef8184476e40'
   ],
   [
     'src-tauri/src/wallet/label_interchange.rs',
@@ -115,7 +115,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src-tauri/tauri.multi.conf.json',
-    '1178ebebd4d261927b62e9d9a2d7c9c476daea0b87ae3b2449f0616fec2645ba'
+    'd35e0895c5a0dcb18b6c2df28ec3a58725018781dee270bbfea903f45d5d82db'
   ],
   [
     'scripts/release/build-unsigned-mainnet.sh',
@@ -137,14 +137,14 @@ const pinnedPolicySources = new Map([
     'src/lib/wallet/live-sync.ts',
     'a5c477820a08a6fda433fbf8c7ac9b0a2d36ede2e16593f0f0c3aebd6538a33c'
   ],
-  ['src/lib/wallet/tauri.ts', 'a115b59e86a6c87b569b41d5d4e01fca176f11702c73c8d00b2c5907b614e5e1'],
+  ['src/lib/wallet/tauri.ts', 'e2ed2554e760c3be602ea9254503249c9e7295b327bcc91ed8c88cd8dce3baaf'],
   [
     'src/lib/wallet/contracts/errors.ts',
     'c24fbc5876dc7aaaf32f4f801506540707eb903882a4dadbadb93559f20fd9ac'
   ],
   [
     'src/lib/wallet/contracts/port.ts',
-    '0d49648db5d6ef72b3c57878a373f0a8e001450988e5ab250496f96474286625'
+    'ac06b6d3c03f3fac2b6b7011dc0c98fd463f612cef46a28cf27f482992994c86'
   ],
   [
     'src/lib/wallet/contracts/runtime.ts',
@@ -209,7 +209,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src/routes/multisig/new/+page.svelte',
-    '9ff60e7a8c7cb99a87121b09a29d34ace2222e7709565bb92c29d6c44659d6cc'
+    '2e4b6c84eda604c1fcc17e026b8911b18df9ff4075245c90079557ee46a40720'
   ],
   [
     'src/lib/multisig/policy.ts',
@@ -225,7 +225,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'scripts/release/build-mainnet-internal-rc.mjs',
-    '676a5d84c3bbf44899ca27c9fb43490343f29b2305162f504b98784fa1f6ad37'
+    'b72c626a47e97e4f3c7a25135cdc79acef53a91d5122d2d84a7b1646a0d59401'
   ],
   [
     'docs/adr/0068-restart-bound-multi-network-settings.md',

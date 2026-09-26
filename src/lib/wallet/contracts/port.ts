@@ -176,7 +176,11 @@ export interface WalletHardwarePort {
   }): Promise<HardwareDevice>;
   promptHardwarePin(deviceId: string): Promise<string>;
   sendHardwarePin(challengeId: string, pinPositions: string): Promise<void>;
-  checkHardwareCosigner(cosigner: CosignerDraft, deviceId: string): Promise<CosignerHealthCheck>;
+  checkHardwareCosigner(
+    cosigner: CosignerDraft,
+    deviceId: string,
+    draft?: boolean
+  ): Promise<CosignerHealthCheck>;
   checkHardwareExternalSigner(
     signer: ExternalSigner,
     deviceId: string

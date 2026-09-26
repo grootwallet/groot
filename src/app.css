@@ -3448,6 +3448,12 @@ code {
 .self-transfer-notice > strong {
   font-size: var(--font-size-meta);
 }
+.transaction-review-insight,
+.self-transfer-consolidating > span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
 .self-transfer-notice > span {
   color: var(--muted);
 }
@@ -3461,8 +3467,6 @@ code {
   border-top: 1px solid color-mix(in srgb, var(--success) 25%, var(--border));
 }
 .self-transfer-consolidating > span {
-  display: grid;
-  gap: 1px;
   min-width: 0;
 }
 .self-transfer-consolidating strong {
@@ -6815,8 +6819,8 @@ code {
   height: 38px;
   place-items: center;
   border-radius: var(--radius-control);
-  color: var(--accent);
-  background: var(--accent-soft);
+  color: var(--text-soft);
+  background: var(--surface-inset);
 }
 .signer-policy-review > header > span.verified {
   color: var(--success);
@@ -6828,6 +6832,7 @@ code {
 }
 .signer-policy-review > header strong {
   font-size: 14px;
+  font-weight: 600;
 }
 .signer-policy-review > header small {
   color: var(--muted);
@@ -6847,6 +6852,10 @@ code {
 .instruction-card > strong {
   font-size: 14px;
 }
+.signer-policy-review strong,
+.signer-policy-review .policy-signer-details-state em {
+  font-weight: 600;
+}
 .policy-device-expectation p {
   margin: 0;
   color: var(--text-soft);
@@ -6862,24 +6871,6 @@ code {
 }
 .instruction-card li + li {
   margin-top: 4px;
-}
-.policy-device-warning {
-  display: grid;
-  gap: 4px;
-  padding: 10px 12px;
-  border: 1px solid color-mix(in srgb, var(--accent) 42%, var(--border));
-  border-radius: var(--radius-control);
-  background: color-mix(in srgb, var(--accent) 7%, var(--surface-inset));
-}
-.policy-device-warning strong {
-  color: var(--warning-text);
-  font-size: 14px;
-}
-.policy-device-warning p {
-  margin: 0;
-  color: var(--text-soft);
-  font-size: var(--font-size-meta);
-  line-height: 1.45;
 }
 .policy-device-expectation dl {
   display: grid;
@@ -6898,16 +6889,16 @@ code {
 .policy-device-expectation dd {
   margin: 0;
   color: var(--text);
-  font-weight: 650;
+  font-weight: 400;
   text-align: right;
 }
 .policy-address-check {
   display: grid;
   gap: 9px;
   padding: 12px;
-  border: 1px solid color-mix(in srgb, var(--fr-blue) 42%, var(--border));
+  border: 1px solid var(--border);
   border-radius: var(--radius-control);
-  background: color-mix(in srgb, var(--fr-blue) 6%, var(--panel));
+  background: var(--surface-inset);
 }
 
 .policy-address-summary {
@@ -6927,13 +6918,13 @@ code {
 
 .policy-address-summary code {
   font-size: 0.95rem;
-  font-weight: 700;
+  font-weight: 500;
 }
 
 .policy-address-summary span {
   color: var(--link);
   font-size: 0.82rem;
-  font-weight: 700;
+  font-weight: 600;
   white-space: nowrap;
 }
 

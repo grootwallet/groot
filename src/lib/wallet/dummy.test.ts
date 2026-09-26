@@ -2,6 +2,33 @@ import { describe, expect, it } from 'vitest';
 import { DummyWalletAdapter } from './dummy';
 import { feeRate, sats, type MultisigSetupDraft } from './contracts';
 
+describe('multisig setup identity', () => {
+  it('checks a draft without storing health on the selected wallet', async () => {
+    const adapter = new DummyWalletAdapter();
+    const device = (await adapter.listHardwareDevices()).find(
+      (device) => device.id === 'virtual-coldcard'
+    )!;
+    const signer = await adapter.importHardwareCosigner(device.id, 'Fixture signer', true);
+    expect((await adapter.checkHardwareCosigner(signer, device.id, true)).status).toBe('healthy');
+    expect(await adapter.hardwareHealthChecks()).toEqual([]);
+    await adapter.checkHardwareCosigner(signer, device.id);
+    expect(await adapter.hardwareHealthChecks()).toHaveLength(1);
+  });
+
+  it('returns the exact existing wallet without replacing a duplicate policy', async () => {
+    const adapter = new DummyWalletAdapter();
+    const wallet = (await adapter.multisigWallet())!;
+    const registry = await adapter.profiles();
+    const existing = registry.wallets.find((profile) => profile.kind === 'multisig')!;
+    await expect(adapter.createMultisig(wallet, 'fixture-pin')).rejects.toMatchObject({
+      code: 'wallet_already_exists',
+      existingWalletId: existing.id
+    });
+    expect(await adapter.profiles()).toEqual(registry);
+    expect(await adapter.multisigWallet()).toEqual(wallet);
+  });
+});
+
 const pendingTransactionId = '6a1b2c3d4e5f67890123456789abcdef6a1b2c3d4e5f67890123456789abcdef';
 
 describe('dummy acceleration proposals', () => {

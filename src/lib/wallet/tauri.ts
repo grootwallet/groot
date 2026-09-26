@@ -552,10 +552,15 @@ export class TauriWalletAdapter implements WalletPort {
   sendHardwarePin(challengeId: string, pinPositions: string) {
     return command<void>('hardware_send_pin', { challengeId, pinPositions });
   }
-  async checkHardwareCosigner(cosigner: PolicyDraft['cosigners'][number], deviceId: string) {
+  async checkHardwareCosigner(
+    cosigner: PolicyDraft['cosigners'][number],
+    deviceId: string,
+    draft = false
+  ) {
     const result = await command<CosignerHealthCheck>('hardware_check_cosigner', {
       cosigner,
-      deviceId
+      deviceId,
+      draft
     });
     return { ...result, checkedAt: normalizeTimestamp(result.checkedAt) ?? result.checkedAt };
   }
