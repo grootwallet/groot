@@ -278,7 +278,6 @@
           syncing ? 'Refreshing payments…' : 'Refresh payments'
         )}</button
       >
-      <Button variant="secondary" href="/">{translate($locale, 'Back to overview')}</Button>
     </div>
   </header>
   {#if syncError}
@@ -356,7 +355,14 @@
           </div>
           <div>
             <dt>{translate($locale, 'Type')}</dt>
-            <dd>{translate($locale, 'Descriptor · Miniscript')}</dd>
+            <dd>
+              {translate(
+                $locale,
+                wallet?.recoveryTemplate
+                  ? 'Descriptor · Miniscript'
+                  : 'Native SegWit · standard multisig'
+              )}
+            </dd>
           </div>
           {#if current.hardwareVerifiedAt}<div>
               <dt>{translate($locale, 'Hardware verified')}</dt>

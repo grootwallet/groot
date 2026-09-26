@@ -1,5 +1,11 @@
 # Implementation status
 
+Sep 26 follow-up: standard receive addresses no longer imply generalized
+Miniscript support; the redundant Receive Overview link is removed. Trezor receive
+unlock refreshes discovery before explicit signer selection (physical retry pending).
+Single-key and multisig acceleration now react to wallet-scoped confirmation events.
+No Rust, persistence, transaction-construction, or dependency change is involved.
+
 Existing-wallet hardware pickers now distinguish unknown identities from known
 non-wallet fingerprints and disable the latter before device interaction.
 Fingerprint matches remain candidates, not account-key proofs. Native validation

@@ -4,6 +4,22 @@ import type { CatalogSection } from './types';
 // These keys are intentionally explicit so uncommon recovery/error paths cannot
 // silently fall back to English in a non-English session.
 export const dynamicCopy = {
+  'Native SegWit · standard multisig': {
+    fr: 'SegWit natif · multisig standard',
+    es: 'SegWit nativo · multifirma estándar'
+  },
+  'Refreshing device identity. Select the signer to verify.': {
+    fr: 'Actualisation de l’identité. Sélectionnez le signataire pour vérifier.',
+    es: 'Actualizando la identidad. Selecciona el firmante para verificar.'
+  },
+  'Transaction already confirmed': {
+    fr: 'Transaction déjà confirmée',
+    es: 'Transacción ya confirmada'
+  },
+  'No fee increase is needed. You can return to Overview.': {
+    fr: 'Aucune augmentation des frais nécessaire. Vous pouvez revenir à l’aperçu.',
+    es: 'No es necesario aumentar la comisión. Puedes volver al resumen.'
+  },
   'Not part of this wallet': {
     fr: 'Ne fait pas partie de ce portefeuille',
     es: 'No forma parte de esta cartera'

@@ -415,7 +415,19 @@ unreported here. A retains earlier exact-build evidence, not a blanket complete
 claim. The checklist below still governs confirmation/restart, remaining pairs,
 negative cases, BIP84, clean recovery, and independent GA review.
 
-### Earlier setup evidence
+### Additional B/C follow-up on f7855a45
+
+The owner's next screenshots still identify v0.4.95 · f7855a45, not e0162d6f.
+Multi B RBF with original BitBox02 and Jade succeeded without reported friction.
+Multi C's first deposit confirmed in Groot. Model One receive verification failed
+immediately after PIN unlock, then passed after fresh discovery showed it ready.
+Record the successful display and the failed chained interaction separately; this
+does not close Model One unlock-handoff reliability or any C signing-pair row.
+The RBF screen failed to announce an original confirming during review. The new
+event-driven UI correction needs packaged physical retesting. No identifiers or
+payment amounts are retained here, and no replacement confirmation is inferred.
+
+### Original setup report
 
 Owner-reported Mainnet results, not an independently witnessed hardware run.
 Group C's screenshot identifies internal v0.4.95 · 81409c14. Exact package

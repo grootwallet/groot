@@ -4,6 +4,16 @@ Status: canonical for the current prototype and first live integration build.
 
 ## Product
 
+Receive leaves Overview navigation to the shell and keeps Refresh payments as its
+header action. Standard BIP48 addresses are labelled **Native SegWit · standard
+multisig**; only recovery-template wallets use the Miniscript label. After a Trezor
+PIN succeeds, receive verification refreshes discovery and asks for explicit signer
+selection rather than redeeming the stale pre-unlock record. The address stays unchanged.
+Both send routes consume wallet-scoped sync updates during fee acceleration. A
+confirmed original produces a durable completion notice and blocks further
+acceleration preparation, hardware signing, and broadcast. Confirmation comes from
+the configured node, not an external explorer. Existing proposals are not deleted.
+
 Hardware pickers for an existing wallet distinguish connection readiness from
 wallet membership. A non-matching discovered fingerprint is unavailable and
 labelled **Not part of this wallet**. A missing fingerprint is **Wallet membership

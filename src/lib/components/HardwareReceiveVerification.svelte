@@ -233,7 +233,6 @@
     pinError = '';
     pinErrorCode = '';
     const positions = pinPositions;
-    const unlockedDevice = pinDevice;
     pinPositions = '';
     try {
       await walletService.sendHardwarePin(pinChallenge, positions);
@@ -243,10 +242,10 @@
       verifyOpen = true;
       toast({
         title: translate($locale, 'Hardware signer unlocked'),
-        description: translate($locale, 'Verifying the address now.'),
+        description: translate($locale, 'Refreshing device identity. Select the signer to verify.'),
         tone: 'success'
       });
-      await verifyAddress(unlockedDevice);
+      await runScan();
     } catch (cause) {
       pinChallenge = '';
       const failure = localizedReceiveVerificationFailure(

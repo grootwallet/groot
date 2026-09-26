@@ -185,7 +185,8 @@ describe('hardware receive verification UI', () => {
       multisigSetup.indexOf('function openDraftPolicyVerification')
     );
 
-    expect(receivePin).toContain('await verifyAddress(unlockedDevice)');
+    expect(receivePin).toContain('await runScan()');
+    expect(receivePin).not.toContain('verifyAddress(unlockedDevice)');
     expect(receivePin).not.toContain('listHardwareDevices');
     expect(multisigImportPin).toContain('await importHardware(unlockedDevice, false, true)');
     expect(multisigImportPin).not.toContain('listHardwareDevices');
@@ -298,7 +299,7 @@ describe('hardware receive verification UI', () => {
     expect(verificationFlow).toContain('walletService.promptHardwarePin(device.id)');
     expect(verificationFlow).toContain('walletService.sendHardwarePin(pinChallenge, positions)');
     expect(verificationFlow).toContain('<TrezorPinModal');
-    expect(verificationFlow).toContain('await verifyAddress(unlockedDevice)');
+    expect(verificationFlow).toContain('Refreshing device identity. Select the signer to verify.');
     expect(verificationFlow).toContain("device.action === 'confirm_empty_passphrase'");
     expect(verificationFlow).toContain("title={translate($locale, 'Use Trezor standard wallet?')}");
     expect(verificationFlow).toContain('onclick={confirmStandardWallet}');

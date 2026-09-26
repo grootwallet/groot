@@ -69,6 +69,7 @@
   } from '$lib/wallet/policy';
   import { compactAddress, compactIdentifier } from '$lib/address-display';
   import {
+    accelerationOriginalConfirmed,
     accelerationUnavailableDescription,
     accelerationUnavailableTitle
   } from '$lib/wallet/acceleration-presentation';
@@ -195,6 +196,7 @@
     initialAcceleration
   );
   let accelerationLoading = $state(Boolean(initialAcceleration));
+  let accelerationConfirmed = $state(false);
   let rbfQuote = $state<AccelerationQuote | null>(null);
   let cpfpQuote = $state<CpfpAccelerationQuote | null>(null);
   const broadcastExplorerUrl = $derived(
@@ -431,6 +433,28 @@
   });
   onMount(() => {
     void loadWallet();
+    return walletService.subscribe((event) => {
+      if (
+        event.type !== 'wallet_updated' ||
+        event.walletKind !== 'multisig' ||
+        event.walletId !== walletShell.selectedWalletId()
+      )
+        return;
+      if (
+        !accelerationConfirmed &&
+        accelerationOriginalConfirmed(
+          accelerationRequest?.txid ?? proposal?.acceleration?.originalTxid,
+          event.snapshot.transactions
+        )
+      ) {
+        accelerationConfirmed = true;
+        toast({
+          title: translate($locale, 'Transaction already confirmed'),
+          description: translate($locale, 'No fee increase is needed. You can return to Overview.'),
+          tone: 'success'
+        });
+      }
+    });
   });
   async function loadWallet() {
     walletLoading = true;
@@ -862,6 +886,7 @@
     }
   }
   async function prepareCustomAcceleration() {
+    if (accelerationConfirmed) return;
     const request = accelerationRequest;
     if (!request || !customFeeValid) return;
     busy = true;
@@ -1140,6 +1165,7 @@
     hardwareChangeAddressOpen = false;
   }
   async function sign(device: HardwareDevice) {
+    if (accelerationConfirmed) return;
     if (!proposal) return;
     const releaseHardwareReview = walletShell.beginHardwareReview();
     const reviewingPolicy = policyReviewOpen && policyReviewDevice?.id === device.id;
@@ -1302,6 +1328,7 @@
     error = durableError;
   }
   async function broadcast() {
+    if (accelerationConfirmed) return;
     if (!proposal || !pin) return;
     busy = true;
     error = '';
@@ -1567,6 +1594,12 @@
       description={walletLoadError}
       onretry={loadWallet}
     />
+  {:else if accelerationConfirmed}
+    <section class="form-card" role="status">
+      <h2>{translate($locale, 'Transaction already confirmed')}</h2>
+      <p>{translate($locale, 'No fee increase is needed. You can return to Overview.')}</p>
+      <Button href="/">{translate($locale, 'Back to overview')}</Button>
+    </section>
   {:else}
     {#if !txid && ((!renewalMode && !delayedSpendMode) || proposal)}<SendProgress
         current={progressStep}

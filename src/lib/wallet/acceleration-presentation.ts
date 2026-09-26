@@ -1,6 +1,19 @@
 import { localizedError, translate } from '$lib/i18n-catalog';
 import type { Locale } from '$lib/i18n';
 import { WalletError, type AccelerationMethod } from './contracts';
+import type { Transaction } from '$lib/types';
+
+export function accelerationOriginalConfirmed(
+  originalTxid: string | null | undefined,
+  transactions: readonly Pick<Transaction, 'id' | 'status'>[]
+) {
+  return Boolean(
+    originalTxid &&
+    transactions.some(
+      (transaction) => transaction.id === originalTxid && transaction.status === 'confirmed'
+    )
+  );
+}
 
 export const RBF_FUNDING_SHORTFALL_MESSAGE =
   'Not enough bitcoin to raise the fee. Receive more and wait for it to confirm, or wait for this transaction to confirm.';

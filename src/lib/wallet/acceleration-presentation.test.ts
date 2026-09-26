@@ -1,12 +1,27 @@
 import { describe, expect, it } from 'vitest';
 import { WalletError } from './contracts';
 import {
+  accelerationOriginalConfirmed,
   accelerationUnavailableDescription,
   accelerationUnavailableTitle,
   RBF_FUNDING_SHORTFALL_MESSAGE
 } from './acceleration-presentation';
 
 describe('acceleration presentation', () => {
+  it('stops acceleration only for the exact confirmed original transaction', () => {
+    expect(
+      accelerationOriginalConfirmed('original', [{ id: 'original', status: 'confirmed' }])
+    ).toBe(true);
+    expect(accelerationOriginalConfirmed('original', [{ id: 'other', status: 'confirmed' }])).toBe(
+      false
+    );
+    expect(accelerationOriginalConfirmed('original', [{ id: 'original', status: 'pending' }])).toBe(
+      false
+    );
+    expect(accelerationOriginalConfirmed(null, [{ id: 'original', status: 'confirmed' }])).toBe(
+      false
+    );
+  });
   it('names the acceleration method instead of implying that the wallet failed to load', () => {
     expect(accelerationUnavailableTitle('cpfp')).toBe('CPFP unavailable');
     expect(accelerationUnavailableTitle('rbf')).toBe('Can’t speed up transaction');

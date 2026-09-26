@@ -1,5 +1,11 @@
 # Bitcoin Improvement Proposal support
 
+Additional owner evidence on f7855a45: Multi B BIP125 replacement signing with
+Jade/original BitBox02 passed; Multi C received its first confirmed BIP48 deposit
+and Model One displayed its address only after a refreshed discovery retry.
+The revised standard-multisig label changes no descriptor or Miniscript support.
+See the Mainnet certification record; the unlock handoff remains a physical retest.
+
 The later Sep 26 Multi B follow-up records owner-reported BIP48 receive display,
 Jade/BitBox02 CPFP signing, BIP129 in-memory reconstruction, and local pruned-node
 scanning on f7855a45. Confirmation and clean-profile recovery are not inferred.

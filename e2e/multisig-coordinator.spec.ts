@@ -215,6 +215,7 @@ test('keeps multisig receive verification disclosure visibly expandable', async 
       .filter({ hasText: /^Receive$/ })
       .click();
   else await page.getByRole('main').getByRole('link', { name: 'Receive' }).click();
+  await expect(page.getByRole('link', { name: 'Back to overview', exact: true })).toHaveCount(0);
   const awaitingAddresses = page.locator('.awaiting-addresses');
   await expect(
     awaitingAddresses.getByText('Hardware not verified', { exact: true }).first()
@@ -283,6 +284,20 @@ test('keeps multisig receive verification disclosure visibly expandable', async 
   await expect(
     awaitingAddresses.getByText('Hardware verified', { exact: true }).first()
   ).toBeVisible();
+  await page.getByRole('button', { name: 'Show address details', exact: true }).click();
+  await expect(page.getByText('Native SegWit · standard multisig', { exact: true })).toBeVisible();
+  await expect(page.getByText('Descriptor · Miniscript', { exact: true })).toHaveCount(0);
+  for (const theme of ['light', 'dark']) {
+    await page.evaluate(
+      (value) => document.documentElement.setAttribute('data-theme', value),
+      theme
+    );
+    await page.screenshot({
+      path: `/private/tmp/groot-receive-followup-${page.viewportSize()?.width}-${theme}.png`,
+      fullPage: true,
+      animations: 'disabled'
+    });
+  }
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
     true
   );
@@ -305,6 +320,33 @@ test('multisig RBF keeps a safe replacement-specific default when estimates are 
   const transactionReview = page.getByRole('region', { name: 'Transaction review' });
   await expect(transactionReview).toBeVisible();
   await expect(page.getByRole('region', { name: 'Payment signers' })).toContainText('2 of 3');
+});
+
+test('confirmed original stops fee acceleration on both wallet routes', async ({ page }) => {
+  for (const route of ['/send', '/multisig/send']) {
+    await page.goto(
+      `${route}?accelerate=rbf&fixture-acceleration-confirmed=1&txid=6a1b2c3d4e5f67890123456789abcdef6a1b2c3d4e5f67890123456789abcdef`
+    );
+    await expect(
+      page.getByRole('heading', { name: 'Transaction already confirmed' })
+    ).toBeVisible();
+    await expect(
+      page.getByText('No fee increase is needed. You can return to Overview.').first()
+    ).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Continue to sign' })).toHaveCount(0);
+    await expect(page.getByText('FEE ACCELERATION', { exact: true })).toHaveCount(0);
+    for (const theme of ['light', 'dark']) {
+      await page.evaluate(
+        (value) => document.documentElement.setAttribute('data-theme', value),
+        theme
+      );
+      await page.screenshot({
+        path: `/private/tmp/groot-confirmed-${route.includes('multisig') ? 'multi' : 'single'}-${page.viewportSize()?.width}-${theme}.png`,
+        fullPage: true,
+        animations: 'disabled'
+      });
+    }
+  }
 });
 
 test('multisig RBF explains a full-balance funding shortfall without a zero default', async ({
@@ -1603,7 +1645,10 @@ test('creates and verifies a simple 2-of-3 descriptor wallet', async ({ page }) 
   await expect(page.getByRole('button', { name: 'Reuse Vault deposit test' })).toBeVisible();
   await page.getByRole('button', { name: 'Cancel' }).click();
 
-  await page.getByRole('link', { name: 'Back to overview' }).click();
+  await page
+    .locator('a:visible')
+    .filter({ hasText: /^Overview$/ })
+    .click();
   await page
     .locator('a:visible')
     .filter({ hasText: /^Send$/ })

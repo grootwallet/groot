@@ -81,6 +81,7 @@
     VISIBLE_LABEL_SUGGESTION_LIMIT
   } from '$lib/wallet/label-suggestions';
   import {
+    accelerationOriginalConfirmed,
     accelerationUnavailableDescription,
     accelerationUnavailableTitle
   } from '$lib/wallet/acceleration-presentation';
@@ -160,6 +161,7 @@
   let accelerationLoading = $state(Boolean(initialAcceleration));
   let rbfQuote = $state<AccelerationQuote | null>(null);
   let cpfpQuote = $state<CpfpAccelerationQuote | null>(null);
+  let accelerationConfirmed = $state(false);
   const broadcastExplorerUrl = $derived(
     txid ? transactionExplorerUrl(defaultConfig.network, txid) : null
   );
@@ -296,7 +298,31 @@
   let walletLoadError = $state('');
   let walletLoading = $state(true);
   let walletLoadGeneration = 0;
-  onMount(loadWallet);
+  onMount(() => {
+    void loadWallet();
+    return walletService.subscribe((event) => {
+      if (
+        event.type !== 'wallet_updated' ||
+        event.walletKind === 'multisig' ||
+        event.walletId !== walletShell.selectedWalletId()
+      )
+        return;
+      if (
+        !accelerationConfirmed &&
+        accelerationOriginalConfirmed(
+          accelerationRequest?.txid ?? proposal?.acceleration?.originalTxid,
+          event.snapshot.transactions
+        )
+      ) {
+        accelerationConfirmed = true;
+        toast({
+          title: translate($locale, 'Transaction already confirmed'),
+          description: translate($locale, 'No fee increase is needed. You can return to Overview.'),
+          tone: 'success'
+        });
+      }
+    });
+  });
   async function loadWallet() {
     const generation = ++walletLoadGeneration;
     let dataLoaded = false;
@@ -627,6 +653,7 @@
   }
 
   async function prepareCustomAcceleration() {
+    if (accelerationConfirmed) return;
     const request = accelerationRequest;
     if (!request || !customFeeValid) return;
     preparing = true;
@@ -681,6 +708,7 @@
   }
 
   async function broadcast() {
+    if (accelerationConfirmed) return;
     if (!passphrase || !proposal) return;
     credentialError = '';
     broadcasting = true;
@@ -807,6 +835,7 @@
     deviceOpen = false;
   }
   async function signHardware(device: HardwareDevice) {
+    if (accelerationConfirmed) return;
     if (!proposal || !externalProposal) return;
     const releaseHardwareReview = walletShell.beginHardwareReview();
     hardwareAction = 'sign';
@@ -1087,6 +1116,12 @@
       description={walletLoadError}
       onretry={loadWallet}
     />
+  {:else if accelerationConfirmed}
+    <section class="form-card" role="status">
+      <h2>{translate($locale, 'Transaction already confirmed')}</h2>
+      <p>{translate($locale, 'No fee increase is needed. You can return to Overview.')}</p>
+      <Button href="/">{translate($locale, 'Back to overview')}</Button>
+    </section>
   {:else}
     {#if step < 4}<SendProgress current={progressStep} />{/if}
     <div
