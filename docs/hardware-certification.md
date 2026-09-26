@@ -1,5 +1,7 @@
 # Physical hardware certification
 
+Latest setup progress: [2026-09-26 A/B/C checkpoint](hardware-certification-mainnet-2026-09-12.md#2026-09-26-abc-setup-checkpoint). All three groups now exist; these owner-reported setup results do not establish transaction, recovery, exact-firmware, or GA certification.
+
 Virtual devices prove coordinator behavior, not vendor compatibility. Run this only with disposable Regtest, Signet, or Testnet4 wallets until the mainnet checklist is approved.
 
 Release-target declarations, not certification evidence: Trezor Model One

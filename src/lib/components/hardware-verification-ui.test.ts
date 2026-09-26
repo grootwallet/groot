@@ -170,7 +170,7 @@ describe('hardware receive verification UI', () => {
     );
     const multisigImportPin = multisigSetup.slice(
       multisigSetup.indexOf('async function submitHardwarePin()'),
-      multisigSetup.indexOf('async function openDraftPolicyVerification')
+      multisigSetup.indexOf('function openDraftPolicyVerification')
     );
     const multisigSendPin = multisigSend.slice(
       multisigSend.indexOf('async function submitHardwarePin()'),
@@ -182,7 +182,7 @@ describe('hardware receive verification UI', () => {
     );
     const multisigDraftHealthPin = multisigSetup.slice(
       multisigSetup.indexOf('async function submitHardwarePin()'),
-      multisigSetup.indexOf('async function openDraftPolicyVerification')
+      multisigSetup.indexOf('function openDraftPolicyVerification')
     );
 
     expect(receivePin).toContain('await verifyAddress(unlockedDevice)');
@@ -457,12 +457,14 @@ describe('hardware receive verification UI', () => {
   });
 
   it('refreshes the saved signer backend instead of reusing stale import handles for policy review', () => {
-    const start = multisigSetup.indexOf('async function openDraftPolicyVerification');
+    const start = multisigSetup.indexOf('function openDraftPolicyVerification');
     const end = multisigSetup.indexOf('async function verifyDraftPolicy', start);
     const reviewSource = multisigSetup.slice(start, end);
     expect(reviewSource).not.toContain('hardware.find(');
     expect(reviewSource).toContain('policyDevice = null');
-    expect(reviewSource.match(/findSavedHardwareDevice\(signer\)/g)).toHaveLength(1);
+    expect(reviewSource).not.toContain('findSavedHardwareDevice');
+    const action = multisigSetup.slice(end, multisigSetup.indexOf('async function review()', end));
+    expect(action.match(/findSavedHardwareDevice\(signer\)/g)).toHaveLength(1);
     expect(reviewSource).not.toContain('listHardwareDevicesForTypes');
     expect(reviewSource).not.toContain('listHardwareDevices()');
   });

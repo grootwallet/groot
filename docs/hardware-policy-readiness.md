@@ -1,5 +1,7 @@
 # Hardware wallet policy readiness
 
+Latest setup progress: [2026-09-26 A/B/C checkpoint](hardware-certification-mainnet-2026-09-12.md#2026-09-26-abc-setup-checkpoint). All three groups now exist; these owner-reported setup results do not establish transaction, recovery, exact-firmware, or GA certification.
+
 The 2026-09-12 Mainnet checkpoint on older internal build `27f821be` passed
 policy registration for a Coldcard Mk4 + Ledger Nano S Plus + BitBox02 Nova
 2-of-3 draft but failed before durable wallet creation because saved-signer

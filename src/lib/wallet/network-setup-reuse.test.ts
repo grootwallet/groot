@@ -79,8 +79,8 @@ describe('protected network setup reuse', () => {
     ).toBeLessThan(source.indexOf('mark_selected_mainnet_node_verified(&app, &state)'));
   });
 
-  it('offers the same default choice for software, hardware, and multisig creation', () => {
-    for (const route of [...directAdoptionRoutes, multisigCreationRoute]) {
+  it('retains the default choice for software and hardware creation', () => {
+    for (const route of directAdoptionRoutes) {
       expect(route).toContain('let reuseNetworkSetup = $state(true)');
       expect(route).toContain('walletService.networkSetupSources()');
       expect(route).toContain(
@@ -90,7 +90,7 @@ describe('protected network setup reuse', () => {
     expect(welcome).toContain('networkSetupSource?.walletId');
     expect(welcome).toContain('creation.networkSetupCopied');
     expect(directAdoptionRoutes[1]).toContain('walletService.adoptNetworkSetup(');
-    expect(multisigCreationRoute).toContain('networkSetupSourceWalletId');
+    expect(multisigCreationRoute).not.toContain('networkSetupSourceWalletId');
     expect(multisigCreationRoute).not.toContain('walletService.adoptNetworkSetup(');
   });
 
@@ -148,11 +148,10 @@ describe('protected network setup reuse', () => {
     );
   });
 
-  it('does not silently publish a multisig wallet when the user selected setup reuse', () => {
-    expect(multisigCreationRoute).toContain('sources.find((source) => source.ready) ?? sources[0]');
-    expect(multisigCreationRoute).toContain(
-      'reuseNetworkSetup && networkSetupSource ? networkSetupSource.walletId : undefined'
-    );
+  it('keeps network adoption out of multisig creation without weakening native copy validation', () => {
+    expect(multisigCreationRoute).not.toContain('networkSetupSources()');
+    expect(multisigCreationRoute).not.toContain('reuseNetworkSetup');
+    expect(multisigCreationRoute).toContain('walletService.createMultisig(policy, credential)');
     expect(multisigCommands).toContain('require_requested_network_setup(');
     expect(multisigCommands).toContain('commit_multisig_profile(&app, id, &wallet)?;');
   });

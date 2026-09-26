@@ -5593,6 +5593,7 @@ code {
   grid-template-columns: 1fr 1fr;
   gap: 10px;
   padding-bottom: 8px;
+  border-bottom: 0;
 }
 .custom-threshold .field {
   margin: 0;

@@ -385,3 +385,43 @@ This is a release-blocking sync-correctness failure for `b49d2a81`; that build i
 eligible for further funded certification. The replacement build must refresh the
 preserved affected profile, show both transactions confirmed with correct accounting,
 and retain the repaired state after restart before physical testing resumes.
+
+## 2026-09-26 A/B/C setup checkpoint
+
+Owner-reported Mainnet results, not an independently witnessed hardware run.
+Group C's screenshot identifies internal v0.4.95 · 81409c14. Exact package
+identity was not re-reported for every A/B operation; firmware versions were not
+captured here. Do not infer them from target versions or earlier results.
+
+| Group | Reported models                                 | New evidence                                                                                                                                                                                   |
+| ----- | ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A     | Coldcard Mk4, BitBox02 Nova, Ledger Nano S Plus | Existing 2-of-3 wallet; all three health checks passed. Earlier policy/payment results retain their original scope.                                                                            |
+| B     | Jade Classic, original BitBox02, Trezor Safe 3  | Imports and all health checks passed; wallet created. Jade policy passed; original BitBox02 registration passed after unplug/replug following a stalled lookup.                                |
+| C     | Trezor Model One, Jade, BitBox02 Nova           | Wallet created; applicable Jade/Nova policy verifications passed. Model One correctly reports **No setup needed**, not registration. No separate C health-check or payment result is inferred. |
+
+BitBox02 reconnect success adds a positive registration observation but does not
+close the discovery stall. Removing redundant renderer lookups is not proof that
+HWI latency or the reconnect defect is resolved. Retest one/multiple devices,
+locked/unlocked, on the replacement package; record timings without raw HWI data.
+
+### Next physical steps
+
+1. Capture exact package commit, firmware, and Ledger Bitcoin app version. Confirm
+   preserved Core-backed wallet accounting survives restart.
+2. Before funding each group, compare its labeled receive address on a capable
+   signer. Policy verification is not proof for every later receive address.
+3. Exercise all three signer pairs: A Mk4/Ledger, Ledger/Nova, Nova/Mk4;
+   B Jade/original BitBox02, original BitBox02/Safe 3, Safe 3/Jade;
+   C Model One/Jade, Jade/Nova, Nova/Model One. Check recipient, amount, fee,
+   change and input labels; require both valid signatures before broadcast.
+4. Include partial-signature restart/resume, normal change and sweep, confirmation
+   and restart accounting. Cover rejection, wrong device, disconnect/retry, and
+   foreign/altered/stale PSBTs; never broadcast negative fixtures.
+5. Complete each model's BIP84 receive/sign/broadcast/restart rows separately.
+   Multisig health/registration does not satisfy single-key transaction rows.
+6. Verify public-backup reconstruction and independent recovery/reviewer rows on
+   the frozen candidate. Preserve the owner's existing profiles.
+
+No new transaction, clean recovery, exact-firmware certification, or GA pass is
+claimed. No wallet IDs, fingerprints, addresses, descriptors, PSBTs, credentials,
+device paths, or node details are retained.

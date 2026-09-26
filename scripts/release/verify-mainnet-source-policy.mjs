@@ -209,7 +209,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src/routes/multisig/new/+page.svelte',
-    'c2a4e2c045cc65f2f2f59875ec38e20d17fa500d35065363bd929157607df755'
+    '1f2407cd89e73e590797f623dda16711b132176818797b1a4c080fec4f488061'
   ],
   [
     'src/lib/multisig/policy.ts',

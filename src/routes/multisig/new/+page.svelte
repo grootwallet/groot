@@ -13,7 +13,6 @@
     Download,
     FileKey,
     FileUp,
-    Network,
     Plus,
     RefreshCw,
     ShieldCheck,
@@ -47,7 +46,6 @@
     type HardwareDevice,
     type MultisigPreview,
     type MultisigSetupDraft,
-    type NetworkSetupSource,
     type PolicyVerificationAddress,
     type RecoveryTemplate,
     type SavedFileResult,
@@ -182,8 +180,6 @@
   let policyLookupGeneration = 0;
   let credential = $state('');
   let confirmation = $state('');
-  let networkSetupSource = $state<NetworkSetupSource | null>(null);
-  let reuseNetworkSetup = $state(true);
   let preview = $state<MultisigPreview | null>(null);
   let policyAddress = $state<PolicyVerificationAddress | null>(null);
   let busy = $state(false);
@@ -513,12 +509,6 @@
   }
 
   onMount(async () => {
-    try {
-      const sources = await walletService.networkSetupSources();
-      networkSetupSource = sources.find((source) => source.ready) ?? sources[0] ?? null;
-    } catch {
-      networkSetupSource = null;
-    }
     try {
       const draft = await walletService.multisigSetupDraft();
       if (draft) {
@@ -1064,29 +1054,13 @@
     }
   }
 
-  async function openDraftPolicyVerification(signer: CosignerDraft) {
-    const generation = ++policyLookupGeneration;
+  function openDraftPolicyVerification(signer: CosignerDraft) {
+    policyLookupGeneration += 1;
     policySigner = signer;
-    // Import rows can outlive a subsequent health scan's native capabilities.
     policyDevice = null;
     policyReviewError = '';
     policyReviewOpen = true;
-    policyReviewBusy = true;
-    try {
-      if (!signer.deviceType)
-        throw new WalletError(
-          'hardware_unavailable',
-          'This signer has no interactive USB device type.'
-        );
-      const device = await walletService.findSavedHardwareDevice(signer);
-      if (generation !== policyLookupGeneration) return;
-      policyDevice = device;
-    } catch (cause) {
-      if (generation !== policyLookupGeneration) return;
-      policyReviewError = localizedError(cause, $locale, 'Could not scan hardware devices.');
-    } finally {
-      if (generation === policyLookupGeneration) policyReviewBusy = false;
-    }
+    policyReviewBusy = false;
   }
 
   function closeDraftPolicyVerification() {
@@ -1100,18 +1074,27 @@
   }
 
   async function verifyDraftPolicy() {
-    if (!policySigner || !policyDevice || policyReviewBusy) return;
-    const signerLabel = policySigner.label;
+    if (!policySigner || policyReviewBusy) return;
+    const signer = policySigner;
+    const signerLabel = signer.label;
+    const generation = ++policyLookupGeneration;
+    policyDevice = null;
     policyReviewBusy = true;
     policyReviewError = '';
     try {
-      // Resolve again at the action boundary, including retries after another
-      // scan or a long review. Rust still proves the complete public identity.
-      policyDevice = await walletService.findSavedHardwareDevice(policySigner);
+      // One fresh lookup per explicit attempt; Rust proves the complete identity.
+      if (!signer.deviceType)
+        throw new WalletError(
+          'hardware_unavailable',
+          'This signer has no interactive USB device type.'
+        );
+      const device = await walletService.findSavedHardwareDevice(signer);
+      if (generation !== policyLookupGeneration) return;
+      policyDevice = device;
       const verification = await walletService.verifyMultisigDraftSignerPolicy(
         policy,
         policyDevice.id,
-        policySigner.fingerprint
+        signer.fingerprint
       );
       draftPolicyVerifications = [
         verification,
@@ -1135,13 +1118,14 @@
         tone: 'success'
       });
     } catch (cause) {
+      if (generation !== policyLookupGeneration) return;
       policyReviewError = localizedError(
         cause,
         $locale,
         'The wallet policy could not be verified.'
       );
     } finally {
-      policyReviewBusy = false;
+      if (generation === policyLookupGeneration) policyReviewBusy = false;
     }
   }
 
@@ -1207,27 +1191,20 @@
     existingWalletId = null;
     try {
       await flushCurrentDraft();
-      const networkSetupSourceWalletId =
-        reuseNetworkSetup && networkSetupSource ? networkSetupSource.walletId : undefined;
-      const creation = recoveryTemplate
-        ? await walletService.createRecoveryMultisig(
-            name,
-            recoveryTemplate,
-            cosigners,
-            credential,
-            networkSetupSourceWalletId
-          )
-        : await walletService.createMultisig(policy, credential, networkSetupSourceWalletId);
+      if (recoveryTemplate) {
+        await walletService.createRecoveryMultisig(name, recoveryTemplate, cosigners, credential);
+      } else {
+        await walletService.createMultisig(policy, credential);
+      }
       hasDraft = false;
-      if (creation.networkSetupCopied)
-        toast({
-          title: 'Multisig wallet created',
-          description:
-            templateKind === 'standard'
-              ? `${threshold} signatures are required to spend.`
-              : '2 of 3 primary keys work now. The recovery key becomes available after the chosen wait.',
-          tone: 'success'
-        });
+      toast({
+        title: 'Multisig wallet created',
+        description:
+          templateKind === 'standard'
+            ? `${threshold} signatures are required to spend.`
+            : '2 of 3 primary keys work now. The recovery key becomes available after the chosen wait.',
+        tone: 'success'
+      });
       await goto('/multisig');
     } catch (cause) {
       existingWalletId =
@@ -1319,11 +1296,7 @@
         {#if policyStep === 'choose'}
           <div class="section-heading compact policy-choice-heading">
             <div>
-              <span class="setup-step">{translate($locale, 'POLICY · 1 OF 2')}</span>
               <h2>{translate($locale, 'Choose how this wallet spends')}</h2>
-              <p>
-                {translate($locale, 'Pick a plan. Review every key before creating the wallet.')}
-              </p>
             </div>
           </div>
           <div
@@ -1403,12 +1376,8 @@
             >
           </div>
         {:else}
-          <button class="back-link" onclick={returnToPolicyChoice}
-            ><ArrowLeft size={16} />{translate($locale, 'Policy options')}</button
-          >
           <div class="section-heading compact policy-configure-heading">
             <div>
-              <span class="setup-step">{translate($locale, 'POLICY · 2 OF 2')}</span>
               <h2>
                 {translate(
                   $locale,
@@ -1419,16 +1388,6 @@
                       : 'Inheritance wallet'
                 )}
               </h2>
-              <p>
-                {translate(
-                  $locale,
-                  templateKind === 'standard'
-                    ? 'Name the wallet and choose its signature threshold.'
-                    : templateKind === 'recovery'
-                      ? 'Three primary keys. One backup recovery key.'
-                      : 'Three primary keys. One delayed heir key.'
-                )}
-              </p>
             </div>
             <span class="policy-pill"
               >{translate(
@@ -1499,9 +1458,6 @@
                   ></label
                 >
               </div>
-              <p class="policy-guidance">
-                {translate($locale, 'Multisig requires at least two signatures.')}
-              </p>
             {/if}
           {:else}<div class="path-visual">
               <span
@@ -1741,17 +1697,7 @@
     </div>
   {:else if stage === 'review' && preview}
     <section class="form-card review-policy">
-      <button class="back-link" onclick={() => (stage = 'keys')}
-        ><ArrowLeft size={16} />{translate($locale, 'Edit keys')}</button
-      >
-      <span class="setup-step">{translate($locale, 'FINAL REVIEW')}</span>
-      <h2>{preview.name}</h2>
-      <p class="review-intro">
-        {translate(
-          $locale,
-          'Confirm the policy and save the descriptor before creating this wallet.'
-        )}
-      </p>
+      <h2>{translate($locale, '{walletName} Review', { walletName: preview.name })}</h2>
       <div class="policy-summary">
         <strong
           >{translate(
@@ -1768,121 +1714,6 @@
           )}</span
         >
       </div>
-      <div class="descriptor-toggle-row">
-        <button
-          class="descriptor-toggle"
-          aria-expanded={showDescriptor}
-          onclick={() => (showDescriptor = !showDescriptor)}
-          >{translate($locale, 'Descriptor logic')}
-          <ChevronDown size={14} class={showDescriptor ? 'rotated' : ''} /></button
-        ><InsightTip
-          label={translate($locale, 'About wallet descriptors')}
-          text={translate(
-            $locale,
-            'A descriptor is a public, watch-only recipe that defines the signing policy and derives every receive and change address. It cannot spend bitcoin, but it reveals the wallet’s complete address history, so keep it private and back it up.'
-          )}
-        />
-      </div>
-      {#if showDescriptor}<div
-          class="descriptor-block descriptor-viewer"
-          data-testid="descriptor-preview"
-        >
-          {#if combinedDescriptor}<section class="descriptor-primary">
-              <div>
-                <span>{translate($locale, 'Portable wallet descriptor')}</span><small
-                  >{translate(
-                    $locale,
-                    'Standard multipath form: branch 0 receives, branch 1 creates change.'
-                  )}</small
-                >
-              </div>
-              <code>{combinedDescriptor}</code><button
-                aria-label={translate($locale, 'Copy wallet descriptor')}
-                onclick={() => copyDescriptor(combinedDescriptor!, 'Wallet')}
-                ><Copy size={14} />{translate($locale, 'Copy wallet descriptor')}</button
-              >
-            </section>
-            <details>
-              <summary>{translate($locale, 'View separate receive and change descriptors')}</summary
-              >
-              <section>
-                <div>
-                  <span>{translate($locale, 'Receive descriptor')}</span><small
-                    >{translate(
-                      $locale,
-                      'Generates addresses shared for incoming payments.'
-                    )}</small
-                  >
-                </div>
-                <code>{preview.externalDescriptor}</code><button
-                  aria-label={translate($locale, 'Copy receive descriptor')}
-                  onclick={() => copyDescriptor(preview!.externalDescriptor, 'Receive')}
-                  ><Copy size={14} />{translate($locale, 'Copy receive descriptor')}</button
-                >
-              </section>
-              <section>
-                <div>
-                  <span>{translate($locale, 'Change descriptor')}</span><small
-                    >{translate(
-                      $locale,
-                      'Generates private change addresses after spending.'
-                    )}</small
-                  >
-                </div>
-                <code>{preview.internalDescriptor}</code><button
-                  aria-label={translate($locale, 'Copy change descriptor')}
-                  onclick={() => copyDescriptor(preview!.internalDescriptor, 'Change')}
-                  ><Copy size={14} />{translate($locale, 'Copy change descriptor')}</button
-                >
-              </section>
-            </details>
-          {:else}<section>
-              <div>
-                <span>{translate($locale, 'Receive descriptor')}</span><small
-                  >{translate($locale, 'Generates addresses shared for incoming payments.')}</small
-                >
-              </div>
-              <code>{preview.externalDescriptor}</code><button
-                aria-label={translate($locale, 'Copy receive descriptor')}
-                onclick={() => copyDescriptor(preview!.externalDescriptor, 'Receive')}
-                ><Copy size={14} />{translate($locale, 'Copy receive descriptor')}</button
-              >
-            </section>
-            <section>
-              <div>
-                <span>{translate($locale, 'Change descriptor')}</span><small
-                  >{translate($locale, 'Generates private change addresses after spending.')}</small
-                >
-              </div>
-              <code>{preview.internalDescriptor}</code><button
-                aria-label={translate($locale, 'Copy change descriptor')}
-                onclick={() => copyDescriptor(preview!.internalDescriptor, 'Change')}
-                ><Copy size={14} />{translate($locale, 'Copy change descriptor')}</button
-              >
-            </section>{/if}
-          {#if recoveryTemplate?.type === 'recovery'}<span>{translate($locale, 'Spend paths')}</span
-            ><code
-              >{translate($locale, '2 of first 3 now · 1 recovery key after')}
-              {formatInteger(recoveryTemplate.recovery.availableAfterBlocks, $locale)}
-              {translate($locale, 'blocks')}</code
-            >{/if}
-          <p>
-            <ShieldCheck size={14} />{translate(
-              $locale,
-              'Keep descriptors private even though they cannot spend. They\n            reveal every address in this wallet.'
-            )}
-          </p>
-          <button
-            class="descriptor-download"
-            disabled={savingDescriptor}
-            onclick={saveDescriptorDraft}
-            ><Download size={14} />{translate(
-              $locale,
-              savingDescriptor ? 'Opening save dialog…' : 'Save public descriptor text'
-            )}</button
-          >
-        </div>{/if}
-      {#if backupError}<p class="form-error" role="alert">{backupError}</p>{/if}
       <div class="review-signers">
         {#each preview.cosigners as signer}<div>
             <Check size={14} /><span
@@ -1900,14 +1731,7 @@
     </section>
   {:else if stage === 'backup' && preview}
     <section class="form-card review-policy">
-      <button class="back-link" onclick={() => (stage = 'review')}
-        ><ArrowLeft size={16} />{translate($locale, 'Back to verification')}</button
-      >
-      <span class="setup-step">{translate($locale, 'BACK UP')}</span>
-      <h2>{translate($locale, 'Protect')} {preview.name}</h2>
-      <p class="review-intro">
-        {translate($locale, 'Complete each section before creating this coordinator.')}
-      </p>
+      <h2>{translate($locale, 'Back up {walletName} Wallet', { walletName: preview.name })}</h2>
       <div class="policy-summary">
         <strong
           >{translate(
@@ -1936,7 +1760,6 @@
           status={saved ? 'Saved' : 'Current step'}
         >
           <Button
-            variant="secondary"
             class="full"
             disabled={savingDescriptor}
             loading={savingDescriptor}
@@ -1947,6 +1770,124 @@
               saved ? 'Save another copy' : 'Save public descriptor text'
             )}</Button
           >
+          {#if combinedDescriptor}
+            <Button
+              variant="secondary"
+              class="full"
+              onclick={() => copyDescriptor(combinedDescriptor!, 'Wallet')}
+            >
+              <Copy size={14} />{translate($locale, 'Copy wallet descriptor')}
+            </Button>
+          {/if}
+          <div class="descriptor-toggle-row">
+            <button
+              class="descriptor-toggle"
+              aria-expanded={showDescriptor}
+              onclick={() => (showDescriptor = !showDescriptor)}
+              >{translate($locale, 'Descriptor logic')}
+              <ChevronDown size={14} class={showDescriptor ? 'rotated' : ''} /></button
+            ><InsightTip
+              label={translate($locale, 'About wallet descriptors')}
+              text={translate(
+                $locale,
+                'A descriptor is a public, watch-only recipe that defines the signing policy and derives every receive and change address. It cannot spend bitcoin, but it reveals the wallet’s complete address history, so keep it private and back it up.'
+              )}
+            />
+          </div>
+          {#if showDescriptor}<div
+              class="descriptor-block descriptor-viewer"
+              data-testid="descriptor-preview"
+            >
+              {#if combinedDescriptor}<section class="descriptor-primary">
+                  <div>
+                    <span>{translate($locale, 'Portable wallet descriptor')}</span><small
+                      >{translate(
+                        $locale,
+                        'Standard multipath form: branch 0 receives, branch 1 creates change.'
+                      )}</small
+                    >
+                  </div>
+                  <code>{combinedDescriptor}</code>
+                </section>
+                <details>
+                  <summary
+                    >{translate($locale, 'View separate receive and change descriptors')}</summary
+                  >
+                  <section>
+                    <div>
+                      <span>{translate($locale, 'Receive descriptor')}</span><small
+                        >{translate(
+                          $locale,
+                          'Generates addresses shared for incoming payments.'
+                        )}</small
+                      >
+                    </div>
+                    <code>{preview.externalDescriptor}</code><button
+                      aria-label={translate($locale, 'Copy receive descriptor')}
+                      onclick={() => copyDescriptor(preview!.externalDescriptor, 'Receive')}
+                      ><Copy size={14} />{translate($locale, 'Copy receive descriptor')}</button
+                    >
+                  </section>
+                  <section>
+                    <div>
+                      <span>{translate($locale, 'Change descriptor')}</span><small
+                        >{translate(
+                          $locale,
+                          'Generates private change addresses after spending.'
+                        )}</small
+                      >
+                    </div>
+                    <code>{preview.internalDescriptor}</code><button
+                      aria-label={translate($locale, 'Copy change descriptor')}
+                      onclick={() => copyDescriptor(preview!.internalDescriptor, 'Change')}
+                      ><Copy size={14} />{translate($locale, 'Copy change descriptor')}</button
+                    >
+                  </section>
+                </details>
+              {:else}<section>
+                  <div>
+                    <span>{translate($locale, 'Receive descriptor')}</span><small
+                      >{translate(
+                        $locale,
+                        'Generates addresses shared for incoming payments.'
+                      )}</small
+                    >
+                  </div>
+                  <code>{preview.externalDescriptor}</code><button
+                    aria-label={translate($locale, 'Copy receive descriptor')}
+                    onclick={() => copyDescriptor(preview!.externalDescriptor, 'Receive')}
+                    ><Copy size={14} />{translate($locale, 'Copy receive descriptor')}</button
+                  >
+                </section>
+                <section>
+                  <div>
+                    <span>{translate($locale, 'Change descriptor')}</span><small
+                      >{translate(
+                        $locale,
+                        'Generates private change addresses after spending.'
+                      )}</small
+                    >
+                  </div>
+                  <code>{preview.internalDescriptor}</code><button
+                    aria-label={translate($locale, 'Copy change descriptor')}
+                    onclick={() => copyDescriptor(preview!.internalDescriptor, 'Change')}
+                    ><Copy size={14} />{translate($locale, 'Copy change descriptor')}</button
+                  >
+                </section>{/if}
+              {#if recoveryTemplate?.type === 'recovery'}<span
+                  >{translate($locale, 'Spend paths')}</span
+                ><code
+                  >{translate($locale, '2 of first 3 now · 1 recovery key after')}
+                  {formatInteger(recoveryTemplate.recovery.availableAfterBlocks, $locale)}
+                  {translate($locale, 'blocks')}</code
+                >{/if}
+              <p>
+                <ShieldCheck size={14} />{translate(
+                  $locale,
+                  'Keep descriptors private even though they cannot spend. They\n            reveal every address in this wallet.'
+                )}
+              </p>
+            </div>{/if}
           {#if backupError}<p class="form-error" role="alert">{backupError}</p>{/if}
         </SetupTask>
         {#if coldcardRegistrationRequired}<SetupTask
@@ -2111,25 +2052,6 @@
           {#if credential && confirmation && credential !== confirmation}<p class="form-error">
               {translate($locale, 'PINs do not match.')}
             </p>{/if}
-          {#if networkSetupSource}<label class="credential-warning credential-ack"
-              ><input type="checkbox" bind:checked={reuseNetworkSetup} /><Network size={16} />
-              <p>
-                <strong
-                  >{translate($locale, 'Use')}
-                  {networkSetupSource.walletName}{translate($locale, '’s network setup.')}</strong
-                ><span
-                  >{networkSetupSource.ready
-                    ? translate(
-                        $locale,
-                        'Copies its node and sync method. This wallet protects its own copy.'
-                      )
-                    : translate(
-                        $locale,
-                        'Unlock this wallet first, then resume setup. Or uncheck to create offline.'
-                      )}</span
-                >
-              </p></label
-            >{/if}
         </SetupTask>
       </div>
       {#if error}<WarningNotice
@@ -2146,17 +2068,21 @@
               onclick={openExistingWallet}>{translate($locale, 'Open existing wallet')}</Button
             >{/if}
         </WarningNotice>{/if}
-      <Button
-        class="full backup-create-action"
-        size="large"
-        disabled={!saved ||
-          !policyReadinessAcknowledged ||
-          !credential ||
-          credential !== confirmation}
-        loading={busy}
-        loadingLabel={translate($locale, 'Creating wallet…')}
-        onclick={create}>{translate($locale, 'Create wallet')}</Button
-      >
+      <div class="coordinator-actions">
+        <Button variant="secondary" disabled={busy} onclick={() => (stage = 'review')}>
+          <ArrowLeft size={16} />{translate($locale, 'Back to verification')}
+        </Button>
+        <Button
+          size="large"
+          disabled={!saved ||
+            !policyReadinessAcknowledged ||
+            !credential ||
+            credential !== confirmation}
+          loading={busy}
+          loadingLabel={translate($locale, 'Creating wallet…')}
+          onclick={create}>{translate($locale, 'Create wallet')}</Button
+        >
+      </div>
     </section>
   {/if}
 </div>
@@ -2267,7 +2193,7 @@
       )}
       label={translate($locale, 'Signer scan in progress')}
     />
-  {:else if policySigner && policyDevice && preview && policyAddress}<SignerPolicyReview
+  {:else if policySigner && preview && policyAddress}<SignerPolicyReview
       wallet={{ ...preview, kind: 'multisig', createdAt: '', policyType: 'standard' }}
       signer={policySigner}
       {policyAddress}

@@ -1098,6 +1098,16 @@ test('selects and freezes multisig coins before entering the send flow', async (
 test('offers safe recipes and advanced M-of-N control', async ({ page }, testInfo) => {
   await page.goto('/multisig/new');
   await expect(page.getByRole('heading', { name: 'Choose how this wallet spends' })).toBeVisible();
+  for (const theme of ['light', 'dark']) {
+    await page.evaluate(
+      (theme) => document.documentElement.setAttribute('data-theme', theme),
+      theme
+    );
+    await page.screenshot({
+      animations: 'disabled',
+      path: test.info().outputPath(`setup-choice-${theme}.png`)
+    });
+  }
   await expect(page.getByLabel('Wallet name')).toHaveCount(0);
   await expect(page.getByText(/same four-key structure/)).toHaveCount(0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
@@ -1135,7 +1145,18 @@ test('offers safe recipes and advanced M-of-N control', async ({ page }, testInf
   await page.getByLabel('Signatures required').selectOption('3');
   await expect(page.locator('.policy-pill')).toHaveText('3 of 4');
   await expect(page.getByLabel('Signatures required').locator('option[value="1"]')).toHaveCount(0);
-  await expect(page.getByText('Multisig requires at least two signatures.')).toBeVisible();
+  await expect(page.getByText('Multisig requires at least two signatures.')).toHaveCount(0);
+  for (const theme of ['light', 'dark']) {
+    await page.evaluate(
+      (theme) => document.documentElement.setAttribute('data-theme', theme),
+      theme
+    );
+    await page.screenshot({
+      path: test.info().outputPath(`setup-custom-${theme}.png`),
+      animations: 'disabled',
+      fullPage: true
+    });
+  }
   await continueToSigners(page, 'Advanced policy vault');
   await expect(page.getByText('Advanced policy vault · 3 of 4')).toBeVisible();
   await page.getByRole('button', { name: 'Back to policy' }).click();
@@ -1454,6 +1475,37 @@ test('creates and verifies a simple 2-of-3 descriptor wallet', async ({ page }) 
   await page.getByRole('button', { name: 'Review wallet' }).click();
   await expect(page.getByRole('link', { name: 'Recover from backup' })).toHaveCount(0);
   await expect(page.getByText('2 of 3 signatures')).toBeVisible();
+  await expect(
+    page.getByRole('heading', { name: 'Family vault Review', exact: true })
+  ).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Descriptor logic' })).toHaveCount(0);
+  for (const theme of ['light', 'dark']) {
+    await page.evaluate(
+      (theme) => document.documentElement.setAttribute('data-theme', theme),
+      theme
+    );
+    await page.screenshot({
+      animations: 'disabled',
+      path: test.info().outputPath(`setup-review-${theme}.png`)
+    });
+  }
+  await page.getByRole('button', { name: 'Continue to backup' }).click();
+  await expect(page.getByRole('heading', { name: 'Back up Family vault Wallet' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Back to verification' })).toHaveCount(1);
+  for (const theme of ['light', 'dark']) {
+    await page.evaluate(
+      (theme) => document.documentElement.setAttribute('data-theme', theme),
+      theme
+    );
+    await page.screenshot({
+      path: test.info().outputPath(`setup-backup-${theme}.png`),
+      animations: 'disabled',
+      fullPage: true
+    });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+      true
+    );
+  }
   await revealInsight(
     page,
     'About wallet descriptors',
@@ -1470,7 +1522,6 @@ test('creates and verifies a simple 2-of-3 descriptor wallet', async ({ page }) 
   await expect(page.getByRole('button', { name: 'Copy change descriptor' })).toBeVisible();
   await saveSetupDescriptor(page, 'family-vault-descriptors.txt');
   await expect(page.getByRole('button', { name: 'Show in Finder' })).toBeVisible();
-  await page.getByRole('button', { name: 'Continue to backup' }).click();
   const creationProgress = page.getByRole('navigation', { name: 'Wallet creation progress' });
   await expect(creationProgress.locator('li.complete')).toHaveCount(3);
   await expect(creationProgress.locator('li.complete svg')).toHaveCount(3);
@@ -1488,10 +1539,19 @@ test('creates and verifies a simple 2-of-3 descriptor wallet', async ({ page }) 
     .getByRole('button', { name: 'Verify policy' });
   await verifyLedgerPolicy.click();
   const policyDialog = page.getByRole('dialog', { name: 'Verify wallet policy' });
-  await expect(policyDialog.getByText('Saved signer not found', { exact: true })).toBeVisible();
+  await expect(policyDialog.getByText('Signer keys to compare', { exact: true })).toBeVisible();
+  await policyDialog.getByRole('button', { name: 'Review on Ledger' }).click();
   await expect(
     policyDialog.getByText('This signer has no interactive USB device type.', { exact: true })
   ).toBeVisible();
+  await expect
+    .poll(async () =>
+      policyDialog.evaluate((dialog) => {
+        const bounds = dialog.getBoundingClientRect();
+        return bounds.top >= 0 && bounds.bottom <= innerHeight;
+      })
+    )
+    .toBe(true);
   const policyDialogBounds = await policyDialog.boundingBox();
   const viewport = page.viewportSize();
   expect(policyDialogBounds && viewport).toBeTruthy();
@@ -1934,9 +1994,9 @@ test('creates a guided recovery descriptor from a visible template', async ({ pa
   await expect(page.getByText('Recovery-only signer', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Review wallet' }).click();
   await expect(page.getByText('2 of 3 primary keys + recovery key later')).toBeVisible();
+  await page.getByRole('button', { name: 'Continue to backup' }).click();
   await page.getByRole('button', { name: 'Descriptor logic' }).click();
   await expect(page.getByTestId('descriptor-preview')).toContainText('4,320 blocks');
-  await page.getByRole('button', { name: 'Continue to backup' }).click();
   await saveSetupDescriptor(page, 'resilient-vault-descriptors.txt');
   await page.getByRole('button', { name: 'Finish hardware setup before first signature' }).click();
   await expect(page.getByLabel('App PIN', { exact: true })).toBeEnabled();
@@ -1955,7 +2015,7 @@ test('keeps assisted recovery honest and offers simple recovery waits', async ({
   await page.getByRole('button', { name: 'Continue', exact: true }).click();
   const recoveryWait = page.getByRole('group', { name: 'Recovery key wait' });
   await expect(recoveryWait).toBeVisible();
-  await expect(recoveryWait.locator('.recovery-delay-title')).toHaveCSS('font-size', '11px');
+  await expect(recoveryWait.locator('.recovery-delay-title')).toHaveCSS('font-size', '13px');
   await expect(recoveryWait.getByRole('button').first()).toHaveCSS('border-radius', '12px');
   await page.getByRole('button', { name: /About 3 months/ }).click();
   await expect(page.getByText('13,140 blocks', { exact: true }).first()).toBeVisible();

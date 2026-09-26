@@ -1,5 +1,13 @@
 # Implementation status
 
+The 2026-09-26 setup simplification removes duplicate navigation and explanatory
+headings, moves descriptor inspection/copy to backup beside the primary file save,
+and moves multisig network adoption out of creation into Settings. Policy review
+opens immediately from saved public data; one fresh device lookup occurs only on
+explicit review, including retries. Complete native identity and address checks
+remain unchanged. This removes a redundant scan, not HWI aggregate-scan latency.
+No persisted format, dependency, or signing behavior changes.
+
 The pruned-rescan follow-up checks persisted checkpoint agreement through Core's
 active-chain height/hash mapping rather than requesting an old full block that
 may already be pruned. Stale hashes still rewind to verified agreement; actual

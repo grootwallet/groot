@@ -78,10 +78,10 @@ The native app version and short source commit remain visible through one shared
 
 Wallet uniqueness is the exact canonical public receive descriptor on the active Rust network. The eight-character descriptor checksum remains an integrity check only; checksum equality cannot establish wallet equality. Creation and recovery compare exact descriptors inside Rust against every authoritative profile representation. A true duplicate returns the existing immutable wallet ID so the shell can select that exact profile; a missing or stale match never falls back to the currently selected wallet.
 
-When another unlocked wallet has a saved protected network setup, new software,
-hardware, and multisig wallets offer to reuse its Bitcoin Core connection and
-activity-sync method by default. Multisig creation also shows a saved but locked
-source with an unlock instruction; the user may opt out and create offline.
+When another unlocked wallet has a saved protected network setup, new software
+and hardware wallets offer to reuse its Bitcoin Core connection and
+activity-sync method by default. Multisig setup leaves network adoption to Settings
+after creation, so a locked source cannot block the final backup/PIN step.
 Listing availability does not require the currently selected wallet to be
 unlocked and returns no node, peer, proxy, or authentication settings. Duplicate
 multisig descriptors are rejected before copying a setup or creating candidate files.
@@ -90,8 +90,8 @@ scan state isolated, and re-encrypts any RPC password with the new wallet
 credential inside Rust; node credentials never enter the webview. A new software
 or multisig profile is not selected, shown as successfully created, or exposed
 to automatic refresh until this protected copy attempt finishes. For multisig
-creation, an explicitly selected reuse that locks, expires, changes, or fails
-validation rolls back the candidate and preserves the draft instead of silently
+creation through native callers explicitly requesting reuse, a source that locks,
+expires, changes, or fails validation rolls back the candidate and preserves the draft instead of silently
 publishing an offline wallet. Software and single-key hardware creation retain
 their existing offline fallback on copy failure. Settings lists saved setups on
 every active network, including Mainnet, without exposing their node details

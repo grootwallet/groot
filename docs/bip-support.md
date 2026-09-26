@@ -1,5 +1,11 @@
 # Bitcoin Improvement Proposal support
 
+The 2026-09-26 A/B/C setup checkpoint adds owner-reported BIP48 creation and
+policy observations in the [Mainnet evidence record](hardware-certification-mainnet-2026-09-12.md#2026-09-26-abc-setup-checkpoint).
+It does not establish new transaction, firmware, or GA certification passes.
+Setup presentation and removal of one redundant device lookup do not change
+BIP32/BIP48/BIP84 derivation, descriptors, PSBTs, or persisted formats.
+
 The pruned-rescan checkpoint and retained-range guidance fix has no BIP-support
 impact: descriptors, derivation, signing, scan bounds, and persisted formats are
 unchanged. Only active-chain checkpoint lookup and public node-status presentation

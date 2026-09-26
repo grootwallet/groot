@@ -2,6 +2,7 @@
 
 - Status: accepted for the isolated certification candidate; distribution remains blocked
 - Date: 2026-09-13
+- Creation-screen choice superseded by ADR 0074; native explicit-copy and policy-status decisions remain in force.
 - Amends: ADR 0064's fallback only when a multisig creator explicitly selects setup reuse
 
 ## Context

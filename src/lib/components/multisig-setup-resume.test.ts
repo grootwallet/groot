@@ -15,16 +15,17 @@ const discardModal = readFileSync(
 describe('resumable multisig setup', () => {
   it('refreshes policy device capabilities instead of reusing stale import rows', () => {
     const open = setup.slice(
-      setup.indexOf('async function openDraftPolicyVerification'),
+      setup.indexOf('function openDraftPolicyVerification'),
       setup.indexOf('function closeDraftPolicyVerification')
     );
     expect(open).not.toContain('hardware.find(');
-    expect(open).toContain('walletService.findSavedHardwareDevice(signer)');
+    expect(open).not.toContain('walletService.findSavedHardwareDevice');
     const verify = setup.slice(
       setup.indexOf('async function verifyDraftPolicy'),
       setup.indexOf('async function create()', setup.indexOf('async function verifyDraftPolicy'))
     );
-    expect(verify.indexOf('walletService.findSavedHardwareDevice(policySigner)')).toBeLessThan(
+    expect(verify).toContain('if (generation !== policyLookupGeneration) return');
+    expect(verify.indexOf('walletService.findSavedHardwareDevice(signer)')).toBeLessThan(
       verify.indexOf('walletService.verifyMultisigDraftSignerPolicy(')
     );
   });

@@ -1,6 +1,14 @@
 import type { CatalogSection } from './types';
 
 export const multisigCopy = {
+  '{walletName} Review': {
+    fr: 'Vérification de {walletName}',
+    es: 'Revisión de {walletName}'
+  },
+  'Back up {walletName} Wallet': {
+    fr: 'Sauvegarder le portefeuille {walletName}',
+    es: 'Respaldar la cartera {walletName}'
+  },
   'Payment inputs unavailable': {
     fr: 'Les fonds de ce paiement ne sont plus disponibles',
     es: 'Los fondos de este pago ya no están disponibles'
