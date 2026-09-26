@@ -875,7 +875,8 @@ test('creates an external-signer wallet, signs by cable, and configures its isol
   const unsignedQrDialog = page.getByRole('dialog', { name: 'Unsigned PSBT' });
   const unsignedQrImage = unsignedQrDialog.getByRole('img', { name: /QR frame/ });
   await expect(unsignedQrImage).toBeVisible();
-  await page.getByRole('button', { name: 'Close' }).click();
+  await unsignedQrDialog.getByRole('button', { name: 'Close' }).click();
+  await expect(unsignedQrDialog).toBeHidden();
   await page.getByRole('button', { name: 'Scan signed QR' }).click();
   await expect(
     page.getByText(
@@ -885,7 +886,9 @@ test('creates an external-signer wallet, signs by cable, and configures its isol
   await expect(
     page.getByText('QR scanning is not available in this WebView. Import the PSBT file instead.')
   ).toHaveCount(0);
-  await page.getByRole('button', { name: 'Close' }).click();
+  const scanQrDialog = page.getByRole('dialog', { name: 'Scan signed PSBT' });
+  await scanQrDialog.getByRole('button', { name: 'Close' }).click();
+  await expect(scanQrDialog).toBeHidden();
   await page.getByRole('button', { name: 'Sign with cable' }).click();
   await expect(
     page.getByRole('status', { name: 'Hardware device scan in progress' })
@@ -989,7 +992,7 @@ test('creates an external-signer wallet, signs by cable, and configures its isol
   await page.getByLabel('RPC password', { exact: true }).fill('rpc-secret');
   await page.getByLabel('App PIN', { exact: true }).fill('hardware-pin');
   await page.getByRole('button', { name: 'Save & test' }).click();
-  await expect(page.getByText('Trusted remote server')).toBeVisible();
+  await expect(page.getByText('Custom remote · activity, fees, and broadcast')).toBeVisible();
 });
 
 test('localizes hardware scan progress in French', async ({ page }) => {
@@ -2374,11 +2377,43 @@ test('an address copied from Receive completes the browser send flow', async ({ 
   await expect(page.getByText('Remaining wallet balance: 2,455,253 sats')).toBeVisible();
 });
 
-test('payment QR scanner uses a large square camera target', async ({ page }) => {
+test('payment QR scanner loads on demand and cancels safely while loading', async ({ page }) => {
+  let requested = false;
+  let releaseDecoder!: () => void;
+  const decoderReady = new Promise<void>((resolve) => (releaseDecoder = resolve));
+  await page.route(/\/qr-scanner\.js(?:\?|$)/, async (route) => {
+    requested = true;
+    await decoderReady;
+    await route.fulfill({
+      contentType: 'application/javascript',
+      body: `export default class {
+        constructor() { window.scannerCreated = (window.scannerCreated || 0) + 1; }
+        async start() { window.scannerStarted = (window.scannerStarted || 0) + 1; }
+        destroy() { window.scannerDestroyed = (window.scannerDestroyed || 0) + 1; }
+      }`
+    });
+  });
   await page.goto('/send');
+  await expect(page.getByRole('heading', { name: 'Send bitcoin', exact: true })).toBeVisible();
+  expect(requested).toBe(false);
   await page.getByRole('button', { name: 'Scan Bitcoin payment QR' }).click();
+  await expect.poll(() => requested).toBe(true);
 
   const dialog = page.getByRole('dialog', { name: 'Scan payment request' });
+  await dialog.getByRole('button', { name: 'Close', exact: true }).click();
+  await expect(dialog).toBeHidden();
+  releaseDecoder();
+  // Reopening reuses the module, but the closed scanner must never acquire a camera.
+  await page.getByRole('button', { name: 'Scan Bitcoin payment QR' }).click();
+  await expect
+    .poll(() =>
+      page.evaluate(() => (window as unknown as { scannerStarted?: number }).scannerStarted)
+    )
+    .toBe(1);
+  expect(
+    await page.evaluate(() => (window as unknown as { scannerCreated?: number }).scannerCreated)
+  ).toBe(1);
+
   const camera = dialog.locator('.camera-frame');
   const guide = dialog.locator('.scan-guide');
   await expect(camera).toBeVisible();
@@ -2392,6 +2427,14 @@ test('payment QR scanner uses a large square camera target', async ({ page }) =>
   expect(cameraBox!.width).toBeGreaterThanOrEqual(
     (page.viewportSize()?.width ?? 1180) > 760 ? 540 : 320
   );
+  await expect(dialog).toHaveCSS('opacity', '1');
+  await page.screenshot({ path: test.info().outputPath('payment-scanner.png') });
+  await dialog.getByRole('button', { name: 'Close', exact: true }).click();
+  await expect
+    .poll(() =>
+      page.evaluate(() => (window as unknown as { scannerDestroyed?: number }).scannerDestroyed)
+    )
+    .toBe(1);
 });
 
 test('custom fees validate and wallet deletion requires typed confirmation', async ({ page }) => {

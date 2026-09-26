@@ -27,7 +27,6 @@
   import TransactionReviewDetails from '$lib/components/TransactionReviewDetails.svelte';
   import Modal from '$lib/components/Modal.svelte';
   import PasswordField from '$lib/components/PasswordField.svelte';
-  import AnimatedUrQr from '$lib/components/AnimatedUrQr.svelte';
   import UrQrScanner from '$lib/components/UrQrScanner.svelte';
   import PaymentRequestQrScanner from '$lib/components/PaymentRequestQrScanner.svelte';
   import RecipientAddressModal from '$lib/components/RecipientAddressModal.svelte';
@@ -2915,7 +2914,18 @@
   open={qrOpen}
   title={translate($locale, 'Unsigned PSBT')}
   description={translate($locale, 'Scan with an offline signer. No private data is encoded.')}
-  onclose={() => (qrOpen = false)}><AnimatedUrQr frames={urFrames} /></Modal
+  onclose={() => (qrOpen = false)}
+  >{#await import('$lib/components/AnimatedUrQr.svelte')}
+    <p role="status">{translate($locale, 'Preparing QR…')}</p>
+  {:then { default: AnimatedUrQr }}
+    <AnimatedUrQr frames={urFrames} />
+  {:catch}
+    <WarningNotice
+      tone="danger"
+      role="alert"
+      title={translate($locale, 'Could not generate QR code')}
+    />
+  {/await}</Modal
 >
 <Modal
   open={paymentScanOpen}

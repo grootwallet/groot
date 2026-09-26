@@ -192,6 +192,12 @@ discarded before the command boundary.
 
 ## Frontend state and component boundaries
 
+Payment-request and signed-PSBT camera scanners load the bundled QR decoder only
+when opened. Send flows likewise load animated QR generation only when its dialog
+opens. Closing during module loading prevents camera construction; closing
+an active scanner destroys it. No remote code, dependency, persisted format, or
+BIP behavior changes are involved.
+
 All dialogs, including complete identifier views opened from another dialog,
 compose the shared `Modal` component. Its layer is portaled to `document.body`
 so transformed route containers cannot change viewport centering or split the
