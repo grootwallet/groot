@@ -48,6 +48,51 @@ struct AnchorReconciliationFixture {
     block: bdk_wallet::bitcoin::Block,
 }
 
+// A pruned node still has active-chain hashes, but no historical block body.
+struct PrunedCheckpointFixture(BTreeMap<u32, BlockHash>);
+
+impl jsonrpc::client::Transport for PrunedCheckpointFixture {
+    fn send_request(
+        &self,
+        request: jsonrpc::Request<'_>,
+    ) -> Result<jsonrpc::Response, jsonrpc::Error> {
+        assert_eq!(
+            request.method, "getblockhash",
+            "checkpoint agreement must not request pruned bodies"
+        );
+        let params: Vec<u32> = serde_json::from_str(request.params.unwrap().get())?;
+        BlockFilterBatchFixture::response(&request, serde_json::to_value(self.0[&params[0]])?)
+    }
+
+    fn send_batch(
+        &self,
+        _: &[jsonrpc::Request<'_>],
+    ) -> Result<Vec<jsonrpc::Response>, jsonrpc::Error> {
+        Err(jsonrpc::Error::WrongBatchResponseSize)
+    }
+
+    fn fmt_target(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("pruned checkpoint fixture")
+    }
+}
+
+#[test]
+fn checkpoint_agreement_works_without_pruned_bodies_and_rejects_stale_hashes() {
+    let (wallet, tip, _, _) = anchor_reconciliation_wallet(50, 22, 32);
+    let genesis = genesis_block(Network::Regtest).block_hash();
+    for (active_tip, expected_height, rewound) in [
+        (tip.hash(), 2, false),
+        (BlockHash::from_byte_array([33; 32]), 0, true),
+    ] {
+        let rpc = Client::from_jsonrpc(jsonrpc::client::Client::with_transport(
+            PrunedCheckpointFixture(BTreeMap::from([(0, genesis), (2, active_tip)])),
+        ));
+        let (agreement, actual_rewound) = rewind_stale_core_checkpoints(&rpc, &wallet).unwrap();
+        assert_eq!(agreement.height(), expected_height);
+        assert_eq!(actual_rewound, rewound);
+    }
+}
+
 impl jsonrpc::client::Transport for AnchorReconciliationFixture {
     fn send_request(
         &self,

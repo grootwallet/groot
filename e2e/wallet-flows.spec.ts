@@ -1364,6 +1364,18 @@ test('pruned recovery errors show retained history and remain easy to trace', as
   await page.goto('/settings?fixture-pruned-history=1');
   await page.getByRole('button', { name: /Recovery scan/ }).click();
   const recoveryScan = page.getByRole('dialog', { name: 'Full wallet rescan' });
+  await expect(
+    recoveryScan.getByText(
+      'Full blocks available from 960,062. Choose a birthday after this block.'
+    )
+  ).toBeVisible();
+  for (const theme of ['light', 'dark']) {
+    await page.evaluate(
+      (value) => document.documentElement.setAttribute('data-theme', value),
+      theme
+    );
+    await recoveryScan.screenshot({ path: test.info().outputPath(`pruned-rescan-${theme}.png`) });
+  }
   await recoveryScan.getByRole('spinbutton', { name: 'Wallet birthday block' }).fill('96600');
   await recoveryScan.getByLabel('Wallet passphrase', { exact: true }).fill('prototype-passphrase');
   await recoveryScan.getByRole('button', { name: 'Save & rescan' }).click();

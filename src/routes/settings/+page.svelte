@@ -226,6 +226,7 @@
     scanPoll: ReturnType<typeof setTimeout> | undefined;
   let scanOptionsOpen = $state(false),
     scanTip = $state<number | null>(null),
+    scanNodeStatus = $state<NodeStatus | null>(null),
     scanTipLoading = $state(false);
   let scanBirthdayAboveTip = $derived(
     scanTip !== null && Number(scanDraft.birthdayHeight) > scanTip
@@ -983,11 +984,12 @@
   }
   async function refreshScanTip() {
     scanTipLoading = true;
+    scanNodeStatus = null;
     try {
-      const cached = await walletService.publicNetworkStatus();
-      scanTip = cached.networkTip;
+      scanTip = (await walletService.publicNetworkStatus().catch(() => null))?.networkTip ?? null;
       const current = await walletService.testNodeConnection();
       scanTip = current.blocks;
+      scanNodeStatus = current;
     } catch {
       // A saved tip is still useful for comparison. Starting the scan performs
       // the authoritative native validation against the live node.
@@ -2213,6 +2215,21 @@
           })}</small
         >{:else if scanTipLoading}<small class="scan-tip"
           >{translate($locale, 'Reading current chain tip…')}</small
+        >{/if}{#if scanNodeStatus?.pruned && scanNodeStatus.pruneHeight !== null}<small
+          class="scan-tip"
+          >{translate(
+            $locale,
+            'Full blocks available from {height}. Choose a birthday after this block.',
+            {
+              height: formatInteger(scanNodeStatus.pruneHeight, $locale)
+            }
+          )}</small
+        >{:else if !scanTipLoading && (!scanNodeStatus || scanNodeStatus.pruned)}<small
+          class="scan-tip"
+          >{translate(
+            $locale,
+            'Retained block range unavailable. Check the node connection and reopen this dialog.'
+          )}</small
         >{/if}{#if scanBirthdayAboveTip}<small class="form-error"
           >{translate($locale, 'Birthday block must be at or below the current chain tip.')}</small
         >{/if}</label

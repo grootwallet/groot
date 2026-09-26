@@ -1,5 +1,10 @@
 # Bitcoin Improvement Proposal support
 
+The pruned-rescan checkpoint and retained-range guidance fix has no BIP-support
+impact: descriptors, derivation, signing, scan bounds, and persisted formats are
+unchanged. Only active-chain checkpoint lookup and public node-status presentation
+change; automated evidence does not establish a pass on the owner's node.
+
 The 2026-09-26 Multisig B follow-up changes capability refresh, setup-availability
 DTOs, duplicate-check ordering, and presentation only. BIP32/BIP48 identity proofs,
 descriptors, signing, backups, and persisted formats are unchanged. The owner's

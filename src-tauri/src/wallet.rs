@@ -2852,8 +2852,10 @@ fn rewind_stale_core_checkpoints(
     let original_tip = wallet.latest_checkpoint().height();
     let mut agreement = None;
     for checkpoint in wallet.latest_checkpoint().iter() {
-        match client.get_block_info(&checkpoint.hash()) {
-            Ok(block) if block.confirmations >= 0 => {
+        // Active-chain hashes remain available after full block bodies are
+        // pruned. Agreement needs identity, not historical transaction data.
+        match client.get_block_hash(u64::from(checkpoint.height())) {
+            Ok(hash) if hash == checkpoint.hash() => {
                 agreement = Some(checkpoint);
                 break;
             }

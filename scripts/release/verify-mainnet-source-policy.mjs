@@ -52,7 +52,7 @@ const pinnedPolicySources = new Map([
   ['src-tauri/src/recovery.rs', '96eba2aaea0461d8ed067513c044f85f8845837dbf584eb3f93e6969ec5670dc'],
   ['src-tauri/src/network.rs', 'dcf011fb789a0b690b1832a9245df5fc0199318f03a820d10f9a3b1c90f5d76b'],
   ['src-tauri/src/registry.rs', '343aea20f5d09df6abd5c9fdba3b093efc6729c9ece8f180b27a150061753a18'],
-  ['src-tauri/src/wallet.rs', 'd499973c92645a1bb81efb2c86dffc6ad8ce384a39f6a993f270b8de9c3582e2'],
+  ['src-tauri/src/wallet.rs', 'f7f1af185e397fdd32d307ff9451ecbf25227879f9162852b3b8433809d4546f'],
   [
     'src-tauri/src/wallet/diagnostics.rs',
     '0378b4dadf9698b2a6e04361950d51c65390e175c0c7fc50d88ac6deb2de8b5f'
@@ -177,7 +177,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src/routes/settings/+page.svelte',
-    'e2e68576ae1cd1ab57c68dfc653d4db9b0fb7b540dcc2ceac9468884ac7b9d64'
+    '056bd0f53252c8b6412299a02f394ede368d8115eda0efe91db98e7c84078e30'
   ],
   [
     'services/core-gateway/gateway.py',

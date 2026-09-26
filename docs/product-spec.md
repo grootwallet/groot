@@ -25,7 +25,11 @@ and operation-specific scalar details when available; arbitrary backend, RPC, si
 or user-authored error strings are never persisted. A pruned recovery-scan failure
 identifies the requested birthday, required anchor, earliest full block retained by
 Bitcoin Core, and earliest usable birthday. The recovery form shows the same facts in
-the standard durable inline error treatment.
+the standard durable inline error treatment. Before submission, the recovery form
+also shows the live node's earliest retained full block and explains that the
+birthday must follow it. Unavailable retention information is explicit, never
+inferred from a cached chain tip. Checkpoint agreement uses active-chain hashes,
+not old full-block bodies; the requested scan range still requires retained blocks.
 
 The distributed macOS application includes Groot's exact reviewed Bitcoin Core HWI dependency for USB hardware signers. A user does not install HWI, Homebrew, or a privileged helper separately. Groot verifies the bundled executable and containing signed app before use and fails closed rather than searching the host system.
 

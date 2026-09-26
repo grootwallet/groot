@@ -474,12 +474,15 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     };
   }
   async testNodeConnection() {
+    const pruned =
+      typeof location !== 'undefined' &&
+      new URLSearchParams(location.search).has('fixture-pruned-history');
     return {
       connected: true,
-      blocks: 301,
+      blocks: pruned ? 968_684 : 301,
       backend: structuredClone(this._nodeConfig),
-      pruned: false,
-      pruneHeight: null,
+      pruned,
+      pruneHeight: pruned ? 960_062 : null,
       initialBlockDownload: false,
       sizeOnDisk: 42_000_000,
       blockFilterIndex: 'disabled' as const

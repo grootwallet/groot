@@ -513,6 +513,14 @@ export const settingsCopy = {
     fr: 'Pointe actuelle de la chaîne {network} : bloc {height}',
     es: 'Punta actual de la cadena {network}: bloque {height}'
   },
+  'Full blocks available from {height}. Choose a birthday after this block.': {
+    fr: 'Blocs complets disponibles depuis {height}. Choisissez un bloc de naissance après ce bloc.',
+    es: 'Bloques completos disponibles desde {height}. Elige un bloque de nacimiento posterior.'
+  },
+  'Retained block range unavailable. Check the node connection and reopen this dialog.': {
+    fr: 'Plage de blocs conservés indisponible. Vérifiez la connexion au nœud et rouvrez cette fenêtre.',
+    es: 'Rango de bloques conservados no disponible. Comprueba la conexión al nodo y vuelve a abrir este diálogo.'
+  },
   'Amount display': { fr: 'Affichage des montants', es: 'Visualización de importes' },
   Authentication: { fr: 'Authentification', es: 'Autenticación' },
   'Automatic cookie authentication': {

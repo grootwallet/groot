@@ -1,5 +1,12 @@
 # Implementation status
 
+The pruned-rescan follow-up checks persisted checkpoint agreement through Core's
+active-chain height/hash mapping rather than requesting an old full block that
+may already be pruned. Stale hashes still rewind to verified agreement; actual
+scan-range retention checks remain mandatory. Settings now retains the live
+connection result's prune height for pre-submit guidance, independently of cached
+tip availability. Wallet data formats and saved birthdays are unchanged.
+
 The Multisig B setup follow-up refreshes opaque signer capabilities before policy
 review and retry instead of reusing import rows invalidated by a later health scan.
 Reusable network setups expose only public wallet identity and readiness, even
