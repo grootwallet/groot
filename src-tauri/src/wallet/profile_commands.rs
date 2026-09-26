@@ -18,7 +18,6 @@ pub struct WalletProfileCompatibility {
 pub struct NetworkSetupSource {
     wallet_id: String,
     wallet_name: String,
-    sync_source: WalletSyncSource,
     ready: bool,
 }
 
@@ -102,8 +101,17 @@ pub fn network_setup_sources(
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> ApiResult<Vec<NetworkSetupSource>> {
-    require_unlocked(&app, &state)?;
+    // This is public source availability, not access to a selected wallet's
+    // protected connection. Adoption separately authorizes the exact source.
     let registry = load_registry(&app)?;
+    for profile in &registry.wallets {
+        authorize_wallet_session(
+            &state,
+            profile.id,
+            false,
+            registry.inactivity_timeout_minutes,
+        )?;
+    }
     let unlocked = state.unlocked_wallets.lock().map_err(internal)?;
     let node_auth = state.node_auth.lock().map_err(internal)?;
     Ok(registry
@@ -125,7 +133,6 @@ pub fn network_setup_sources(
             Some(NetworkSetupSource {
                 wallet_id: profile.id.to_string(),
                 wallet_name: profile.name,
-                sync_source: read_sync_source_for(&app, profile.id).ok()?,
                 ready,
             })
         })

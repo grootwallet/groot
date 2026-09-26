@@ -1122,16 +1122,12 @@ test('offers safe recipes and advanced M-of-N control', async ({ page }, testInf
   await page.getByRole('button', { name: /^Standard/ }).click();
   await revealInsight(page, 'How Standard multisig works', testInfo.project.name === 'mobile');
   await expect(
-    page.getByRole('tooltip').filter({ hasText: 'helper can never spend alone' })
+    page.getByRole('tooltip').filter({ hasText: 'No single key can spend alone' })
   ).toBeVisible();
   await page.getByRole('button', { name: 'Continue', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Standard multisig' })).toBeVisible();
   await expect(page.getByText('2 of 3', { exact: true }).first()).toBeVisible();
-  await expect(page.getByText('Assisted signing', { exact: true })).toBeVisible();
-  await revealInsight(page, 'About assisted signing', testInfo.project.name === 'mobile');
-  await expect(
-    page.getByRole('tooltip').filter({ hasText: 'owners can always sign together' })
-  ).toBeVisible();
+  await expect(page.getByText('Assisted signing', { exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: /3 of 5/ }).click();
   await expect(page.locator('.policy-pill')).toHaveText('3 of 5');
   await page.getByRole('button', { name: /Custom/ }).click();
@@ -2003,6 +1999,24 @@ test('opens the exact existing wallet after duplicate multisig creation', async 
   await expect(page.getByRole('alert')).toContainText(
     'This exact descriptor wallet already exists'
   );
+  const duplicateAlert = page.getByRole('alert');
+  const duplicateAction = duplicateAlert.getByRole('button', { name: 'Open existing wallet' });
+  await expect(page.locator('.toast-region .toast')).toHaveCount(0, { timeout: 10_000 });
+  await duplicateAction.scrollIntoViewIfNeeded();
+  for (const theme of ['light', 'dark']) {
+    await page.evaluate(
+      (value) => document.documentElement.setAttribute('data-theme', value),
+      theme
+    );
+    await duplicateAlert.screenshot({
+      path: test.info().outputPath(`duplicate-wallet-${theme}.png`)
+    });
+  }
+  if ((page.viewportSize()?.width ?? 1180) > 640) {
+    const body = await duplicateAlert.locator('.warning-notice-body').boundingBox();
+    const action = await duplicateAction.boundingBox();
+    expect(action!.x).toBeGreaterThan(body!.x + body!.width);
+  }
   await page.getByRole('button', { name: 'Open existing wallet' }).click();
   await expect(page).toHaveURL(/\/unlock$/);
   await expect(page.getByRole('heading', { name: 'Family wallet' })).toBeVisible();

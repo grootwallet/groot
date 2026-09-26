@@ -1166,6 +1166,13 @@ pub async fn multisig_create(
         // An offline, watch-only coordinator does not need a short-lived HWI
         // admission. Mainnet receive remains gated on durable device evidence.
         let preview = policy.preview().map_err(policy_api_error)?;
+        if let Some(existing) = find_exact_descriptor_profile(
+            &app,
+            &load_registry(&app)?,
+            &preview.external_descriptor,
+        )? {
+            return Err(wallet_already_exists(&existing));
+        }
         let coldcard_registered =
             multisig_setup_commands::coldcard_registration_for_preview(&app, &preview)?;
         let preview_descriptor_checksum = descriptor_checksum(&preview.external_descriptor)?;
@@ -1317,6 +1324,11 @@ pub async fn multisig_recovery_create(
         };
         policy.preview().map_err(policy_api_error)?;
         let analysis = analyze_template(&template, &cosigners).map_err(recovery_api_error)?;
+        if let Some(existing) = find_exact_descriptor_profile(
+            &app, &load_registry(&app)?, &analysis.external_descriptor,
+        )? {
+            return Err(wallet_already_exists(&existing));
+        }
         let threshold = analysis
             .paths
             .first()

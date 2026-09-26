@@ -512,9 +512,11 @@
         </table>
       </div>
       {#if tableRecords.length < visibleRecords.length}
-        <Button variant="secondary" onclick={() => (visibleCount += 100)}
-          >{translate($locale, 'Load more')}</Button
-        >
+        <div class="list-pagination">
+          <Button variant="secondary" onclick={() => (visibleCount += 100)}
+            >{translate($locale, 'Load more')}</Button
+          >
+        </div>
       {/if}
     {/if}
   {/if}

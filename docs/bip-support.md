@@ -1,5 +1,12 @@
 # Bitcoin Improvement Proposal support
 
+The 2026-09-26 Multisig B follow-up changes capability refresh, setup-availability
+DTOs, duplicate-check ordering, and presentation only. BIP32/BIP48 identity proofs,
+descriptors, signing, backups, and persisted formats are unchanged. The owner's
+reported key-import/health and Jade-policy successes on `8cc12222` are scoped
+observations, not new model certification; original BitBox02 policy verification
+failed there and requires replacement-package retesting.
+
 The 2026-09-21 Safe 3 discovery correction has no BIP or persisted-format
 impact. A physical Mainnet probe showed the pinned HWI 3.2.0 returning the exact
 model string `trezor_safe 3`; the trusted boundary now treats only that spelling

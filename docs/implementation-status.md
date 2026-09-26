@@ -1,5 +1,19 @@
 # Implementation status
 
+The Multisig B setup follow-up refreshes opaque signer capabilities before policy
+review and retry instead of reusing import rows invalidated by a later health scan.
+Reusable network setups expose only public wallet identity and readiness, even
+when the selected wallet is locked; copying still authorizes the exact source,
+verifies Core, and encrypts an independent destination copy before publication.
+Duplicate descriptors are rejected before that copy or candidate-file creation.
+Standard multisig no longer implies assisted signing. Shared policy headings,
+duplicate-wallet actions, and App Logs pagination use aligned, spaced layouts.
+No persisted format, migration, dependency, or BIP semantics change is involved.
+The owner reported Multisig B key imports and health checks succeeding, Jade policy
+registration succeeding, and original BitBox02 policy verification failing on
+`8cc12222`; replacement-package verification remains required. Aggregate HWI
+discovery can still prompt before device choice; passive discovery remains separate.
+
 The payment-resume and multisig-setup follow-up holds both Send flows behind a
 loading state until the saved draft/proposal is restored, shows authoritative
 funding labels in review, and simplifies shared self-transfer and device-policy

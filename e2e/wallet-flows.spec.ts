@@ -223,6 +223,27 @@ test('large app logs keep rendering bounded and search the complete history', as
   console.info(`App logs first rows (${test.info().project.name}): ${Date.now() - started} ms`);
   const rows = page.getByRole('table').locator('tbody tr');
   await expect(rows).toHaveCount(100);
+  const pagination = page.locator('.list-pagination');
+  const loadMore = pagination.getByRole('button', { name: 'Load more', exact: true });
+  const paginationBounds = await pagination.boundingBox();
+  const buttonBounds = await loadMore.boundingBox();
+  expect(paginationBounds && buttonBounds).toBeTruthy();
+  expect(
+    Math.abs(
+      buttonBounds!.x + buttonBounds!.width / 2 - paginationBounds!.x - paginationBounds!.width / 2
+    )
+  ).toBeLessThan(2);
+  expect(
+    await pagination.evaluate((element) => parseFloat(getComputedStyle(element).marginTop))
+  ).toBeGreaterThanOrEqual(20);
+  await loadMore.scrollIntoViewIfNeeded();
+  for (const theme of ['light', 'dark']) {
+    await page.evaluate(
+      (value) => document.documentElement.setAttribute('data-theme', value),
+      theme
+    );
+    await page.screenshot({ path: test.info().outputPath(`logs-pagination-${theme}.png`) });
+  }
   await page.getByRole('button', { name: 'Load more', exact: true }).click();
   await expect(rows).toHaveCount(200);
   await page.getByLabel('Search logs').fill('"itemCount":1999');

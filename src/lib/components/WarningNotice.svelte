@@ -103,6 +103,22 @@
     justify-self: start;
     margin-top: 6px;
   }
+  @media (min-width: 641px) {
+    .inline-action .warning-notice-content:has(> :global(.button)) {
+      grid-template-columns: minmax(0, 1fr) auto;
+      column-gap: 20px;
+    }
+    .inline-action .warning-notice-title,
+    .inline-action .warning-notice-body {
+      grid-column: 1;
+    }
+    .inline-action .warning-notice-content > :global(.button) {
+      grid-column: 2;
+      grid-row: 1 / span 2;
+      align-self: center;
+      margin: 0;
+    }
+  }
   .danger {
     display: flex;
     flex-direction: column;
@@ -111,6 +127,10 @@
     border-color: rgba(239, 100, 100, 0.25);
     color: var(--danger);
     background: rgba(239, 100, 100, 0.06);
+  }
+  .danger.has-icon {
+    display: grid;
+    gap: 10px;
   }
   .credential-spacing {
     margin-bottom: 24px;

@@ -5584,33 +5584,10 @@ code {
   border-color: color-mix(in srgb, var(--control-border) 76%, transparent);
   border-radius: var(--radius-inset);
 }
-.assisted-signing-plan {
-  display: grid;
-  grid-template-columns: 28px minmax(0, 1fr) 28px;
-  gap: 11px;
-  align-items: center;
-  padding: 13px 14px;
-  margin: -8px 0 22px;
-  border: 1px solid color-mix(in srgb, var(--fr-blue) 28%, var(--control-border));
-  border-radius: var(--radius-inset);
-  color: var(--link);
-  background: color-mix(in srgb, var(--fr-blue) 6%, var(--surface-control));
-}
-.assisted-signing-plan > span {
-  display: grid;
-  gap: 3px;
-}
-.assisted-signing-plan strong {
-  color: var(--text-soft);
-  font-size: 14px;
-}
-.assisted-signing-plan small {
-  color: var(--muted);
-  font-size: var(--font-size-meta);
-  line-height: 1.45;
-}
-.assisted-signing-plan > .insight-tip {
-  justify-self: end;
+.list-pagination {
+  display: flex;
+  justify-content: center;
+  margin-block: 24px;
 }
 .custom-threshold {
   grid-template-columns: 1fr 1fr;
@@ -6810,7 +6787,7 @@ code {
 .signer-policy-review > header {
   display: grid;
   grid-template-columns: 38px minmax(0, 1fr);
-  align-items: start;
+  align-items: center;
   gap: 11px;
 }
 .signer-policy-review > header > span {

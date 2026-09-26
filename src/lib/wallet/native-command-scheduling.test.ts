@@ -41,6 +41,33 @@ function synchronousCommandSource(source: string, command: string): string {
 }
 
 describe('native command scheduling', () => {
+  it('lists only public setup availability independently of the selected wallet lock', () => {
+    const source = synchronousCommandSource(profileCommands, 'network_setup_sources');
+    expect(source).not.toContain('require_unlocked');
+    expect(source).toContain('unlocked.is_unlocked(profile.id)');
+    expect(source).toContain('session.config == config');
+    expect(source).not.toContain('read_sync_source_for');
+    const dto = profileCommands.slice(
+      profileCommands.indexOf('pub struct NetworkSetupSource'),
+      profileCommands.indexOf('pub struct SoftwareWalletCreation')
+    );
+    expect(dto).not.toContain('sync_source');
+    expect(dto).not.toContain('password');
+    expect(profileCommands).toContain(
+      'authorize_wallet_session(state, source, false, registry.inactivity_timeout_minutes)?'
+    );
+  });
+
+  it.each(['multisig_create', 'multisig_recovery_create'])(
+    '%s rejects duplicates before any protected network copy',
+    (command) => {
+      const source = commandSource(multisigProposalCommands, command);
+      const duplicateCheck = source.indexOf('find_exact_descriptor_profile(');
+      expect(duplicateCheck).toBeGreaterThan(-1);
+      expect(duplicateCheck).toBeLessThan(source.indexOf('prepare_profile_directory('));
+      expect(source).toContain('require_requested_network_setup(');
+    }
+  );
   it.each(['node_config', 'wallet_sync_source'])(
     '%s exposes only saved non-secret network configuration while locked',
     (command) => {

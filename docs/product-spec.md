@@ -78,6 +78,9 @@ When another unlocked wallet has a saved protected network setup, new software,
 hardware, and multisig wallets offer to reuse its Bitcoin Core connection and
 activity-sync method by default. Multisig creation also shows a saved but locked
 source with an unlock instruction; the user may opt out and create offline.
+Listing availability does not require the currently selected wallet to be
+unlocked and returns no node, peer, proxy, or authentication settings. Duplicate
+multisig descriptors are rejected before copying a setup or creating candidate files.
 Groot rechecks the exact Core chain before copying, keeps wallet databases and
 scan state isolated, and re-encrypts any RPC password with the new wallet
 credential inside Rust; node credentials never enter the webview. A new software

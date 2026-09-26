@@ -57,7 +57,7 @@ describe('protected network setup reuse', () => {
     const sourceDto = runtimeContract.slice(start, end);
 
     expect(sourceDto).toContain('walletId');
-    expect(sourceDto).toContain('syncSource');
+    expect(sourceDto).not.toContain('syncSource');
     expect(sourceDto).toContain('ready');
     expect(sourceDto).not.toMatch(/password|credential|nodeConfig/i);
   });
@@ -150,7 +150,9 @@ describe('protected network setup reuse', () => {
 
   it('does not silently publish a multisig wallet when the user selected setup reuse', () => {
     expect(multisigCreationRoute).toContain('sources.find((source) => source.ready) ?? sources[0]');
-    expect(multisigCreationRoute).toContain('if (!source?.ready)');
+    expect(multisigCreationRoute).toContain(
+      'reuseNetworkSetup && networkSetupSource ? networkSetupSource.walletId : undefined'
+    );
     expect(multisigCommands).toContain('require_requested_network_setup(');
     expect(multisigCommands).toContain('commit_multisig_profile(&app, id, &wallet)?;');
   });

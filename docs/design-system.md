@@ -57,6 +57,9 @@ Warning surfaces use the shared `WarningNotice` component on every route. It own
 warning/danger tone, title/body hierarchy, optional insight tooltip, semantic role,
 icon treatment, and credential-field spacing; routes provide content and actions but
 must not recreate the panel markup or styling.
+Its inline-action variant places duplicate-wallet navigation to the right of the
+message on desktop and beneath it on mobile. Policy-review titles are vertically
+centered with their icon. App Logs pagination is centered with 24px block spacing.
 
 Tokens live in `src/app.css`. Component surfaces must use semantic tokens such as `--panel`, `--surface-control`, `--surface-inset`, and `--surface-icon`; hard-coded dark neutral backgrounds are prohibited because they break light mode. Reusable behavior belongs in `src/lib/components`; route files may compose components but must not introduce wallet policy.
 

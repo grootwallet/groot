@@ -682,6 +682,7 @@
       {#if error}
         <WarningNotice
           tone="danger"
+          class="inline-action"
           icon
           role="alert"
           ariaLive="polite"

@@ -433,7 +433,6 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     return this._profiles.map((profile) => ({
       walletId: profile.id,
       walletName: profile.name,
-      syncSource: structuredClone(this._syncSource),
       ready:
         this._unlockedWalletIds.has(profile.id) &&
         (!lockReusableSources || profile.id === this._selectedWalletId)

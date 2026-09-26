@@ -13,6 +13,21 @@ const discardModal = readFileSync(
 );
 
 describe('resumable multisig setup', () => {
+  it('refreshes policy device capabilities instead of reusing stale import rows', () => {
+    const open = setup.slice(
+      setup.indexOf('async function openDraftPolicyVerification'),
+      setup.indexOf('function closeDraftPolicyVerification')
+    );
+    expect(open).not.toContain('hardware.find(');
+    expect(open).toContain('walletService.findSavedHardwareDevice(signer)');
+    const verify = setup.slice(
+      setup.indexOf('async function verifyDraftPolicy'),
+      setup.indexOf('async function create()', setup.indexOf('async function verifyDraftPolicy'))
+    );
+    expect(verify.indexOf('walletService.findSavedHardwareDevice(policySigner)')).toBeLessThan(
+      verify.indexOf('walletService.verifyMultisigDraftSignerPolicy(')
+    );
+  });
   it('separates policy choice from wallet configuration before signer enrollment', () => {
     expect(setup).toContain("let policyStep = $state<'choose' | 'configure'>('choose')");
     expect(setup).toContain('Choose how this wallet spends');
@@ -20,8 +35,9 @@ describe('resumable multisig setup', () => {
     expect(setup).toContain('The backup key stays separate from the primary 2-of-3.');
     expect(setup).toContain('The wait starts separately for each received coin.');
     expect(setup).toContain('Recovery key spending authority');
-    expect(setup).toContain('Assisted signing');
-    expect(setup).toContain('the helper never signs alone');
+    expect(setup).not.toContain('Assisted signing');
+    expect(setup).not.toContain('assisted signing:');
+    expect(setup).toContain('No single key can spend alone.');
     expect(setup).toContain("'Heir-only signer'");
     expect(setup.indexOf("{#if policyStep === 'choose'}")).toBeLessThan(
       setup.search(

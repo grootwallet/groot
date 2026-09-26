@@ -1067,16 +1067,10 @@
   async function openDraftPolicyVerification(signer: CosignerDraft) {
     const generation = ++policyLookupGeneration;
     policySigner = signer;
-    policyDevice =
-      hardware.find(
-        (device) => device.fingerprint?.toLowerCase() === signer.fingerprint.toLowerCase()
-      ) ?? null;
+    // Import rows can outlive a subsequent health scan's native capabilities.
+    policyDevice = null;
     policyReviewError = '';
     policyReviewOpen = true;
-    if (policyDevice) {
-      policyReviewBusy = false;
-      return;
-    }
     policyReviewBusy = true;
     try {
       if (!signer.deviceType)
@@ -1111,6 +1105,9 @@
     policyReviewBusy = true;
     policyReviewError = '';
     try {
+      // Resolve again at the action boundary, including retries after another
+      // scan or a long review. Rust still proves the complete public identity.
+      policyDevice = await walletService.findSavedHardwareDevice(policySigner);
       const verification = await walletService.verifyMultisigDraftSignerPolicy(
         policy,
         policyDevice.id,
@@ -1210,16 +1207,6 @@
     existingWalletId = null;
     try {
       await flushCurrentDraft();
-      if (reuseNetworkSetup && networkSetupSource) {
-        const source = (await walletService.networkSetupSources()).find(
-          (candidate) => candidate.walletId === networkSetupSource?.walletId
-        );
-        if (!source?.ready)
-          throw new WalletError(
-            'wallet_locked',
-            'Unlock the wallet providing this network setup, then resume this setup or turn off reuse to create offline.'
-          );
-      }
       const networkSetupSourceWalletId =
         reuseNetworkSetup && networkSetupSource ? networkSetupSource.walletId : undefined;
       const creation = recoveryTemplate
@@ -1401,7 +1388,7 @@
               text={translate(
                 $locale,
                 templateKind === 'standard'
-                  ? 'Standard 2-of-3 can also support assisted signing: the owners keep two keys and a trusted helper keeps one. Either owner plus the helper can sign, or the two owner keys can sign together. The helper can never spend alone.'
+                  ? 'Choose how many independent keys must sign each payment. No single key can spend alone.'
                   : templateKind === 'recovery'
                     ? 'The recovery key is a separate spending path. After each coin has aged 4,320 blocks, that key can spend the matured coin alone. Every new deposit starts its own delay.'
                     : 'Assisted recovery will combine your keys with a dedicated recovery service and guided beneficiary support. It is not available yet.'
@@ -1492,22 +1479,6 @@
                 ><em>{translate($locale, 'Advanced')}</em></button
               >
             </div>
-            {#if standardRecipe === '2of3'}<div class="assisted-signing-plan">
-                <Users size={16} /><span
-                  ><strong>{translate($locale, 'Assisted signing')}</strong><small
-                    >{translate(
-                      $locale,
-                      'Two owner keys + one helper key. Any two sign; the helper never signs alone.'
-                    )}</small
-                  ></span
-                ><InsightTip
-                  label={translate($locale, 'About assisted signing')}
-                  text={translate(
-                    $locale,
-                    'This uses the same standard 2-of-3 policy. Keep the two owner keys independent. A trusted helper can co-sign with either owner, while the owners can always sign together without the helper.'
-                  )}
-                />
-              </div>{/if}
             {#if standardRecipe === 'custom'}<div class="threshold-row custom-threshold">
                 <label class="field"
                   ><span>{translate($locale, 'Signatures required (M)')}</span><select
@@ -2161,17 +2132,20 @@
             >{/if}
         </SetupTask>
       </div>
-      {#if error}<div class="hardware-inline-error hardware-create-error" role="alert">
-          <AlertTriangle size={18} /><span
-            ><strong>{translate($locale, createErrorTitle || 'Wallet could not be created')}</strong
-            ><small>{error}</small>
-            {#if existingWalletId}<Button
-                variant="secondary"
-                loading={busy}
-                onclick={openExistingWallet}>{translate($locale, 'Open existing wallet')}</Button
-              >{/if}</span
-          >
-        </div>{/if}
+      {#if error}<WarningNotice
+          tone="danger"
+          icon
+          role="alert"
+          class="hardware-create-error inline-action"
+          title={translate($locale, createErrorTitle || 'Wallet could not be created')}
+          body={error}
+        >
+          {#if existingWalletId}<Button
+              variant="secondary"
+              loading={busy}
+              onclick={openExistingWallet}>{translate($locale, 'Open existing wallet')}</Button
+            >{/if}
+        </WarningNotice>{/if}
       <Button
         class="full backup-create-action"
         size="large"

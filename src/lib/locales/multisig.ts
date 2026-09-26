@@ -127,11 +127,10 @@ export const multisigCopy = {
     fr: 'Fonctionnement de l’héritage',
     es: 'Cómo funciona la herencia'
   },
-  'Standard 2-of-3 can also support assisted signing: the owners keep two keys and a trusted helper keeps one. Either owner plus the helper can sign, or the two owner keys can sign together. The helper can never spend alone.':
-    {
-      fr: 'Le standard 2 sur 3 permet aussi la signature assistée : les propriétaires conservent deux clés et une personne de confiance en conserve une. Un propriétaire et cette personne peuvent signer ensemble, ou les deux clés des propriétaires peuvent signer. La personne aidante ne peut jamais dépenser seule.',
-      es: 'El estándar 2 de 3 también permite la firma asistida: los propietarios conservan dos claves y una persona de confianza conserva una. Un propietario y esa persona pueden firmar juntos, o pueden firmar las dos claves de los propietarios. La persona asistente nunca puede gastar por sí sola.'
-    },
+  'Choose how many independent keys must sign each payment. No single key can spend alone.': {
+    fr: 'Choisissez combien de clés indépendantes doivent signer chaque paiement. Aucune clé ne peut dépenser seule.',
+    es: 'Elige cuántas claves independientes deben firmar cada pago. Ninguna clave puede gastar por sí sola.'
+  },
   'The recovery key is a separate spending path. After each coin has aged 4,320 blocks, that key can spend the matured coin alone. Every new deposit starts its own delay.':
     {
       fr: 'La clé de récupération est un chemin de dépense distinct. Après que chaque pièce a atteint 4 320 blocs, cette clé peut dépenser seule la pièce arrivée à maturité. Chaque nouveau dépôt démarre son propre délai.',
@@ -141,20 +140,6 @@ export const multisigCopy = {
     {
       fr: 'La clé d’héritier est un chemin de dépense distinct. Après que chaque pièce a atteint 52 560 blocs, cette clé peut dépenser seule la pièce arrivée à maturité. Chaque nouveau dépôt démarre son propre délai.',
       es: 'La clave del heredero es una ruta de gasto independiente. Cuando cada moneda alcanza 52.560 bloques, esa clave puede gastar por sí sola la moneda vencida. Cada nuevo depósito inicia su propio plazo.'
-    },
-  'Assisted signing': { fr: 'Signature assistée', es: 'Firma asistida' },
-  'Two owner keys + one helper key. Any two sign; the helper never signs alone.': {
-    fr: 'Deux clés de propriétaire + une clé d’aide. Deux clés signent ; la personne aidante ne signe jamais seule.',
-    es: 'Dos claves de propietario + una clave de ayuda. Firman dos; la persona asistente nunca firma sola.'
-  },
-  'About assisted signing': {
-    fr: 'À propos de la signature assistée',
-    es: 'Acerca de la firma asistida'
-  },
-  'This uses the same standard 2-of-3 policy. Keep the two owner keys independent. A trusted helper can co-sign with either owner, while the owners can always sign together without the helper.':
-    {
-      fr: 'Cette configuration utilise la même politique standard 2 sur 3. Conservez les deux clés des propriétaires séparément. Une personne de confiance peut cosigner avec l’un des propriétaires, tandis que les propriétaires peuvent toujours signer ensemble sans elle.',
-      es: 'Esta configuración usa la misma política estándar 2 de 3. Mantén separadas las dos claves de los propietarios. Una persona de confianza puede firmar junto con cualquiera de ellos, mientras que los propietarios siempre pueden firmar juntos sin su ayuda.'
     },
   'Recovery key spending authority': {
     fr: 'Pouvoir de dépense de la clé de récupération',
