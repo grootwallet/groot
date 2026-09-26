@@ -1,5 +1,13 @@
 # Bitcoin Improvement Proposal support
 
+The 2026-09-26 owner report adds limited Mainnet device evidence for BIP84
+receive-address checks on seven exact target models and a BitBox02-family
+BIP48 wallet-policy registration after USB reconnect. It does not change BIP32,
+BIP48, BIP84, descriptor, address, PSBT, or signing support. The BitBox exact
+model and frozen package were not supplied; no BIP48 first-address comparison
+or transaction result is inferred, and no result transfers between original
+BitBox02 and Nova.
+
 The 2026-09-21 Safe 3 discovery correction has no BIP or persisted-format
 impact. A physical Mainnet probe showed the pinned HWI 3.2.0 returning the exact
 model string `trezor_safe 3`; the trusted boundary now treats only that spelling
