@@ -313,9 +313,11 @@ describe('hardware receive verification UI', () => {
   it('redeems a detected unlock capability without starting another scan', () => {
     expect(verificationFlow).toContain("device.action === 'unlock'");
     expect(verificationFlow).toContain('verifyAddress(device, true)');
-    expect(verificationFlow).toContain(
-      "disabled={device.action === 'none' || device.action === 'retry'}"
+    expect(verificationFlow).toMatch(
+      /disabled=\{membership === 'unrelated' \|\|\s*device.action === 'none' \|\|\s*device.action === 'retry'\}/
     );
+    expect(multisigSend).toContain('hardwareWalletMembershipLabel(membership)');
+    expect(hardwareDeviceList).toContain("membership === 'unrelated'");
     expect(verificationFlow).toContain("'Unlock & continue'");
     expect(hardwareSetup).toContain("device.action !== 'unlock'");
     expect(multisigSetup).toContain("device.action === 'unlock'");

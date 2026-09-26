@@ -4,6 +4,22 @@ import type { CatalogSection } from './types';
 // These keys are intentionally explicit so uncommon recovery/error paths cannot
 // silently fall back to English in a non-English session.
 export const dynamicCopy = {
+  'Not part of this wallet': {
+    fr: 'Ne fait pas partie de ce portefeuille',
+    es: 'No forma parte de esta cartera'
+  },
+  'Wallet membership unknown · unlock to identify': {
+    fr: 'Appartenance inconnue · déverrouillez pour identifier',
+    es: 'Pertenencia desconocida · desbloquea para identificar'
+  },
+  'Wallet key candidate · account checked before use': {
+    fr: 'Clé candidate du portefeuille · compte vérifié avant utilisation',
+    es: 'Posible clave de la cartera · cuenta verificada antes de usar'
+  },
+  'Use a BSMS or JSON backup. PDF cannot be imported or tested.': {
+    fr: 'Utilisez une sauvegarde BSMS ou JSON. Un PDF ne peut pas être importé ni testé.',
+    es: 'Usa una copia BSMS o JSON. No se puede importar ni probar un PDF.'
+  },
   '203.0.113.10:38333 [2001:db8::10]:38333': {
     fr: '203.0.113.10:38333 [2001:db8::10]:38333',
     es: '203.0.113.10:38333 [2001:db8::10]:38333'

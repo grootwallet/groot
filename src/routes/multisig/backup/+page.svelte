@@ -431,6 +431,9 @@
           onchange={importBackup}
         />
       </label>
+      <p class="field-help">
+        {translate($locale, 'Use a BSMS or JSON backup. PDF cannot be imported or tested.')}
+      </p>
       <Button
         class="full"
         disabled={!backup}

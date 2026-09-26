@@ -1105,7 +1105,6 @@
           <section class="form-card send-stage-card acceleration-loading-card" aria-live="polite">
             <RefreshCw class="spin" size={28} />
             <div class="send-stage-heading">
-              <span>{translate($locale, 'FEE ACCELERATION')}</span>
               <h2>{translate($locale, 'Preparing fee acceleration')}</h2>
               <p>
                 {translate(
@@ -1125,7 +1124,6 @@
             }}
           >
             <div class="send-stage-heading">
-              <span>{translate($locale, 'FEE ACCELERATION')}</span>
               <h2>
                 {translate(
                   $locale,

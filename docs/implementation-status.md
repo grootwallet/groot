@@ -1,5 +1,12 @@
 # Implementation status
 
+Existing-wallet hardware pickers now distinguish unknown identities from known
+non-wallet fingerprints and disable the latter before device interaction.
+Fingerprint matches remain candidates, not account-key proofs. Native validation
+and persisted formats are unchanged. The CPFP/RBF eyebrow is removed; loaded
+backup selectors have vertical padding and recovery states that PDF is not an
+importable backup. Aggregate HWI latency remains an open physical regression.
+
 The 2026-09-26 setup simplification removes duplicate navigation and explanatory
 headings, moves descriptor inspection/copy to backup beside the primary file save,
 and moves multisig network adoption out of creation into Settings. Policy review

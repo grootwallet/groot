@@ -4,6 +4,14 @@ Status: canonical for the current prototype and first live integration build.
 
 ## Product
 
+Hardware pickers for an existing wallet distinguish connection readiness from
+wallet membership. A non-matching discovered fingerprint is unavailable and
+labelled **Not part of this wallet**. A missing fingerprint is **Wallet membership
+unknown · unlock to identify**, never inferred to match from its brand/model.
+A matching fingerprint is only a candidate: native full account-key proof remains
+mandatory before address display, policy verification, or signing. Public backup
+recovery accepts importable text/BSMS/JSON, not the human-readable PDF export.
+
 Groot is an onchain-only Bitcoin wallet and multisig coordinator. It prioritizes the smallest understandable flows for receiving, sending, reviewing activity, inspecting coins, and coordinating descriptor-based hardware signers. There are no cloud backups, Lightning, address books, or editable labels in the first release.
 
 Groot keeps local sanitized **App logs** for materially useful lifecycle and

@@ -241,6 +241,21 @@ test('keeps multisig receive verification disclosure visibly expandable', async 
   const lockedTrezor = dialog.getByRole('button', { name: /Virtual Trezor One/ });
   await expect(lockedTrezor).toBeEnabled();
   await expect(lockedTrezor).toContainText('Locked');
+  await expect(lockedTrezor).toContainText('Wallet membership unknown · unlock to identify');
+  const outsider = dialog.getByRole('button', { name: /Virtual Trezor Standard/ });
+  await expect(outsider).toContainText('Not part of this wallet');
+  await expect(outsider).toBeDisabled();
+  for (const theme of ['light', 'dark']) {
+    await page.evaluate(
+      (value) => document.documentElement.setAttribute('data-theme', value),
+      theme
+    );
+    await page.screenshot({
+      path: `/private/tmp/groot-membership-${page.viewportSize()?.width}-${theme}.png`,
+      fullPage: true,
+      animations: 'disabled'
+    });
+  }
   await lockedTrezor.click();
   const pinDialog = page.getByRole('dialog', { name: 'Unlock Trezor' });
   await expect(pinDialog.getByText('Match locations, not numbers')).toBeVisible();
@@ -539,10 +554,9 @@ test('spends end-to-end from the ready-made demo wallet', async ({ page }) => {
   await unsignedQrDialog.getByRole('button', { name: 'Close' }).click();
   await page.getByRole('button', { name: 'Sign with device' }).click();
   const hardwareDialog = page.getByRole('dialog', { name: 'Sign with hardware' });
-  await expect(hardwareDialog.getByRole('button', { name: /Virtual Ledger outsider/ })).toHaveCSS(
-    'cursor',
-    'pointer'
-  );
+  await expect(
+    hardwareDialog.getByRole('button', { name: /Virtual Ledger outsider/ })
+  ).toBeDisabled();
   await expect(hardwareDialog.getByText('Fee rate', { exact: true })).toBeHidden();
   const moreDetails = hardwareDialog.getByText('View more details', { exact: true });
   await expect(moreDetails).toHaveCSS('cursor', 'pointer');
@@ -550,13 +564,9 @@ test('spends end-to-end from the ready-made demo wallet', async ({ page }) => {
   await moreDetails.click();
   await expect(hardwareDialog.getByText('Fee rate', { exact: true })).toBeVisible();
   await expect(hardwareDialog.getByText('Transaction inputs', { exact: true })).toHaveCount(0);
-  await hardwareDialog.getByRole('button', { name: /Virtual Ledger outsider/ }).click();
   await expect(
-    hardwareDialog.getByText(
-      'The connected device does not match any saved signer for this wallet.'
-    )
-  ).toBeVisible();
-  await expect(hardwareDialog.getByRole('button', { name: 'Rescan', exact: true })).toBeVisible();
+    hardwareDialog.getByRole('button', { name: /Virtual Ledger outsider/ })
+  ).toContainText('Not part of this wallet');
   await hardwareDialog.getByRole('button', { name: 'Close' }).click();
   await page.getByRole('button', { name: 'Sign with device' }).click();
   await hardwareDialog.getByRole('button', { name: /Virtual Trezor One/ }).click();
@@ -1725,6 +1735,14 @@ test('creates and verifies a simple 2-of-3 descriptor wallet', async ({ page }) 
   });
   await expect(page.locator('.file-action.file-loaded')).toBeVisible();
   await expect(
+    page.getByText('Use a BSMS or JSON backup. PDF cannot be imported or tested.')
+  ).toBeVisible();
+  expect(
+    await page
+      .locator('.file-action.file-loaded')
+      .evaluate((element) => parseFloat(getComputedStyle(element).paddingTop))
+  ).toBeGreaterThanOrEqual(12);
+  await expect(
     page.locator('.file-action').getByText('family-vault-backup.json', { exact: true })
   ).toBeVisible();
   await page.getByRole('button', { name: 'Test recovery' }).click();
@@ -1836,6 +1854,30 @@ test('exports and validates the recommended BSMS record', async ({ page }) => {
   const downloadPromise = page.waitForEvent('download');
   await page.getByRole('button', { name: 'Download BSMS' }).click();
   await expect((await downloadPromise).suggestedFilename()).toBe('family-wallet.bsms');
+  await page.getByLabel('Backup file import').setInputFiles({
+    name: 'family-wallet.bsms',
+    mimeType: 'text/plain',
+    buffer: Buffer.from(bsms)
+  });
+  const loadedFile = page.locator('.file-action.file-loaded');
+  await expect(loadedFile).toContainText('Backup ready');
+  expect(
+    await loadedFile.evaluate((element) => parseFloat(getComputedStyle(element).paddingTop))
+  ).toBeGreaterThanOrEqual(12);
+  await expect(page.getByRole('button', { name: 'Dismiss', exact: true })).toHaveCount(0, {
+    timeout: 10_000
+  });
+  await loadedFile.scrollIntoViewIfNeeded();
+  for (const theme of ['light', 'dark']) {
+    await page.evaluate(
+      (value) => document.documentElement.setAttribute('data-theme', value),
+      theme
+    );
+    await page.screenshot({
+      path: `/private/tmp/groot-backup-${page.viewportSize()?.width}-${theme}.png`,
+      animations: 'disabled'
+    });
+  }
   await page.getByRole('button', { name: 'Test recovery' }).click();
   await expect(page.getByText('Backup verified')).toBeVisible();
 });

@@ -15,7 +15,12 @@
     localizedReceiveVerificationFailure,
     receiveVerificationIntent
   } from '$lib/hardware/receive-verification';
-  import { hardwareDeviceDisplayName, type SavedHardwareSignerName } from '$lib/hardware/discovery';
+  import {
+    hardwareDeviceDisplayName,
+    hardwareWalletMembership,
+    hardwareWalletMembershipLabel,
+    type SavedHardwareSignerName
+  } from '$lib/hardware/discovery';
   import { toast } from '$lib/stores/toasts';
   import { walletService, type HardwareDevice, type WalletErrorCode } from '$lib/wallet';
   import { hardwareAddressComparison } from '$lib/wallet/hardware-display';
@@ -135,15 +140,6 @@
     }
   }
 
-  function eligibleDevices(discovered: HardwareDevice[]) {
-    const fingerprints = new Set(
-      eligibleFingerprints.map((fingerprint) => fingerprint.trim().toLowerCase())
-    );
-    return discovered.filter(
-      (device) => device.fingerprint === null || fingerprints.has(device.fingerprint.toLowerCase())
-    );
-  }
-
   function isColdcard(device: HardwareDevice) {
     return `${device.label} ${device.model}`.toLowerCase().includes('coldcard');
   }
@@ -161,8 +157,7 @@
       if (generation !== hardwareScanGeneration || !verifyOpen) return;
       const discovered = await walletService.listHardwareDevicesForTypes(eligibleDeviceTypes);
       if (generation !== hardwareScanGeneration || !verifyOpen) return;
-      const eligible = eligibleDevices(discovered);
-      devices = eligible;
+      devices = discovered;
       if (hasAmbiguousUnidentifiedHardware(devices)) {
         devices = [];
         verifyError = translate(
@@ -188,6 +183,7 @@
   }
 
   async function chooseDevice(device: HardwareDevice) {
+    if (hardwareWalletMembership(device, eligibleFingerprints) === 'unrelated') return;
     switch (receiveVerificationIntent(device)) {
       case 'prompt_pin':
         await startPin(device);
@@ -408,18 +404,23 @@
   {:else if devices.length}
     <div class="source-list hardware-device-list">
       {#each devices as device}
+        {@const membership = hardwareWalletMembership(device, eligibleFingerprints)}
         <button
-          disabled={device.action === 'none' || device.action === 'retry'}
+          disabled={membership === 'unrelated' ||
+            device.action === 'none' ||
+            device.action === 'retry'}
           onclick={() => chooseDevice(device)}
         >
           <Cpu size={18} />
           <span>
             <strong>{hardwareDeviceDisplayName(device, savedSigners)}</strong>
+            <small>{translate($locale, hardwareWalletMembershipLabel(membership))}</small>
             {#if device.action !== 'prompt_pin'}<small
                 >{translate($locale, device.fingerprint ?? device.message)}</small
               >{/if}
             <em
-              class:ready={device.status === 'ready' || device.status === 'detected'}
+              class:ready={membership === 'candidate' &&
+                (device.status === 'ready' || device.status === 'detected')}
               class:attention={device.action === 'prompt_pin' ||
                 device.action === 'confirm_empty_passphrase'}
               >{translate(

@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { hardwareDeviceDisplayName, mergeHardwareDiscovery } from './discovery';
+import {
+  hardwareDeviceDisplayName,
+  hardwareWalletMembership,
+  mergeHardwareDiscovery
+} from './discovery';
 import type { HardwareDevice } from '$lib/wallet/contracts';
 
 function device(id: string, message = id): HardwareDevice {
@@ -31,6 +35,18 @@ describe('hardware discovery settling', () => {
 });
 
 describe('hardware device display names', () => {
+  it('never treats a locked device family as proof of wallet membership', () => {
+    expect(hardwareWalletMembership(device('trezor'), ['aabbccdd'])).toBe('unknown');
+    expect(
+      hardwareWalletMembership({ ...device('trezor'), fingerprint: '11223344' }, ['aabbccdd'])
+    ).toBe('unrelated');
+    expect(
+      hardwareWalletMembership({ ...device('trezor'), fingerprint: 'AABBCCDD' }, ['aabbccdd'])
+    ).toBe('candidate');
+    expect(hardwareWalletMembership({ ...device('ledger'), fingerprint: '11223344' }, [])).toBe(
+      'unrelated'
+    );
+  });
   it('uses the saved user name after an exact fingerprint match', () => {
     const jade = { ...device('jade'), fingerprint: '1B9B9B49', label: 'jade' };
     expect(

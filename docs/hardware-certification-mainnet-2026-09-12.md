@@ -388,6 +388,35 @@ and retain the repaired state after restart before physical testing resumes.
 
 ## 2026-09-26 A/B/C setup checkpoint
 
+### Later Multi B payment and recovery follow-up
+
+Owner-reported internal Mainnet v0.4.95 · f7855a45 (visible package identity):
+
+- Receive-address comparison passed independently on Jade Classic, original
+  BitBox02 Bitcoin-only, and Trezor Safe 3.
+- First deposit was observed; confirmation remained pending at the report.
+- CPFP signing succeeded with Jade and original BitBox02. No confirmation or
+  post-restart accounting result is inferred.
+- BSMS **Test recovery** reconstructed the same first address. This is an
+  in-memory public-backup proof, not independent clean-profile recovery.
+- Recovery scanning succeeded against the owner's local pruned Bitcoin Core.
+- The owner reports unchanged device firmware from prior Regtest/Testnet4
+  campaigns. This continuity statement does not replace exact-version capture
+  for a frozen GA artifact or transfer certification between models.
+
+Discovery presented unrelated or unidentified Model One/Ledger rows as available.
+The replacement UI distinguishes non-matching fingerprints from unidentified
+locked devices; account-key authority remains native. Physical regression on the
+replacement package remains required, including the earlier BitBox reconnect stall.
+
+Proceed to C's payment campaign; do not recreate C (setup already passed).
+B's newly evidenced pair is Jade/BitBox02; BitBox02/Safe 3 and Safe 3/Jade remain
+unreported here. A retains earlier exact-build evidence, not a blanket complete
+claim. The checklist below still governs confirmation/restart, remaining pairs,
+negative cases, BIP84, clean recovery, and independent GA review.
+
+### Earlier setup evidence
+
 Owner-reported Mainnet results, not an independently witnessed hardware run.
 Group C's screenshot identifies internal v0.4.95 · 81409c14. Exact package
 identity was not re-reported for every A/B operation; firmware versions were not

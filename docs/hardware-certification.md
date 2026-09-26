@@ -1,5 +1,11 @@
 # Physical hardware certification
 
+Latest payment follow-up: [Multi B, f7855a45](hardware-certification-mainnet-2026-09-12.md#later-multi-b-payment-and-recovery-follow-up)
+adds owner-reported three-device receive comparison, Jade/original-BitBox02 CPFP,
+BSMS reconstruction, and local pruned scanning. Confirmation, other signer pairs,
+clean-profile recovery, and independent GA approval are not implied. Firmware
+continuity with earlier rehearsals is owner-reported, not a new version capture.
+
 Latest setup progress: [2026-09-26 A/B/C checkpoint](hardware-certification-mainnet-2026-09-12.md#2026-09-26-abc-setup-checkpoint). All three groups now exist; these owner-reported setup results do not establish transaction, recovery, exact-firmware, or GA certification.
 
 Virtual devices prove coordinator behavior, not vendor compatibility. Run this only with disposable Regtest, Signet, or Testnet4 wallets until the mainnet checklist is approved.

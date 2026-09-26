@@ -1,5 +1,13 @@
 # Wallet and coordinator flows
 
+In existing-wallet hardware selection, scan results retain known non-wallet
+devices as disabled rows labelled **Not part of this wallet**. Unidentified
+devices say **Wallet membership unknown · unlock to identify**. Selecting an
+unknown device can start identification, never establish membership by its brand.
+Native saved-account proof still gates receive display, policy authorization,
+and signing. This does not change initial key enrollment, where no saved wallet
+membership exists yet.
+
 ## App logs
 
 1. Open **Settings → App logs → View app logs**. It appears immediately before wallet

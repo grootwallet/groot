@@ -1,5 +1,12 @@
 # Bitcoin Improvement Proposal support
 
+The later Sep 26 Multi B follow-up records owner-reported BIP48 receive display,
+Jade/BitBox02 CPFP signing, BIP129 in-memory reconstruction, and local pruned-node
+scanning on f7855a45. Confirmation and clean-profile recovery are not inferred.
+See the [Mainnet record](hardware-certification-mainnet-2026-09-12.md#later-multi-b-payment-and-recovery-follow-up).
+Picker membership hints and file-padding changes do not alter any BIP, descriptor,
+persisted format, or native identity/signature validation rule.
+
 The 2026-09-26 A/B/C setup checkpoint adds owner-reported BIP48 creation and
 policy observations in the [Mainnet evidence record](hardware-certification-mainnet-2026-09-12.md#2026-09-26-abc-setup-checkpoint).
 It does not establish new transaction, firmware, or GA certification passes.
