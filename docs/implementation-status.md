@@ -1,5 +1,11 @@
 # Implementation status
 
+The [HWI investigation](hwi-performance-investigation-2026-09-26.md) measures
+bundled-helper startup without touching devices and records larger transport
+proposals. BitBox draft/saved policy display now uses the freshly proven
+fingerprint reopen already used by receive display. Full identity proof remains
+mandatory; physical reconnect and timing improvements are not certified.
+
 Sep 26 follow-up: standard receive addresses no longer imply generalized
 Miniscript support; the redundant Receive Overview link is removed. Trezor receive
 unlock refreshes discovery before explicit signer selection (physical retry pending).
@@ -1226,7 +1232,7 @@ native vendor transport and physical certification, not additional automatic
 HWI retries. No wallet, profile, descriptor, key, credential, node, proposal,
 backup, database, or stable DTO format changes; no migration is required.
 
-The follow-up HWI continuation audit removes the remaining aggregate rescans
+The earlier HWI continuation audit removed aggregate rescans
 after a successful Trezor PIN challenge in receive verification, multisig
 signer import, multisig signing, and saved/draft signer health checks. Each flow
 redeems the already admitted opaque capability and immediately runs the same
@@ -1236,7 +1242,9 @@ ambiguity still fail closed or start a fresh bounded discovery. This removes
 avoidable pinned-HWI startup work without weakening identity checks, changing
 wallet data, or migrating existing profiles. Physical timing on the replacement
 package remains required; the aggregate HWI enumerator is still the first-scan
-latency floor.
+latency floor. The later Sep 26 Model One regression supersedes the receive-only
+continuation: receive refreshes discovery after PIN success before explicit
+signer selection, as described at the top of this document.
 
 The next Trezor and initial-history follow-up corrects two presentation and
 orchestration defects without changing either trusted operation. A locked Trezor

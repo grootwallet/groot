@@ -89,6 +89,12 @@ flowchart LR
 
 ## Trust boundary
 
+BitBox receive and draft/saved policy display reopen by the fingerprint freshly
+established by full account-key proof under the same native operation lease.
+HWI still owns rediscovery and may initialize unrelated devices; this is not a
+persistent-client optimization. See the
+[HWI investigation](hwi-performance-investigation-2026-09-26.md).
+
 Mainnet HWI import admission is memory-only and bound to the exact live family,
 fingerprint, account xpub, and derivation path. Device discovery invalidates
 only opaque scan capabilities and preserves other still-valid admissions in a

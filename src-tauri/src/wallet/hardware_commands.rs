@@ -3248,14 +3248,25 @@ fn display_multisig_policy_address(
             "This signer does not require interactive policy verification.",
         ));
     }
-    let displayed = hwi
-        .display_descriptor_address_in_operation(
+    // Match saved receive verification: a BitBox secure connection may no
+    // longer reopen through the scan's HID path after the identity client
+    // closes. Use only the fingerprint proven by that live account-key check,
+    // under the same operation lease; never a renderer-supplied selector.
+    let displayed = if identity.device_type.eq_ignore_ascii_case("bitbox02") {
+        hwi.display_bitbox_descriptor_address_in_operation(
+            &operation,
+            &identity.fingerprint,
+            descriptor,
+        )
+    } else {
+        hwi.display_descriptor_address_in_operation(
             &operation,
             &identity.device_type,
             &device.path,
             descriptor,
         )
-        .map_err(|error| hardware_device_api_error(error, &identity.device_type))?;
+    }
+    .map_err(|error| hardware_device_api_error(error, &identity.device_type))?;
     Ok((displayed, identity, device, operation))
 }
 
@@ -3628,6 +3639,79 @@ mod health_check_tests {
             source: SignerSource::Usb,
             device_type: Some("trezor".to_owned()),
         }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn policy_display_uses_proven_bitbox_fingerprint_and_keeps_other_paths() {
+        use std::os::unix::fs::PermissionsExt as _;
+
+        let suffix = format!("{}-{:?}", std::process::id(), std::thread::current().id());
+        let script = std::env::temp_dir().join(format!("groot-policy-reopen-{suffix}"));
+        let log = std::env::temp_dir().join(format!("groot-policy-reopen-log-{suffix}"));
+        let mut expected = signer_from_seed(43);
+        let response = serde_json::to_string(&serde_json::json!([{
+            "desc": format!("wpkh([{}/{}]{}/0/*)", expected.fingerprint,
+                expected.derivation_path.trim_start_matches("m/"), expected.xpub)
+        }]))
+        .unwrap()
+        .replace('\'', "'\"'\"'");
+        std::fs::write(&script, format!(
+            "#!/bin/sh\nIFS= read -r command\nprintf '%s\\n' \"$command\" >> '{}'\ncase \"$command\" in *getkeypool*) printf '%s\\n' '{response}' ;; *displayaddress*) printf '%s\\n' '{{\"address\":\"fixture\"}}' ;; *) exit 2 ;; esac\n",
+            log.display()
+        )).unwrap();
+        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let hwi = HwiCli::for_test_program(script.clone());
+        for family in ["bitbox02", "jade"] {
+            std::fs::write(&log, "").unwrap();
+            expected.device_type = Some(family.to_owned());
+            let device = HwiDevice {
+                device_type: family.to_owned(),
+                path: "fixture-private-path".to_owned(),
+                fingerprint: Some(expected.fingerprint.clone()),
+                ..HwiDevice::default()
+            };
+            let result = display_multisig_policy_address(
+                &hwi,
+                device.clone(),
+                &expected,
+                "wsh(sortedmulti(fixture))",
+            )
+            .unwrap();
+            assert_eq!(result.1.fingerprint, expected.fingerprint);
+            drop(result);
+            let commands = std::fs::read_to_string(&log).unwrap();
+            let commands = commands.lines().collect::<Vec<_>>();
+            assert_eq!(commands.len(), 2);
+            assert!(commands[0].contains("getkeypool"));
+            assert!(commands[0].contains("fixture-private-path"));
+            assert!(commands[1].contains("displayaddress"));
+            if family == "bitbox02" {
+                assert!(commands[1].contains("--fingerprint"));
+                assert!(commands[1].contains(&expected.fingerprint));
+                assert!(!commands[1].contains("--device-path"));
+                assert!(!commands[1].contains("fixture-private-path"));
+            } else {
+                assert!(commands[1].contains("--device-path"));
+                assert!(commands[1].contains("fixture-private-path"));
+            }
+
+            std::fs::write(&log, "").unwrap();
+            let mut wrong = signer_from_seed(44);
+            wrong.device_type = Some(family.to_owned());
+            assert!(display_multisig_policy_address(
+                &hwi,
+                device,
+                &wrong,
+                "wsh(sortedmulti(fixture))"
+            )
+            .is_err());
+            let commands = std::fs::read_to_string(&log).unwrap();
+            assert_eq!(commands.lines().count(), 1);
+            assert!(!commands.contains("displayaddress"));
+        }
+        std::fs::remove_file(script).unwrap();
+        std::fs::remove_file(log).unwrap();
     }
 
     #[cfg(unix)]

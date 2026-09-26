@@ -4,6 +4,10 @@ Status: canonical for the current prototype and first live integration build.
 
 ## Product
 
+BitBox policy verification uses the same freshly identity-bound reconnect path
+as receive verification. A failed account proof never proceeds to device display;
+no automatic approval retry or pairing-state reset is performed.
+
 Receive leaves Overview navigation to the shell and keeps Refresh payments as its
 header action. Standard BIP48 addresses are labelled **Native SegWit · standard
 multisig**; only recovery-template wallets use the Miniscript label. After a Trezor

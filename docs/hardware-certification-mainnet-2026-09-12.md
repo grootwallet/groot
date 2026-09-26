@@ -1,5 +1,10 @@
 # Mainnet hardware checkpoint — 2026-09-12
 
+The [Sep 26 HWI investigation](hwi-performance-investigation-2026-09-26.md)
+adds no physical pass: only no-device startup measurements and a fixture-tested
+BitBox policy reconnect candidate. Original BitBox02 and Nova require separate
+packaged policy/address/cancel/retry retests; discovery latency remains open.
+
 This sanitized checkpoint records release-owner testing performed with the
 internal Mainnet application shown as `Groot v0.4.94 · 27f821be`. It does not
 transfer evidence to a later source commit or package. Firmware versions were

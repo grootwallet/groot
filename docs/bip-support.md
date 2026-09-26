@@ -1,5 +1,10 @@
 # Bitcoin Improvement Proposal support
 
+The HWI performance/reconnect follow-up has no BIP or persisted-format impact.
+BitBox policy display changes only its post-proof connection selector, matching
+receive display. BIP32/BIP48 identity, address comparison, and signing rules are
+unchanged; physical evidence is not inferred from the regression test.
+
 Additional owner evidence on f7855a45: Multi B BIP125 replacement signing with
 Jade/original BitBox02 passed; Multi C received its first confirmed BIP48 deposit
 and Model One displayed its address only after a refreshed discovery retry.

@@ -151,3 +151,12 @@ same address and selected signer behind an explicit interactive retry action.
 This is a candidate correction pending a separate packaged retest on the
 original BitBox02 and Nova; Nova's earlier pass is not inherited by the new
 invocation boundary.
+
+### Sep 26 policy-display alignment
+
+The same fingerprint-selected reopen is now used for BitBox draft and saved
+policy display, which previously retained the older HID-path reopen. Full live
+account proof precedes it under the same lease. The policy/address response and
+context still require validation before evidence is persisted. This reuses the
+existing transport decision; it is not a persistent-client or faster-discovery
+implementation. Original BitBox02 and Nova packaged retests remain required.
