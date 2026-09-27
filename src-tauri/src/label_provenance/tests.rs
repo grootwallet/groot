@@ -319,6 +319,130 @@ fn compound_provenance_read_does_not_cache_wallet_data_or_hide_corruption() {
 }
 
 #[test]
+fn reuse_follows_canonical_receipts_not_retained_rbf_or_evicted_lineage() {
+    for multisig in [false, true] {
+        let keys =
+            [61, 62, 63].map(|seed| Xpriv::new_master(Network::Regtest, &[seed; 32]).unwrap());
+        let descriptor = |branch| {
+            if multisig {
+                format!(
+                    "wsh(sortedmulti(2,{}/{branch}/*,{}/{branch}/*,{}/{branch}/*))",
+                    keys[0], keys[1], keys[2]
+                )
+            } else {
+                format!("wpkh({}/{branch}/*)", keys[0])
+            }
+        };
+        let mut wallet = Wallet::create(descriptor(0), descriptor(1))
+            .network(Network::Regtest)
+            .create_wallet_no_persist()
+            .unwrap();
+        let db = fixture_db();
+        let script = wallet
+            .reveal_next_address(KeychainKind::External)
+            .address
+            .script_pubkey();
+        let original = transaction(
+            vec![OutPoint::new(Txid::from_byte_array([71; 32]), 0)],
+            script.clone(),
+            50_000,
+        );
+        let original_outpoint = OutPoint::new(original.compute_txid(), 0).to_string();
+        wallet.apply_unconfirmed_txs([(original.clone(), 1)]);
+        reconcile_wallet_outputs(&wallet, &db, 1).unwrap();
+        assert!(
+            !output_summary(&db, &original_outpoint)
+                .unwrap()
+                .address_reused
+        );
+
+        let mut replacement = original.clone();
+        replacement.output[0].value = Amount::from_sat(49_000);
+        let replacement_outpoint = OutPoint::new(replacement.compute_txid(), 0).to_string();
+        wallet.apply_unconfirmed_txs([(replacement.clone(), 2)]);
+        assert_eq!(wallet.transactions().count(), 1);
+        reconcile_wallet_outputs(&wallet, &db, 2).unwrap();
+        // Simulate a previously persisted false positive; ordinary reconciliation repairs it.
+        db.execute("UPDATE groot_output_lineage SET address_reused=1", [])
+            .unwrap();
+        reconcile_wallet_outputs(&wallet, &db, 3).unwrap();
+        for outpoint in [&original_outpoint, &replacement_outpoint] {
+            let summary = output_summary(&db, outpoint).unwrap();
+            assert!(!summary.address_reused);
+            assert_eq!(summary.labels.len(), 1);
+        }
+        assert_eq!(
+            db.query_row("SELECT COUNT(*) FROM groot_output_lineage", [], |row| row
+                .get::<_, u32>(
+                0
+            ))
+            .unwrap(),
+            2
+        );
+        let stable = persisted_rows(&db);
+        reconcile_wallet_outputs(&wallet, &db, 4).unwrap();
+        assert_eq!(persisted_rows(&db), stable);
+
+        // If the original wins again, the replacement's retained row still is not reuse.
+        wallet.apply_evicted_txs([(replacement.compute_txid(), 5)]);
+        wallet.apply_unconfirmed_txs([(original.clone(), 6)]);
+        reconcile_wallet_outputs(&wallet, &db, 6).unwrap();
+        assert!(
+            !output_summary(&db, &original_outpoint)
+                .unwrap()
+                .address_reused
+        );
+
+        let second = transaction(
+            vec![OutPoint::new(Txid::from_byte_array([72; 32]), 0)],
+            script,
+            30_000,
+        );
+        wallet.apply_unconfirmed_txs([(second.clone(), 7)]);
+        reconcile_wallet_outputs(&wallet, &db, 7).unwrap();
+        assert!(
+            output_summary(&db, &original_outpoint)
+                .unwrap()
+                .address_reused
+        );
+        // Spending one receipt does not erase real address reuse from history.
+        let spend = transaction(
+            vec![OutPoint::new(second.compute_txid(), 0)],
+            wallet
+                .reveal_next_address(KeychainKind::Internal)
+                .address
+                .script_pubkey(),
+            29_000,
+        );
+        wallet.apply_unconfirmed_txs([(spend.clone(), 8)]);
+        reconcile_wallet_outputs(&wallet, &db, 8).unwrap();
+        assert!(
+            output_summary(&db, &original_outpoint)
+                .unwrap()
+                .address_reused
+        );
+        wallet.apply_evicted_txs([(second.compute_txid(), 9), (spend.compute_txid(), 9)]);
+        reconcile_wallet_outputs(&wallet, &db, 9).unwrap();
+        assert!(
+            !output_summary(&db, &original_outpoint)
+                .unwrap()
+                .address_reused
+        );
+
+        // Two outputs in one valid transaction to the same address really are reuse.
+        let mut duplicate = original.clone();
+        duplicate.output.push(duplicate.output[0].clone());
+        wallet.apply_unconfirmed_txs([(duplicate, 10)]);
+        reconcile_wallet_outputs(&wallet, &db, 10).unwrap();
+        assert!(
+            output_summary(&db, &original_outpoint)
+                .unwrap()
+                .address_reused
+        );
+    }
+}
+
+#[test]
 fn grouped_reuse_refresh_matches_legacy_and_skips_unchanged_row_writes() {
     let db = fixture_db();
     for (index, (address, reused)) in [
@@ -334,8 +458,9 @@ fn grouped_reuse_refresh_matches_legacy_and_skips_unchanged_row_writes() {
     {
         db.execute("INSERT INTO groot_output_lineage(outpoint,source_txid,context,provenance_state,address_idx,address_reused) VALUES(?1,'synthetic','received','unknown',?2,?3)", params![format!("synthetic:{index}"),address,reused]).unwrap();
     }
-    assert_eq!(refresh_address_reuse(&db).unwrap(), 5);
-    assert_eq!(refresh_address_reuse(&db).unwrap(), 0);
+    let reused = BTreeSet::from([0, 2]);
+    assert_eq!(refresh_address_reuse(&db, &reused).unwrap(), 5);
+    assert_eq!(refresh_address_reuse(&db, &reused).unwrap(), 0);
     let before = persisted_rows(&db);
     db.execute("UPDATE groot_output_lineage SET address_reused = CASE WHEN address_idx IS NOT NULL AND (SELECT COUNT(*) FROM groot_output_lineage sibling WHERE sibling.address_idx = groot_output_lineage.address_idx) > 1 THEN 1 ELSE 0 END", []).unwrap();
     assert_eq!(persisted_rows(&db), before);
@@ -343,10 +468,10 @@ fn grouped_reuse_refresh_matches_legacy_and_skips_unchanged_row_writes() {
         "BEGIN; UPDATE groot_output_lineage SET address_idx=3 WHERE outpoint='synthetic:5'",
     )
     .unwrap();
-    assert_eq!(refresh_address_reuse(&db).unwrap(), 2);
+    assert_eq!(refresh_address_reuse(&db, &BTreeSet::from([0])).unwrap(), 2);
     db.execute_batch("ROLLBACK").unwrap();
     assert_eq!(persisted_rows(&db), before);
-    assert_eq!(refresh_address_reuse(&db).unwrap(), 0);
+    assert_eq!(refresh_address_reuse(&db, &reused).unwrap(), 0);
 }
 
 #[test]
@@ -356,7 +481,7 @@ fn grouped_reuse_plan_has_no_per_output_correlated_scan() {
         .prepare(&format!("EXPLAIN QUERY PLAN {REFRESH_ADDRESS_REUSE_SQL}"))
         .unwrap();
     let plan = statement
-        .query_map([], |row| row.get::<_, String>(3))
+        .query_map(params!["[]"], |row| row.get::<_, String>(3))
         .unwrap()
         .collect::<Result<Vec<_>, _>>()
         .unwrap()

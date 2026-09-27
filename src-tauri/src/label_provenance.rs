@@ -793,7 +793,20 @@ pub fn reconcile_wallet_outputs(
 ) -> Result<(), bdk_wallet::rusqlite::Error> {
     let transactions = wallet.transactions().collect::<Vec<_>>();
     let mut dependents = HashMap::<_, BTreeSet<usize>>::new();
+    let mut received_addresses = HashSet::new();
+    let mut reused_addresses = BTreeSet::new();
     for (index, canonical) in transactions.iter().enumerate() {
+        // Count canonical outputs once, including spent receipts. Retained lineage
+        // also contains replaced/evicted transactions and is not payment truth.
+        for output in &canonical.tx_node.tx.output {
+            if let Some((KeychainKind::External, address_index)) =
+                wallet.derivation_of_spk(output.script_pubkey.clone())
+            {
+                if !received_addresses.insert(address_index) {
+                    reused_addresses.insert(address_index);
+                }
+            }
+        }
         for input in &canonical.tx_node.tx.input {
             dependents
                 .entry(input.previous_output.txid)
@@ -896,23 +909,27 @@ pub fn reconcile_wallet_outputs(
         }
     }
 
-    refresh_address_reuse(db)?;
+    refresh_address_reuse(db, &reused_addresses)?;
     Ok(())
 }
 
-// Group once instead of counting all siblings again for every stored output.
-// Historical rows remain included, and unchanged flags incur no row writes.
+// Update only derived flags, never remove historical lineage or label evidence.
+// A single bound array avoids SQL parameter limits and per-output sibling scans.
 const REFRESH_ADDRESS_REUSE_SQL: &str =
     "WITH reused AS MATERIALIZED (
-       SELECT address_idx FROM groot_output_lineage
-       WHERE address_idx IS NOT NULL GROUP BY address_idx HAVING COUNT(*) > 1
+       SELECT CAST(value AS INTEGER) AS address_idx FROM json_each(?1)
      )
      UPDATE groot_output_lineage
      SET address_reused = CASE WHEN address_idx IN (SELECT address_idx FROM reused) THEN 1 ELSE 0 END
      WHERE address_reused <> CASE WHEN address_idx IN (SELECT address_idx FROM reused) THEN 1 ELSE 0 END";
 
-fn refresh_address_reuse(db: &Connection) -> Result<usize, bdk_wallet::rusqlite::Error> {
-    db.execute(REFRESH_ADDRESS_REUSE_SQL, [])
+fn refresh_address_reuse(
+    db: &Connection,
+    reused_addresses: &BTreeSet<u32>,
+) -> Result<usize, bdk_wallet::rusqlite::Error> {
+    let indices = serde_json::to_string(reused_addresses)
+        .map_err(|error| bdk_wallet::rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?;
+    db.execute(REFRESH_ADDRESS_REUSE_SQL, params![indices])
 }
 
 fn cluster_links(db: &Connection) -> Result<Vec<(String, String)>, bdk_wallet::rusqlite::Error> {

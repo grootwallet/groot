@@ -1,5 +1,11 @@
 # Testing and coverage methodology
 
+The Sep 27 address-reuse regression covers canonical incoming RBF replacement,
+eviction, stale-flag repair, retained labels/history, spent genuine reuse, and
+two same-address outputs in one transaction for single-key and multisig fixtures.
+The funded RBF/CPFP Regtest scenario also observes original/replacement receipts
+in a separate multisig wallet and checks the flag after confirmation and reopen.
+
 The 2026-09-08 application refresh adds exact font digest/license and local-only
 loading assertions, expanded semantic contrast pairs, every-route light/dark browser
 checks, font-failure fallback, compact translated layouts and keyboard/reduced-motion

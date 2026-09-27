@@ -1,5 +1,10 @@
 # Bitcoin Improvement Proposal support
 
+Sep 27 address-reuse correction has no BIP support, dependency, or persisted-format
+impact. BIP125 replacement history remains retained; only the derived privacy
+flag excludes noncanonical outputs. No Mainnet/device certification is inferred
+from fixture coverage.
+
 The HWI performance/reconnect follow-up has no BIP or persisted-format impact.
 BitBox policy display changes only its post-proof connection selector, matching
 receive display. BIP32/BIP48 identity, address comparison, and signing rules are

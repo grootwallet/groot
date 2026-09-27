@@ -1,5 +1,12 @@
 # Implementation status
 
+Sep 27 address-reuse correction: retained original/replacement lineage could
+incorrectly count one incoming RBF payment twice. Reuse now follows BDK canonical
+external outputs, including spent receipts, while keeping historical records and
+labels. Rust regression fixtures cover single-key and standard multisig replacement,
+eviction, real reuse, repeat reconciliation, and repair of old derived flags.
+Physical confirmation of the reported Multi C badge remains pending.
+
 The [HWI investigation](hwi-performance-investigation-2026-09-26.md) measures
 bundled-helper startup without touching devices and records larger transport
 proposals. BitBox draft/saved policy display now uses the freshly proven

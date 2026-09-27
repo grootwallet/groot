@@ -4,6 +4,13 @@ Status: canonical for the current prototype and first live integration build.
 
 ## Product
 
+Address-reuse notices count external outputs in BDK's canonical transaction
+history, including receipts that have since been spent. Retained replaced or
+evicted transaction versions are not additional payments. Two outputs to the
+same receive address in one valid transaction still count as reuse. Normal
+reconciliation corrects derived flags without deleting any historical records
+or changing permanent labels.
+
 BitBox policy verification uses the same freshly identity-bound reconnect path
 as receive verification. A failed account proof never proceeds to device display;
 no automatic approval retry or pairing-state reset is performed.

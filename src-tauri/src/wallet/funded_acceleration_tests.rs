@@ -952,11 +952,21 @@ fn funded_rbf_and_cpfp_cross_groot_proposal_boundaries() {
     rpc.generate_to_address(1, &mining).unwrap();
     sync(&mut wallet, &mut db, Arc::clone(&rpc));
 
-    let destination = rpc
-        .get_new_address(Some("groot destination"), None)
-        .unwrap()
-        .require_network(Network::Regtest)
-        .unwrap();
+    // Observe both versions from a separate receiving multisig wallet, as in
+    // the reported incoming-RBF false-positive address-reuse case.
+    let receiver_database = TemporaryDatabase::new();
+    let mut receiver_db = Connection::open(&receiver_database.0).unwrap();
+    init_app_schema(&receiver_db).unwrap();
+    let receiver_keys = test_keys();
+    let mut receiver = Wallet::create(
+        descriptor(&receiver_keys, 0, None),
+        descriptor(&receiver_keys, 1, None),
+    )
+    .network(Network::Regtest)
+    .create_wallet(&mut receiver_db)
+    .unwrap();
+    let destination = receiver.reveal_next_address(KeychainKind::External).address;
+    receiver.persist(&mut receiver_db).unwrap();
     let mut builder = wallet.build_tx();
     builder
         .add_recipient(destination.script_pubkey(), Amount::from_sat(250_000))
@@ -969,6 +979,8 @@ fn funded_rbf_and_cpfp_cross_groot_proposal_boundaries() {
     let original_tx = original.extract_tx().unwrap();
     let original_txid = broadcast_transaction_with_rpc(&rpc, &original_tx).unwrap();
     sync(&mut wallet, &mut db, Arc::clone(&rpc));
+    sync(&mut receiver, &mut receiver_db, Arc::clone(&rpc));
+    label_provenance::reconcile_wallet_outputs(&receiver, &receiver_db, now()).unwrap();
 
     let incremental_fee = rpc.get_network_info().unwrap().incremental_fee.to_sat();
     let (applied, rate) = validate_fee_rate("5").unwrap();
@@ -1050,6 +1062,28 @@ fn funded_rbf_and_cpfp_cross_groot_proposal_boundaries() {
     mine_empty_block(&rpc, &mining);
     sync(&mut wallet, &mut db, Arc::clone(&rpc));
     let replacement_txid = broadcast_transaction_with_rpc(&rpc, &replacement_tx).unwrap();
+    sync(&mut receiver, &mut receiver_db, Arc::clone(&rpc));
+    label_provenance::reconcile_wallet_outputs(&receiver, &receiver_db, now()).unwrap();
+    assert_eq!(receiver.transactions().count(), 1);
+    assert_eq!(
+        receiver_db
+            .query_row("SELECT COUNT(*) FROM groot_output_lineage", [], |row| row
+                .get::<_, u32>(
+                0
+            ))
+            .unwrap(),
+        2
+    );
+    assert_eq!(
+        receiver_db
+            .query_row(
+                "SELECT SUM(address_reused) FROM groot_output_lineage",
+                [],
+                |row| row.get::<_, u32>(0)
+            )
+            .unwrap(),
+        0
+    );
     assert_eq!(
         broadcast_transaction_with_rpc(&rpc, &replacement_tx).unwrap(),
         replacement_txid,
@@ -1181,4 +1215,26 @@ fn funded_rbf_and_cpfp_cross_groot_proposal_boundaries() {
         .chain_position
         .is_confirmed());
     assert_eq!(proposal_status(&db, &cpfp.proposal_id).0, "broadcast");
+    sync(&mut receiver, &mut receiver_db, Arc::clone(&rpc));
+    drop(receiver);
+    drop(receiver_db);
+    let mut receiver_db = Connection::open(&receiver_database.0).unwrap();
+    init_app_schema(&receiver_db).unwrap();
+    let receiver = load_wallet(&mut receiver_db).unwrap();
+    label_provenance::reconcile_wallet_outputs(&receiver, &receiver_db, now()).unwrap();
+    assert!(receiver
+        .get_tx(replacement_txid)
+        .unwrap()
+        .chain_position
+        .is_confirmed());
+    assert_eq!(
+        receiver_db
+            .query_row(
+                "SELECT SUM(address_reused) FROM groot_output_lineage",
+                [],
+                |row| row.get::<_, u32>(0)
+            )
+            .unwrap(),
+        0
+    );
 }

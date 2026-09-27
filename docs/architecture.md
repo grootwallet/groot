@@ -337,6 +337,12 @@ and presentation only, not persisted wallet or checkpoint formats.
 
 ## Transaction flow
 
+Address-reuse flags are derived from canonical external outputs, not all retained
+output-lineage rows. Rust counts each canonical output once and updates changed
+flags in one bound SQLite statement. Superseded/evicted lineage, labels, and
+cluster evidence remain intact. No schema or persisted-format change is needed;
+ordinary snapshot/sync reconciliation also repairs previously stored false flags.
+
 Proposal summaries expose Rust-derived recipient ownership and the recipient output's PSBT key-origin paths. The renderer presents a wallet-owned recipient as a self-transfer and states that only the network fee leaves the wallet; it never infers ownership from labels, address text, or the presence of change.
 
 Static payment QR decoding returns the exact text to one bounded Rust payment-request parser. It accepts a plain address or BIP21 URI, validates the address against the compile-time network, rejects unknown required parameters, and serializes an optional amount as a decimal satoshi string so JavaScript cannot round it. The renderer may prefill the canonical recipient, amount, and an editable label suggestion, but transaction preparation repeats authoritative address, amount, and network validation. A detected Payjoin request is surfaced as unsupported rather than silently sent as a conventional payment; ADR 0031 continues to gate Payjoin sessions and fallback consent.
