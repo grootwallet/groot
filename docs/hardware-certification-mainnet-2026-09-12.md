@@ -1,5 +1,26 @@
 # Mainnet hardware checkpoint — 2026-09-12
 
+## Sep 28 owner-reported focused retest
+
+Reported after the ab92d31d handoff; attached crops do not independently display
+the package commit. No new firmware versions were reported.
+
+- False address-reuse warning is gone after the correction.
+- Original BitBox02 policy re-verification and address verification passed.
+- Owner reports the same successful policy/address and cancel/reject/unplug/replug
+  handling for Nova. Keep the two exact models separate in certification.
+- Model One receive-address verification passed.
+- Mixed non-wallet devices were correctly identified except an unlocked Ledger
+  Nano S Plus was missing. Source inspection found receive's family filter;
+  removing that filter is a candidate UI fix, not a new physical Ledger pass.
+- Discovery remains approximately 2–4 seconds by owner report, not instrumented
+  timing evidence or a closed performance issue.
+- Original-confirmation-during-RBF-signing observation is still pending. No
+  transaction, signing-pair, confirmation, recovery, or GA completion is inferred.
+
+Next: verify concise policy copy, Ledger visibility, and exact discard target;
+report the pending RBF race outcome, then continue C's missing signing pairs.
+
 The [Sep 26 HWI investigation](hwi-performance-investigation-2026-09-26.md)
 adds no physical pass: only no-device startup measurements and a fixture-tested
 BitBox policy reconnect candidate. Original BitBox02 and Nova require separate

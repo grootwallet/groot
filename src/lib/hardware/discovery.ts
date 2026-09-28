@@ -19,13 +19,16 @@ export function hardwareWalletMembership(
 }
 
 export function hardwareWalletMembershipLabel(
-  membership: ReturnType<typeof hardwareWalletMembership>
+  membership: ReturnType<typeof hardwareWalletMembership>,
+  policyUnverified = false
 ) {
   return membership === 'unrelated'
     ? 'Not part of this wallet'
     : membership === 'unknown'
-      ? 'Wallet membership unknown · unlock to identify'
-      : 'Wallet key candidate · account checked before use';
+      ? 'Unlock to identify'
+      : policyUnverified
+        ? 'Policy unverified'
+        : '';
 }
 
 export function hardwareDeviceDisplayName(

@@ -242,10 +242,14 @@ test('keeps multisig receive verification disclosure visibly expandable', async 
   const lockedTrezor = dialog.getByRole('button', { name: /Virtual Trezor One/ });
   await expect(lockedTrezor).toBeEnabled();
   await expect(lockedTrezor).toContainText('Locked');
-  await expect(lockedTrezor).toContainText('Wallet membership unknown · unlock to identify');
+  await expect(lockedTrezor).toContainText('Unlock to identify');
+  await expect(dialog).not.toContainText('Wallet key candidate');
   const outsider = dialog.getByRole('button', { name: /Virtual Trezor Standard/ });
   await expect(outsider).toContainText('Not part of this wallet');
   await expect(outsider).toBeDisabled();
+  const ledgerOutsider = dialog.getByRole('button', { name: /Virtual Ledger outsider/ });
+  await expect(ledgerOutsider).toContainText('Not part of this wallet');
+  await expect(ledgerOutsider).toBeDisabled();
   for (const theme of ['light', 'dark']) {
     await page.evaluate(
       (value) => document.documentElement.setAttribute('data-theme', value),
@@ -287,6 +291,30 @@ test('keeps multisig receive verification disclosure visibly expandable', async 
   await page.getByRole('button', { name: 'Show address details', exact: true }).click();
   await expect(page.getByText('Native SegWit · standard multisig', { exact: true })).toBeVisible();
   await expect(page.getByText('Descriptor · Miniscript', { exact: true })).toHaveCount(0);
+  await page
+    .locator('.receive-actions')
+    .getByRole('button', { name: 'Discard', exact: true })
+    .click();
+  const discardDialog = page
+    .getByRole('dialog')
+    .filter({ has: page.getByRole('button', { name: 'Keep address' }) });
+  await expect(discardDialog.getByLabel('Assigned labels')).toBeVisible();
+  await discardDialog.getByText('Show address details', { exact: true }).click();
+  await expect(discardDialog.getByRole('button', { name: 'Copy exact address' })).toBeVisible();
+  for (const theme of ['light', 'dark']) {
+    await page.evaluate(
+      (value) => document.documentElement.setAttribute('data-theme', value),
+      theme
+    );
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)
+    ).toBe(true);
+    await page.screenshot({
+      path: `/private/tmp/groot-multisig-discard-${page.viewportSize()?.width}-${theme}.png`,
+      animations: 'disabled'
+    });
+  }
+  await discardDialog.getByRole('button', { name: 'Keep address' }).click();
   for (const theme of ['light', 'dark']) {
     await page.evaluate(
       (value) => document.documentElement.setAttribute('data-theme', value),

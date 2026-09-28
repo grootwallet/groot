@@ -251,6 +251,15 @@
       busy = false;
     }
   }
+  async function copyDiscardAddress() {
+    if (!discardTarget) return;
+    try {
+      await copyText(discardTarget.address, 'bitcoin-address');
+      toast({ title: 'Address copied', tone: 'success' });
+    } catch {
+      toast({ title: 'Copy failed', tone: 'danger' });
+    }
+  }
   function applyAddresses(nextAddresses: ReceiveAddress[]) {
     addresses = nextAddresses;
     const nextAwaiting = awaitingPaymentAddresses(nextAddresses);
@@ -552,7 +561,24 @@
     showDiscard = false;
     discardTarget = null;
   }}
-  ><div class="modal-footer">
+  >{#if discardTarget}
+    <PermanentLabelTags
+      labels={discardTarget.labels?.length ? discardTarget.labels : [discardTarget.label]}
+      prominent
+    />
+    <p><code>{compactAddress(discardTarget.address)}</code></p>
+    <details class="verification-details">
+      <summary>{translate($locale, 'Show address details')}<ChevronDown size={16} /></summary>
+      <ReadableAddress address={discardTarget.address} oncopy={copyDiscardAddress} />
+      <dl class="optional-details">
+        <div>
+          <dt>{translate($locale, 'Derivation')}</dt>
+          <dd><code>{discardTarget.derivationPath}</code></dd>
+        </div>
+      </dl>
+    </details>
+  {/if}
+  <div class="modal-footer">
     <Button
       variant="secondary"
       onclick={() => {

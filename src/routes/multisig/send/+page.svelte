@@ -2812,9 +2812,10 @@
             policyRegistrationProfile(device).registration === 'unsupported'}
           onclick={() => handleHardware(device)}
           ><Cpu size={18} /><span
-            ><strong>{hardwareDeviceDisplayName(device, wallet?.cosigners ?? [])}</strong><small
-              >{translate($locale, hardwareWalletMembershipLabel(membership))}</small
-            >{#if device.action !== 'prompt_pin'}<small
+            ><strong>{hardwareDeviceDisplayName(device, wallet?.cosigners ?? [])}</strong
+            >{#if hardwareWalletMembershipLabel(membership)}<small
+                >{translate($locale, hardwareWalletMembershipLabel(membership))}</small
+              >{/if}{#if device.action !== 'prompt_pin'}<small
                 >{translate($locale, device.fingerprint ?? device.message)}</small
               >{/if}<em
               class:ready={membership === 'candidate' &&

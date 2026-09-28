@@ -76,7 +76,7 @@
         <Cpu size={18} />
         <span
           ><strong>{hardwareDeviceDisplayName(device, savedSigners)}</strong
-          >{#if savedSigners.length}<small
+          >{#if savedSigners.length && hardwareWalletMembershipLabel(membership)}<small
               >{translate($locale, hardwareWalletMembershipLabel(membership))}</small
             >{/if}{#if deviceDetail}<small>{translate($locale, deviceDetail)}</small>{/if}</span
         >

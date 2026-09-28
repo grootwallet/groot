@@ -1,5 +1,10 @@
 # Physical hardware certification
 
+Latest focused retest: [Sep 28 owner report](hardware-certification-mainnet-2026-09-12.md#sep-28-owner-reported-focused-retest).
+BitBox02/Nova policy, address and interruption handling, and Model One address
+verification are reported successful. Missing Ledger visibility, discovery latency,
+and the RBF confirmation race remain open; this is not GA approval.
+
 Latest payment follow-up: [Multi B, f7855a45](hardware-certification-mainnet-2026-09-12.md#later-multi-b-payment-and-recovery-follow-up)
 adds owner-reported three-device receive comparison, Jade/original-BitBox02 CPFP,
 BSMS reconstruction, and local pruned scanning. Confirmation, other signer pairs,

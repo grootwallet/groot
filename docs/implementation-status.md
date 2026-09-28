@@ -1,5 +1,13 @@
 # Implementation status
 
+Sep 28 receive follow-up removes technical candidate copy, reads saved multisig
+policy evidence for the concise unverified hint, and retains every discovered
+family (the former family filter hid an unrelated Ledger). Single-key and multisig
+discard confirmations identify the exact target with all labels and expandable
+address details. Native identity checks, retirement rules, and persisted formats
+are unchanged. Owner-reported hardware retests are recorded in the Mainnet ledger;
+the Ledger visibility correction and RBF-confirmation race still need physical evidence.
+
 Sep 27 address-reuse correction: retained original/replacement lineage could
 incorrectly count one incoming RBF payment twice. Reuse now follows BDK canonical
 external outputs, including spent receipts, while keeping historical records and

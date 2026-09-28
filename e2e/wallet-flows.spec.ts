@@ -2102,10 +2102,10 @@ test('receive keeps multiple labeled payment requests and discards them independ
   const stableDialogHeight = (await page.getByRole('dialog').boundingBox())?.height;
   await page.getByLabel('Label', { exact: true }).fill('A label that does not exist');
   await expect(page.locator('.label-suggestions button')).toHaveCount(0);
-  expect((await page.getByRole('dialog').boundingBox())?.height).toBeCloseTo(
-    stableDialogHeight!,
-    2
-  );
+  // Allow a one-pixel border/rounding difference without permitting layout jumps.
+  expect(
+    Math.abs((await page.getByRole('dialog').boundingBox())!.height - stableDialogHeight!)
+  ).toBeLessThanOrEqual(1.1);
   await page.getByLabel('Label', { exact: true }).fill('');
   await page.getByRole('button', { name: 'Reuse Savings' }).click();
   await expect(page.getByLabel('Label', { exact: true })).toHaveValue('');
@@ -2169,6 +2169,18 @@ test('receive keeps multiple labeled payment requests and discards them independ
   await expect(page.getByRole('button', { name: 'View Invoice #205' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'View Invoice #206' })).toBeVisible();
   await page.getByRole('button', { name: 'Discard Invoice #205' }).click();
+  const discardDialog = page.getByRole('dialog', { name: 'Discard Invoice #205?' });
+  await expect(discardDialog.getByLabel('Assigned labels')).toContainText('Customer A');
+  await discardDialog.getByText('Show address details', { exact: true }).click();
+  await expect(discardDialog.getByText("m/84'/1'/0'/0/9", { exact: true })).toBeVisible();
+  await expect(discardDialog.getByRole('button', { name: 'Copy exact address' })).toBeVisible();
+  expect(
+    (await discardDialog.locator('.readable-address-groups').textContent())?.replace(/\s/g, '')
+  ).toMatch(/dummy0009/);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
+    true
+  );
+  await page.screenshot({ path: `/private/tmp/groot-discard-${page.viewportSize()?.width}.png` });
   await page.getByRole('button', { name: 'Discard address' }).click();
   await expect(page.getByRole('button', { name: 'View Invoice #205' })).not.toBeVisible();
   await expect(page.getByRole('button', { name: 'View Invoice #206' })).toBeVisible();

@@ -1,5 +1,10 @@
 # Bitcoin Improvement Proposal support
 
+Sep 28 receive-picker/discard presentation has no BIP or persisted-format impact.
+Owner-reported original BitBox02/Nova policy, address, rejection and reconnect
+retests and Model One address success add scoped hardware observations only;
+they do not expand model, transport, or spending-policy support.
+
 Sep 27 address-reuse correction has no BIP support, dependency, or persisted-format
 impact. BIP125 replacement history remains retained; only the derived privacy
 flag excludes noncanonical outputs. No Mainnet/device certification is inferred

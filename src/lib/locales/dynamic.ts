@@ -24,13 +24,21 @@ export const dynamicCopy = {
     fr: 'Ne fait pas partie de ce portefeuille',
     es: 'No forma parte de esta cartera'
   },
-  'Wallet membership unknown · unlock to identify': {
-    fr: 'Appartenance inconnue · déverrouillez pour identifier',
-    es: 'Pertenencia desconocida · desbloquea para identificar'
+  'Unlock to identify': {
+    fr: 'Déverrouillez pour identifier',
+    es: 'Desbloquea para identificar'
   },
-  'Wallet key candidate · account checked before use': {
-    fr: 'Clé candidate du portefeuille · compte vérifié avant utilisation',
-    es: 'Posible clave de la cartera · cuenta verificada antes de usar'
+  'Show address details': {
+    fr: 'Afficher les détails de l’adresse',
+    es: 'Mostrar detalles de la dirección'
+  },
+  'Policy unverified': {
+    fr: 'Politique non vérifiée',
+    es: 'Política sin verificar'
+  },
+  'Choose a signer for this wallet.': {
+    fr: 'Choisissez un signataire de ce portefeuille.',
+    es: 'Elige un firmante de esta cartera.'
   },
   'Use a BSMS or JSON backup. PDF cannot be imported or tested.': {
     fr: 'Utilisez une sauvegarde BSMS ou JSON. Un PDF ne peut pas être importé ni testé.',

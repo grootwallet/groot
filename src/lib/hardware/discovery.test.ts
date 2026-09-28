@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   hardwareDeviceDisplayName,
   hardwareWalletMembership,
+  hardwareWalletMembershipLabel,
   mergeHardwareDiscovery
 } from './discovery';
 import type { HardwareDevice } from '$lib/wallet/contracts';
@@ -35,6 +36,12 @@ describe('hardware discovery settling', () => {
 });
 
 describe('hardware device display names', () => {
+  it('keeps matching signer copy quiet unless policy evidence is missing', () => {
+    expect(hardwareWalletMembershipLabel('candidate')).toBe('');
+    expect(hardwareWalletMembershipLabel('candidate', true)).toBe('Policy unverified');
+    expect(hardwareWalletMembershipLabel('unknown', true)).toBe('Unlock to identify');
+    expect(hardwareWalletMembershipLabel('unrelated', true)).toBe('Not part of this wallet');
+  });
   it('never treats a locked device family as proof of wallet membership', () => {
     expect(hardwareWalletMembership(device('trezor'), ['aabbccdd'])).toBe('unknown');
     expect(

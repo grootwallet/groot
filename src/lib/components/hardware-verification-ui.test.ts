@@ -378,14 +378,13 @@ describe('hardware receive verification UI', () => {
     expect(verificationFlow).not.toMatch(/cosigner/i);
   });
 
-  it('limits receive verification discovery to signers saved in the wallet', () => {
-    expect(verificationFlow).toContain(
-      'walletService.listHardwareDevicesForTypes(eligibleDeviceTypes)'
-    );
+  it('shows every discovered family while preserving wallet identity checks', () => {
+    expect(verificationFlow).toContain('walletService.listHardwareDevices()');
     expect(verificationFlow).toContain('eligibleFingerprints');
     expect(multisigReceive).toContain('{eligibleDeviceTypes}');
     expect(multisigReceive).toContain('{eligibleFingerprints}');
-    expect(verificationFlow).toContain('ignores other connected device families');
+    expect(verificationFlow).not.toContain('ignores other connected device families');
+    expect(verificationFlow).toContain('multisigSignerPolicyVerifications()');
     expect(deviceDetails).toContain('Keep it connected and unlocked.');
   });
 

@@ -25,6 +25,8 @@
   import { walletService, type HardwareDevice, type WalletErrorCode } from '$lib/wallet';
   import { hardwareAddressComparison } from '$lib/wallet/hardware-display';
   import type { ReceiveAddress } from '$lib/types';
+  import type { SignerPolicyVerification } from '$lib/wallet/contracts';
+  import { matchingPolicyVerification, requiresPolicySetup } from '$lib/hardware/policy-readiness';
 
   type Props = {
     address: ReceiveAddress;
@@ -49,6 +51,7 @@
   let verifyBusy = $state(false);
   let verifyError = $state('');
   let devices = $state<HardwareDevice[]>([]);
+  let policyVerifications = $state<SignerPolicyVerification[]>([]);
   let verificationDevice = $state<HardwareDevice | null>(null);
   let verificationAction = $state<'scan' | 'unlock' | 'approve'>('scan');
   let cancelRequested = $state(false);
@@ -155,10 +158,18 @@
     try {
       await waitForHardwareCancellation();
       if (generation !== hardwareScanGeneration || !verifyOpen) return;
-      const discovered = await walletService.listHardwareDevicesForTypes(eligibleDeviceTypes);
+      const [discovered, verifications] = await Promise.all([
+        walletService.listHardwareDevices(),
+        isMultisig ? walletService.multisigSignerPolicyVerifications() : Promise.resolve([])
+      ]);
       if (generation !== hardwareScanGeneration || !verifyOpen) return;
       devices = discovered;
-      if (hasAmbiguousUnidentifiedHardware(devices)) {
+      policyVerifications = verifications;
+      if (
+        hasAmbiguousUnidentifiedHardware(
+          devices.filter((device) => eligibleDeviceTypes.includes(device.model))
+        )
+      ) {
         devices = [];
         verifyError = translate(
           $locale,
@@ -383,9 +394,7 @@
               : verificationAction === 'unlock'
                 ? 'Complete the login or unlock on-device, then compare the complete address above and approve it.'
                 : 'Compare the complete address above, then approve it on the device.'
-            : isMultisig
-              ? 'Groot checks only signer types saved in this wallet policy and ignores other connected device families.'
-              : 'Groot checks only this saved signer type and ignores other connected device families.'
+            : 'Choose a signer for this wallet.'
       )}
       label={translate(
         $locale,
@@ -404,6 +413,13 @@
     <div class="source-list hardware-device-list">
       {#each devices as device}
         {@const membership = hardwareWalletMembership(device, eligibleFingerprints)}
+        {@const membershipLabel = hardwareWalletMembershipLabel(
+          membership,
+          isMultisig &&
+            requiresPolicySetup(device) &&
+            !!device.fingerprint &&
+            !matchingPolicyVerification({ fingerprint: device.fingerprint }, policyVerifications)
+        )}
         <button
           disabled={membership === 'unrelated' ||
             device.action === 'none' ||
@@ -413,7 +429,7 @@
           <Cpu size={18} />
           <span>
             <strong>{hardwareDeviceDisplayName(device, savedSigners)}</strong>
-            <small>{translate($locale, hardwareWalletMembershipLabel(membership))}</small>
+            {#if membershipLabel}<small>{translate($locale, membershipLabel)}</small>{/if}
             {#if device.action !== 'prompt_pin'}<small
                 >{translate($locale, device.fingerprint ?? device.message)}</small
               >{/if}
