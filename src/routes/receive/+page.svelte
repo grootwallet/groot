@@ -60,6 +60,7 @@
   let showQr = $state(false);
   let showDetails = $state(false);
   let copied = $state(false);
+  let discardAddressCopied = $state(false);
   let qrGeneration = 0;
   let discardTarget = $state<ReceiveAddress | null>(null);
   let detailAddress = $state<ReceiveAddress | null>(null);
@@ -237,7 +238,9 @@
     if (!discardTarget) return;
     try {
       await copyText(discardTarget.address, 'bitcoin-address');
+      discardAddressCopied = true;
       toast({ title: 'Address copied', tone: 'success' });
+      setTimeout(() => (discardAddressCopied = false), 1500);
     } catch {
       toast({ title: 'Copy failed', tone: 'danger' });
     }
@@ -269,6 +272,7 @@
     }
   };
   const requestDiscard = (address: ReceiveAddress) => {
+    discardAddressCopied = false;
     discardTarget = address;
     showDiscard = true;
   };
@@ -334,7 +338,10 @@
       >
       <div class="receive-actions">
         <Button variant="secondary" onclick={copy}
-          ><Copy size={16} />{translate($locale, 'Copy address')}</Button
+          >{#if copied}<Check size={16} />{:else}<Copy size={16} />{/if}{translate(
+            $locale,
+            'Copy address'
+          )}</Button
         >{#if externalSigner}<HardwareReceiveVerification
             address={current}
             walletKind="single_key"
@@ -544,6 +551,7 @@
   })}
   description={translate($locale, 'It will be retired and never shown for payment again.')}
   onclose={() => {
+    discardAddressCopied = false;
     showDiscard = false;
     discardTarget = null;
   }}
@@ -556,7 +564,11 @@
           prominent
         />
       </div>
-      <ReadableAddress address={discardTarget.address} oncopy={copyDiscardAddress} />
+      <ReadableAddress
+        address={discardTarget.address}
+        copied={discardAddressCopied}
+        oncopy={copyDiscardAddress}
+      />
       <details class="verification-details">
         <summary>{translate($locale, 'Show address details')}<ChevronDown size={16} /></summary>
         <dl class="optional-details">
@@ -576,6 +588,7 @@
     <Button
       variant="secondary"
       onclick={() => {
+        discardAddressCopied = false;
         showDiscard = false;
         discardTarget = null;
       }}>{translate($locale, 'Keep address')}</Button

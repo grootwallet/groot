@@ -9867,6 +9867,9 @@ code {
 .discard-address-detail .verification-details {
   margin-top: 0;
 }
+.discard-address-detail .verification-details[open] summary {
+  border-bottom: 0;
+}
 .discard-address-detail .optional-details {
   margin-top: 12px;
 }
@@ -9898,6 +9901,9 @@ code {
 .address-detail-view dd {
   color: var(--text-soft);
   text-transform: capitalize;
+}
+.address-detail-view dd code {
+  text-transform: none;
 }
 .address-detail-view > p {
   margin: 0;

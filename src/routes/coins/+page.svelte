@@ -2,6 +2,7 @@
   import { translate, localizedError } from '$lib/i18n-catalog';
   import {
     AlertTriangle,
+    Check,
     ChevronDown,
     CircleDot,
     Copy,
@@ -65,6 +66,7 @@
   let selectionMenuRoot = $state<HTMLDivElement | null>(null);
   let selectionMenuTrigger = $state<HTMLButtonElement | null>(null);
   let expanded = $state<string[]>([]);
+  let copiedValue = $state('');
   let busy = $state(false);
   let syncing = $state(false);
   let multisig = $state(false);
@@ -279,10 +281,14 @@
   async function copy(value: string, label: string, content: 'bitcoin-address' | 'identifier') {
     try {
       await copyText(value, content);
+      copiedValue = value;
       toast({
         title: translate($locale, '{label} copied', { label: translate($locale, label) }),
         tone: 'success'
       });
+      setTimeout(() => {
+        if (copiedValue === value) copiedValue = '';
+      }, 1_500);
     } catch {
       toast({ title: 'Copy failed', description: 'Select and copy it manually.', tone: 'danger' });
     }
@@ -897,7 +903,9 @@
                       <code>{compactAddress(utxo.address)}</code><button
                         aria-label={translate($locale, 'Copy address')}
                         onclick={() => copy(utxo.address, 'Address', 'bitcoin-address')}
-                        ><Copy size={13} /></button
+                        >{#if copiedValue === utxo.address}<Check size={13} />{:else}<Copy
+                            size={13}
+                          />{/if}</button
                       >
                     </dd>
                   </div>
@@ -907,7 +915,9 @@
                       <code>{compactAddress(utxo.outpoint, 18, 10)}</code><button
                         aria-label={translate($locale, 'Copy outpoint')}
                         onclick={() => copy(utxo.outpoint, 'Outpoint', 'identifier')}
-                        ><Copy size={13} /></button
+                        >{#if copiedValue === utxo.outpoint}<Check size={13} />{:else}<Copy
+                            size={13}
+                          />{/if}</button
                       >
                     </dd>
                   </div>

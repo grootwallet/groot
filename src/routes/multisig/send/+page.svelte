@@ -148,6 +148,8 @@
     deviceError = $state(''),
     cancelError = $state('');
   let selectedLabels = $state<string[]>([]);
+  let broadcastTxidCopied = $state(false);
+  let psbtCopied = $state(false);
   let labelSuggestions = $state<LabelSuggestion[]>([]);
   let visibleSuggestions = $derived(
     visibleLabelSuggestions(labelSuggestions, label, VISIBLE_LABEL_SUGGESTION_LIMIT, selectedLabels)
@@ -1370,7 +1372,9 @@
     if (!txid) return;
     try {
       await copyText(txid, 'identifier');
+      broadcastTxidCopied = true;
       toast({ title: 'Transaction ID copied', tone: 'success' });
+      setTimeout(() => (broadcastTxidCopied = false), 1_500);
     } catch {
       toast({ title: 'Copy failed', tone: 'danger' });
     }
@@ -1449,7 +1453,9 @@
   async function copyPsbt() {
     if (!proposal) return;
     await copyText(proposal.psbt, 'transaction-data');
+    psbtCopied = true;
     toast({ title: 'PSBT copied', tone: 'success' });
+    setTimeout(() => (psbtCopied = false), 1_500);
   }
   async function saveProposalPsbt() {
     if (!proposal || savingPsbt) return;
@@ -1784,7 +1790,7 @@
             <button class="hash-box" type="button" onclick={copyBroadcastTxid}
               ><span>{translate($locale, 'Transaction ID')}</span><code
                 >{compactIdentifier(txid)}</code
-              ><Copy size={16} /></button
+              >{#if broadcastTxidCopied}<Check size={16} />{:else}<Copy size={16} />{/if}</button
             >
             <div class="success-actions">
               <Button href="/multisig">{translate($locale, 'Return to wallet')}</Button>
@@ -2591,7 +2597,10 @@
                     ><Button variant="secondary" onclick={openPsbtImport}
                       ><FileUp size={16} />{translate($locale, 'Import signed PSBT')}</Button
                     ><Button variant="secondary" onclick={copyPsbt}
-                      ><Copy size={16} />{translate($locale, 'Copy PSBT')}</Button
+                      >{#if psbtCopied}<Check size={16} />{:else}<Copy size={16} />{/if}{translate(
+                        $locale,
+                        'Copy PSBT'
+                      )}</Button
                     ><Button
                       variant="secondary"
                       loading={savingPsbt}

@@ -152,7 +152,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src/routes/diagnostics/+page.svelte',
-    '94204b88d49144a7d42c21e0e3c686d98c74b46e7626d22ea3fcea1dfb9775c5'
+    '3cdacdc85378c8b7f5ae07a50974cfe275cf26ec36a492081dc1d9c801d1de43'
   ],
   [
     'src/routes/welcome/+page.svelte',
@@ -169,11 +169,11 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src/routes/receive/+page.svelte',
-    '6ab799cf5a1c875a76cb0f072202d4c6b6928cf5d580cf0d376ca220aabc6777'
+    '233db25ab597e28b4e8b92eae47fd057597f0bf4b1052eff198cd5ccba924e73'
   ],
   [
     'src/routes/multisig/receive/+page.svelte',
-    '71353226465888454a77bbedd8f0e7f2820676d97cbda716131b558d118bac24'
+    '88bd2edf8a551efdfa0b637c538fa04d6e95c64398e9ec6ba911497c66d82b53'
   ],
   [
     'src/routes/settings/+page.svelte',
@@ -209,7 +209,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src/routes/multisig/new/+page.svelte',
-    '1f2407cd89e73e590797f623dda16711b132176818797b1a4c080fec4f488061'
+    '930bad4c56703efef9757d9595943fb2bd3f95a26fb2c81252408fe3e6719b23'
   ],
   [
     'src/lib/multisig/policy.ts',

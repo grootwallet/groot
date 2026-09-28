@@ -1,7 +1,7 @@
 <script lang="ts">
   import { formatInteger, locale } from '$lib/i18n';
   import { translate } from '$lib/i18n-catalog';
-  import { ArrowRight, ArrowUp, Copy, ExternalLink, Layers } from '@lucide/svelte';
+  import { ArrowRight, ArrowUp, Check, Copy, ExternalLink, Layers } from '@lucide/svelte';
   import Modal from './Modal.svelte';
   import Button from './Button.svelte';
   import { copyText } from '$lib/clipboard';
@@ -25,6 +25,7 @@
   let showAddress = $state(false);
   let showMore = $state(false);
   let addressCopied = $state(false);
+  let txidCopied = $state(false);
   let explorerError = $state('');
   let explorerUrl = $derived(
     transaction ? transactionExplorerUrl(defaultConfig.network, transaction.id) : null
@@ -53,13 +54,16 @@
     transaction?.id;
     showAddress = false;
     showMore = false;
+    txidCopied = false;
   });
 
   async function copyTxid() {
     if (!transaction) return;
     try {
       await copyText(transaction.id, 'identifier');
+      txidCopied = true;
       toast({ title: 'Transaction ID copied', tone: 'success' });
+      setTimeout(() => (txidCopied = false), 1_500);
     } catch {
       toast({ title: 'Copy failed', tone: 'danger' });
     }
@@ -332,7 +336,7 @@
       <button class="hash-box" onclick={copyTxid}
         ><span>{translate($locale, 'Transaction ID')}</span><code
           >{compactIdentifier(transaction.id)}</code
-        ><Copy size={16} /></button
+        >{#if txidCopied}<Check size={16} />{:else}<Copy size={16} />{/if}</button
       >
       {#if explorerUrl}
         <div class="explorer-panel">

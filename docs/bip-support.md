@@ -648,6 +648,11 @@ presentation and the existing global denomination preference; integer-satoshi
 accounting, descriptors, addresses, transactions, PSBTs, signing, recovery, and
 interoperability remain unchanged.
 
+The copy-confirmation glyph, discard-address disclosure divider removal, and
+case-exact derivation-path presentation have no BIP support or interoperability
+impact. Clipboard payloads, derivation data, descriptors, addresses, transactions,
+PSBTs, signing, recovery, and persisted formats are unchanged.
+
 If a change has no BIP impact, its pull request records that explicit assessment.
 Upstream status changes alone may update this document without changing Groot's
 implementation status.

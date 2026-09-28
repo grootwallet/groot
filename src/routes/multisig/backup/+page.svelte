@@ -40,6 +40,7 @@
   let wallet = $state<MultisigWallet | null>(null);
   let pin = $state('');
   let backup = $state('');
+  let copiedPublicValue = $state('');
   let drill = $state<RecoveryDrill | null>(null);
   let busy = $state(false);
   let exportError = $state('');
@@ -171,11 +172,15 @@
 
   async function copyDescriptor(value: string, label: string) {
     await copyText(value, 'public-wallet-data');
+    copiedPublicValue = value;
     toast({
       title: translate($locale, '{label} descriptor copied', { label: translate($locale, label) }),
       description: 'Public watch-only descriptor copied.',
       tone: 'success'
     });
+    setTimeout(() => {
+      if (copiedPublicValue === value) copiedPublicValue = '';
+    }, 1_500);
   }
 
   function savedFileAction(saved: SavedFileResult) {
@@ -344,8 +349,15 @@
             variant="secondary"
             onclick={async () => {
               await copyText(backup, 'public-wallet-data');
+              copiedPublicValue = backup;
               toast({ title: 'Backup copied', tone: 'success' });
-            }}><Copy size={15} />{translate($locale, 'Copy backup')}</Button
+              setTimeout(() => {
+                if (copiedPublicValue === backup) copiedPublicValue = '';
+              }, 1_500);
+            }}
+            >{#if copiedPublicValue === backup}<Check size={15} />{:else}<Copy
+                size={15}
+              />{/if}{translate($locale, 'Copy backup')}</Button
           ><Button variant="secondary" onclick={saveBackupFile}
             ><Download size={15} />{translate($locale, 'Download')}
             {translate($locale, backupFormat === 'bsms' ? 'BSMS' : 'JSON')}</Button
@@ -378,7 +390,9 @@
             <code>{wallet.externalDescriptor}</code><button
               aria-label={translate($locale, 'Copy receive descriptor')}
               onclick={() => copyDescriptor(wallet!.externalDescriptor, 'Receive')}
-              ><Copy size={15} /></button
+              >{#if copiedPublicValue === wallet.externalDescriptor}<Check size={15} />{:else}<Copy
+                  size={15}
+                />{/if}</button
             >
           </div>
         </div>
@@ -563,7 +577,9 @@
       <Button
         variant="secondary"
         onclick={() => wallet && copyDescriptor(wallet.externalDescriptor, 'Receive')}
-        ><Copy size={15} />{translate($locale, 'Copy receive descriptor')}</Button
+        >{#if copiedPublicValue === wallet?.externalDescriptor}<Check size={15} />{:else}<Copy
+            size={15}
+          />{/if}{translate($locale, 'Copy receive descriptor')}</Button
       >
     </div>{/if}</Modal
 >

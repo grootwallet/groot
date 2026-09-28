@@ -150,6 +150,7 @@
   let maxSpendActive = $state(false);
   let maxSpendRequestRevision = 0;
   let txid = $state('');
+  let broadcastTxidCopied = $state(false);
   let broadcastExplorerError = $state('');
   let sentAmount = $state(0);
   let balanceSyncPending = $state(false);
@@ -763,7 +764,9 @@
     if (!txid) return;
     try {
       await copyText(txid, 'identifier');
+      broadcastTxidCopied = true;
       toast({ title: 'Transaction ID copied', tone: 'success' });
+      setTimeout(() => (broadcastTxidCopied = false), 1_500);
     } catch {
       toast({ title: 'Copy failed', tone: 'danger' });
     }
@@ -2005,7 +2008,7 @@
             <button class="hash-box" type="button" onclick={copyBroadcastTxid}
               ><span>{translate($locale, 'Transaction ID')}</span><code
                 >{compactIdentifier(txid)}</code
-              ><Copy size={16} /></button
+              >{#if broadcastTxidCopied}<Check size={16} />{:else}<Copy size={16} />{/if}</button
             >
             <div class="success-actions">
               <Button

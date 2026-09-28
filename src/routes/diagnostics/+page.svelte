@@ -35,6 +35,7 @@
   let sortOrder = $state<DiagnosticSortOrder>('newest');
   let view = $state<'table' | 'raw'>('table');
   let visibleCount = $state(100);
+  let rawJsonCopied = $state(false);
 
   const eventLabels = {
     app_started: 'App started',
@@ -103,7 +104,9 @@
   async function copyRawJson() {
     try {
       await copyText(rawJson, 'app-logs');
+      rawJsonCopied = true;
       toast({ title: translate($locale, 'App logs copied'), tone: 'success' });
+      setTimeout(() => (rawJsonCopied = false), 1_500);
     } catch (cause) {
       toast({
         title: translate($locale, 'Could not copy app logs'),
@@ -390,7 +393,10 @@
               )}</small
             ></span
           ><Button variant="secondary" size="small" onclick={copyRawJson}
-            ><Copy size={15} />{translate($locale, 'Copy JSON')}</Button
+            >{#if rawJsonCopied}<Check size={15} />{:else}<Copy size={15} />{/if}{translate(
+              $locale,
+              'Copy JSON'
+            )}</Button
           >
         </div>
         <textarea

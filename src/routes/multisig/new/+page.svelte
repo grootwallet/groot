@@ -147,6 +147,7 @@
   let hardware = $state<HardwareDevice[]>([]);
   let hardwareBusy = $state(false);
   let hardwareProgress = $state('Looking for devices…');
+  let copiedDescriptor = $state('');
   let standardWalletOpen = $state(false);
   let standardWalletDevice = $state<HardwareDevice | null>(null);
   let pinOpen = $state(false);
@@ -841,11 +842,15 @@
 
   async function copyDescriptor(value: string, label: 'Wallet' | 'Receive' | 'Change') {
     await copyText(value, 'public-wallet-data');
+    copiedDescriptor = value;
     toast({
       title: translate($locale, '{label} descriptor copied', { label: translate($locale, label) }),
       description: 'Public watch-only descriptor copied.',
       tone: 'success'
     });
+    setTimeout(() => {
+      if (copiedDescriptor === value) copiedDescriptor = '';
+    }, 1_500);
   }
 
   function savedFileAction(result: SavedFileResult) {
@@ -1776,7 +1781,9 @@
               class="full"
               onclick={() => copyDescriptor(combinedDescriptor!, 'Wallet')}
             >
-              <Copy size={14} />{translate($locale, 'Copy wallet descriptor')}
+              {#if copiedDescriptor === combinedDescriptor}<Check size={14} />{:else}<Copy
+                  size={14}
+                />{/if}{translate($locale, 'Copy wallet descriptor')}
             </Button>
           {/if}
           <div class="descriptor-toggle-row">
@@ -1825,7 +1832,12 @@
                     <code>{preview.externalDescriptor}</code><button
                       aria-label={translate($locale, 'Copy receive descriptor')}
                       onclick={() => copyDescriptor(preview!.externalDescriptor, 'Receive')}
-                      ><Copy size={14} />{translate($locale, 'Copy receive descriptor')}</button
+                      >{#if copiedDescriptor === preview.externalDescriptor}<Check
+                          size={14}
+                        />{:else}<Copy size={14} />{/if}{translate(
+                        $locale,
+                        'Copy receive descriptor'
+                      )}</button
                     >
                   </section>
                   <section>
@@ -1840,7 +1852,12 @@
                     <code>{preview.internalDescriptor}</code><button
                       aria-label={translate($locale, 'Copy change descriptor')}
                       onclick={() => copyDescriptor(preview!.internalDescriptor, 'Change')}
-                      ><Copy size={14} />{translate($locale, 'Copy change descriptor')}</button
+                      >{#if copiedDescriptor === preview.internalDescriptor}<Check
+                          size={14}
+                        />{:else}<Copy size={14} />{/if}{translate(
+                        $locale,
+                        'Copy change descriptor'
+                      )}</button
                     >
                   </section>
                 </details>
@@ -1856,7 +1873,12 @@
                   <code>{preview.externalDescriptor}</code><button
                     aria-label={translate($locale, 'Copy receive descriptor')}
                     onclick={() => copyDescriptor(preview!.externalDescriptor, 'Receive')}
-                    ><Copy size={14} />{translate($locale, 'Copy receive descriptor')}</button
+                    >{#if copiedDescriptor === preview.externalDescriptor}<Check
+                        size={14}
+                      />{:else}<Copy size={14} />{/if}{translate(
+                      $locale,
+                      'Copy receive descriptor'
+                    )}</button
                   >
                 </section>
                 <section>
@@ -1871,7 +1893,12 @@
                   <code>{preview.internalDescriptor}</code><button
                     aria-label={translate($locale, 'Copy change descriptor')}
                     onclick={() => copyDescriptor(preview!.internalDescriptor, 'Change')}
-                    ><Copy size={14} />{translate($locale, 'Copy change descriptor')}</button
+                    >{#if copiedDescriptor === preview.internalDescriptor}<Check
+                        size={14}
+                      />{:else}<Copy size={14} />{/if}{translate(
+                      $locale,
+                      'Copy change descriptor'
+                    )}</button
                   >
                 </section>{/if}
               {#if recoveryTemplate?.type === 'recovery'}<span
