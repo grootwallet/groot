@@ -2248,10 +2248,9 @@ test('coin control selects, freezes, and carries coins into send', async ({ page
   await expect(page.getByText('Manual · 2 coins')).toBeVisible();
   const selectionPreview = page.locator('.manual-selection-preview');
   await expect(selectionPreview).toContainText('2 selected · 1,639,090 sats');
-  await expect(selectionPreview.locator('.selection-technical > span')).toBeHidden();
-  await expect(selectionPreview.getByText('Funding labels', { exact: true })).toBeVisible();
-  await selectionPreview.getByText('Input details', { exact: true }).click();
-  await expect(selectionPreview).toContainText('Estimated input weight: 1,000 WU');
+  await expect(selectionPreview.getByText('Funding labels', { exact: true })).toHaveCount(0);
+  await expect(selectionPreview.getByText('Input details', { exact: true })).toHaveCount(0);
+  await expect(selectionPreview).not.toContainText('Estimated input weight');
   const coinMode = page.getByRole('button', { name: /Manual · 2 coins/ });
   await coinMode.click();
   await expect(

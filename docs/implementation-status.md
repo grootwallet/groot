@@ -1,5 +1,21 @@
 # Implementation status
 
+Sep 28 hardware/UI closing pass replaces the improvised discard-address summary
+with the existing grouped copy control, permanent-label tags, and standard detail
+rows for derivation path and address type. Standard multisig is identified as
+**Native SegWit · standard multisig**; only delayed descriptor policies use
+**Descriptor · Miniscript**. Manual coin selection removes decorative separators,
+the redundant funding-label heading, and the non-actionable estimated-weight
+disclosure; selectable rows now expose hover/focus feedback. Single-key signing
+uses the complete discovered-device list and the shared status badges while Rust
+continues to reject non-wallet identities. Model One PIN success now performs a
+fresh discovery before any signing action, preventing a synthetic stale locked
+row from being reused. No persisted format, descriptor, derivation, transaction,
+PSBT, dependency, or BIP support behavior changes; no migration is required.
+Stock HWI 3.2.0 aggregate discovery can still enter a vendor-owned unlock/login
+flow before Groot has a selected signer. Passive transport inventory remains a
+separate reviewed-helper proposal, not an unsafe shortcut in this patch.
+
 Sep 28 RBF follow-up retains obsolete proposal details after original confirmation
 and removes signing/PSBT/broadcast actions on both send routes. Snapshot checks
 also cover reopening. Existing native cancellation removes the saved proposal;

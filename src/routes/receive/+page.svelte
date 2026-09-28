@@ -26,7 +26,6 @@
   import HardwareVerificationStatus from '$lib/components/HardwareVerificationStatus.svelte';
   import HardwareReceiveVerification from '$lib/components/HardwareReceiveVerification.svelte';
   import PermanentLabelTags from '$lib/components/PermanentLabelTags.svelte';
-  import WarningNotice from '$lib/components/WarningNotice.svelte';
   import { compactAddress } from '$lib/address-display';
   import { goto } from '$app/navigation';
   import { walletService, WalletError } from '$lib/wallet';
@@ -549,23 +548,29 @@
     discardTarget = null;
   }}
 >
-  <WarningNotice body={translate($locale, 'Discarded addresses remain monitored.')} />
   {#if discardTarget}
-    <PermanentLabelTags
-      labels={discardTarget.labels?.length ? discardTarget.labels : [discardTarget.label]}
-      prominent
-    />
-    <p><code>{compactAddress(discardTarget.address)}</code></p>
-    <details class="verification-details">
-      <summary>{translate($locale, 'Show address details')}<ChevronDown size={16} /></summary>
+    <div class="address-detail-view discard-address-detail">
+      <div class="address-detail-status">
+        <PermanentLabelTags
+          labels={discardTarget.labels?.length ? discardTarget.labels : [discardTarget.label]}
+          prominent
+        />
+      </div>
       <ReadableAddress address={discardTarget.address} oncopy={copyDiscardAddress} />
-      <dl class="optional-details">
-        <div>
-          <dt>{translate($locale, 'Derivation')}</dt>
-          <dd><code>{discardTarget.derivationPath}</code></dd>
-        </div>
-      </dl>
-    </details>
+      <details class="verification-details">
+        <summary>{translate($locale, 'Show address details')}<ChevronDown size={16} /></summary>
+        <dl class="optional-details">
+          <div>
+            <dt>{translate($locale, 'Derivation path')}</dt>
+            <dd><code>{discardTarget.derivationPath}</code></dd>
+          </div>
+          <div>
+            <dt>{translate($locale, 'Address type')}</dt>
+            <dd>{translate($locale, 'Native SegWit')}</dd>
+          </div>
+        </dl>
+      </details>
+    </div>
   {/if}
   <div class="modal-footer">
     <Button

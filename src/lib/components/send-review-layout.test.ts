@@ -104,6 +104,19 @@ describe('send review layout', () => {
     expect(multisigSend).not.toContain('class:warning={proposalHasPrivacyWarning}');
   });
 
+  it('keeps manual coin selection compact and directly interactive', () => {
+    for (const route of [singleSend, multisigSend]) {
+      expect(route).not.toContain("translate($locale, 'Funding labels')");
+      expect(route).not.toContain("translate($locale, 'Input details')");
+      expect(route).not.toContain('estimatedInputWeight');
+    }
+    expect(appCss).toMatch(/\.send-coin-picker label\s*\{[^}]*cursor: pointer;/s);
+    expect(appCss).toMatch(
+      /\.send-coin-picker label:not\(\.frozen\):hover,[\s\S]*?background: var\(--surface-hover\);/
+    );
+    expect(appCss).toMatch(/\.selection-recommendation > button\s*\{[^}]*font-weight: 500;/s);
+  });
+
   it('uses the signer sidebar throughout ordinary send steps', () => {
     for (const route of [singleSend, multisigSend]) {
       expect(route).toContain('class="send-flow-layout"');

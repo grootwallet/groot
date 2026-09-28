@@ -562,21 +562,35 @@
     discardTarget = null;
   }}
   >{#if discardTarget}
-    <PermanentLabelTags
-      labels={discardTarget.labels?.length ? discardTarget.labels : [discardTarget.label]}
-      prominent
-    />
-    <p><code>{compactAddress(discardTarget.address)}</code></p>
-    <details class="verification-details">
-      <summary>{translate($locale, 'Show address details')}<ChevronDown size={16} /></summary>
+    <div class="address-detail-view discard-address-detail">
+      <div class="address-detail-status">
+        <PermanentLabelTags
+          labels={discardTarget.labels?.length ? discardTarget.labels : [discardTarget.label]}
+          prominent
+        />
+      </div>
       <ReadableAddress address={discardTarget.address} oncopy={copyDiscardAddress} />
-      <dl class="optional-details">
-        <div>
-          <dt>{translate($locale, 'Derivation')}</dt>
-          <dd><code>{discardTarget.derivationPath}</code></dd>
-        </div>
-      </dl>
-    </details>
+      <details class="verification-details">
+        <summary>{translate($locale, 'Show address details')}<ChevronDown size={16} /></summary>
+        <dl class="optional-details">
+          <div>
+            <dt>{translate($locale, 'Derivation path')}</dt>
+            <dd><code>{discardTarget.derivationPath}</code></dd>
+          </div>
+          <div>
+            <dt>{translate($locale, 'Address type')}</dt>
+            <dd>
+              {translate(
+                $locale,
+                wallet?.recoveryTemplate
+                  ? 'Descriptor · Miniscript'
+                  : 'Native SegWit · standard multisig'
+              )}
+            </dd>
+          </div>
+        </dl>
+      </details>
+    </div>
   {/if}
   <div class="modal-footer">
     <Button
@@ -608,6 +622,8 @@
 <AddressDetailsModal
   address={detailAddress}
   open={Boolean(detailAddress)}
-  walletType="Descriptor · Native SegWit"
+  walletType={wallet?.recoveryTemplate
+    ? 'Descriptor · Miniscript'
+    : 'Native SegWit · standard multisig'}
   onclose={() => (detailAddress = null)}
 />

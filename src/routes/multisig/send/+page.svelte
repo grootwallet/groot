@@ -38,7 +38,6 @@
   import ColdcardPolicySetup from '$lib/components/ColdcardPolicySetup.svelte';
   import WarningNotice from '$lib/components/WarningNotice.svelte';
   import { copyText } from '$lib/clipboard';
-  import { shortSats } from '$lib/data';
   import { toast } from '$lib/stores/toasts';
   import { coldcardPolicyFilename, psbtFilename, readTransferFile } from '$lib/transfer';
   import {
@@ -1157,7 +1156,6 @@
     pinError = '';
     pinErrorCode = '';
     let positions = pinPositions;
-    const unlockedDevice = pinDevice;
     pinPositions = '';
     try {
       await walletService.sendHardwarePin(pinChallenge, positions);
@@ -1166,18 +1164,11 @@
       pinDevice = null;
       toast({
         title: 'Hardware signer unlocked',
-        description: 'Continuing with this signer now.',
+        description: 'Device status refreshed. Select this signer to continue.',
         tone: 'success'
       });
-      if (unlockedDevice) {
-        deviceOpen = true;
-        await handleHardware({
-          ...unlockedDevice,
-          status: 'detected',
-          action: 'import',
-          message: 'Unlocked and ready.'
-        });
-      } else await scan();
+      deviceOpen = true;
+      await scan();
     } catch (cause) {
       if (await redirectExpiredHardwareSession(cause)) return;
       pinChallenge = '';
@@ -2368,9 +2359,7 @@
                 >{#if $discreetMode}<span
                     >{translate($locale, 'Funding provenance hidden in discreet mode.')}</span
                   >{:else}<div class="selection-labels">
-                    <span>{translate($locale, 'Funding labels')}</span><PermanentLabelTags
-                      labels={selectionPreview.fundingLabels}
-                    />
+                    <PermanentLabelTags labels={selectionPreview.fundingLabels} />
                   </div>
                   <span
                     >{translate(
@@ -2395,12 +2384,7 @@
                         }}>{translate($locale, 'Use privacy-first selection')}</button
                       >
                     </div>{/if}
-                  <details class="selection-technical">
-                    <summary>{translate($locale, 'Input details')}</summary><span
-                      >{translate($locale, 'Estimated input weight:')}
-                      {shortSats(selectionPreview.estimatedInputWeight)} WU</span
-                    >
-                  </details>{/if}
+                {/if}
               </div>{/if}
             {#if selectedReadyCoins.length}<div class="selection-review renewal-review">
                 <strong

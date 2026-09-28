@@ -38,7 +38,6 @@
   import WarningNotice from '$lib/components/WarningNotice.svelte';
   import { psbtFilename, readTransferFile } from '$lib/transfer';
   import { copyText } from '$lib/clipboard';
-  import { shortSats } from '$lib/data';
   import { toast } from '$lib/stores/toasts';
   import {
     feeRate as asFeeRate,
@@ -838,9 +837,7 @@
     broadcasting = true;
     deviceError = '';
     try {
-      const discovered = externalWallet
-        ? [await walletService.findSavedHardwareDevice(externalWallet.signer)]
-        : await walletService.listHardwareDevices();
+      const discovered = await walletService.listHardwareDevices();
       if (generation !== hardwareScanGeneration || !deviceOpen) return;
       devices = discovered;
     } catch (cause) {
@@ -1585,9 +1582,7 @@
                   >{#if $discreetMode}<span
                       >{translate($locale, 'Funding provenance hidden in discreet mode.')}</span
                     >{:else}<div class="selection-labels">
-                      <span>{translate($locale, 'Funding labels')}</span><PermanentLabelTags
-                        labels={selectionPreview.fundingLabels}
-                      />
+                      <PermanentLabelTags labels={selectionPreview.fundingLabels} />
                     </div>
                     <span
                       >{translate(
@@ -1612,12 +1607,7 @@
                           }}>{translate($locale, 'Use privacy-first selection')}</button
                         >
                       </div>{/if}
-                    <details class="selection-technical">
-                      <summary>{translate($locale, 'Input details')}</summary><span
-                        >{translate($locale, 'Estimated input weight:')}
-                        {shortSats(selectionPreview.estimatedInputWeight)} WU</span
-                      >
-                    </details>{/if}
+                  {/if}
                 </div>{/if}
             </div>
             <FeeSelector
@@ -2165,6 +2155,7 @@
     />{:else}<HardwareDeviceList
       {devices}
       savedSigners={externalWallet ? [externalWallet.signer] : []}
+      detailedStatus={Boolean(externalWallet)}
       emptyMessage={translate(
         $locale,
         'Connect the signer and scan again. If another wallet app is open, quit it so Groot can use USB.'

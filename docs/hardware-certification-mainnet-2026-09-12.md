@@ -460,6 +460,45 @@ The RBF screen failed to announce an original confirming during review. The new
 event-driven UI correction needs packaged physical retesting. No identifiers or
 payment amounts are retained here, and no replacement confirmation is inferred.
 
+### Sep 28 owner follow-up through 7ef05897
+
+The owner reports the following Mainnet outcomes across the recent v0.4.95
+candidate sequence. The latest screenshots identify `7ef05897`; the exact commit
+was not re-reported for every action, and no firmware versions or sensitive
+identifiers are retained.
+
+- The previously missing unlocked Ledger Nano S Plus now appeared as **Not part
+  of this wallet** during Multi C discovery. Nova's simplified signer copy was
+  also accepted.
+- Original BitBox02 and Nova policy/address retests, including cancel, reject,
+  unplug and replug handling, were reported successful. Evidence remains
+  model-specific.
+- RBF restart/resume and explicit obsolete-proposal discard were reported
+  successful after the original transaction confirmed.
+- Multi C signed and broadcast a payment with Nova. Multi B observed the receive,
+  and the owner reports that transaction state and accounting persisted through
+  restart. This closes only the Nova half of that exact payment; no second signer
+  identity, final confirmation, or clean recovery is inferred from the report.
+- A Ledger Nano S Plus single-key wallet signed and broadcast a sweep. This is a
+  positive BIP84 sweep-sign/broadcast observation; post-broadcast confirmation and
+  restart persistence for that sweep were not separately reported.
+- Model One accepted Groot's blind PIN matrix and Groot showed an unlock toast,
+  but the signing picker retained the stale **Locked** row and prevented signing.
+  Fresh post-PIN discovery is a source candidate that requires packaged physical
+  repetition; no Model One signing pass is recorded.
+- Multi C discovery still caused an unselected Jade unlock interaction instead of
+  immediately returning a locked row. HWI 3.2.0 owns aggregate vendor discovery;
+  the reviewed passive-inventory/helper work in the HWI investigation remains
+  open. Do not claim this is fixed by renderer copy or timing changes.
+- The single-key picker showed only the saved Ledger and omitted state/unrelated
+  rows. The replacement source uses the complete shared discovery list with the
+  existing native identity checks; physical repetition remains required.
+
+The discard-address and manual-selection changes are presentation-only and do
+not add hardware evidence. Repeat the Model One post-PIN scan/sign path, Jade
+locked discovery, and single-key mixed-device list on the next exact package
+before closing those rows.
+
 ### Original setup report
 
 Owner-reported Mainnet results, not an independently witnessed hardware run.

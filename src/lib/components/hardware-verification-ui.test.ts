@@ -190,8 +190,8 @@ describe('hardware receive verification UI', () => {
     expect(receivePin).not.toContain('listHardwareDevices');
     expect(multisigImportPin).toContain('await importHardware(unlockedDevice, false, true)');
     expect(multisigImportPin).not.toContain('listHardwareDevices');
-    expect(multisigSendPin).toContain('await handleHardware({');
-    expect(multisigSendPin).not.toContain('listHardwareDevices');
+    expect(multisigSendPin).toContain('await scan()');
+    expect(multisigSendPin).not.toContain('await handleHardware({');
     expect(multisigHealthPin).toContain('await runHealthCheck(unlockedDevice)');
     expect(multisigHealthPin).not.toContain('findSavedHardwareDevice');
     expect(multisigDraftHealthPin).toContain('await runDraftHealthCheck(unlockedDevice)');
@@ -226,13 +226,15 @@ describe('hardware receive verification UI', () => {
     expect(verificationStatus).toContain('explanation: translate($locale, explanation)');
   });
 
-  it('targets the saved signer for single-key hardware signing', () => {
+  it('shows all discovered signers while binding single-key signing to the saved identity', () => {
     const scan = singleKeySend.slice(
       singleKeySend.indexOf('async function scanHardware()'),
       singleKeySend.indexOf('async function signHardware')
     );
-    expect(scan).toContain('findSavedHardwareDevice(externalWallet.signer)');
+    expect(scan).toContain('walletService.listHardwareDevices()');
+    expect(scan).not.toContain('findSavedHardwareDevice(externalWallet.signer)');
     expect(scan).toContain('hardwareScanGeneration');
+    expect(singleKeySend).toContain('detailedStatus={Boolean(externalWallet)}');
   });
 
   it('bounds, coordinates, and cancels native HWI work', () => {

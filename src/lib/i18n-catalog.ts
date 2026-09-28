@@ -210,6 +210,10 @@ export const copyCatalog = {
     fr: 'Poursuite avec ce signataire.',
     es: 'Continuando ahora con este firmante.'
   },
+  'Device status refreshed. Select this signer to continue.': {
+    fr: 'État de l’appareil actualisé. Sélectionnez ce signataire pour continuer.',
+    es: 'Estado del dispositivo actualizado. Selecciona este firmante para continuar.'
+  },
   'Health check needs attention': {
     fr: 'Le contrôle d’état requiert votre attention',
     es: 'La comprobación de estado requiere atención'

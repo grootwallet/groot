@@ -9861,6 +9861,15 @@ code {
 .address-detail-view .readable-address-block {
   width: 100%;
 }
+.discard-address-detail {
+  gap: 18px;
+}
+.discard-address-detail .verification-details {
+  margin-top: 0;
+}
+.discard-address-detail .optional-details {
+  margin-top: 12px;
+}
 .address-detail-view dl {
   margin: 0;
   padding: 0 12px;
@@ -9964,7 +9973,6 @@ code {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 6px;
-  border-bottom: 1px solid var(--border);
 }
 .automatic-strategies legend {
   font-size: var(--font-size-meta);
@@ -9997,7 +10005,13 @@ code {
   gap: 9px;
   align-items: center;
   padding: 10px 2px;
-  border-bottom: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 140ms ease;
+}
+.send-coin-picker label:not(.frozen):hover,
+.send-coin-picker label:not(.frozen):focus-within {
+  background: var(--surface-hover);
 }
 .send-coin-picker label > span {
   display: flex;
@@ -10023,13 +10037,14 @@ code {
 }
 .send-coin-picker label.frozen {
   opacity: 0.45;
+  cursor: not-allowed;
 }
 .send-coin-picker > button {
   border: 0;
   background: transparent;
   color: var(--link);
   font-size: var(--font-size-meta);
-  padding: 12px 2px 2px;
+  padding: 10px 2px 2px;
   cursor: pointer;
 }
 .selection-review {
@@ -10060,11 +10075,8 @@ code {
   gap: 7px;
   flex-wrap: wrap;
 }
-.selection-labels > span {
-  flex: 0 0 auto;
-}
 .selection-labels .permanent-label-tags {
-  flex: 1 1 180px;
+  flex: 1 1 100%;
 }
 .selection-recommendation {
   margin-top: 7px;
@@ -10089,7 +10101,7 @@ code {
   color: var(--text);
   background: var(--surface-control);
   font-size: var(--font-size-meta);
-  font-weight: 700;
+  font-weight: 500;
   cursor: pointer;
 }
 .selection-recommendation > button:hover,
