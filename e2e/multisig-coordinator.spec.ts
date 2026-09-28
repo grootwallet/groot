@@ -377,6 +377,67 @@ test('confirmed original stops fee acceleration on both wallet routes', async ({
   }
 });
 
+test('confirmed RBF proposal keeps its review until explicitly discarded', async ({ page }) => {
+  for (const route of ['/send', '/multisig/send']) {
+    await page.goto(
+      `${route}?accelerate=rbf&fixture-acceleration-confirmed=1&fixture-confirm-after-review=1${route.includes('multisig') ? '&fixture-selected-multisig=1' : ''}&txid=6a1b2c3d4e5f67890123456789abcdef6a1b2c3d4e5f67890123456789abcdef`
+    );
+    await page.getByRole('button', { name: 'Continue to sign', exact: true }).click();
+    if (route.includes('multisig')) {
+      await page.getByRole('button', { name: 'Import signed PSBT', exact: true }).click();
+    } else {
+      await page.getByRole('button', { name: 'Continue to sign', exact: true }).click();
+    }
+    await expect(
+      page
+        .getByText(
+          'The original transaction is confirmed. Discard this obsolete proposal; your confirmed payment is unchanged.'
+        )
+        .first()
+    ).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /^Sign & broadcast/ })).toHaveCount(0);
+    await expect(page.getByText('Network fee', { exact: true }).first()).toBeVisible();
+    await expect(
+      page.getByRole('button', {
+        name: /^(Continue to sign|Sign with device|Sign with cable|Finalize & broadcast|Import signed PSBT)$/
+      })
+    ).toHaveCount(0);
+    await page.getByRole('link', { name: 'Overview', exact: true }).click();
+    await page
+      .getByRole('link', { name: /Resume payment,/ })
+      .first()
+      .click();
+    await expect(page).toHaveURL(route.includes('multisig') ? /\/multisig\/send/ : /\/send/);
+    await expect(page.getByRole('button', { name: 'Discard proposal', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Continue to sign', exact: true })).toHaveCount(
+      0
+    );
+    for (const theme of ['light', 'dark']) {
+      await page.evaluate(
+        (value) => document.documentElement.setAttribute('data-theme', value),
+        theme
+      );
+      await page.screenshot({
+        path: `/private/tmp/groot-rbf-review-${route.includes('multisig') ? 'multi' : 'single'}-${page.viewportSize()?.width}-${theme}.png`,
+        fullPage: true,
+        animations: 'disabled'
+      });
+    }
+    await page.getByRole('button', { name: 'Discard proposal', exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: 'Discard proposal?' });
+    await expect(
+      dialog.getByText(
+        'Your confirmed payment is unchanged. Only this proposal and its signatures will be removed.'
+      )
+    ).toBeVisible();
+    await dialog.getByRole('button', { name: 'Discard proposal', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Overview', exact: true })).toBeVisible();
+    await expect(page.getByRole('link', { name: /Resume payment,/ })).toHaveCount(0);
+    await expect(page.getByRole('link', { name: /Resume payment draft/ })).toHaveCount(0);
+  }
+});
+
 test('multisig RBF explains a full-balance funding shortfall without a zero default', async ({
   page
 }) => {

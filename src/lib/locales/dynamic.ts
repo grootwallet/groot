@@ -4,6 +4,18 @@ import type { CatalogSection } from './types';
 // These keys are intentionally explicit so uncommon recovery/error paths cannot
 // silently fall back to English in a non-English session.
 export const dynamicCopy = {
+  'Proposal discarded': { fr: 'Proposition supprimée', es: 'Propuesta descartada' },
+  'Discard proposal': { fr: 'Supprimer la proposition', es: 'Descartar propuesta' },
+  'Discard proposal?': { fr: 'Supprimer la proposition ?', es: '¿Descartar propuesta?' },
+  'The original transaction is confirmed. Discard this obsolete proposal; your confirmed payment is unchanged.':
+    {
+      fr: 'La transaction initiale est confirmée. Supprimez cette proposition obsolète ; votre paiement confirmé reste inchangé.',
+      es: 'La transacción original está confirmada. Descarta esta propuesta obsoleta; tu pago confirmado no cambia.'
+    },
+  'Your confirmed payment is unchanged. Only this proposal and its signatures will be removed.': {
+    fr: 'Votre paiement confirmé reste inchangé. Seules cette proposition et ses signatures seront supprimées.',
+    es: 'Tu pago confirmado no cambia. Solo se eliminarán esta propuesta y sus firmas.'
+  },
   'Native SegWit · standard multisig': {
     fr: 'SegWit natif · multisig standard',
     es: 'SegWit nativo · multifirma estándar'

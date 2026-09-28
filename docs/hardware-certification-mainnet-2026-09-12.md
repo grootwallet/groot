@@ -2,6 +2,13 @@
 
 ## Sep 28 owner-reported focused retest
 
+Subsequent owner screenshots identify build ab92d31d and a Nano S Plus wallet:
+original confirmation was detected, but the RBF review disappeared while Overview
+retained a resumable proposal. This is a failed proposal-lifecycle UX observation,
+not a passed confirmation-race test. The follow-up candidate retains read-only
+details and explicit discard; repeat live-confirmation, resume and discard on the
+new package before closing this row. No additional device signature is inferred.
+
 Reported after the ab92d31d handoff; attached crops do not independently display
 the package commit. No new firmware versions were reported.
 

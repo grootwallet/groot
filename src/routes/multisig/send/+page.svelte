@@ -447,15 +447,34 @@
           event.snapshot.transactions
         )
       ) {
-        accelerationConfirmed = true;
+        markAccelerationConfirmed();
         toast({
           title: translate($locale, 'Transaction already confirmed'),
-          description: translate($locale, 'No fee increase is needed. You can return to Overview.'),
+          description: translate(
+            $locale,
+            proposal
+              ? 'The original transaction is confirmed. Discard this obsolete proposal; your confirmed payment is unchanged.'
+              : 'No fee increase is needed. You can return to Overview.'
+          ),
           tone: 'success'
         });
       }
     });
   });
+  function markAccelerationConfirmed() {
+    if (busy && (deviceOpen || pinOpen || policyReviewOpen)) {
+      void walletService.cancelHardwareOperations(true).catch((cause) => {
+        cancelError = localizedError(cause, $locale);
+      });
+    }
+    accelerationConfirmed = true;
+    pin = '';
+    importOpen = false;
+    qrScanOpen = false;
+    pinOpen = false;
+    deviceOpen = false;
+    hardwareCancelRequested = true;
+  }
   async function loadWallet() {
     walletLoading = true;
     walletLoadError = '';
@@ -558,6 +577,14 @@
         } else if (requestedProposalId) {
           error = translate($locale, 'This saved payment is no longer available.');
         }
+      }
+      if (
+        accelerationOriginalConfirmed(
+          proposal?.acceleration?.originalTxid ?? txid,
+          snapshot.transactions
+        )
+      ) {
+        markAccelerationConfirmed();
       }
       if (!proposal && !renewalMode && !delayedSpendMode && !accelerationRequest && draftWalletId) {
         const savedDraft = await walletService.paymentDraft();
@@ -983,6 +1010,7 @@
     }
   }
   async function scan() {
+    if (accelerationConfirmed) return;
     const generation = ++hardwareScanGeneration;
     deviceOpen = true;
     activeHardwareDevice = null;
@@ -1199,7 +1227,7 @@
       if (await redirectExpiredHardwareSession(cause)) return;
       closeHardwareReviewOverlays();
       policyReviewOpen = false;
-      deviceOpen = !hardwareCancelRequested;
+      deviceOpen = !hardwareCancelRequested && !accelerationConfirmed;
       deviceError = hardwareCancelRequested
         ? ''
         : localizedError(cause, $locale, 'Device signing failed.');
@@ -1286,6 +1314,7 @@
     }
   }
   async function importPsbt() {
+    if (accelerationConfirmed) return;
     if (!proposal || !imported.trim()) return;
     busy = true;
     importError = '';
@@ -1379,6 +1408,7 @@
     cancelError = '';
     try {
       await walletService.cancelMultisigProposal(proposal.proposalId);
+      suppressDraftSave = true;
       proposal = null;
       address = '';
       label = '';
@@ -1387,7 +1417,10 @@
       draftStep = 1;
       cancelOpen = false;
       toast({
-        title: 'Payment canceled',
+        title: translate(
+          $locale,
+          accelerationConfirmed ? 'Proposal discarded' : 'Payment canceled'
+        ),
         description: 'The unsigned transaction and any collected signatures were discarded.'
       });
       await goto('/');
@@ -1487,6 +1520,7 @@
     }
   }
   async function showPsbtQr() {
+    if (accelerationConfirmed) return;
     if (!proposal) return;
     busy = true;
     error = '';
@@ -1594,7 +1628,7 @@
       description={walletLoadError}
       onretry={loadWallet}
     />
-  {:else if accelerationConfirmed}
+  {:else if accelerationConfirmed && !proposal}
     <section class="form-card" role="status">
       <h2>{translate($locale, 'Transaction already confirmed')}</h2>
       <p>{translate($locale, 'No fee increase is needed. You can return to Overview.')}</p>
@@ -2537,7 +2571,16 @@
                     : `${wallet?.threshold} of ${wallet?.cosigners.length}`}
                 onChangeAddress={() => (changeAddressOpen = true)}
               />
-              {#if proposalInputsUnavailable(proposal)}<div
+              {#if accelerationConfirmed}<div class="hardware-inline-error" role="status">
+                  <AlertTriangle size={18} /><span
+                    ><strong>{translate($locale, 'Transaction already confirmed')}</strong><small
+                      >{translate(
+                        $locale,
+                        'The original transaction is confirmed. Discard this obsolete proposal; your confirmed payment is unchanged.'
+                      )}</small
+                    ></span
+                  >
+                </div>{:else if proposalInputsUnavailable(proposal)}<div
                   class="hardware-inline-error signing-transport-error"
                   role="alert"
                 >
@@ -2640,7 +2683,11 @@
                 onclick={() => {
                   cancelError = '';
                   cancelOpen = true;
-                }}><X size={15} />{translate($locale, 'Cancel payment')}</Button
+                }}
+                ><X size={15} />{translate(
+                  $locale,
+                  accelerationConfirmed ? 'Discard proposal' : 'Cancel payment'
+                )}</Button
               >
             </section>
             {#if wallet}<aside class="signer-side-panel">
@@ -2649,10 +2696,12 @@
                   required={proposal.required}
                   signedFingerprints={proposal.signedFingerprints}
                   collecting
-                  ondiscard={(signer) => {
-                    discardError = '';
-                    discardSigner = signer;
-                  }}
+                  ondiscard={accelerationConfirmed
+                    ? undefined
+                    : (signer) => {
+                        discardError = '';
+                        discardSigner = signer;
+                      }}
                 />
               </aside>{/if}
           </div>{/if}
@@ -2672,7 +2721,7 @@
 </div>
 
 <Modal
-  open={deviceOpen}
+  open={deviceOpen && !accelerationConfirmed}
   title={translate($locale, 'Sign with hardware')}
   description={translate($locale, 'Compare every value below with the device before approving.')}
   onclose={closeHardwareScan}
@@ -2878,7 +2927,7 @@
     </div>{/if}
 </Modal>
 <Modal
-  open={policyReviewOpen}
+  open={policyReviewOpen && !accelerationConfirmed}
   title={translate($locale, 'Review wallet policy')}
   onclose={closePolicyReview}
   attentionSignal={hardwareAttentionSignal}
@@ -2907,7 +2956,7 @@
     />{/if}
 </Modal>
 <Modal
-  open={coldcardSetupOpen}
+  open={coldcardSetupOpen && !accelerationConfirmed}
   title={translate($locale, 'Prepare Coldcard for this wallet')}
   description={translate(
     $locale,
@@ -2938,7 +2987,7 @@
     />{/if}
 </Modal>
 <TrezorPinModal
-  open={pinOpen}
+  open={pinOpen && !accelerationConfirmed}
   busy={pinBusy}
   challengeReady={Boolean(pinChallenge)}
   positions={pinPositions}
@@ -2963,7 +3012,7 @@
   }}
 />
 <Modal
-  open={importOpen}
+  open={importOpen && !accelerationConfirmed}
   title={translate($locale, 'Import signed PSBT')}
   description={translate($locale, 'Only signatures for this exact proposal are accepted.')}
   onclose={closePsbtImport}
@@ -2999,7 +3048,7 @@
   </div></Modal
 >
 <Modal
-  open={qrOpen}
+  open={qrOpen && !accelerationConfirmed}
   title={translate($locale, 'Unsigned PSBT')}
   description={translate($locale, 'Scan with an offline signer. No private data is encoded.')}
   onclose={() => (qrOpen = false)}
@@ -3035,7 +3084,7 @@
 </Modal>
 
 <Modal
-  open={qrScanOpen}
+  open={qrScanOpen && !accelerationConfirmed}
   title={translate($locale, 'Scan signed PSBT')}
   description={translate(
     $locale,
@@ -3078,7 +3127,7 @@
 >
 <Modal
   open={cancelOpen}
-  title={translate($locale, 'Cancel this payment?')}
+  title={translate($locale, accelerationConfirmed ? 'Discard proposal?' : 'Cancel this payment?')}
   description={translate($locale, 'Review what will be discarded before continuing.')}
   onclose={() => {
     if (!busy) {
@@ -3088,7 +3137,12 @@
   }}
   >{#if proposal}<WarningNotice
       title={translate($locale, 'This cannot be undone.')}
-      body={translate($locale, 'You will need to prepare and sign this payment again.')}
+      body={translate(
+        $locale,
+        accelerationConfirmed
+          ? 'Your confirmed payment is unchanged. Only this proposal and its signatures will be removed.'
+          : 'You will need to prepare and sign this payment again.'
+      )}
     />
     <dl class="details-list cancel-proposal-details">
       <div>
@@ -3112,17 +3166,18 @@
         onclick={() => {
           cancelOpen = false;
           cancelError = '';
-        }}>{translate($locale, 'Keep payment')}</Button
+        }}>{translate($locale, accelerationConfirmed ? 'Back' : 'Keep payment')}</Button
       ><Button
         variant="danger"
         loading={busy}
         loadingLabel={translate($locale, 'Canceling payment…')}
-        onclick={confirmCancel}>{translate($locale, 'Cancel payment')}</Button
+        onclick={confirmCancel}
+        >{translate($locale, accelerationConfirmed ? 'Discard proposal' : 'Cancel payment')}</Button
       >
     </div>{/if}</Modal
 >
 <Modal
-  open={Boolean(discardSigner)}
+  open={Boolean(discardSigner) && !accelerationConfirmed}
   title={translate($locale, 'Discard local signature?')}
   description={translate($locale, "Remove this signer from Groot's current proposal.")}
   onclose={() => {

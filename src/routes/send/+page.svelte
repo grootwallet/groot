@@ -314,15 +314,34 @@
           event.snapshot.transactions
         )
       ) {
-        accelerationConfirmed = true;
+        markAccelerationConfirmed();
         toast({
           title: translate($locale, 'Transaction already confirmed'),
-          description: translate($locale, 'No fee increase is needed. You can return to Overview.'),
+          description: translate(
+            $locale,
+            proposal
+              ? 'The original transaction is confirmed. Discard this obsolete proposal; your confirmed payment is unchanged.'
+              : 'No fee increase is needed. You can return to Overview.'
+          ),
           tone: 'success'
         });
       }
     });
   });
+  function markAccelerationConfirmed() {
+    if (deviceOpen && broadcasting) {
+      void walletService.cancelHardwareOperations(true).catch((cause) => {
+        cancelError = localizedError(cause, $locale);
+      });
+    }
+    accelerationConfirmed = true;
+    if (proposal) step = 2;
+    passphrase = '';
+    importOpen = false;
+    qrScanOpen = false;
+    deviceOpen = false;
+    hardwareCancelRequested = true;
+  }
   async function loadWallet() {
     const generation = ++walletLoadGeneration;
     let dataLoaded = false;
@@ -432,6 +451,14 @@
           amount = String(activeProposal.amount);
           step = 2;
         }
+      }
+      if (
+        accelerationOriginalConfirmed(
+          accelerationRequest?.txid ?? proposal?.acceleration?.originalTxid,
+          snapshot.transactions
+        )
+      ) {
+        markAccelerationConfirmed();
       }
       if (!proposal && !accelerationRequest && draftWalletId) {
         if (generation !== walletLoadGeneration) return;
@@ -802,6 +829,7 @@
     }
   }
   async function scanHardware() {
+    if (accelerationConfirmed) return;
     if (!(await hardwareSessionIsUnlocked())) return;
     const generation = ++hardwareScanGeneration;
     clearSigningTransportError();
@@ -852,7 +880,7 @@
       toast({ title: 'Hardware signature added', tone: 'success' });
     } catch (cause) {
       if (await redirectExpiredHardwareSession(cause)) return;
-      deviceOpen = !hardwareCancelRequested;
+      deviceOpen = !hardwareCancelRequested && !accelerationConfirmed;
       deviceError = hardwareCancelRequested
         ? ''
         : localizedError(cause, $locale, 'Hardware signing failed.');
@@ -863,6 +891,7 @@
     }
   }
   async function importSigned() {
+    if (accelerationConfirmed) return;
     if (!proposal || !externalProposal || !imported.trim()) return;
     broadcasting = true;
     credentialError = '';
@@ -900,6 +929,7 @@
     }
   }
   async function showPsbtQr() {
+    if (accelerationConfirmed) return;
     if (!externalProposal) return;
     clearSigningTransportError();
     broadcasting = true;
@@ -960,6 +990,7 @@
     try {
       if (externalSigner) await walletService.cancelExternalSignerProposal(proposal.proposalId);
       else await walletService.cancelPaymentProposal(proposal.proposalId);
+      suppressDraftSave = true;
       proposal = null;
       externalProposal = null;
       address = '';
@@ -970,7 +1001,10 @@
       draftStep = 1;
       cancelOpen = false;
       toast({
-        title: 'Payment canceled',
+        title: translate(
+          $locale,
+          accelerationConfirmed ? 'Proposal discarded' : 'Payment canceled'
+        ),
         description: 'The transaction and any collected signatures were discarded.'
       });
       await goto('/');
@@ -1116,7 +1150,7 @@
       description={walletLoadError}
       onretry={loadWallet}
     />
-  {:else if accelerationConfirmed}
+  {:else if accelerationConfirmed && !proposal}
     <section class="form-card" role="status">
       <h2>{translate($locale, 'Transaction already confirmed')}</h2>
       <p>{translate($locale, 'No fee increase is needed. You can return to Overview.')}</p>
@@ -1605,7 +1639,7 @@
               >
             </div>
           </form>
-        {:else if step === 2 && proposal}
+        {:else if (step === 2 || accelerationConfirmed) && proposal}
           <section class="form-card">
             <div class="review-amount">
               <span>{translate($locale, 'You send')}</span><Amount
@@ -1664,6 +1698,18 @@
               interactiveAmounts
               onChangeAddress={() => (changeAddressOpen = true)}
             />
+            {#if accelerationConfirmed}
+              <div class="hardware-inline-error" role="status">
+                <AlertTriangle size={18} /><span
+                  ><strong>{translate($locale, 'Transaction already confirmed')}</strong><small
+                    >{translate(
+                      $locale,
+                      'The original transaction is confirmed. Discard this obsolete proposal; your confirmed payment is unchanged.'
+                    )}</small
+                  ></span
+                >
+              </div>
+            {/if}
             <div class="split-actions">
               <Button
                 variant="danger-outline"
@@ -1671,10 +1717,14 @@
                 onclick={() => {
                   cancelError = '';
                   cancelOpen = true;
-                }}>{translate($locale, 'Cancel payment')}</Button
-              ><Button size="large" onclick={() => (step = 3)}
-                >{translate($locale, 'Continue to sign')}<ArrowRight size={17} /></Button
-              >
+                }}
+                >{translate(
+                  $locale,
+                  accelerationConfirmed ? 'Discard proposal' : 'Cancel payment'
+                )}</Button
+              >{#if !accelerationConfirmed}<Button size="large" onclick={() => (step = 3)}
+                  >{translate($locale, 'Continue to sign')}<ArrowRight size={17} /></Button
+                >{/if}
             </div>
           </section>
         {:else if step === 3 && proposal && externalSigner}
@@ -2008,7 +2058,7 @@
             signedFingerprints={externalProposal?.signedFingerprints ?? []}
             collecting={externalSigner && Boolean(proposal)}
             loading={!signerSummaryReady && !walletLoadError}
-            ondiscard={externalSigner
+            ondiscard={externalSigner && !accelerationConfirmed
               ? () => {
                   discardSignatureError = '';
                   discardSignatureOpen = true;
@@ -2021,7 +2071,7 @@
 </div>
 
 <Modal
-  open={deviceOpen}
+  open={deviceOpen && !accelerationConfirmed}
   title={translate($locale, 'Sign with hardware')}
   description={translate(
     $locale,
@@ -2132,7 +2182,7 @@
     </div>{/if}</Modal
 >
 <Modal
-  open={importOpen}
+  open={importOpen && !accelerationConfirmed}
   title={translate($locale, 'Import signed PSBT')}
   description={translate(
     $locale,
@@ -2173,7 +2223,7 @@
   </div></Modal
 >
 <Modal
-  open={qrOpen}
+  open={qrOpen && !accelerationConfirmed}
   title={translate($locale, 'Unsigned PSBT')}
   description={translate($locale, 'Scan with an offline signer. No private key data is encoded.')}
   onclose={() => (qrOpen = false)}
@@ -2209,7 +2259,7 @@
 </Modal>
 
 <Modal
-  open={qrScanOpen}
+  open={qrScanOpen && !accelerationConfirmed}
   title={translate($locale, 'Scan signed PSBT')}
   description={translate(
     $locale,
@@ -2251,7 +2301,7 @@
   </div></Modal
 >
 <Modal
-  open={discardSignatureOpen}
+  open={discardSignatureOpen && !accelerationConfirmed}
   title={translate($locale, 'Discard local signature?')}
   description={translate(
     $locale,
@@ -2303,7 +2353,7 @@
 >
 <Modal
   open={cancelOpen}
-  title={translate($locale, 'Cancel this payment?')}
+  title={translate($locale, accelerationConfirmed ? 'Discard proposal?' : 'Cancel this payment?')}
   description={translate($locale, 'Review what will be discarded before continuing.')}
   onclose={() => {
     if (!broadcasting) {
@@ -2313,7 +2363,12 @@
   }}
   >{#if proposal}<WarningNotice
       title={translate($locale, 'This cannot be undone.')}
-      body={translate($locale, 'You will need to prepare and sign this payment again.')}
+      body={translate(
+        $locale,
+        accelerationConfirmed
+          ? 'Your confirmed payment is unchanged. Only this proposal and its signatures will be removed.'
+          : 'You will need to prepare and sign this payment again.'
+      )}
     />
     <dl class="details-list cancel-proposal-details">
       <div>
@@ -2342,12 +2397,13 @@
         onclick={() => {
           cancelOpen = false;
           cancelError = '';
-        }}>{translate($locale, 'Keep payment')}</Button
+        }}>{translate($locale, accelerationConfirmed ? 'Back' : 'Keep payment')}</Button
       ><Button
         variant="danger"
         loading={broadcasting}
         loadingLabel={translate($locale, 'Canceling payment…')}
-        onclick={confirmCancelProposal}>{translate($locale, 'Cancel payment')}</Button
+        onclick={confirmCancelProposal}
+        >{translate($locale, accelerationConfirmed ? 'Discard proposal' : 'Cancel payment')}</Button
       >
     </div>{/if}</Modal
 >

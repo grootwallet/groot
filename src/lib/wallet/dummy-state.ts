@@ -176,7 +176,9 @@ export abstract class DummyWalletState {
       ]
     : [];
   protected _selectedWalletId: string | null =
-    fixtureDelayedPolicy !== null
+    fixtureDelayedPolicy !== null ||
+    (typeof location !== 'undefined' &&
+      new URLSearchParams(location.search).has('fixture-selected-multisig'))
       ? (this._multisigProfileId ?? this._profiles[0]?.id ?? null)
       : (this._profiles[0]?.id ?? null);
   protected _labelSuggestionsByWallet = new Map<string, LabelSuggestion[]>([
@@ -231,8 +233,8 @@ export abstract class DummyWalletState {
           (new URLSearchParams(location.search).has('fixture-delayed-wallet-switch') ||
             fixtureDelayedPolicy !== null)
         ? this._profiles.map((profile) => profile.id)
-        : this._profiles[0]
-          ? [this._profiles[0].id]
+        : this._selectedWalletId
+          ? [this._selectedWalletId]
           : []
   );
   protected _coins = fixtureCoins().map((coin, index) => ({

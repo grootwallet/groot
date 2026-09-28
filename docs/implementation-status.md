@@ -1,5 +1,12 @@
 # Implementation status
 
+Sep 28 RBF follow-up retains obsolete proposal details after original confirmation
+and removes signing/PSBT/broadcast actions on both send routes. Snapshot checks
+also cover reopening. Existing native cancellation removes the saved proposal;
+draft autosave is suppressed after successful cancellation. Desktop/mobile browser
+fixtures cover live confirmation, resume and explicit discard; physical packaged
+retesting remains required. No persisted format or native transaction rule changed.
+
 Sep 28 receive follow-up removes technical candidate copy, reads saved multisig
 policy evidence for the concise unverified hint, and retains every discovered
 family (the former family filter hid an unrelated Ledger). Single-key and multisig

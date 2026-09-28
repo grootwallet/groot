@@ -1,5 +1,9 @@
 # Bitcoin Improvement Proposal support
 
+Sep 28 expired-acceleration review/discard is a presentation/lifecycle correction
+with no BIP support or persisted-format change. Native replacement and stale-input
+validation remain authoritative; browser coverage is not physical signing evidence.
+
 Sep 28 receive-picker/discard presentation has no BIP or persisted-format impact.
 Owner-reported original BitBox02/Nova policy, address, rejection and reconnect
 retests and Model One address success add scoped hardware observations only;

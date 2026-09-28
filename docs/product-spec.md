@@ -1,5 +1,12 @@
 # Groot product specification
 
+When an acceleration's original transaction confirms, a saved proposal remains
+visible for review but cannot be signed, exported for signing, or broadcast.
+The sole proposal action is explicit discard through native cancellation; the
+confirmed payment is untouched. Reopening must preserve this read-only state,
+and discarding must not regenerate a payment draft. Without a saved proposal,
+the confirmed-original notice may simply offer an Overview exit.
+
 Status: canonical for the current prototype and first live integration build.
 
 ## Product

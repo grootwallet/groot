@@ -2572,20 +2572,28 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     this._listeners.add(listener);
     const params = typeof location === 'undefined' ? null : new URLSearchParams(location.search);
     const timer = params?.has('fixture-acceleration-confirmed')
-      ? setTimeout(async () => {
-          const snapshot = await this.snapshot();
-          const txid = params.get('txid');
-          const transaction = snapshot.transactions.find((transaction) => transaction.id === txid);
-          if (!transaction || !this._selectedWalletId) return;
-          transaction.status = 'confirmed';
-          transaction.confirmations = 1;
-          listener({
-            type: 'wallet_updated',
-            walletId: this._selectedWalletId,
-            walletKind: location.pathname.startsWith('/multisig') ? 'multisig' : 'single_key',
-            snapshot
-          });
-        }, 1500)
+      ? setTimeout(
+          async () => {
+            const snapshot = await this.snapshot();
+            const txid = params.get('txid');
+            const transaction = snapshot.transactions.find(
+              (transaction) => transaction.id === txid
+            );
+            if (!transaction || !this._selectedWalletId) return;
+            transaction.status = 'confirmed';
+            transaction.confirmations = 1;
+            this._transactions = this._transactions.map((item) =>
+              item.id === txid ? { ...item, status: 'confirmed', confirmations: 1 } : item
+            );
+            listener({
+              type: 'wallet_updated',
+              walletId: this._selectedWalletId,
+              walletKind: location.pathname.startsWith('/multisig') ? 'multisig' : 'single_key',
+              snapshot
+            });
+          },
+          params.has('fixture-confirm-after-review') ? 5000 : 1500
+        )
       : null;
     return () => {
       if (timer) clearTimeout(timer);

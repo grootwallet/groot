@@ -2,9 +2,12 @@
 
 Receive PIN unlock now returns to a refreshed device picker for explicit address
 verification; it does not immediately reuse the pre-unlock capability. During RBF
-or CPFP review, a wallet-scoped update confirming the original replaces the send
-form with **Transaction already confirmed** and an Overview exit. It never
-auto-broadcasts or deletes a proposal. Native stale-input validation remains authoritative.
+or CPFP review, a wallet-scoped update confirming the original leaves any saved
+proposal's transaction details visible, removes signing/broadcast/PSBT actions,
+and offers **Discard proposal**. Reopening checks the loaded snapshot too. Discard
+uses the existing native cancellation operation and must not recreate a payment
+draft on navigation. Before a proposal exists, an Overview exit remains available.
+It never auto-broadcasts or deletes a proposal. Native stale-input validation remains authoritative.
 
 In existing-wallet hardware selection, scan results retain known non-wallet
 devices as disabled rows labelled **Not part of this wallet**. Unidentified
