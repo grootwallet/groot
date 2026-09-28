@@ -14,6 +14,10 @@ const multisigSend = readFileSync(
   new URL('../../routes/multisig/send/+page.svelte', import.meta.url),
   'utf8'
 );
+const multisigSetup = readFileSync(
+  new URL('../../routes/multisig/new/+page.svelte', import.meta.url),
+  'utf8'
+);
 
 describe('hardware signing review usability', () => {
   it('lets every hardware-review amount toggle the global sats/BTC denomination', () => {
@@ -38,6 +42,12 @@ describe('hardware signing review usability', () => {
     expect(policy).not.toContain("'Compare every signer key and the first address on Ledger.'");
     expect(policy).toContain("'Signer keys to compare'");
     expect(policy).toContain("'First address reference'");
+    expect(policy).toContain('showAddressReference = true');
+    expect(multisigSend).toContain(
+      "showAddressReference={policyRegistrationProfile(signer).kind !== 'ledger'}"
+    );
+    expect(multisigSetup).toContain('<SignerPolicyReview');
+    expect(multisigSetup).not.toContain('showAddressReference=');
     expect(policy).not.toContain(
       "Groot's current Ledger connection must authorize this policy again for each signing"
     );
@@ -75,6 +85,24 @@ describe('hardware signing review usability', () => {
     expect(appCss).toMatch(/\.hardware-review-details\s*\{[^}]*border-top:\s*0;/s);
   });
 
+  it('uses the main review hierarchy and separators in compact hardware review', () => {
+    for (const source of [singleSend, multisigSend]) {
+      const start = source.indexOf('class="hardware-review"');
+      const end = source.indexOf('<TransactionReviewDetails', start);
+      const review = source.slice(start, end);
+      expect(review).toContain('class="hardware-review-amount"');
+      expect(review).toContain('class="details-list hardware-review-primary"');
+      expect(review.indexOf("'To'")).toBeLessThan(review.indexOf("'Label'"));
+      expect(review.indexOf("'Label'")).toBeLessThan(review.indexOf("'Network'"));
+      expect(review.indexOf("'Network'")).toBeLessThan(review.indexOf("'Network fee'"));
+      expect(review.indexOf("'Network fee'")).toBeLessThan(review.indexOf("'Total'"));
+    }
+    expect(details).toContain('<dl class="details-list">');
+    expect(appCss).toMatch(
+      /\.hardware-review \.details-list > div\s*\{[^}]*min-height: 43px;[^}]*gap: 18px;/s
+    );
+  });
+
   it('marks wallet-owned recipients and shows their Rust-derived receive paths', () => {
     expect(details).toContain('proposal.recipientIsWalletOwned');
     expect(details).toContain("'Self-transfer'");
@@ -86,7 +114,9 @@ describe('hardware signing review usability', () => {
     expect(details).toContain('proposal.recipientDerivationPaths');
     expect(details).toContain("'Receive path'");
     for (const source of [singleSend, multisigSend]) {
-      expect(source).toContain("proposal.recipientIsWalletOwned ? 'Self-transfer recipient'");
+      const start = source.indexOf('class="hardware-review"');
+      const end = source.indexOf('<TransactionReviewDetails', start);
+      expect(source.slice(start, end)).toContain("translate($locale, 'To')");
     }
   });
 

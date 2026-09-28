@@ -92,7 +92,7 @@
         >{translate($locale, 'Some coins come from a reused address.')}</span
       >{/if}
   </WarningNotice>
-  <dl class:details-list={!compact}>
+  <dl class="details-list">
     {#if proposal.acceleration?.method === 'rbf'}
       <div>
         <dt>{translate($locale, 'Original fee rate')}</dt>

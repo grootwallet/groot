@@ -2077,14 +2077,12 @@
       aria-label={translate($locale, 'Authoritative transaction details')}
     >
       <strong>{translate($locale, 'Transaction to verify')}</strong>
-      <dl class="hardware-review-primary">
+      <div class="hardware-review-amount">
+        <span>{translate($locale, 'You send')}</span><Amount value={proposal.amount} interactive />
+      </div>
+      <dl class="details-list hardware-review-primary">
         <div>
-          <dt>
-            {translate(
-              $locale,
-              proposal.recipientIsWalletOwned ? 'Self-transfer recipient' : 'Recipient'
-            )}
-          </dt>
+          <dt>{translate($locale, 'To')}</dt>
           <dd>
             <button
               type="button"
@@ -2094,13 +2092,9 @@
             >
           </dd>
         </div>
-        <div>
+        <div class="label-details-row">
           <dt>{translate($locale, 'Label')}</dt>
           <dd><PermanentLabelTags labels={proposal.labels ?? [proposal.label]} prominent /></dd>
-        </div>
-        <div>
-          <dt>{translate($locale, 'Amount')}</dt>
-          <dd><Amount value={proposal.amount} interactive /></dd>
         </div>
         <div>
           <dt>{translate($locale, 'Network')}</dt>
@@ -2110,7 +2104,7 @@
           <dt>{translate($locale, 'Network fee')}</dt>
           <dd><Amount value={proposal.fee} interactive /></dd>
         </div>
-        <div>
+        <div class="total">
           <dt>{translate($locale, 'Total')}</dt>
           <dd><Amount value={proposal.total} interactive /></dd>
         </div>

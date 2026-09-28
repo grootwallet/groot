@@ -22,8 +22,9 @@ describe('send review layout', () => {
       /\.details-list > \.transaction-review-path-row\s*\{[^}]*padding-block: 12px/s
     );
     expect(appCss).toMatch(
-      /\.hardware-review-details > dl > \.transaction-review-path-row\s*\{[^}]*padding-block: 12px;[^}]*border-bottom:/s
+      /\.hardware-review-details > dl > \.transaction-review-path-row\s*\{[^}]*padding-block: 12px;/s
     );
+    expect(reviewDetails).toContain('<dl class="details-list">');
     expect(appCss).toMatch(/\.transaction-review-input-total\s*\{[^}]*align-items: baseline;/s);
     expect(appCss).toMatch(/\.derivation-paths code\s*\{[^}]*font-size: 1em;/s);
   });
@@ -115,6 +116,9 @@ describe('send review layout', () => {
       /\.send-coin-picker label:not\(\.frozen\):hover,[\s\S]*?background: var\(--surface-hover\);/
     );
     expect(appCss).toMatch(/\.selection-recommendation > button\s*\{[^}]*font-weight: 500;/s);
+    expect(appCss).toMatch(
+      /\.automatic-strategies button\.active\s*\{[^}]*border-color: var\(--link\);[^}]*box-shadow: inset 0 0 0 1px var\(--link\);/s
+    );
   });
 
   it('uses the signer sidebar throughout ordinary send steps', () => {

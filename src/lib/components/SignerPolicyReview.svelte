@@ -29,6 +29,7 @@
     busy = false,
     error = '',
     action = 'verify',
+    showAddressReference = true,
     onverify,
     oncontinue,
     onshowtransaction,
@@ -41,6 +42,7 @@
     busy?: boolean;
     error?: string;
     action?: 'verify' | 'sign';
+    showAddressReference?: boolean;
     onverify?: () => void;
     oncontinue?: () => void;
     onshowtransaction?: () => void;
@@ -164,45 +166,48 @@
     <PolicySignerList signers={wallet.cosigners} currentFingerprint={signer.fingerprint} />
   </details>
 
-  <section class="policy-address-check" aria-label={translate($locale, 'First address to verify')}>
-    <div>
-      <strong
-        >{translate(
-          $locale,
-          isBitBox ? 'Address shown after registration' : 'First address reference'
-        )}</strong
-      >{#if action !== 'sign'}<small
-          >{isBitBox
-            ? translate($locale, '{device} shows this after policy approval.', {
-                device: deviceName
-              })
-            : translate($locale, 'Compare this when it appears on the device.')}</small
-        >{/if}
-    </div>
-    <button
-      type="button"
-      class="policy-address-summary"
-      aria-expanded={addressExpanded}
-      onclick={() => (addressExpanded = !addressExpanded)}
-      ><code>{compactAddress(displayedAddress)}</code><span
-        >{translate($locale, addressExpanded ? 'Hide full address' : 'Show full address')}</span
-      ></button
+  {#if showAddressReference}<section
+      class="policy-address-check"
+      aria-label={translate($locale, 'First address to verify')}
     >
-    {#if addressExpanded}<ReadableAddress
-        address={displayedAddress}
-        copied={addressCopied}
-        oncopy={copyAddress}
-      />{/if}
-    {#if testnetAddressDevice}<small
-        >{testnetAddressDevice}
-        {translate($locale, 'displays the Regtest script with a')}
-        <code>{translate($locale, 'tb1')}</code>
-        {translate(
-          $locale,
-          'prefix. Rust verified\n        that it decodes to the identical Bitcoin output script.'
-        )}</small
-      >{/if}
-  </section>
+      <div>
+        <strong
+          >{translate(
+            $locale,
+            isBitBox ? 'Address shown after registration' : 'First address reference'
+          )}</strong
+        >{#if action !== 'sign'}<small
+            >{isBitBox
+              ? translate($locale, '{device} shows this after policy approval.', {
+                  device: deviceName
+                })
+              : translate($locale, 'Compare this when it appears on the device.')}</small
+          >{/if}
+      </div>
+      <button
+        type="button"
+        class="policy-address-summary"
+        aria-expanded={addressExpanded}
+        onclick={() => (addressExpanded = !addressExpanded)}
+        ><code>{compactAddress(displayedAddress)}</code><span
+          >{translate($locale, addressExpanded ? 'Hide full address' : 'Show full address')}</span
+        ></button
+      >
+      {#if addressExpanded}<ReadableAddress
+          address={displayedAddress}
+          copied={addressCopied}
+          oncopy={copyAddress}
+        />{/if}
+      {#if testnetAddressDevice}<small
+          >{testnetAddressDevice}
+          {translate($locale, 'displays the Regtest script with a')}
+          <code>{translate($locale, 'tb1')}</code>
+          {translate(
+            $locale,
+            'prefix. Rust verified\n        that it decodes to the identical Bitcoin output script.'
+          )}</small
+        >{/if}
+    </section>{/if}
 
   {#if error}<div class="hardware-inline-error" role="alert" aria-live="polite">
       <AlertTriangle size={18} /><span

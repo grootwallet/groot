@@ -1,5 +1,16 @@
 # Bitcoin Improvement Proposal support
 
+The 2026-09-28 hardware-review harmonization has no BIP, descriptor, derivation,
+transaction-construction, PSBT, signing, backup, or persisted-format impact. It
+reuses the authoritative proposal data in a separated compact review, removes a
+Ledger pre-sign first-address reference that the device does not display during
+that authorization step, and changes only the automatic-strategy selection
+outline. New-wallet Ledger policy registration retains its first-address proof.
+The owner's reported Model One PIN unlock and standard BIP48 partial signing on
+the exact `a5df75ee` Mainnet package is candidate-specific physical evidence; it
+does not by itself add BIP support, prove threshold broadcast or confirmation,
+or transfer to the replacement build.
+
 Sep 28 expired-acceleration review/discard is a presentation/lifecycle correction
 with no BIP support or persisted-format change. Native replacement and stale-input
 validation remain authoritative; browser coverage is not physical signing evidence.

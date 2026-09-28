@@ -1759,6 +1759,9 @@ test('creates and verifies a simple 2-of-3 descriptor wallet', async ({ page }) 
   await expect(
     signingPolicyReview.getByText('Signer keys to compare', { exact: true })
   ).toBeVisible();
+  await expect(
+    signingPolicyReview.getByText('First address reference', { exact: true })
+  ).toHaveCount(0);
   await expect(signingPolicyReview).not.toContainText(
     'current Ledger connection must authorize this policy again'
   );

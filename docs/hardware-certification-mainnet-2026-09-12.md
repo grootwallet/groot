@@ -530,6 +530,27 @@ not add hardware evidence. Repeat the Model One post-PIN scan/sign path, Jade
 locked discovery, and single-key mixed-device list on the next exact package
 before closing those rows.
 
+### Sep 28 owner follow-up on a5df75ee
+
+The owner identified exact internal Mainnet package `a5df75ee` in the supplied
+screenshots and reported that Multi C successfully unlocked the Trezor Model One
+through Groot's blind PIN matrix and collected its signature. Model One presented
+the transaction across successive device confirmations, including change,
+recipient/output, fee, and locktime rather than one combined screen. This closes
+the stale post-PIN locked-row regression for that package and adds one positive
+standard-BIP48 Model One partial-signature observation. It does not infer the
+second signer, broadcast, confirmation, restart accounting, negative-path rows,
+clean recovery, exact firmware, or replacement-build behavior.
+
+The same follow-up reports that Multi A labeled connected devices outside its
+quorum correctly, and that receive-address verification and discard completed
+successfully. Manual coin-selection simplification was accepted. These are
+positive presentation/workflow observations, not additional transaction or
+interoperability certification. Ledger's pre-sign policy authorization did not
+show a first address on-device; the replacement source therefore removes that
+Groot-only reference from the pre-sign step while retaining first-address proof
+during actual new-wallet policy registration.
+
 ### Original setup report
 
 Owner-reported Mainnet results, not an independently witnessed hardware run.

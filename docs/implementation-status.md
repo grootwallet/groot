@@ -1,5 +1,17 @@
 # Implementation status
 
+Sep 28 hardware-review follow-up aligns the compact single-key and multisig
+signing modal with the primary Review & sign hierarchy: the amount leads, the
+same `To → Label → Network → Network fee → Total` rows use the established type
+scale and separators, and expanded technical data stays in separated rows.
+Ledger's repeated pre-sign policy authorization omits the first-address reference
+that Ledger does not display there; new-wallet multisig policy registration
+retains that check. Automatic coin strategy selection now uses the standard blue
+outline instead of amber. These are presentation-only changes;
+wallet, profile, proposal, registry, backup, transaction, descriptor, PSBT, and
+database formats are unchanged, no migration is required, and BIP behavior is
+unchanged.
+
 Sep 28 hardware/UI closing pass replaces the improvised discard-address summary
 with the existing grouped copy control, permanent-label tags, and standard detail
 rows for derivation path and address type. Standard multisig is identified as
