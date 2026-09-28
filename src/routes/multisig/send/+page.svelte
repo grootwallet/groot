@@ -1186,7 +1186,7 @@
     hardwareChangeAddressOpen = false;
   }
   async function sign(device: HardwareDevice) {
-    if (accelerationConfirmed) return;
+    if (accelerationConfirmed || busy || policyReviewBusy) return;
     if (!proposal) return;
     const releaseHardwareReview = walletShell.beginHardwareReview();
     const reviewingPolicy = policyReviewOpen && policyReviewDevice?.id === device.id;
@@ -2730,7 +2730,6 @@
         >
           {translate($locale, 'Step 2 of 2 · Transaction review')}
         </p>{/if}
-      <strong>{translate($locale, 'Transaction to verify')}</strong>
       <div class="hardware-review-amount">
         <span>{translate($locale, 'You send')}</span><Amount
           value={Number(proposal.amount)}

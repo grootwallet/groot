@@ -863,7 +863,7 @@
     deviceOpen = false;
   }
   async function signHardware(device: HardwareDevice) {
-    if (accelerationConfirmed) return;
+    if (accelerationConfirmed || broadcasting) return;
     if (!proposal || !externalProposal) return;
     const releaseHardwareReview = walletShell.beginHardwareReview();
     hardwareAction = 'sign';
@@ -2076,7 +2076,6 @@
       class="hardware-review"
       aria-label={translate($locale, 'Authoritative transaction details')}
     >
-      <strong>{translate($locale, 'Transaction to verify')}</strong>
       <div class="hardware-review-amount">
         <span>{translate($locale, 'You send')}</span><Amount value={proposal.amount} interactive />
       </div>

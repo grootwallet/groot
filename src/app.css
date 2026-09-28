@@ -6521,6 +6521,10 @@ code {
 }
 .hardware-review-details > dl {
   margin: 0;
+  border-top: 0;
+}
+.hardware-review-details > dl > div:last-child {
+  border-bottom: 0;
 }
 .hardware-review-details > dl > div {
   min-height: 43px;

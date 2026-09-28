@@ -1,5 +1,12 @@
 # Bitcoin Improvement Proposal support
 
+The 2026-09-28 compact hardware-review boundary cleanup and renderer re-entry
+guard have no BIP, descriptor, derivation, transaction-construction, PSBT,
+signing, dependency, backup, or persisted-format impact. The guard prevents a
+second Groot signing dispatch while the first remains active; it does not alter
+the pinned HWI 3.2.0 Ledger adapter's internal wallet-policy registration or
+transaction-review sequence.
+
 The 2026-09-28 hardware-review harmonization has no BIP, descriptor, derivation,
 transaction-construction, PSBT, signing, backup, or persisted-format impact. It
 reuses the authoritative proposal data in a separated compact review, removes a

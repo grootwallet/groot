@@ -96,10 +96,22 @@ describe('hardware signing review usability', () => {
       expect(review.indexOf("'Label'")).toBeLessThan(review.indexOf("'Network'"));
       expect(review.indexOf("'Network'")).toBeLessThan(review.indexOf("'Network fee'"));
       expect(review.indexOf("'Network fee'")).toBeLessThan(review.indexOf("'Total'"));
+      expect(review).not.toContain("'Transaction to verify'");
     }
     expect(details).toContain('<dl class="details-list">');
     expect(appCss).toMatch(
       /\.hardware-review \.details-list > div\s*\{[^}]*min-height: 43px;[^}]*gap: 18px;/s
+    );
+    expect(appCss).toMatch(/\.hardware-review-details > dl\s*\{[^}]*border-top:\s*0;/s);
+    expect(appCss).toMatch(
+      /\.hardware-review-details > dl > div:last-child\s*\{[^}]*border-bottom:\s*0;/s
+    );
+  });
+
+  it('rejects a second renderer signing dispatch while one is active', () => {
+    expect(singleSend).toContain('if (accelerationConfirmed || broadcasting) return;');
+    expect(multisigSend).toContain(
+      'if (accelerationConfirmed || busy || policyReviewBusy) return;'
     );
   });
 
