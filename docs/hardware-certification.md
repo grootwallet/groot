@@ -51,6 +51,16 @@ proof. See the same
 [sanitized Mainnet checkpoint](hardware-certification-mainnet-2026-09-12.md);
 these results do not certify other device models or later packages.
 
+The owner subsequently reported Mainnet BIP84 receive-address checks and
+quit/relaunch persistence on the seven exact target models. A separate
+BitBox02-family multisig policy registration succeeded only after a stalled
+saved-signer lookup and USB reconnect; its exact model, package, firmware, and
+first-address comparison were not supplied. These are limited owner reports,
+not frozen-package GA certification. The unresolved discovery latency and the
+remaining wallet A/B/C transaction, remote-backend, recovery, and independent
+review gates are recorded in the
+[Mainnet follow-up](hardware-certification-mainnet-2026-09-12.md#2026-09-21-to-2026-09-26-owner-reported-single-key-and-multisig-follow-up).
+
 ## Hardware certification matrix
 
 | Exact model                                 | Primary transport                                                                   | Credential rule                                                                                  | Local Regtest                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | Open work                                                                                                                                                               |

@@ -9,6 +9,14 @@ Owner-reported original BitBox02/Nova policy, address, rejection and reconnect
 retests and Model One address success add scoped hardware observations only;
 they do not expand model, transport, or spending-policy support.
 
+The earlier 2026-09-26 owner report adds limited Mainnet device evidence for
+BIP84 receive-address checks on seven exact target models and a BitBox02-family
+BIP48 wallet-policy registration after USB reconnect. It does not change BIP32,
+BIP48, BIP84, descriptor, address, PSBT, or signing support. The BitBox exact
+model and frozen package were not supplied; no BIP48 first-address comparison
+or transaction result is inferred, and no result transfers between original
+BitBox02 and Nova.
+
 Sep 27 address-reuse correction has no BIP support, dependency, or persisted-format
 impact. BIP125 replacement history remains retained; only the derived privacy
 flag excludes noncanonical outputs. No Mainnet/device certification is inferred

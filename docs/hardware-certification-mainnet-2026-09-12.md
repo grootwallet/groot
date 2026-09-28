@@ -396,6 +396,37 @@ No address, transaction identifier, amount beyond the reported accounting
 comparison, fingerprint, descriptor, PSBT, credential, device path, or node
 detail is retained.
 
+## 2026-09-21 to 2026-09-26 owner-reported single-key and multisig follow-up
+
+The release owner reported Mainnet BIP84 receive addresses successfully checked
+on Trezor Safe 3, Trezor Model One, Jade Classic, original BitBox02, BitBox02
+Nova, Ledger Nano S Plus, and Coldcard Mk4. The seven single-key wallets and
+their checks persisted after quit and relaunch. The owner also reported
+performing device-specific checks other than transactions, but did not provide
+row-by-row outcomes, exact firmware, or a single frozen package identity for
+that full set. Record the named receive and persistence observations only;
+do not convert the unspecified checks into negative-test or certification
+passes. In an earlier `v0.4.95 · a2588f4d` run, Safe 3 discovery failed while
+Sparrow found it. A later owner report said Safe 3 single-key import worked;
+the successful build identity was not supplied, so the failure and later success
+remain distinct candidate-bound observations.
+
+On 2026-09-26, the owner reported that a connected, unlocked BitBox02-family
+signer initially remained at **Looking for the saved signer** during multisig
+policy verification. After unplugging and reconnecting it, the owner completed
+wallet-policy registration. The screenshot proves the pending Groot state, not
+the device's internal state or the duration of the HWI call. The exact original
+BitBox02-versus-Nova model, Groot version/commit, firmware, whether the first
+address was compared on-device, and wallet A/B/C identity were not supplied.
+This is a successful owner-reported reconnect/registration with an unresolved
+discovery-latency and first-attempt reliability finding, **not** a frozen-build
+GA pass or an inherited result for either exact BitBox model. No transaction
+signing or broadcast for this wallet was reported.
+
+The later dated checkpoints below supersede this report's original resume order.
+They preserve the successful evidence while recording the exact subsequent
+wallet setup, payment, reconnect, and remaining-certification outcomes.
+
 ## 2026-09-25 exact `b49d2a81` local-Core reconciliation failure
 
 The release owner opened internal multi-network build `v0.4.95 · b49d2a81` with
