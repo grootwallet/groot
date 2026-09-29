@@ -1799,7 +1799,7 @@
               >{#if broadcastTxidCopied}<Check size={16} />{:else}<Copy size={16} />{/if}</button
             >
             <div class="success-actions">
-              <Button href="/multisig">{translate($locale, 'Return to wallet')}</Button>
+              <Button href="/">{translate($locale, 'Return to wallet')}</Button>
               <Button variant="secondary" href="/activity"
                 >{translate($locale, 'View transaction')}</Button
               >

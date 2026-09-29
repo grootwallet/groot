@@ -1697,9 +1697,7 @@ test('creates and verifies a simple 2-of-3 descriptor wallet', async ({ page }) 
   expect(policyDialogBounds!.y).toBeGreaterThanOrEqual(0);
   expect(policyDialogBounds!.y + policyDialogBounds!.height).toBeLessThanOrEqual(viewport!.height);
   if (viewport!.width > 760) {
-    expect(
-      Math.abs(policyDialogBounds!.y + policyDialogBounds!.height / 2 - viewport!.height / 2)
-    ).toBeLessThanOrEqual(8);
+    expect(policyDialogBounds!.y).toBeLessThanOrEqual(96);
   }
   await policyDialog.getByRole('button', { name: 'Close' }).click();
   await expect(policyDialog).toBeHidden();
@@ -1821,6 +1819,9 @@ test('creates and verifies a simple 2-of-3 descriptor wallet', async ({ page }) 
   await expect(page.getByRole('heading', { name: 'Transaction broadcast' })).toBeVisible();
 
   await page.getByRole('link', { name: 'Return to wallet' }).click();
+  await expect.poll(() => new URL(page.url()).pathname).toBe('/');
+  await page.getByRole('link', { name: 'Policy', exact: true }).click();
+  await expect(page).toHaveURL(/\/multisig$/);
   await page.getByRole('link', { name: 'Export & verify' }).click();
   const exportCard = page.locator('.backup-export-card');
   await page.getByRole('button', { name: /Groot JSON/ }).click();

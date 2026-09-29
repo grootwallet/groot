@@ -47,4 +47,20 @@ describe('shared page presentation', () => {
       /\.setup-progress li\.complete \.setup-progress-number\s*\{[\s\S]*?background: var\(--step-complete-bg\);/
     );
   });
+
+  it('keeps every toast inside the viewport and lets long copy wrap', () => {
+    expect(appCss).toMatch(
+      /\.toast-region\s*\{[^}]*width:\s*min\(360px, calc\(100% - 40px\)\);[^}]*max-width:\s*calc\(100% - 40px\);/s
+    );
+    expect(appCss).toMatch(
+      /\.toast\s*\{[^}]*width:\s*100%;[^}]*min-width:\s*0;[^}]*max-width:\s*100%;[^}]*grid-template-columns:\s*28px minmax\(0, 1fr\) 22px;/s
+    );
+    expect(appCss).toMatch(/\.toast-copy strong\s*\{[^}]*overflow-wrap:\s*anywhere;/s);
+    expect(appCss).toMatch(
+      /\.toast-copy button\s*\{[^}]*max-width:\s*100%;[^}]*overflow-wrap:\s*anywhere;/s
+    );
+    expect(appCss).toMatch(
+      /@media \(max-width: 760px\)[\s\S]*?\.toast-region\s*\{[^}]*left:\s*max\(12px, env\(safe-area-inset-left\)\);[^}]*right:\s*max\(12px, env\(safe-area-inset-right\)\);[^}]*width:\s*auto;[^}]*max-width:\s*360px;/s
+    );
+  });
 });

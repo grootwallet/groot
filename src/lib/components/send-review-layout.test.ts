@@ -22,6 +22,24 @@ describe('send review layout', () => {
     );
   });
 
+  it('restores the shell-safe top inset for both mobile send routes', () => {
+    expect(appCss).toMatch(
+      /@media \(max-width: 760px\)[\s\S]*?\.send-page\.signing-page\s*\{[^}]*padding-top:\s*max\(68px, calc\(env\(safe-area-inset-top\) \+ 56px\)\);/s
+    );
+    expect(appCss).toMatch(
+      /\.app-shell\.prototype-shell \.send-page\.signing-page\s*\{[^}]*padding-top:\s*max\(120px, calc\(env\(safe-area-inset-top\) \+ 108px\)\);/s
+    );
+  });
+
+  it('returns a completed multisig payment to the selected wallet overview', () => {
+    expect(multisigSend).toContain(
+      `<Button href="/">{translate($locale, 'Return to wallet')}</Button>`
+    );
+    expect(multisigSend).not.toContain(
+      `<Button href="/multisig">{translate($locale, 'Return to wallet')}</Button>`
+    );
+  });
+
   it('gives derivation paths breathable separated rows and aligns the input total', () => {
     expect(reviewDetails.match(/class="transaction-review-path-row"/g)?.length).toBe(3);
     expect(reviewDetails).toContain('class="transaction-review-input-total"');

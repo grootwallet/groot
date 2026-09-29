@@ -1,5 +1,15 @@
 # Bitcoin Improvement Proposal support
 
+The 2026-09-30 mobile-layout and post-broadcast-navigation correction changes no
+BIP, descriptor, derivation, transaction construction, PSBT, signing, backup, or
+persisted format. The owner reports successful Mainnet BIP48 signing and broadcast
+for original BitBox02 plus Trezor Safe 3 in Multi B, Jade plus BitBox02 Nova in a
+wallet identified as Multi B, Jade plus BitBox02 Nova in Multi C, and BitBox02 Nova
+plus Trezor Model One in Multi C, and states that the remaining positive BIP48
+campaign is complete. The reported Multi B Jade/Nova pair conflicts with the
+previously recorded Multi B signer roster of Jade/original BitBox02/Safe 3; retain
+the report but do not silently relabel that exact pair as Safe 3/Jade.
+
 The 2026-09-29 viewport-density follow-up changes only shared modal containment,
 Ledger policy-review spacing, and Send-page presentation. It changes no BIP,
 descriptor, derivation, transaction construction, PSBT, signing, backup, or

@@ -592,6 +592,18 @@ locked/unlocked, on the replacement package; record timings without raw HWI data
 
 ### Next physical steps
 
+On 2026-09-30 the owner reported successful Mainnet signing and broadcast for
+original BitBox02 plus Trezor Safe 3 in Multi B, Jade plus BitBox02 Nova in a
+wallet identified as Multi B, Jade plus BitBox02 Nova in Multi C, and BitBox02
+Nova plus Trezor Model One in Multi C, and declared the remaining positive BIP48
+campaign complete. The explicit Multi B Jade/Nova report conflicts with the
+previously recorded Multi B roster of Jade/original BitBox02/Safe 3. Preserve
+both statements: no additional positive BIP48 run is requested from the owner,
+but the exact package/roster record must be reconciled before an independent
+reviewer treats that report as the missing Safe 3/Jade pair. No exact package,
+firmware, confirmation, restart, or accounting result is inferred where it was
+not separately supplied.
+
 The owner subsequently reported that Multi A signed and broadcast successfully
 with Coldcard Mk4 plus Ledger Nano S Plus. This closes that positive pair row for
 the reported candidate sequence; the exact package identity and firmware/app
@@ -609,9 +621,10 @@ transaction sequence on the exact device.
    preserved Core-backed wallet accounting survives restart.
 2. Before funding each group, compare its labeled receive address on a capable
    signer. Policy verification is not proof for every later receive address.
-3. Exercise only the unreported BIP48 pairs: B original BitBox02/Safe 3 and
-   Safe 3/Jade; C Jade/Nova and Nova/Model One. Check recipient, amount, fee,
-   change and input labels; require both valid signatures before broadcast.
+3. Reconcile the reported Multi B Jade/Nova label against the recorded wallet
+   roster and bind each completed positive BIP48 pair to its exact package and
+   signer versions. Do not request another positive BIP48 payment unless that
+   readback establishes that an intended pair was not actually exercised.
 4. On the frozen candidate, cover the still-open confirmation, rejection, wrong
    device, disconnect/retry, foreign/altered/stale-PSBT, and foreground-scan
    inactivity rows; never broadcast negative fixtures. Multi C partial-signature
