@@ -2364,10 +2364,7 @@ test('send reviews a proposal and rejects a wrong credential', async ({ page }) 
   await expect(reviewLabels).toContainText('Savings');
   await expect(reviewLabels).toContainText('Test payment');
   await expect(page.getByText('25,000')).toBeVisible();
-  await expect(page.getByText('Exact strategy comparison')).toBeVisible();
-  await expect(
-    page.locator('.selection-review').filter({ hasText: 'Exact strategy comparison' })
-  ).toContainText('100 sats lower than the valid More private candidate');
+  await expect(page.getByText('Exact strategy comparison')).toHaveCount(0);
   await page.getByRole('button', { name: 'Continue to sign' }).click();
   const authorizationReview = page.getByRole('region', {
     name: 'Transaction authorization review'

@@ -31,21 +31,18 @@
     savedSigners?: readonly SavedHardwareSignerName[];
   } = $props();
 
-  function detail(device: HardwareDevice) {
+  function detail(device: HardwareDevice, membership: ReturnType<typeof hardwareWalletMembership>) {
     if (device.action === 'prompt_pin') return '';
-    return detailedStatus && device.fingerprint
-      ? translate($locale, 'Fingerprint {fingerprint} · {message}', {
-          fingerprint: device.fingerprint,
-          message: translate($locale, device.message)
-        })
-      : (device.fingerprint ?? device.message);
+    if (savedSigners.length && membership === 'unknown') return '';
+    if (device.fingerprint) return device.fingerprint;
+    return savedSigners.length ? '' : device.message;
   }
 
   function status(device: HardwareDevice) {
     if (device.action === 'prompt_pin') return 'Locked';
+    if (device.action === 'unlock') return 'Unlock & continue';
     if (device.status === 'ready') return 'Ready';
     if (device.status === 'detected') return 'Detected';
-    if (device.action === 'unlock') return 'Unlock & continue';
     if (device.action === 'confirm_empty_passphrase') return 'Choose wallet';
     return 'Attention';
   }
@@ -64,11 +61,11 @@
       devices.some((device) => device.action === 'prompt_pin')}
   >
     {#each devices as device (device.id)}
-      {@const deviceDetail = detail(device)}
       {@const membership = hardwareWalletMembership(
         device,
         savedSigners.map((signer) => signer.fingerprint)
       )}
+      {@const deviceDetail = detail(device, membership)}
       <button
         onclick={() => onselect(device)}
         disabled={disabled || (savedSigners.length > 0 && membership === 'unrelated')}

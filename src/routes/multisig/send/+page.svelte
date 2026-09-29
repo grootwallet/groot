@@ -1012,6 +1012,7 @@
   }
   async function scan() {
     if (accelerationConfirmed) return;
+    const releaseHardwareReview = walletShell.beginHardwareReview();
     const generation = ++hardwareScanGeneration;
     deviceOpen = true;
     activeHardwareDevice = null;
@@ -1030,6 +1031,7 @@
       devices = [];
       deviceError = localizedError(cause, $locale, 'Could not find hardware.');
     } finally {
+      releaseHardwareReview();
       if (generation === hardwareScanGeneration) busy = false;
     }
   }
@@ -1130,6 +1132,7 @@
     await sign(device);
   }
   async function startHardwarePin(device: HardwareDevice) {
+    const releaseHardwareReview = walletShell.beginHardwareReview();
     busy = true;
     pinBusy = true;
     deviceError = '';
@@ -1148,12 +1151,14 @@
       pinErrorCode = cause instanceof WalletError ? cause.code : 'internal_error';
       pinError = message;
     } finally {
+      releaseHardwareReview();
       busy = false;
       pinBusy = false;
     }
   }
   async function submitHardwarePin() {
     if (!pinChallenge || !pinPositions || pinBusy) return;
+    const releaseHardwareReview = walletShell.beginHardwareReview();
     pinBusy = true;
     pinError = '';
     pinErrorCode = '';
@@ -1177,6 +1182,7 @@
       pinErrorCode = cause instanceof WalletError ? cause.code : 'internal_error';
       pinError = localizedError(cause, $locale, 'Trezor did not accept that matrix entry.');
     } finally {
+      releaseHardwareReview();
       positions = '';
       pinBusy = false;
     }
@@ -2536,21 +2542,6 @@
                     )}</span
                   >
                 </div>{/if}
-              {#if proposal.selectionImpact.feeDifferenceVsPrivate !== null}<div
-                  class="selection-review"
-                >
-                  <strong>{translate($locale, 'Exact strategy comparison')}</strong><span
-                    ><Amount value={Math.abs(proposal.selectionImpact.feeDifferenceVsPrivate)} />
-                    {translate(
-                      $locale,
-                      proposal.selectionImpact.feeDifferenceVsPrivate <= 0 ? 'lower' : 'higher'
-                    )}
-                    {translate(
-                      $locale,
-                      'than the valid\n              More private candidate. Lower fee is not better privacy.'
-                    )}</span
-                  >
-                </div>{/if}
               <TransactionReviewDetails
                 {proposal}
                 interactiveAmounts
@@ -2719,6 +2710,7 @@
   description={translate($locale, 'Compare every value below with the device before approving.')}
   onclose={closeHardwareScan}
   attentionSignal={hardwareAttentionSignal}
+  upper
 >
   {#if proposal}
     <section
@@ -2853,8 +2845,8 @@
             ><strong>{hardwareDeviceDisplayName(device, wallet?.cosigners ?? [])}</strong
             >{#if hardwareWalletMembershipLabel(membership)}<small
                 >{translate($locale, hardwareWalletMembershipLabel(membership))}</small
-              >{/if}{#if device.action !== 'prompt_pin'}<small
-                >{translate($locale, device.fingerprint ?? device.message)}</small
+              >{/if}{#if (membership === 'candidate' || membership === 'unrelated') && device.action !== 'prompt_pin' && device.fingerprint}<small
+                >{device.fingerprint}</small
               >{/if}<em
               class:ready={membership === 'candidate' &&
                 !alreadySigned &&
@@ -2865,17 +2857,21 @@
                 policyRegistrationProfile(device).registration === 'unsupported'}
               >{#if membership !== 'candidate'}{translate(
                   $locale,
-                  device.action === 'prompt_pin' ? 'Locked' : 'Detected'
+                  device.action === 'prompt_pin'
+                    ? 'Locked'
+                    : device.action === 'unlock'
+                      ? 'Unlock & continue'
+                      : 'Detected'
                 )}{:else if alreadySigned}<Check size={11} />{translate(
                   $locale,
                   'Already signed'
-                )}{:else if policyRequired || policyRegistrationProfile(device).registration === 'unsupported'}{translate(
+                )}{:else if policyRegistrationProfile(device).registration === 'unsupported' || (policyRequired && !policyVerified)}{translate(
                   $locale,
                   policyReadinessLabel(device, policyVerified)
                 )}{:else}{translate(
                   $locale,
                   device.status === 'ready' || device.status === 'detected'
-                    ? 'No setup needed'
+                    ? 'Ready'
                     : device.action === 'unlock'
                       ? 'Unlock & continue'
                       : device.action === 'prompt_pin'

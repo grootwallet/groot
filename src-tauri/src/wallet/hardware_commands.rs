@@ -639,6 +639,7 @@ pub async fn hardware_list(
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> ApiResult<Vec<HardwareDeviceDto>> {
+    let _activity = begin_optional_unlocked_user_operation(&app, &state)?;
     let request_epoch = forget_hardware_scan(&state)?;
     let hwi = hwi_cli(&app)?;
     let (generation, mut devices) =
@@ -655,6 +656,7 @@ pub async fn hardware_list_for_device_types(
     state: State<'_, AppState>,
     device_types: Vec<String>,
 ) -> ApiResult<Vec<HardwareDeviceDto>> {
+    let _activity = begin_optional_unlocked_user_operation(&app, &state)?;
     let device_types = validated_target_device_types(device_types)?;
     let request_epoch = forget_hardware_scan(&state)?;
     let hwi = hwi_cli(&app)?;
@@ -689,6 +691,7 @@ pub async fn hardware_find_saved_device(
     derivation_path: String,
     account_xpub: String,
 ) -> ApiResult<HardwareDeviceDto> {
+    let _activity = begin_optional_unlocked_user_operation(&app, &state)?;
     let device_type = validated_target_device_types(vec![device_type])?
         .into_iter()
         .next()
@@ -1368,6 +1371,7 @@ pub async fn hardware_prompt_pin(
     state: State<'_, AppState>,
     device_id: String,
 ) -> ApiResult<String> {
+    let _activity = begin_optional_unlocked_user_operation(&app, &state)?;
     let hwi = hwi_cli(&app)?;
     let device = recently_scanned_hardware_device(&state, &device_id)?;
     let pending = tauri::async_runtime::spawn_blocking(move || {
@@ -1412,6 +1416,7 @@ pub async fn hardware_send_pin(
     pin_positions: String,
 ) -> ApiResult<()> {
     let pin_positions = Zeroizing::new(pin_positions);
+    let _activity = begin_optional_unlocked_user_operation(&app, &state)?;
     let valid = !pin_positions.is_empty()
         && pin_positions.len() <= MAX_HARDWARE_PIN_POSITIONS
         && pin_positions
@@ -2801,7 +2806,7 @@ pub async fn hardware_sign_external(
         None,
     );
     let result = async {
-        require_unlocked(&app, &state)?;
+        let (_wallet_id, _activity) = begin_unlocked_user_operation(&app, &state)?;
         let metadata = read_external_signer_metadata(&app)?;
         let mut db = open_db(&app)?;
         let proposal = load_external_proposal(&mut db, &metadata, &proposal_id)?;
@@ -3017,7 +3022,7 @@ pub async fn hardware_verify_multisig_address(
     device_id: String,
     address_id: u32,
 ) -> ApiResult<ReceiveAddressDto> {
-    let initiating_wallet_id = require_unlocked(&app, &state)?;
+    let (initiating_wallet_id, _activity) = begin_unlocked_user_operation(&app, &state)?;
     let metadata = read_multisig_metadata(&app)?;
     require_hwi_supported_multisig_policy(&metadata)?;
     let initiating_external_descriptor = metadata.external_descriptor.clone();
@@ -3310,7 +3315,7 @@ pub async fn hardware_verify_multisig_policy(
     device_id: String,
     signer_fingerprint: String,
 ) -> ApiResult<SignerPolicyVerificationDto> {
-    let initiating_wallet_id = require_unlocked(&app, &state)?;
+    let (initiating_wallet_id, _activity) = begin_unlocked_user_operation(&app, &state)?;
     let metadata = read_multisig_metadata(&app)?;
     require_hwi_supported_multisig_policy(&metadata)?;
     let initiating_external_descriptor = metadata.external_descriptor.clone();
@@ -3376,6 +3381,7 @@ pub async fn hardware_verify_multisig_draft_policy(
     device_id: String,
     signer_fingerprint: String,
 ) -> ApiResult<SignerPolicyVerificationDto> {
+    let _activity = begin_optional_unlocked_user_operation(&app, &state)?;
     reject_virtual_cosigners(&policy.cosigners)?;
     let preview = policy.preview().map_err(policy_api_error)?;
     let wallet = MultisigWalletDto {
@@ -3467,7 +3473,7 @@ pub async fn hardware_verify_external_address(
     device_id: String,
     address_id: u32,
 ) -> ApiResult<ReceiveAddressDto> {
-    let initiating_wallet_id = require_unlocked(&app, &state)?;
+    let (initiating_wallet_id, _activity) = begin_unlocked_user_operation(&app, &state)?;
     let metadata = read_external_signer_metadata(&app)?;
     let initiating_metadata = metadata.clone();
     let mut db = open_db(&app)?;

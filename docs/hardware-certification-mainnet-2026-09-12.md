@@ -551,6 +551,27 @@ show a first address on-device; the replacement source therefore removes that
 Groot-only reference from the pre-sign step while retaining first-address proof
 during actual new-wallet policy registration.
 
+### Sep 29 owner follow-up on the current candidate sequence
+
+The owner reports that Multi B collected a Trezor Safe 3 signature, reached a
+fully signed transaction, and broadcast successfully. The other signature used
+for that transaction was not identified in the report, so this records Safe 3
+Mainnet BIP48 signing and a successful threshold broadcast without closing either
+the original-BitBox02/Safe-3 or Safe-3/Jade pair row.
+
+The owner separately reports that Multi C collected signatures from Trezor Model
+One and Blockstream Jade and broadcast successfully. The partially signed
+transaction survived a reboot, and wallet transaction state and accounting were
+correct before and after broadcast. This closes the Model-One/Jade happy-path
+pair and the reported partial-signature restart/resume row for that campaign.
+
+The exact package identity and device firmware were not supplied with this
+follow-up. These observations do not close confirmation, negative-PSBT,
+disconnect/retry, clean-profile recovery, or independent-review rows. The
+reported lock during a foreground hardware scan is a product defect; the
+replacement source now treats bounded hardware operations as active use, but
+that correction requires packaged physical regression.
+
 ### Original setup report
 
 Owner-reported Mainnet results, not an independently witnessed hardware run.
@@ -575,15 +596,20 @@ locked/unlocked, on the replacement package; record timings without raw HWI data
    preserved Core-backed wallet accounting survives restart.
 2. Before funding each group, compare its labeled receive address on a capable
    signer. Policy verification is not proof for every later receive address.
-3. Exercise all three signer pairs: A Mk4/Ledger, Ledger/Nova, Nova/Mk4;
-   B Jade/original BitBox02, original BitBox02/Safe 3, Safe 3/Jade;
-   C Model One/Jade, Jade/Nova, Nova/Model One. Check recipient, amount, fee,
-   change and input labels; require both valid signatures before broadcast.
-4. Include partial-signature restart/resume, normal change and sweep, confirmation
-   and restart accounting. Cover rejection, wrong device, disconnect/retry, and
-   foreign/altered/stale PSBTs; never broadcast negative fixtures.
-5. Complete each model's BIP84 receive/sign/broadcast/restart rows separately.
-   Multisig health/registration does not satisfy single-key transaction rows.
+3. Exercise only the unreported BIP48 pairs: A Mk4/Ledger; B original
+   BitBox02/Safe 3 and Safe 3/Jade; C Jade/Nova and Nova/Model One. If the owner
+   identifies Multi B's other signer, credit that exact pair before retesting it.
+   Check recipient, amount, fee, change and input labels; require both valid
+   signatures before broadcast.
+4. On the frozen candidate, cover the still-open confirmation, rejection, wrong
+   device, disconnect/retry, foreign/altered/stale-PSBT, and foreground-scan
+   inactivity rows; never broadcast negative fixtures. Multi C partial-signature
+   restart/resume and accounting are already owner-reported and need only the
+   final frozen-candidate regression required by this certification record.
+5. Complete BIP84 sign/broadcast/restart rows for Coldcard Mk4, Trezor Model One,
+   Trezor Safe 3, Jade Classic, original BitBox02, and BitBox02 Nova. Ledger's
+   positive BIP84 sweep sign/broadcast is already recorded; only its open
+   confirmation/restart and frozen-package rows remain.
 6. Verify public-backup reconstruction and independent recovery/reviewer rows on
    the frozen candidate. Preserve the owner's existing profiles.
 

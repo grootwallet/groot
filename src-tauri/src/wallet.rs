@@ -398,6 +398,77 @@ fn require_unlocked(app: &AppHandle, state: &State<'_, AppState>) -> ApiResult<U
     require_unlocked_with_activity(app, state, true)
 }
 
+struct ActiveWalletOperation<'a> {
+    state: &'a AppState,
+    wallet_id: Uuid,
+    session_id: Uuid,
+}
+
+impl Drop for ActiveWalletOperation<'_> {
+    fn drop(&mut self) {
+        if let Ok(mut sessions) = self.state.unlocked_wallets.lock() {
+            sessions.finish_user_operation(self.wallet_id, self.session_id, Instant::now());
+        }
+    }
+}
+
+fn begin_unlocked_user_operation<'a>(
+    app: &AppHandle,
+    state: &'a State<'_, AppState>,
+) -> ApiResult<(Uuid, ActiveWalletOperation<'a>)> {
+    let wallet_id = require_unlocked_with_activity(app, state, true)?;
+    let app_state = state.inner();
+    let session_id = app_state
+        .unlocked_wallets
+        .lock()
+        .map_err(internal)?
+        .begin_user_operation(wallet_id)
+        .ok_or_else(|| {
+            api_error(
+                "wallet_locked",
+                "Enter your passphrase / PIN to unlock Groot.",
+            )
+        })?;
+    Ok((
+        wallet_id,
+        ActiveWalletOperation {
+            state: app_state,
+            wallet_id,
+            session_id,
+        },
+    ))
+}
+
+fn begin_optional_unlocked_user_operation<'a>(
+    app: &AppHandle,
+    state: &'a State<'_, AppState>,
+) -> ApiResult<Option<ActiveWalletOperation<'a>>> {
+    let registry = load_registry(app)?;
+    let Some(wallet_id) = registry.selected_wallet_id else {
+        return Ok(None);
+    };
+    if !authorize_wallet_session(state, wallet_id, true, registry.inactivity_timeout_minutes)? {
+        return Ok(None);
+    }
+    let app_state = state.inner();
+    let session_id = app_state
+        .unlocked_wallets
+        .lock()
+        .map_err(internal)?
+        .begin_user_operation(wallet_id)
+        .ok_or_else(|| {
+            api_error(
+                "wallet_locked",
+                "Enter your passphrase / PIN to unlock Groot.",
+            )
+        })?;
+    Ok(Some(ActiveWalletOperation {
+        state: app_state,
+        wallet_id,
+        session_id,
+    }))
+}
+
 fn require_unlocked_for_background_sync(
     app: &AppHandle,
     state: &State<'_, AppState>,

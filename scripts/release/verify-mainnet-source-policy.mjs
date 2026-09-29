@@ -12,7 +12,7 @@ const pinnedPolicySources = new Map([
     'src-tauri/src/wallet/activity.rs',
     '55f0b995153a10d44c58205895ccde3d53205079cdcf58bda28ca95b7d641669'
   ],
-  ['src-tauri/src/session.rs', '38b9faf9091ec5d379d2444418f7260d650a4cc151252571bb476a9426ddb19c'],
+  ['src-tauri/src/session.rs', '82da6d3a2643710aaa0974f69f0fb7c932172a401ecf33c186e440c8170f35e0'],
   ['.env.mainnet', '1623f3f97de588daea2bbeae1f9c56ebc896b6bc2c22ac238563b46b688ced85'],
   ['.env.multi', '33fc3d5022968d9eaa25bfe749c0b01691c0570611a65255100718d2c50df723'],
   ['package.json', '11cd0626ef8f795919abaa142ab307bced9a589e81645f09617e2db26e192970'],
@@ -52,7 +52,7 @@ const pinnedPolicySources = new Map([
   ['src-tauri/src/recovery.rs', '96eba2aaea0461d8ed067513c044f85f8845837dbf584eb3f93e6969ec5670dc'],
   ['src-tauri/src/network.rs', 'dcf011fb789a0b690b1832a9245df5fc0199318f03a820d10f9a3b1c90f5d76b'],
   ['src-tauri/src/registry.rs', '343aea20f5d09df6abd5c9fdba3b093efc6729c9ece8f180b27a150061753a18'],
-  ['src-tauri/src/wallet.rs', 'f7f1af185e397fdd32d307ff9451ecbf25227879f9162852b3b8433809d4546f'],
+  ['src-tauri/src/wallet.rs', '5a398d3e7d69f8d7c70951fcf1fcc36f4836176b3dbf186814faa340ec8352c9'],
   [
     'src-tauri/src/wallet/diagnostics.rs',
     '0378b4dadf9698b2a6e04361950d51c65390e175c0c7fc50d88ac6deb2de8b5f'
@@ -71,7 +71,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src-tauri/src/wallet/hardware_commands.rs',
-    'c7f9cc93a33bb8bf8d10bca0d74ba970bcc285fa38dd13504dffd0774834fe22'
+    'e249726ac65f1465f1371706cd5ed80e2ca7089559bb6de7f36383c49ca3075f'
   ],
   [
     'src-tauri/src/wallet/label_interchange.rs',
@@ -83,7 +83,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src-tauri/src/wallet/multisig_proposal_commands.rs',
-    '3938f5c79e746732f99bda9809768809ae78015c180698d4b3c1d7fb8a87ed7e'
+    'e1d144096e9834f1ebbaf8bd2ec78e52c79f7edc26c8fd92aaef2243e577f280'
   ],
   [
     'src-tauri/src/wallet/profile_commands.rs',
@@ -156,11 +156,11 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src/routes/welcome/+page.svelte',
-    'f18ce862318916b8124192f7b3e869efec44fa7cbb4e84391aba150c7ae4e26b'
+    '032001a48d335a533746861e874f34df9518b5097596e9cc502af01b1e60bce0'
   ],
   [
     'src/routes/unlock/+page.svelte',
-    'b4758e27251a4d493bca8c12a35962b8ea910398293c4f35c8da103baf13e519'
+    'e9bdedb70faa920c236209f95e58a9d8cd5e51e2ad12c912876b3720cec90924'
   ],
   ['src/routes/+page.svelte', '54f51228e6f50f71bbc1a8bd655200f776c544087cde1033aa0e191ff8726b9f'],
   [

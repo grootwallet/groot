@@ -12,6 +12,7 @@
     onclose,
     attentionSignal = 0,
     wide = false,
+    upper = false,
     children
   } = $props();
   let dialog = $state<HTMLDivElement>();
@@ -131,6 +132,7 @@
 {#if open}
   <div
     class="modal-layer"
+    class:modal-layer-upper={upper}
     use:portal
     style:--modal-document-top={`${documentTop}px`}
     role="presentation"

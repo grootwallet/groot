@@ -833,6 +833,7 @@
   async function scanHardware() {
     if (accelerationConfirmed) return;
     if (!(await hardwareSessionIsUnlocked())) return;
+    const releaseHardwareReview = walletShell.beginHardwareReview();
     const generation = ++hardwareScanGeneration;
     clearSigningTransportError();
     deviceOpen = true;
@@ -849,6 +850,7 @@
       devices = [];
       deviceError = localizedError(cause, $locale, 'Could not find hardware.');
     } finally {
+      releaseHardwareReview();
       if (generation === hardwareScanGeneration) broadcasting = false;
     }
   }
@@ -1671,21 +1673,6 @@
                 <dd><Amount value={proposal.total} interactive /></dd>
               </div>
             </dl>
-            {#if proposal.selectionImpact.feeDifferenceVsPrivate !== null}<div
-                class="selection-review"
-              >
-                <strong>{translate($locale, 'Exact strategy comparison')}</strong><span
-                  ><Amount value={Math.abs(proposal.selectionImpact.feeDifferenceVsPrivate)} />
-                  {translate(
-                    $locale,
-                    proposal.selectionImpact.feeDifferenceVsPrivate <= 0 ? 'lower' : 'higher'
-                  )}
-                  {translate(
-                    $locale,
-                    'than the valid\n            More private candidate. Lower fee is not better privacy.'
-                  )}</span
-                >
-              </div>{/if}
             <TransactionReviewDetails
               {proposal}
               interactiveAmounts
@@ -2072,6 +2059,7 @@
   )}
   onclose={closeHardwareScan}
   attentionSignal={hardwareAttentionSignal}
+  upper
   >{#if proposal}<section
       class="hardware-review"
       aria-label={translate($locale, 'Authoritative transaction details')}

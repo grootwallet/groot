@@ -709,9 +709,7 @@ test('spends end-to-end from the ready-made demo wallet', async ({ page }) => {
   await pinDialog.getByRole('button', { name: 'Unlock Trezor' }).click();
   await expect(hardwareDialog).toBeVisible();
   await expect(hardwareDialog.getByRole('button', { name: /^Trezor / })).toContainText('c0ffee01');
-  await expect(hardwareDialog.getByRole('button', { name: /^Trezor / })).toContainText(
-    'No setup needed'
-  );
+  await expect(hardwareDialog.getByRole('button', { name: /^Trezor / })).toContainText('Ready');
   await hardwareDialog.getByRole('button', { name: /^Coldcard / }).click();
   const coldcardSetup = page.getByRole('dialog', { name: 'Prepare Coldcard for this wallet' });
   if (await coldcardSetup.isVisible()) {

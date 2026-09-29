@@ -13,10 +13,12 @@ use uuid::Uuid;
 pub(crate) struct WalletSessions {
     last_activity: HashMap<Uuid, Instant>,
     identities: HashMap<Uuid, Uuid>,
+    active_user_operations: HashMap<Uuid, usize>,
 }
 
 impl WalletSessions {
     pub(crate) fn unlock(&mut self, wallet_id: Uuid) {
+        self.active_user_operations.remove(&wallet_id);
         self.last_activity.insert(wallet_id, Instant::now());
         self.identities.insert(wallet_id, Uuid::new_v4());
     }
@@ -35,9 +37,14 @@ impl WalletSessions {
         let Some(last_activity) = self.last_activity.get_mut(&wallet_id) else {
             return false;
         };
-        if now.duration_since(*last_activity) > idle_timeout {
+        let operation_active = self
+            .active_user_operations
+            .get(&wallet_id)
+            .is_some_and(|count| *count > 0);
+        if !operation_active && now.duration_since(*last_activity) > idle_timeout {
             self.last_activity.remove(&wallet_id);
             self.identities.remove(&wallet_id);
+            self.active_user_operations.remove(&wallet_id);
             return false;
         }
         if record_activity {
@@ -49,7 +56,11 @@ impl WalletSessions {
     pub(crate) fn prune_expired_at(&mut self, now: Instant, idle_timeout: Duration) -> Vec<Uuid> {
         let mut expired = Vec::new();
         self.last_activity.retain(|wallet_id, last_activity| {
-            let keep = now.duration_since(*last_activity) <= idle_timeout;
+            let operation_active = self
+                .active_user_operations
+                .get(wallet_id)
+                .is_some_and(|count| *count > 0);
+            let keep = operation_active || now.duration_since(*last_activity) <= idle_timeout;
             if !keep {
                 expired.push(*wallet_id);
             }
@@ -57,13 +68,36 @@ impl WalletSessions {
         });
         for wallet_id in &expired {
             self.identities.remove(wallet_id);
+            self.active_user_operations.remove(wallet_id);
         }
         expired
+    }
+
+    pub(crate) fn begin_user_operation(&mut self, wallet_id: Uuid) -> Option<Uuid> {
+        let identity = self.identity(wallet_id)?;
+        *self.active_user_operations.entry(wallet_id).or_default() += 1;
+        Some(identity)
+    }
+
+    pub(crate) fn finish_user_operation(&mut self, wallet_id: Uuid, identity: Uuid, now: Instant) {
+        let Some(active) = self.active_user_operations.get_mut(&wallet_id) else {
+            return;
+        };
+        *active = active.saturating_sub(1);
+        if *active == 0 {
+            self.active_user_operations.remove(&wallet_id);
+        }
+        if self.identities.get(&wallet_id) == Some(&identity) {
+            if let Some(last_activity) = self.last_activity.get_mut(&wallet_id) {
+                *last_activity = now;
+            }
+        }
     }
 
     pub(crate) fn lock(&mut self, wallet_id: Uuid) {
         self.last_activity.remove(&wallet_id);
         self.identities.remove(&wallet_id);
+        self.active_user_operations.remove(&wallet_id);
     }
 
     pub(crate) fn is_unlocked(&self, wallet_id: Uuid) -> bool {
@@ -193,5 +227,49 @@ mod tests {
             started + Duration::from_secs(61),
             one_minute
         ));
+    }
+
+    #[test]
+    fn active_user_operation_suspends_idle_expiry_and_refreshes_on_completion() {
+        let wallet_id = Uuid::new_v4();
+        let identity = Uuid::new_v4();
+        let started = Instant::now();
+        let idle_timeout = Duration::from_secs(60);
+        let finished = started + Duration::from_secs(90);
+        let mut sessions = WalletSessions::default();
+        sessions.last_activity.insert(wallet_id, started);
+        sessions.identities.insert(wallet_id, identity);
+
+        assert_eq!(sessions.begin_user_operation(wallet_id), Some(identity));
+        assert!(sessions.authorize_at(wallet_id, false, finished, idle_timeout));
+        assert!(sessions.prune_expired_at(finished, idle_timeout).is_empty());
+
+        sessions.finish_user_operation(wallet_id, identity, finished);
+        assert!(sessions.authorize_at(
+            wallet_id,
+            false,
+            finished + Duration::from_secs(59),
+            idle_timeout
+        ));
+        assert!(!sessions.authorize_at(
+            wallet_id,
+            false,
+            finished + Duration::from_secs(61),
+            idle_timeout
+        ));
+    }
+
+    #[test]
+    fn explicit_lock_invalidates_an_active_user_operation() {
+        let wallet_id = Uuid::new_v4();
+        let mut sessions = WalletSessions::default();
+        sessions.unlock(wallet_id);
+        let identity = sessions.begin_user_operation(wallet_id).unwrap();
+
+        sessions.lock(wallet_id);
+        sessions.finish_user_operation(wallet_id, identity, Instant::now());
+
+        assert!(!sessions.is_unlocked(wallet_id));
+        assert!(!sessions.active_user_operations.contains_key(&wallet_id));
     }
 }

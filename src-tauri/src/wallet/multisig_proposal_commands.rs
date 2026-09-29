@@ -889,7 +889,7 @@ pub async fn hardware_sign_multisig(
         None,
     );
     let result = async {
-    require_unlocked(&app, &state)?;
+    let (_wallet_id, _activity) = begin_unlocked_user_operation(&app, &state)?;
     let metadata = read_multisig_metadata(&app)?;
     require_hwi_supported_multisig_policy(&metadata)?;
     let mut db = open_multisig_db(&app)?;

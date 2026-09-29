@@ -195,9 +195,6 @@
         >{/if}
     </main>
   {/key}
-  <footer class="onboarding-footer">
-    {translate($locale, 'Keys stay on this device · Open source')}
-  </footer>
 </div>
 
 <Modal

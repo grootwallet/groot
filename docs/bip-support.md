@@ -1,5 +1,14 @@
 # Bitcoin Improvement Proposal support
 
+The 2026-09-29 signing-flow presentation and activity correction has no BIP,
+descriptor, derivation, transaction-construction, PSBT, signing, backup, or
+persisted-format impact. Signing pickers now use transaction-readiness states
+such as **Ready** instead of reusing policy-registration evidence, and a bounded
+native hardware operation suspends only inactivity expiry while it is active.
+The owner-reported Mainnet Safe 3, Model One, and Jade outcomes below add scoped
+physical BIP48 evidence; they do not expand supported models or infer an
+unreported signer pair.
+
 The 2026-09-28 compact hardware-review boundary cleanup and renderer re-entry
 guard have no BIP, descriptor, derivation, transaction-construction, PSBT,
 signing, dependency, backup, or persisted-format impact. The guard prevents a

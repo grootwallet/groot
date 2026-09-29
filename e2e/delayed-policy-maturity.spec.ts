@@ -90,9 +90,7 @@ test('renews one mature coin without merging another coin', async ({ page }) => 
 
   await expect(page.getByText('New protected coin')).toBeVisible();
   await expect(page.getByText('Protection restarts after confirmation')).toBeVisible();
-  await expect(
-    page.locator('.selection-review').filter({ hasText: '1 funding coin' })
-  ).toBeVisible();
+  await expect(page.getByText('Exact strategy comparison')).toHaveCount(0);
   await expect(
     page.getByText(/Only this coin moves. The network fee is the only amount leaving your wallet/)
   ).toBeVisible();

@@ -147,4 +147,30 @@ describe('hardware signing review usability', () => {
       expect(source).toContain('releaseHardwareReview()');
     }
   });
+
+  it('treats discovery as active use and top-weights the desktop signing review', () => {
+    for (const source of [singleSend, multisigSend]) {
+      const scanStart = source.indexOf(
+        source === singleSend ? 'async function scanHardware()' : 'async function scan()'
+      );
+      const scanEnd = source.indexOf('function closeHardwareScan()', scanStart);
+      const scan = source.slice(scanStart, scanEnd);
+      expect(scan).toContain('walletShell.beginHardwareReview()');
+      expect(scan).toContain('releaseHardwareReview()');
+
+      const modalStart = source.indexOf("title={translate($locale, 'Sign with hardware')}");
+      const modalEnd = source.indexOf('>', modalStart);
+      expect(source.slice(modalStart, modalEnd)).toContain('upper');
+    }
+    expect(appCss).toMatch(/\.modal-layer\.modal-layer-upper\s*\{[^}]*align-items: flex-start;/s);
+  });
+
+  it('keeps strategy comparison out of the final review and uses signing readiness states', () => {
+    for (const source of [singleSend, multisigSend]) {
+      expect(source).not.toContain("translate($locale, 'Exact strategy comparison')");
+    }
+    expect(multisigSend).toContain("? 'Ready'");
+    expect(multisigSend).not.toContain("? 'No setup needed'");
+    expect(multisigSend).toContain('policyRequired && !policyVerified');
+  });
 });

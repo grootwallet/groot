@@ -63,6 +63,11 @@ centered with their icon. App Logs pagination is centered with 24px block spacin
 
 Tokens live in `src/app.css`. Component surfaces must use semantic tokens such as `--panel`, `--surface-control`, `--surface-inset`, and `--surface-icon`; hard-coded dark neutral backgrounds are prohibited because they break light mode. Reusable behavior belongs in `src/lib/components`; route files may compose components but must not introduce wallet policy.
 
+Hardware-signing review dialogs are the desktop placement exception: they are
+top-weighted so authoritative values begin in the user's primary reading area.
+Other desktop dialogs remain centered, and mobile keeps its safe bottom-sheet
+placement.
+
 ## Layout
 
 Desktop uses a 224-pixel persistent navigation rail and a centered content area. Coordinator screens may use a main column plus a narrow safety sidebar. Mobile removes the rail, uses four fixed navigation destinations, preserves safe-area padding, and places high-frequency Receive/Send actions above the tab bar.

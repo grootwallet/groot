@@ -2391,6 +2391,13 @@ code {
   justify-content: center;
   padding: 50px 18px 18px;
 }
+.modal-layer.modal-layer-upper {
+  align-items: flex-start;
+  padding-top: clamp(64px, 8vh, 96px);
+}
+.modal-layer.modal-layer-upper .modal {
+  max-height: calc(100dvh - 100px);
+}
 .modal {
   width: min(480px, 100%);
   max-height: min(720px, calc(100dvh - 36px));
@@ -5987,6 +5994,7 @@ code {
 .source-list strong {
   color: var(--text);
   font-size: 13px;
+  font-weight: 600;
   line-height: 1.35;
 }
 .source-list small {
@@ -6019,11 +6027,11 @@ code {
   width: fit-content;
   border: 1px solid var(--border);
   border-radius: 999px;
-  padding: 2px 7px;
+  padding: 3px 8px;
   color: var(--muted);
   font-size: var(--font-size-meta);
   font-style: normal;
-  font-weight: 700;
+  font-weight: 550;
 }
 .hardware-device-list em.ready,
 .hardware-device-list em.signed {
@@ -8336,7 +8344,7 @@ code {
   color: var(--success);
   font-size: var(--font-size-meta);
   line-height: 1.25;
-  padding: 4px 7px;
+  padding: 3px 7px;
   border: 1px solid color-mix(in srgb, var(--success) 18%, transparent);
   background: color-mix(in srgb, var(--success) 8%, transparent);
   border-radius: 999px;
@@ -10775,6 +10783,13 @@ code {
     min-height: 0;
     align-items: flex-end;
     padding: max(10px, env(safe-area-inset-top)) 10px max(10px, env(safe-area-inset-bottom));
+  }
+  .modal-layer.modal-layer-upper {
+    align-items: flex-end;
+    padding-top: max(10px, env(safe-area-inset-top));
+  }
+  .modal-layer.modal-layer-upper .modal {
+    max-height: calc(100dvh - max(20px, env(safe-area-inset-top) + env(safe-area-inset-bottom)));
   }
   .modal {
     width: 100%;
