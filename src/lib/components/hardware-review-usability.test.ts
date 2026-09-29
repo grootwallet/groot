@@ -54,6 +54,10 @@ describe('hardware signing review usability', () => {
     expect(multisigSend).not.toContain(
       "description={translate($locale, 'Check the policy, signer keys, and first address.')}"
     );
+    expect(appCss).toMatch(/\.signer-policy-review\s*\{[^}]*gap:\s*10px;/s);
+    expect(appCss).toMatch(
+      /\.policy-review-step,[\s\S]*?\.hardware-review-step\s*\{[^}]*margin:\s*0 0 2px;/s
+    );
   });
 
   it('starts with a compact first-address reference and expands on request', () => {
@@ -162,7 +166,7 @@ describe('hardware signing review usability', () => {
       const modalEnd = source.indexOf('>', modalStart);
       expect(source.slice(modalStart, modalEnd)).toContain('upper');
     }
-    expect(appCss).toMatch(/\.modal-layer\.modal-layer-upper\s*\{[^}]*align-items: flex-start;/s);
+    expect(appCss).toMatch(/\.modal-layer\s*\{[^}]*align-items: flex-start;/s);
   });
 
   it('keeps strategy comparison out of the final review and uses signing readiness states', () => {

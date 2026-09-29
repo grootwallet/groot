@@ -2387,20 +2387,16 @@ code {
   -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
-  padding: 50px 18px 18px;
+  padding: clamp(56px, 6vh, 72px) 18px 18px;
 }
 .modal-layer.modal-layer-upper {
-  align-items: flex-start;
-  padding-top: clamp(64px, 8vh, 96px);
-}
-.modal-layer.modal-layer-upper .modal {
-  max-height: calc(100dvh - 100px);
+  padding-top: clamp(56px, 6vh, 72px);
 }
 .modal {
   width: min(480px, 100%);
-  max-height: min(720px, calc(100dvh - 36px));
+  max-height: min(720px, calc(100dvh - 96px));
   min-height: 0;
   display: flex;
   flex-direction: column;
@@ -2483,8 +2479,10 @@ code {
 }
 .modal-body {
   min-height: 0;
+  flex: 1 1 auto;
   overflow-y: auto;
   overscroll-behavior: contain;
+  scrollbar-gutter: stable;
   padding: 20px;
 }
 .modal-footer {
@@ -3023,6 +3021,11 @@ code {
 }
 .send-page.signing-page {
   max-width: 1080px;
+  padding-top: 24px;
+}
+.send-page.signing-page > .page-header {
+  min-height: 56px;
+  margin-bottom: 18px;
 }
 .policy-renewal-banner {
   display: grid;
@@ -6808,7 +6811,7 @@ code {
 }
 .signer-policy-review {
   display: grid;
-  gap: 14px;
+  gap: 10px;
 }
 .signer-policy-review > header {
   display: grid;
@@ -6939,6 +6942,7 @@ code {
 
 .policy-review-step,
 .hardware-review-step {
+  margin: 0 0 2px;
   color: var(--link);
   font-size: 0.78rem;
   font-weight: 800;

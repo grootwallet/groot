@@ -592,15 +592,26 @@ locked/unlocked, on the replacement package; record timings without raw HWI data
 
 ### Next physical steps
 
+The owner subsequently reported that Multi A signed and broadcast successfully
+with Coldcard Mk4 plus Ledger Nano S Plus. This closes that positive pair row for
+the reported candidate sequence; the exact package identity and firmware/app
+versions were not supplied, so it does not transfer to the replacement package
+or close confirmation, restart, negative-PSBT, disconnect/retry, recovery, or
+independent-review rows. During a separate mixed-input Ledger signing request,
+the owner observed the policy and transaction approval sequence twice despite one
+click. Source audit shows one Groot native signing dispatch; pinned HWI 3.2.0 can
+infer multiple Ledger policy IDs when BIP67-derived signer order differs between
+inputs and then register/sign each inferred policy. Do not mark that regression
+fixed until a reviewed HWI-boundary correction produces one policy and one
+transaction sequence on the exact device.
+
 1. Capture exact package commit, firmware, and Ledger Bitcoin app version. Confirm
    preserved Core-backed wallet accounting survives restart.
 2. Before funding each group, compare its labeled receive address on a capable
    signer. Policy verification is not proof for every later receive address.
-3. Exercise only the unreported BIP48 pairs: A Mk4/Ledger; B original
-   BitBox02/Safe 3 and Safe 3/Jade; C Jade/Nova and Nova/Model One. If the owner
-   identifies Multi B's other signer, credit that exact pair before retesting it.
-   Check recipient, amount, fee, change and input labels; require both valid
-   signatures before broadcast.
+3. Exercise only the unreported BIP48 pairs: B original BitBox02/Safe 3 and
+   Safe 3/Jade; C Jade/Nova and Nova/Model One. Check recipient, amount, fee,
+   change and input labels; require both valid signatures before broadcast.
 4. On the frozen candidate, cover the still-open confirmation, rejection, wrong
    device, disconnect/retry, foreign/altered/stale-PSBT, and foreground-scan
    inactivity rows; never broadcast negative fixtures. Multi C partial-signature

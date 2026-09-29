@@ -1,5 +1,18 @@
 # Bitcoin Improvement Proposal support
 
+The 2026-09-29 viewport-density follow-up changes only shared modal containment,
+Ledger policy-review spacing, and Send-page presentation. It changes no BIP,
+descriptor, derivation, transaction construction, PSBT, signing, backup, or
+persisted format. The owner-reported Multi A Coldcard Mk4 plus Ledger Nano S Plus
+Mainnet BIP48 signing and broadcast is scoped positive evidence; it does not
+transfer to a replacement package or close negative, recovery, firmware, or
+independent-review rows. A mixed-input Ledger payment also reproduced two policy
+and transaction approval rounds inside one pinned HWI 3.2.0 `signtx` command.
+Source audit attributes that behavior to HWI inferring more than one policy ID
+when BIP67-derived signer ordering differs across inputs. Groot still dispatches
+one native signing command; this is an unresolved pinned-dependency defect, not
+a new BIP48 behavior or a passed regression.
+
 The 2026-09-29 signing-flow presentation and activity correction has no BIP,
 descriptor, derivation, transaction-construction, PSBT, signing, backup, or
 persisted-format impact. Signing pickers now use transaction-readiness states

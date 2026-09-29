@@ -15,6 +15,13 @@ const multisigSend = readFileSync(
 );
 
 describe('send review layout', () => {
+  it('keeps the desktop send heading and progress compact near the top edge', () => {
+    expect(appCss).toMatch(/\.send-page\.signing-page\s*\{[^}]*padding-top:\s*24px;/s);
+    expect(appCss).toMatch(
+      /\.send-page\.signing-page > \.page-header\s*\{[^}]*min-height:\s*56px;[^}]*margin-bottom:\s*18px;/s
+    );
+  });
+
   it('gives derivation paths breathable separated rows and aligns the input total', () => {
     expect(reviewDetails.match(/class="transaction-review-path-row"/g)?.length).toBe(3);
     expect(reviewDetails).toContain('class="transaction-review-input-total"');
