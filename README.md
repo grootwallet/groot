@@ -4,7 +4,7 @@ A minimal onchain Bitcoin wallet and descriptor multisig coordinator built with 
 
 ## Repository boundary
 
-This repository, [`thibistaken/groot`](https://github.com/thibistaken/groot), is the wallet application: native desktop/mobile through Tauri plus the browser-based wallet prototype. It does not contain the marketing website.
+This repository, [`grootwallet/groot`](https://github.com/grootwallet/groot), is the wallet application: native desktop/mobile through Tauri plus the browser-based wallet prototype. It does not contain the marketing website.
 
 The public marketing website lives only in [`thibistaken/groot-site`](https://github.com/thibistaken/groot-site). That repository is canonical for marketing code, copy, screenshots, SEO metadata, and Vercel deployment. Product behavior and security evidence remain canonical here.
 

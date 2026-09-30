@@ -13,7 +13,7 @@ node, or hardware device.
 
 ## Frozen source and inputs
 
-- Repository: `thibistaken/groot`
+- Repository: `grootwallet/groot`
 - Branch at build time: `codex/mainnet-final-enablement`
 - Detached source commit:
   `2110eaf0afd0339754c1b9bbba31011c66aa3d69`
@@ -60,8 +60,8 @@ Each build used a fresh GitHub clone, detached checkout, Cargo home, Cargo
 target, pnpm store, HWI download/extraction/staging area, and evidence
 destination. Machine A's first dependency installation downloaded all 144
 packages with zero reuse; Machine B independently reported the same isolation.
-The owner-local absolute evidence paths are retained in private coordination
-issue [#79](https://github.com/thibistaken/groot/issues/79), while this sanitized
+The owner-local absolute evidence paths are retained in coordination issue
+[#79](https://github.com/grootwallet/groot/issues/79), while this sanitized
 record uses only the Build A and Build B labels.
 
 ## Reproducibility correction
