@@ -135,6 +135,38 @@ During a physical session:
 - retain vendor limitations exactly instead of converting them into a stronger
   readiness label.
 
+For ADR 0075 passive-inventory certification, use the disposable Testnet4
+package and the seven-device set: Coldcard Mk4, Jade Classic, original BitBox02
+Bitcoin-only, BitBox02 Nova Bitcoin-only, Trezor Model One, Trezor Safe 3
+Bitcoin-only, and Ledger Nano S Plus. Record firmware, macOS build, direct versus
+hub connection, and package identity without recording device paths or wallet
+identifiers. Run these rows in order:
+
+1. With every device disconnected, open and close the picker five times. Expect
+   an empty result, no HWI process, no vendor prompt, and no device-screen change.
+2. Connect each device alone while locked or at its earliest host-visible state.
+   Expect one stable row for every host-visible approved endpoint, no prompt, and
+   no screen change. A pre-login Coldcard is expected to be absent; unlock it and
+   enable USB, then require exactly one Coldcard row. On Testnet4 the passively
+   ambiguous Safe 3 revision-A/Model-T USB identity may appear as generic
+   **Trezor**; Mainnet must omit that ambiguous record.
+3. Connect all seven together, first directly where practical and then through
+   the intended hub. Run at least ten cold picker opens and ten immediate repeat
+   opens. Require one row per visible device, two distinct BitBox rows, no
+   duplicate Jade `/dev/tty` row, stable family/model labels, no device prompt,
+   and no unselected screen change. Record sanitized durations for p50/p95.
+4. Select one row at a time. Only that exact device may prompt or change screen;
+   cancel or complete the non-spending BIP84/BIP48 account-key proof, then verify
+   all other devices were untouched. Repeat with two devices from the same family
+   connected where available.
+5. Unplug one device between inventory and selection. The selected action must
+   fail closed without substituting another device. Reconnect and explicitly
+   rescan; the old capability must remain invalid.
+
+Stop on any scan-time password, PIN, login, approval, duplicate row, wrong-model
+row, unselected-device screen change, or same-family substitution. Do not proceed
+to funded signing until the inventory rows are reviewed.
+
 Current local status on 2026-08-24:
 
 - Coldcard Mk4, Blockstream Jade Classic, original BitBox02 Bitcoin-only,
@@ -281,20 +313,25 @@ Current local status on 2026-08-24:
   and Nova while Trezor and Ledger passed in the same package. HWI-owned
   rediscovery through global `--stdin` also failed on both BitBox models. The
   last certified Nova build used HWI 3.2.0 with ordinary documented argv, so
-  initial BitBox single-key import now requires exactly one scanned BitBox row
-  and invokes only a fixed non-sensitive BIP84 argv command. The HID path and
-  fingerprint are not forwarded and the complete
+  v0.4.29 initial BitBox single-key import then required exactly one scanned
+  BitBox row and invoked only a fixed non-sensitive BIP84 argv command. The HID
+  path and fingerprint were not forwarded and the complete
   live identity proof remains mandatory; separate exact-model physical retests
   are still required.
 - After the BitBoxApp pairing state was repaired, packaged v0.4.29 initial
   BIP84 import passed independently on the original BitBox02 and Nova. Nova
   then passed BIP84 trusted receive display, while the original model was
   enumerated as ready and failed unlock-required when the display command
-  reopened the cached HID path. No verification was persisted. The current
-  candidate keeps the full live identity proof but reopens saved BitBox address
-  display through HWI's exact fingerprint selector and provides a same-signer
-  interactive retry. Both exact models require packaged retesting on this new
-  boundary; the earlier Nova display pass is not inherited.
+  reopened the cached HID path. No verification was persisted. A later
+  pre-Sep30 candidate kept the full live identity proof but reopened saved BitBox address
+  display through HWI's exact fingerprint selector and provided a same-signer
+  interactive retry. The Sep 30 correction supersedes that selector: account
+  proof, retries, and trusted display now remain on the explicitly selected exact
+  path, and empty/type/fingerprint-only action selection fails before spawn. Both
+  exact models require packaged retesting on this newer boundary; the earlier
+  Nova display pass is not inherited. ADR 0075's macOS passive picker is now
+  implemented, but its packaged seven-device inventory and timing matrix remains
+  open physical evidence.
 
 GitHub issue state is intentionally not duplicated as a large static list. The
 live tracker is <https://github.com/thibistaken/groot/issues>. At this snapshot,

@@ -460,6 +460,36 @@ describe('hardware receive verification UI', () => {
     expect(scanSource).not.toContain('mergeHardwareDiscovery');
   });
 
+  it('cancels native discovery when every hardware scan dialog closes', () => {
+    for (const [source, endMarker] of [
+      [hardwareSetup, 'async function useDevice('],
+      [multisigSetup, 'async function copyDescriptor('],
+      [singleKeySend, 'async function signHardware('],
+      [multisigSend, 'function closePolicyReview()']
+    ] as const) {
+      const start = source.indexOf('function closeHardwareScan()');
+      const end = source.indexOf(endMarker, start);
+      const closeSource = source.slice(start, end);
+      expect(start).toBeGreaterThan(-1);
+      expect(end).toBeGreaterThan(start);
+      expect(closeSource).toContain('walletService.cancelHardwareOperations(true)');
+      expect(closeSource).toContain('Could not stop hardware scan');
+    }
+  });
+
+  it('keeps signer health checks active so automatic lock cannot interrupt device review', () => {
+    for (const command of ['hardware_check_cosigner', 'hardware_check_external_signer']) {
+      const start = hardwareCommands.indexOf(`pub async fn ${command}(`);
+      const end = hardwareCommands.indexOf('\n#[tauri::command]', start + 1);
+      const commandSource = hardwareCommands.slice(start, end);
+      expect(start).toBeGreaterThan(-1);
+      expect(commandSource).toContain('begin_optional_unlocked_user_operation(&app, &state)');
+      expect(commandSource.indexOf('begin_optional_unlocked_user_operation')).toBeLessThan(
+        commandSource.indexOf('spawn_blocking')
+      );
+    }
+  });
+
   it('refreshes the saved signer backend instead of reusing stale import handles for policy review', () => {
     const start = multisigSetup.indexOf('function openDraftPolicyVerification');
     const end = multisigSetup.indexOf('async function verifyDraftPolicy', start);

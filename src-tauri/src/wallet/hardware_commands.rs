@@ -207,7 +207,10 @@ pub async fn hardware_cancel_operations(
         .lock()
         .map_err(internal)?
         .clear();
-    *state.recent_hardware_scan.lock().map_err(internal)? = None;
+    // Advance the epoch before terminating the native operation. A canceled
+    // enumerate process that finishes concurrently must never repopulate the
+    // cache with capabilities the user just invalidated.
+    forget_hardware_scan(&state)?;
     if preserve_mainnet_admission != Some(true) {
         state
             .pending_hardware_admissions
@@ -262,7 +265,15 @@ fn retain_requested_hwi_devices(
 struct DiscoveryFlightState {
     running: bool,
     generation: u64,
-    result: Option<(u64, ApiResult<Vec<HwiDevice>>)>,
+    waiters: usize,
+    completions: HashMap<u64, SharedDiscoveryCompletion>,
+}
+
+type SharedDiscoveryResult = ApiResult<(u64, Vec<HwiDevice>)>;
+
+struct SharedDiscoveryCompletion {
+    result: SharedDiscoveryResult,
+    remaining_waiters: usize,
 }
 
 struct DiscoveryFlight {
@@ -290,7 +301,7 @@ fn validate_discovered_devices_for_network(
     if devices.len() > MAX_DISCOVERED_DEVICES {
         return Err(api_error(
             "hardware_response_too_large",
-            "HWI returned too many hardware-signer records.",
+            "The hardware inventory returned too many signer records.",
         ));
     }
     let mut paths = std::collections::HashSet::new();
@@ -303,11 +314,11 @@ fn validate_discovered_devices_for_network(
         {
             return Err(api_error(
                 "invalid_hardware_response",
-                "HWI returned an invalid hardware-signer record.",
+                "The hardware inventory returned an invalid signer record.",
             ));
         }
     }
-    // Aggregate HWI discovery reports every connected family. An otherwise
+    // Passive inventory reports every recognized connected family. An otherwise
     // valid but out-of-scope model must not prevent an approved signer from
     // being discovered. Drop it before issuing a capability or caching its
     // private path; selected-device commands therefore remain limited to the
@@ -323,7 +334,7 @@ fn validate_discovered_devices_for_network(
                 Fingerprint::from_str(&fingerprint).map_err(|_| {
                     api_error(
                         "invalid_hardware_response",
-                        "HWI returned an invalid hardware-signer identity.",
+                        "The hardware inventory returned an invalid signer identity.",
                     )
                 })?;
                 Some(fingerprint)
@@ -333,45 +344,85 @@ fn validate_discovered_devices_for_network(
         if !device.path.is_empty() && !paths.insert(device.path.clone()) {
             return Err(api_error(
                 "hardware_ambiguous",
-                "HWI returned conflicting devices for one connection. Disconnect extra signers and scan again.",
+                "The hardware inventory returned conflicting devices for one connection. Disconnect extra signers and scan again.",
             ));
         }
     }
     Ok(devices)
 }
 
-fn discover_hardware_singleflight(hwi: &HwiCli) -> ApiResult<(u64, Vec<HwiDevice>)> {
+fn passive_hwi_devices() -> ApiResult<Vec<HwiDevice>> {
+    let devices = passive_hardware_inventory(network())
+        .map_err(hardware_api_error)?
+        .into_iter()
+        .map(|candidate| HwiDevice {
+            passive: true,
+            device_type: candidate.device_type,
+            model: candidate.model,
+            path: candidate.path,
+            ..HwiDevice::default()
+        })
+        .collect();
+    validate_discovered_devices(devices)
+}
+
+fn discover_hardware_singleflight<S, F>(
+    scan: S,
+    begin_scan: F,
+) -> ApiResult<(u64, u64, Vec<HwiDevice>)>
+where
+    S: FnOnce() -> ApiResult<Vec<HwiDevice>>,
+    F: FnOnce() -> ApiResult<u64>,
+{
     let flight = discovery_flight();
     let mut state = flight.state.lock().map_err(internal)?;
     if state.running {
         let generation = state.generation;
+        state.waiters = state.waiters.saturating_add(1);
         while state.running && state.generation == generation {
             state = flight.finished.wait(state).map_err(internal)?;
         }
-        let result = state
-            .result
-            .as_ref()
-            .filter(|(completed, _)| *completed == generation)
-            .map(|(_, result)| result.clone())
-            .ok_or_else(|| internal("The shared hardware scan did not produce a result."))?;
-        return result.map(|devices| (generation, devices));
+        let (result, remove_completion) = {
+            let completion = state
+                .completions
+                .get_mut(&generation)
+                .ok_or_else(|| internal("The shared hardware scan did not produce a result."))?;
+            let result = completion.result.clone();
+            completion.remaining_waiters = completion.remaining_waiters.saturating_sub(1);
+            (result, completion.remaining_waiters == 0)
+        };
+        if remove_completion {
+            state.completions.remove(&generation);
+        }
+        return result.map(|(request_epoch, devices)| (generation, request_epoch, devices));
     }
     state.generation = state.generation.wrapping_add(1);
     let generation = state.generation;
     state.running = true;
+    state.waiters = 0;
     drop(state);
 
-    let result = hwi
-        .enumerate()
-        .map_err(hardware_api_error)
-        .and_then(|encoded| serde_json::from_slice(&encoded).map_err(internal))
-        .and_then(validate_discovered_devices);
+    // Only the leader invalidates the prior cache. Followers join both the
+    // native inventory call and its request epoch so every coalesced caller
+    // can publish the same capabilities without superseding its peers.
+    let result =
+        begin_scan().and_then(|request_epoch| scan().map(|devices| (request_epoch, devices)));
 
     let mut state = flight.state.lock().map_err(internal)?;
     state.running = false;
-    state.result = Some((generation, result.clone()));
+    if state.waiters > 0 {
+        let remaining_waiters = state.waiters;
+        state.completions.insert(
+            generation,
+            SharedDiscoveryCompletion {
+                result: result.clone(),
+                remaining_waiters,
+            },
+        );
+    }
+    state.waiters = 0;
     flight.finished.notify_all();
-    result.map(|devices| (generation, devices))
+    result.map(|(request_epoch, devices)| (generation, request_epoch, devices))
 }
 
 fn saved_hwi_device(
@@ -419,10 +470,7 @@ fn saved_hwi_device(
 }
 
 fn supports_locked_interactive_identity(device_type: &str) -> bool {
-    matches!(
-        device_type.to_ascii_lowercase().as_str(),
-        "bitbox02" | "jade" | "ledger"
-    )
+    SUPPORTED_HWI_DEVICE_TYPES.contains(&device_type.to_ascii_lowercase().as_str())
 }
 
 pub(super) fn saved_cosigner_candidates_for_device(
@@ -463,18 +511,24 @@ fn same_cosigner_identity(left: &CosignerInput, right: &CosignerInput) -> bool {
         && left.device_type == right.device_type
 }
 
-fn discover_saved_hardware_device(
-    hwi: &HwiCli,
+fn discover_saved_hardware_device<S, F>(
+    scan: S,
     device_type: &str,
     fingerprint: &str,
-) -> ApiResult<HwiDevice> {
-    let (_, discovered) = discover_hardware_singleflight(hwi)?;
-    saved_hwi_device(discovered, device_type, fingerprint)?.ok_or_else(|| {
+    begin_scan: F,
+) -> ApiResult<(u64, u64, HwiDevice)>
+where
+    S: FnOnce() -> ApiResult<Vec<HwiDevice>>,
+    F: FnOnce() -> ApiResult<u64>,
+{
+    let (generation, request_epoch, discovered) = discover_hardware_singleflight(scan, begin_scan)?;
+    let device = saved_hwi_device(discovered, device_type, fingerprint)?.ok_or_else(|| {
         api_error(
             "hardware_unavailable",
             "The saved hardware signer was not found. Keep that signer connected and unlocked, then try again.",
         )
-    })
+    })?;
+    Ok((generation, request_epoch, device))
 }
 
 fn remember_hardware_scan(
@@ -551,22 +605,6 @@ fn remember_hardware_devices_in_scan(
     scan.generation = None;
 }
 
-fn remember_discovered_hardware_devices(
-    state: &AppState,
-    request_epoch: u64,
-    devices: &mut [HwiDevice],
-) -> ApiResult<()> {
-    let mut scans = state.recent_hardware_scan.lock().map_err(internal)?;
-    if state.hardware_scan_epoch.load(Ordering::SeqCst) != request_epoch {
-        return Err(api_error(
-            "hardware_scan_superseded",
-            "A newer hardware scan replaced this result. Use the latest scan.",
-        ));
-    }
-    remember_hardware_devices_in_scan(&mut scans, devices);
-    Ok(())
-}
-
 fn forget_hardware_scan(state: &AppState) -> ApiResult<u64> {
     let mut scans = state.recent_hardware_scan.lock().map_err(internal)?;
     let request_epoch = state
@@ -602,50 +640,22 @@ pub(super) fn recently_scanned_hardware_device(
     })
 }
 
-fn require_unique_bitbox(state: &AppState, selected: &HwiDevice) -> ApiResult<()> {
-    if !selected.device_type.eq_ignore_ascii_case("bitbox02") {
-        return Ok(());
-    }
-    let scans = state.recent_hardware_scan.lock().map_err(internal)?;
-    let scan = scans.as_ref().ok_or_else(|| {
-        api_error(
-            "hardware_scan_expired",
-            "Scan for hardware signers again before continuing.",
-        )
-    })?;
-    if scan.created_at.elapsed() > HARDWARE_SCAN_CACHE_TIMEOUT {
-        return Err(api_error(
-            "hardware_scan_expired",
-            "The hardware scan expired. Scan again before continuing.",
-        ));
-    }
-    let matching = scan
-        .devices
-        .values()
-        .filter(|device| device.device_type.eq_ignore_ascii_case("bitbox02"))
-        .count();
-    if matching == 1 {
-        Ok(())
-    } else {
-        Err(api_error(
-            "hardware_ambiguous",
-            "Connect only the selected locked BitBox, scan again, and continue.",
-        ))
-    }
-}
-
 #[tauri::command]
 pub async fn hardware_list(
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> ApiResult<Vec<HardwareDeviceDto>> {
     let _activity = begin_optional_unlocked_user_operation(&app, &state)?;
-    let request_epoch = forget_hardware_scan(&state)?;
-    let hwi = hwi_cli(&app)?;
-    let (generation, mut devices) =
-        tauri::async_runtime::spawn_blocking(move || discover_hardware_singleflight(&hwi))
-            .await
-            .map_err(internal)??;
+    let app_for_scan = app.clone();
+    let (generation, request_epoch, mut devices) =
+        tauri::async_runtime::spawn_blocking(move || {
+            let native_state = app_for_scan.state::<AppState>();
+            discover_hardware_singleflight(passive_hwi_devices, || {
+                forget_hardware_scan(&native_state)
+            })
+        })
+        .await
+        .map_err(internal)??;
     remember_hardware_scan(&state, request_epoch, generation, &mut devices)?;
     Ok(devices.into_iter().map(hardware_device_dto).collect())
 }
@@ -658,19 +668,23 @@ pub async fn hardware_list_for_device_types(
 ) -> ApiResult<Vec<HardwareDeviceDto>> {
     let _activity = begin_optional_unlocked_user_operation(&app, &state)?;
     let device_types = validated_target_device_types(device_types)?;
-    let request_epoch = forget_hardware_scan(&state)?;
-    let hwi = hwi_cli(&app)?;
+    let app_for_scan = app.clone();
     let devices = tauri::async_runtime::spawn_blocking(move || {
-        let (generation, discovered) = discover_hardware_singleflight(&hwi)?;
+        let native_state = app_for_scan.state::<AppState>();
+        let (generation, request_epoch, discovered) =
+            discover_hardware_singleflight(passive_hwi_devices, || {
+                forget_hardware_scan(&native_state)
+            })?;
         Ok::<_, ApiError>((
             generation,
+            request_epoch,
             discovered.clone(),
             retain_requested_hwi_devices(discovered, &device_types),
         ))
     })
     .await
     .map_err(internal)??;
-    let (generation, mut all_devices, mut devices) = devices;
+    let (generation, request_epoch, mut all_devices, mut devices) = devices;
     remember_hardware_scan(&state, request_epoch, generation, &mut all_devices)?;
     let capabilities = all_devices
         .iter()
@@ -727,17 +741,22 @@ pub async fn hardware_find_saved_device(
     // identity and perform its action under one exclusive native lease.
     // It must not erase the other exact live admissions collected for this
     // multisig setup; every admission remains identity-bound and time-bounded.
-    let request_epoch = forget_hardware_scan(&state)?;
-    let hwi = hwi_cli(&app)?;
     let requested_type = device_type.clone();
     let requested_fingerprint = fingerprint.clone();
-    let device = tauri::async_runtime::spawn_blocking(move || {
-        discover_saved_hardware_device(&hwi, &requested_type, &requested_fingerprint)
+    let app_for_scan = app.clone();
+    let (generation, request_epoch, device) = tauri::async_runtime::spawn_blocking(move || {
+        let native_state = app_for_scan.state::<AppState>();
+        discover_saved_hardware_device(
+            passive_hwi_devices,
+            &requested_type,
+            &requested_fingerprint,
+            || forget_hardware_scan(&native_state),
+        )
     })
     .await
     .map_err(internal)??;
     let mut remembered = [device];
-    remember_discovered_hardware_devices(&state, request_epoch, &mut remembered)?;
+    remember_hardware_scan(&state, request_epoch, generation, &mut remembered)?;
     let device = remembered
         .into_iter()
         .next()
@@ -748,25 +767,27 @@ pub async fn hardware_find_saved_device(
 #[cfg(test)]
 mod targeted_scan_tests {
     use super::*;
+    use std::sync::{
+        atomic::{AtomicUsize, Ordering as AtomicOrdering},
+        Arc,
+    };
     use std::thread;
 
-    #[cfg(unix)]
-    static FAKE_HWI_TEST_LOCK: Mutex<()> = Mutex::new(());
+    static PASSIVE_SCAN_TEST_LOCK: Mutex<()> = Mutex::new(());
 
-    #[cfg(unix)]
-    fn fake_hwi() -> (HwiCli, PathBuf, PathBuf) {
-        use std::os::unix::fs::PermissionsExt as _;
-
-        let suffix = format!("{}-{:?}", std::process::id(), thread::current().id());
-        let program = std::env::temp_dir().join(format!("groot-fake-hwi-{suffix}"));
-        let count = std::env::temp_dir().join(format!("groot-fake-hwi-count-{suffix}"));
-        let script = format!(
-            "#!/bin/sh\nIFS= read -r command\nvalue=0\nif [ -f '{count}' ]; then IFS= read -r value < '{count}'; fi\nvalue=$((value + 1))\nprintf '%s\\n' \"$value\" > '{count}'\n/bin/sleep 0.05\nprintf '%s\\n' '[{{\"type\":\"jade\",\"model\":\"Jade\",\"path\":\"fake-path\",\"fingerprint\":\"a1b2c3d4\"}}]'",
-            count = count.display()
-        );
-        std::fs::write(&program, script).unwrap();
-        std::fs::set_permissions(&program, std::fs::Permissions::from_mode(0o755)).unwrap();
-        (HwiCli::for_test_program(program.clone()), program, count)
+    fn fake_passive_scan(count: Arc<AtomicUsize>) -> impl FnOnce() -> ApiResult<Vec<HwiDevice>> {
+        move || {
+            count.fetch_add(1, AtomicOrdering::SeqCst);
+            thread::sleep(Duration::from_millis(50));
+            Ok(vec![HwiDevice {
+                passive: true,
+                device_type: "jade".into(),
+                model: "jade".into(),
+                path: "fake-path".into(),
+                fingerprint: Some("a1b2c3d4".into()),
+                ..HwiDevice::default()
+            }])
+        }
     }
 
     #[test]
@@ -838,51 +859,104 @@ mod targeted_scan_tests {
         assert!(!generic.message.to_ascii_lowercase().contains("wrong pin"));
     }
 
-    #[cfg(unix)]
     #[test]
-    fn three_or_seven_family_requests_and_concurrent_callers_each_use_one_enumerate() {
-        let _guard = FAKE_HWI_TEST_LOCK.lock().unwrap();
-        let (hwi, program, count) = fake_hwi();
+    fn three_or_all_family_requests_and_concurrent_callers_each_use_one_inventory_call() {
+        let _guard = PASSIVE_SCAN_TEST_LOCK.lock().unwrap();
+        let count = Arc::new(AtomicUsize::new(0));
+        let state = AppState::default();
         let three = vec!["jade".into(), "ledger".into(), "trezor".into()];
-        let (_, discovered) = discover_hardware_singleflight(&hwi).unwrap();
+        let (_, _, discovered) =
+            discover_hardware_singleflight(fake_passive_scan(Arc::clone(&count)), || {
+                forget_hardware_scan(&state)
+            })
+            .unwrap();
         assert_eq!(retain_requested_hwi_devices(discovered, &three).len(), 1);
-        assert_eq!(std::fs::read_to_string(&count).unwrap().trim(), "1");
+        assert_eq!(count.load(AtomicOrdering::SeqCst), 1);
 
-        let seven = SUPPORTED_HWI_DEVICE_TYPES
+        let all = SUPPORTED_HWI_DEVICE_TYPES
             .iter()
             .map(|value| (*value).to_owned())
             .collect::<Vec<_>>();
-        let (_, discovered) = discover_hardware_singleflight(&hwi).unwrap();
-        assert_eq!(retain_requested_hwi_devices(discovered, &seven).len(), 1);
-        assert_eq!(std::fs::read_to_string(&count).unwrap().trim(), "2");
+        let (_, _, discovered) =
+            discover_hardware_singleflight(fake_passive_scan(Arc::clone(&count)), || {
+                forget_hardware_scan(&state)
+            })
+            .unwrap();
+        assert_eq!(retain_requested_hwi_devices(discovered, &all).len(), 1);
+        assert_eq!(count.load(AtomicOrdering::SeqCst), 2);
 
-        let first = hwi.clone();
-        let second = hwi;
-        let left = thread::spawn(move || discover_hardware_singleflight(&first));
+        let shared_state = Arc::new(AppState::default());
+        let first_count = Arc::clone(&count);
+        let second_count = Arc::clone(&count);
+        let first_state = Arc::clone(&shared_state);
+        let left = thread::spawn(move || {
+            discover_hardware_singleflight(fake_passive_scan(first_count), || {
+                forget_hardware_scan(&first_state)
+            })
+        });
         thread::sleep(Duration::from_millis(10));
-        let right = thread::spawn(move || discover_hardware_singleflight(&second));
+        let second_state = Arc::clone(&shared_state);
+        let right = thread::spawn(move || {
+            discover_hardware_singleflight(fake_passive_scan(second_count), || {
+                forget_hardware_scan(&second_state)
+            })
+        });
+        let (left_generation, left_epoch, mut left_devices) = left.join().unwrap().unwrap();
+        let (right_generation, right_epoch, mut right_devices) = right.join().unwrap().unwrap();
+        assert_eq!(left_generation, right_generation);
+        assert_eq!(left_epoch, right_epoch);
+        assert_eq!(left_devices, right_devices);
+        remember_hardware_scan(
+            &shared_state,
+            left_epoch,
+            left_generation,
+            &mut left_devices,
+        )
+        .unwrap();
+        remember_hardware_scan(
+            &shared_state,
+            right_epoch,
+            right_generation,
+            &mut right_devices,
+        )
+        .unwrap();
+        assert_eq!(left_devices[0].capability, right_devices[0].capability);
         assert_eq!(
-            left.join().unwrap().unwrap(),
-            right.join().unwrap().unwrap()
+            recently_scanned_hardware_device(&shared_state, &left_devices[0].capability)
+                .unwrap()
+                .path,
+            "fake-path"
         );
-        assert_eq!(std::fs::read_to_string(&count).unwrap().trim(), "3");
-
-        std::fs::remove_file(program).unwrap();
-        std::fs::remove_file(count).unwrap();
+        let flight_state = discovery_flight().state.lock().unwrap();
+        assert!(!flight_state.running);
+        assert_eq!(flight_state.waiters, 0);
+        assert!(!flight_state.completions.contains_key(&left_generation));
+        drop(flight_state);
+        assert_eq!(count.load(AtomicOrdering::SeqCst), 3);
     }
 
-    #[cfg(unix)]
     #[test]
-    fn each_saved_device_rescan_performs_fresh_enumeration() {
-        let _guard = FAKE_HWI_TEST_LOCK.lock().unwrap();
-        let (hwi, program, count) = fake_hwi();
+    fn each_saved_device_rescan_performs_fresh_inventory() {
+        let _guard = PASSIVE_SCAN_TEST_LOCK.lock().unwrap();
+        let count = Arc::new(AtomicUsize::new(0));
+        let state = AppState::default();
 
-        discover_saved_hardware_device(&hwi, "jade", "a1b2c3d4").unwrap();
-        discover_saved_hardware_device(&hwi, "jade", "a1b2c3d4").unwrap();
+        discover_saved_hardware_device(
+            fake_passive_scan(Arc::clone(&count)),
+            "jade",
+            "a1b2c3d4",
+            || forget_hardware_scan(&state),
+        )
+        .unwrap();
+        discover_saved_hardware_device(
+            fake_passive_scan(Arc::clone(&count)),
+            "jade",
+            "a1b2c3d4",
+            || forget_hardware_scan(&state),
+        )
+        .unwrap();
 
-        assert_eq!(std::fs::read_to_string(&count).unwrap().trim(), "2");
-        std::fs::remove_file(program).unwrap();
-        std::fs::remove_file(count).unwrap();
+        assert_eq!(count.load(AtomicOrdering::SeqCst), 2);
     }
 
     #[test]
@@ -950,41 +1024,31 @@ mod targeted_scan_tests {
     }
 
     #[test]
-    fn bitbox_type_selection_requires_one_scanned_bitbox() {
+    fn same_family_devices_keep_distinct_redeemable_capabilities() {
         let state = AppState::default();
-        let mut devices = [HwiDevice {
-            device_type: "bitbox02".into(),
-            path: "private-bitbox-path".into(),
-            ..HwiDevice::default()
-        }];
-        let first_epoch = forget_hardware_scan(&state).unwrap();
-        remember_hardware_scan(&state, first_epoch, 7, &mut devices).unwrap();
-        assert!(require_unique_bitbox(&state, &devices[0]).is_ok());
-
-        let mut ambiguous = [
-            devices[0].clone(),
+        let mut devices = [
             HwiDevice {
                 device_type: "bitbox02".into(),
-                path: "other-private-bitbox-path".into(),
+                path: "private-bitbox-original-path".into(),
+                ..HwiDevice::default()
+            },
+            HwiDevice {
+                device_type: "bitbox02".into(),
+                path: "private-bitbox-nova-path".into(),
                 ..HwiDevice::default()
             },
         ];
-        let second_epoch = forget_hardware_scan(&state).unwrap();
-        remember_hardware_scan(&state, second_epoch, 8, &mut ambiguous).unwrap();
-        assert_eq!(
-            require_unique_bitbox(&state, &ambiguous[0])
-                .unwrap_err()
-                .code,
-            "hardware_ambiguous"
-        );
-
-        ambiguous[0].fingerprint = Some("a1b2c3d4".into());
-        assert_eq!(
-            require_unique_bitbox(&state, &ambiguous[0])
-                .unwrap_err()
-                .code,
-            "hardware_ambiguous"
-        );
+        let epoch = forget_hardware_scan(&state).unwrap();
+        remember_hardware_scan(&state, epoch, 8, &mut devices).unwrap();
+        assert_ne!(devices[0].capability, devices[1].capability);
+        for device in devices {
+            assert_eq!(
+                recently_scanned_hardware_device(&state, &device.capability)
+                    .unwrap()
+                    .path,
+                device.path
+            );
+        }
     }
 
     #[test]
@@ -1351,17 +1415,18 @@ mod targeted_scan_tests {
     }
 
     #[test]
-    fn saved_device_does_not_redeem_locked_coldcard_or_trezor_hints() {
-        for device_type in ["coldcard", "trezor"] {
+    fn saved_device_redeems_one_passive_path_for_every_supported_family() {
+        for device_type in SUPPORTED_HWI_DEVICE_TYPES {
             let locked = HwiDevice {
                 fingerprint: None,
-                device_type: device_type.into(),
+                device_type: (*device_type).into(),
                 path: format!("usb-{device_type}"),
                 ..HwiDevice::default()
             };
-            assert!(saved_hwi_device(vec![locked], device_type, "a1b2c3d4")
-                .unwrap()
-                .is_none());
+            assert_eq!(
+                saved_hwi_device(vec![locked.clone()], device_type, "a1b2c3d4").unwrap(),
+                Some(locked)
+            );
         }
     }
 }
@@ -1370,22 +1435,25 @@ pub async fn hardware_prompt_pin(
     app: AppHandle,
     state: State<'_, AppState>,
     device_id: String,
-) -> ApiResult<String> {
+) -> ApiResult<HardwarePinPromptDto> {
     let _activity = begin_optional_unlocked_user_operation(&app, &state)?;
     let hwi = hwi_cli(&app)?;
     let device = recently_scanned_hardware_device(&state, &device_id)?;
     let pending = tauri::async_runtime::spawn_blocking(move || {
-        if !device.device_type.eq_ignore_ascii_case("trezor")
-            || (!device.needs_pin_sent && device.code != Some(-12))
-        {
+        if !hardware_pin_prompt_required(&device) {
             return Err(api_error(
                 "invalid_hardware_request",
                 "This device does not need Groot's PIN-matrix flow.",
             ));
         }
-        let output = hwi
-            .prompt_pin(&device.device_type, &device.path)
-            .map_err(hardware_api_error)?;
+        let output = match hwi.prompt_pin(&device.device_type, &device.path) {
+            Ok(output) => output,
+            // Passive inventory deliberately does not open Trezor to learn its
+            // lock state. Probe only the selected exact path; HWI's typed
+            // already-unlocked result means the caller can continue directly.
+            Err(HardwareError::CommandFailed(Some(-11))) if device.passive => return Ok(None),
+            Err(error) => return Err(hardware_api_error(error)),
+        };
         let response: HwiSuccess = serde_json::from_slice(&output).map_err(internal)?;
         if response.success != Some(true) {
             return Err(missing_hwi_value(
@@ -1393,19 +1461,33 @@ pub async fn hardware_prompt_pin(
                 "The hardware signer did not start its PIN matrix.",
             ));
         }
-        Ok(PendingHardwarePin {
+        Ok(Some(PendingHardwarePin {
             device_type: device.device_type,
             device_path: device.path,
             created_at: Instant::now(),
-        })
+        }))
     })
     .await
     .map_err(internal)??;
+    let Some(pending) = pending else {
+        state
+            .pending_hardware_pins
+            .lock()
+            .map_err(internal)?
+            .clear();
+        return Ok(HardwarePinPromptDto {
+            challenge_id: None,
+            pin_required: false,
+        });
+    };
     let challenge_id = Uuid::new_v4().to_string();
     let mut challenges = state.pending_hardware_pins.lock().map_err(internal)?;
     challenges.clear();
     challenges.insert(challenge_id.clone(), pending);
-    Ok(challenge_id)
+    Ok(HardwarePinPromptDto {
+        challenge_id: Some(challenge_id),
+        pin_required: true,
+    })
 }
 
 #[tauri::command]
@@ -1531,6 +1613,7 @@ pub async fn hardware_check_cosigner(
     device_id: String,
     draft: Option<bool>,
 ) -> ApiResult<CosignerHealthDto> {
+    let _activity = begin_optional_unlocked_user_operation(&app, &state)?;
     cosigner.parse_for_validation().map_err(policy_api_error)?;
     if draft.unwrap_or(false) {
         let selection = load_registry(&app)?.selected_wallet_id;
@@ -1631,6 +1714,7 @@ pub async fn hardware_check_external_signer(
     signer: ExternalSignerInput,
     device_id: String,
 ) -> ApiResult<CosignerHealthDto> {
+    let _activity = begin_optional_unlocked_user_operation(&app, &state)?;
     signer.validate().map_err(external_signer_api_error)?;
     let selected = selected_profile(&app)?;
     if selected.kind != WalletKind::WatchOnly {
@@ -2072,14 +2156,16 @@ fn read_bitbox_account_identity(
     device: &HwiDevice,
     derivation_path: &str,
 ) -> ApiResult<(String, String)> {
-    // The last physically certified Nova path used HWI's documented argv mode.
-    // The later global --stdin hardening is the shared regression boundary for
-    // both BitBox models. Invoke only this fixed, non-sensitive BIP84 command
-    // through argv and let HWI select the one scanned BitBox by type. The
-    // returned descriptor still binds the live fingerprint and account key
-    // atomically; paths, fingerprints, addresses, keys, and PSBTs stay off argv.
+    // Keep every retry bound to the opaque path selected from the latest scan.
+    // A type-only HWI command performs aggregate enumeration internally and
+    // can open an unselected BitBox or another connected signer.
     for attempt in 0..BITBOX_ACCOUNT_KEY_ATTEMPTS {
-        let output = match hwi.standard_bitbox_singlesig_keypool_in_operation(operation) {
+        let output = match hwi.account_keypool_in_operation(
+            operation,
+            &device.device_type,
+            &device.path,
+            derivation_path,
+        ) {
             Ok(output) => output,
             Err(error)
                 if attempt + 1 < BITBOX_ACCOUNT_KEY_ATTEMPTS
@@ -2104,9 +2190,9 @@ fn read_bitbox_account_identity(
         match parse_hwi_account_keypool(&output, derivation_path, &device.device_type) {
             Ok(identity) => return Ok(identity),
             Err(_) if retryable_response && attempt + 1 < BITBOX_ACCOUNT_KEY_ATTEMPTS => {
-                // HWI closes its aggregate-enumeration client immediately
-                // before this selected-device command. Nova can briefly report the
-                // same HID path as busy/not ready during that handoff. Retry
+                // HWI closes its discovery client before this exact-path
+                // selected-device command. Nova can briefly report the same HID
+                // path as busy/not ready during that handoff. Retry
                 // only those typed transient results; cancellation, identity,
                 // path, network, and descriptor failures remain terminal.
                 std::thread::sleep(BITBOX_ACCOUNT_KEY_RETRY_DELAY);
@@ -2305,7 +2391,6 @@ pub async fn hardware_import_external_signer(
     let label = normalize_label(&label)?;
     let hwi = hwi_cli(&app)?;
     let device = recently_scanned_hardware_device(&state, &device_id)?;
-    require_unique_bitbox(&state, &device)?;
     let input = tauri::async_runtime::spawn_blocking(move || {
         read_hardware_external_signer(
             &hwi,
@@ -3055,27 +3140,14 @@ pub async fn hardware_verify_multisig_address(
                 &device,
                 &expected_signers,
             )?;
-            let displayed = if identity.device_type.eq_ignore_ascii_case("bitbox02") {
-                // HWI's cached BitBox HID path can stop reopening after aggregate
-                // discovery even while the signer remains connected. Reopen the
-                // saved signer through HWI's exact fingerprint selector for the
-                // trusted-display command. The selector and descriptor stay in
-                // stdin, and the earlier full account identity proof remains
-                // mandatory under this same exclusive operation lease.
-                hwi.display_bitbox_descriptor_address_in_operation(
-                    &operation,
-                    &identity.fingerprint,
-                    &descriptor,
-                )
-            } else {
-                hwi.display_descriptor_address_in_operation(
+            let displayed = hwi
+                .display_descriptor_address_in_operation(
                     &operation,
                     &identity.device_type,
                     &device.path,
                     &descriptor,
                 )
-            }
-            .map_err(|error| hardware_device_api_error(error, &identity.device_type))?;
+                .map_err(|error| hardware_device_api_error(error, &identity.device_type))?;
             Ok::<_, ApiError>((displayed, identity, operation))
         })
         .await
@@ -3254,25 +3326,16 @@ fn display_multisig_policy_address(
             "This signer does not require interactive policy verification.",
         ));
     }
-    // Match saved receive verification: a BitBox secure connection may no
-    // longer reopen through the scan's HID path after the identity client
-    // closes. Use only the fingerprint proven by that live account-key check,
-    // under the same operation lease; never a renderer-supplied selector.
-    let displayed = if identity.device_type.eq_ignore_ascii_case("bitbox02") {
-        hwi.display_bitbox_descriptor_address_in_operation(
-            &operation,
-            &identity.fingerprint,
-            descriptor,
-        )
-    } else {
-        hwi.display_descriptor_address_in_operation(
+    // The identity proof and trusted-display action remain on the exact path
+    // selected by the user, under one exclusive operation lease.
+    let displayed = hwi
+        .display_descriptor_address_in_operation(
             &operation,
             &identity.device_type,
             &device.path,
             descriptor,
         )
-    }
-    .map_err(|error| hardware_device_api_error(error, &identity.device_type))?;
+        .map_err(|error| hardware_device_api_error(error, &identity.device_type))?;
     Ok((displayed, identity, device, operation))
 }
 
@@ -3526,24 +3589,14 @@ pub async fn hardware_verify_external_address(
                 .map_err(hardware_api_error)?;
             let identity =
                 prove_live_external_signer_identity(&hwi, &operation, &device, &expected_signer)?;
-            let displayed = if identity.device_type.eq_ignore_ascii_case("bitbox02") {
-                // A saved BitBox may need a fresh secure connection after the
-                // identity proof. Select that connection by the freshly proven
-                // fingerprint instead of reusing the discovery HID path.
-                hwi.display_bitbox_descriptor_address_in_operation(
-                    &operation,
-                    &identity.fingerprint,
-                    &descriptor,
-                )
-            } else {
-                hwi.display_descriptor_address_in_operation(
+            let displayed = hwi
+                .display_descriptor_address_in_operation(
                     &operation,
                     &identity.device_type,
                     &device.path,
                     &descriptor,
                 )
-            }
-            .map_err(|error| hardware_device_api_error(error, &identity.device_type))?;
+                .map_err(|error| hardware_device_api_error(error, &identity.device_type))?;
             Ok::<_, ApiError>((displayed, identity, operation))
         })
         .await
@@ -3693,15 +3746,9 @@ mod health_check_tests {
             assert!(commands[0].contains("getkeypool"));
             assert!(commands[0].contains("fixture-private-path"));
             assert!(commands[1].contains("displayaddress"));
-            if family == "bitbox02" {
-                assert!(commands[1].contains("--fingerprint"));
-                assert!(commands[1].contains(&expected.fingerprint));
-                assert!(!commands[1].contains("--device-path"));
-                assert!(!commands[1].contains("fixture-private-path"));
-            } else {
-                assert!(commands[1].contains("--device-path"));
-                assert!(commands[1].contains("fixture-private-path"));
-            }
+            assert!(commands[1].contains("--device-path"));
+            assert!(commands[1].contains("fixture-private-path"));
+            assert!(!commands[1].contains("--fingerprint"));
 
             std::fs::write(&log, "").unwrap();
             let mut wrong = signer_from_seed(44);
@@ -3777,7 +3824,7 @@ mod health_check_tests {
 
     #[cfg(unix)]
     #[test]
-    fn initial_bitbox_import_uses_documented_public_argv_without_identifiers() {
+    fn initial_bitbox_import_retries_only_the_exact_selected_path_via_stdin() {
         use std::os::unix::fs::PermissionsExt as _;
 
         let expected = external_signer_from_seed(21);
@@ -3796,7 +3843,7 @@ mod health_check_tests {
         std::fs::write(
             &script,
             format!(
-                "#!/bin/sh\nif [ \"$1\" = '--stdin' ]; then exit 91; fi\nprintf '%s\\n' \"$*\" >> '{command_log}'\nvalue=0\nif [ -f '{count}' ]; then IFS= read -r value < '{count}'; fi\nvalue=$((value + 1))\nprintf '%s\\n' \"$value\" > '{count}'\nif [ \"$value\" -eq 1 ]; then printf '%s\\n' '{{\"error\":\"unavailable action\",\"code\":-9}}'; elif [ \"$value\" -eq 2 ]; then printf '%s\\n' '{{\"error\":\"busy\",\"code\":-15}}'; else printf '%s\\n' '{shell_keypool}'; fi\n",
+                "#!/bin/sh\nIFS= read -r command\nprintf '%s\\n' \"$command\" >> '{command_log}'\nvalue=0\nif [ -f '{count}' ]; then IFS= read -r value < '{count}'; fi\nvalue=$((value + 1))\nprintf '%s\\n' \"$value\" > '{count}'\nif [ \"$value\" -eq 1 ]; then printf '%s\\n' '{{\"error\":\"unavailable action\",\"code\":-9}}'; elif [ \"$value\" -eq 2 ]; then printf '%s\\n' '{{\"error\":\"busy\",\"code\":-15}}'; else printf '%s\\n' '{shell_keypool}'; fi\n",
                 count = count.display(),
                 command_log = command_log.display()
             ),
@@ -3824,25 +3871,23 @@ mod health_check_tests {
             .all(|command| command.contains("getkeypool")));
         assert!(commands
             .lines()
-            .all(|command| command.contains("--addr-type")));
-        assert!(commands.lines().all(|command| command.contains("wit")));
+            .all(|command| command.contains("--device-path")));
         assert!(commands
             .lines()
-            .all(|command| command.contains("--account")));
-        assert!(commands.lines().all(|command| !command.contains("--path")));
+            .all(|command| command.contains("opaque-nova-path")));
+        assert!(commands.lines().all(|command| command.contains("--path")));
         assert!(commands
             .lines()
-            .all(|command| !command.contains("--device-path")));
+            .all(|command| command.contains("m/84") && command.contains("/0/*")));
         assert!(commands
             .lines()
             .all(|command| !command.contains("--fingerprint")));
-        assert!(commands.lines().all(|command| !command.contains("--stdin")));
         assert!(commands
             .lines()
-            .all(|command| command.contains("--chain test")));
+            .all(|command| command.contains("--chain") && command.contains("test")));
         assert!(commands
             .lines()
-            .all(|command| command.contains("--device-type bitbox02")));
+            .all(|command| command.contains("--device-type") && command.contains("bitbox02")));
         assert!(bitbox_account_key_response_is_retryable(
             b"{\"error\":\"unavailable action\",\"code\":-9}"
         ));
@@ -3905,7 +3950,7 @@ mod health_check_tests {
     }
 
     #[test]
-    fn fingerprintless_prepare_then_rescan_device_still_fails_closed() {
+    fn fingerprintless_device_yields_only_saved_same_family_candidates() {
         let mut saved = signer_from_seed(15);
         saved.device_type = Some("coldcard".to_owned());
         let locked_coldcard = HwiDevice {
@@ -3914,8 +3959,11 @@ mod health_check_tests {
             ..HwiDevice::default()
         };
 
-        let error = saved_cosigner_candidates_for_device(&[saved], &locked_coldcard).unwrap_err();
-        assert_eq!(error.code, "hardware_unavailable");
+        let candidates =
+            saved_cosigner_candidates_for_device(&[saved.clone()], &locked_coldcard).unwrap();
+        assert_eq!(candidates.len(), 1);
+        assert_eq!(candidates[0].fingerprint, saved.fingerprint);
+        assert_eq!(candidates[0].xpub, saved.xpub);
     }
 
     #[cfg(unix)]

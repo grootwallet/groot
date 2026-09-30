@@ -43,7 +43,7 @@ const pinnedPolicySources = new Map([
     'src-tauri/src/external_signer.rs',
     '8d78a5f3c59acd619f8e8099899e1e902a71429257b8cb7136cabc516a2deabc'
   ],
-  ['src-tauri/src/hardware.rs', '484f422d62596bc0cf523eea6c6d12d20aa30710d60d8714f1bad94db64cf85d'],
+  ['src-tauri/src/hardware.rs', '152600b262500b54944681e0e95e21c4f50182881deafba891b0c679dc60008a'],
   ['src-tauri/src/multisig.rs', '2db90d61e79e09c5848e6d206c0a30c381437bffc4704cbbecd9c3d8abcf710d'],
   [
     'src-tauri/src/payjoin_support.rs',
@@ -52,7 +52,7 @@ const pinnedPolicySources = new Map([
   ['src-tauri/src/recovery.rs', '96eba2aaea0461d8ed067513c044f85f8845837dbf584eb3f93e6969ec5670dc'],
   ['src-tauri/src/network.rs', 'dcf011fb789a0b690b1832a9245df5fc0199318f03a820d10f9a3b1c90f5d76b'],
   ['src-tauri/src/registry.rs', '343aea20f5d09df6abd5c9fdba3b093efc6729c9ece8f180b27a150061753a18'],
-  ['src-tauri/src/wallet.rs', '5a398d3e7d69f8d7c70951fcf1fcc36f4836176b3dbf186814faa340ec8352c9'],
+  ['src-tauri/src/wallet.rs', '81a6fc16c459fdb02d88e7df70712dc09c760d0951948b670126b036316b8ddc'],
   [
     'src-tauri/src/wallet/diagnostics.rs',
     '0378b4dadf9698b2a6e04361950d51c65390e175c0c7fc50d88ac6deb2de8b5f'
@@ -71,7 +71,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src-tauri/src/wallet/hardware_commands.rs',
-    '0416bbeb43ed4fd18c20a86a259799c8edb7a2268b8fcf5a9c5368c831846b26'
+    '3edb2366b730146c97a066cb2835f7369da4abcb6a69bc6ee5ae32728e6452cc'
   ],
   [
     'src-tauri/src/wallet/label_interchange.rs',
@@ -137,14 +137,14 @@ const pinnedPolicySources = new Map([
     'src/lib/wallet/live-sync.ts',
     'a5c477820a08a6fda433fbf8c7ac9b0a2d36ede2e16593f0f0c3aebd6538a33c'
   ],
-  ['src/lib/wallet/tauri.ts', 'e2ed2554e760c3be602ea9254503249c9e7295b327bcc91ed8c88cd8dce3baaf'],
+  ['src/lib/wallet/tauri.ts', '8652a1e472c459ef63fbb4020df7ecd8cb783ca492c48702c99e8aa15af5ded2'],
   [
     'src/lib/wallet/contracts/errors.ts',
     'c24fbc5876dc7aaaf32f4f801506540707eb903882a4dadbadb93559f20fd9ac'
   ],
   [
     'src/lib/wallet/contracts/port.ts',
-    'ac06b6d3c03f3fac2b6b7011dc0c98fd463f612cef46a28cf27f482992994c86'
+    'e2053587e298312fee55b6f7695042326ad8c3ad75cbe472303a2437e00b41e0'
   ],
   [
     'src/lib/wallet/contracts/runtime.ts',
@@ -205,11 +205,11 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src/routes/hardware/new/+page.svelte',
-    '4b7e1edb8ca803ecdb4baeda576e4b2bcfb9e3c8c1d3d63919dca618ed77f579'
+    'fdc998607fdd6abf2a3fc297f3dfa9f84ffaa59b11e851e4f13f93753bbf3cbf'
   ],
   [
     'src/routes/multisig/new/+page.svelte',
-    '930bad4c56703efef9757d9595943fb2bd3f95a26fb2c81252408fe3e6719b23'
+    'fc078493cc139f8094b8225abb8403193acf5f30f5f2081bbe9bb6b74521bf86'
   ],
   [
     'src/lib/multisig/policy.ts',

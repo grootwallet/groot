@@ -1259,7 +1259,7 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
         'invalid_hardware_request',
         'This device does not need the PIN-matrix flow.'
       );
-    return 'fixture-pin-challenge';
+    return { challengeId: 'fixture-pin-challenge', pinRequired: true };
   }
   async sendHardwarePin(challengeId: string, pinPositions: string) {
     await new Promise((resolve) => setTimeout(resolve, 200));

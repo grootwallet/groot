@@ -3238,6 +3238,7 @@ fn loaded_hardware_wallet_descriptors_must_match_receive_and_change_identity() {
 #[test]
 fn cached_hwi_connection_identity_must_match_the_saved_signer() {
     let device = HwiDevice {
+        passive: false,
         capability: "opaque-device".to_owned(),
         fingerprint: Some("d34db33f".to_owned()),
         device_type: "trezor".to_owned(),
@@ -3450,7 +3451,59 @@ fn hwi_response_codes_become_safe_actionable_errors() {
 
 #[test]
 fn not_ready_hardware_remains_visible_with_safe_device_specific_actions() {
+    let passive_trezor = hardware_device_dto(HwiDevice {
+        passive: true,
+        capability: "opaque-passive-trezor".to_owned(),
+        fingerprint: None,
+        device_type: "trezor".to_owned(),
+        model: "trezor_candidate".to_owned(),
+        path: "webusb:007:4".to_owned(),
+        code: None,
+        error: None,
+        needs_pin_sent: false,
+        needs_passphrase_sent: false,
+        warnings: vec![],
+    });
+    assert_eq!(passive_trezor.label, "Trezor");
+    assert_eq!(passive_trezor.status, "needs_device_unlock");
+    assert_eq!(passive_trezor.action, "unlock");
+    assert!(passive_trezor.fingerprint.is_none());
+
+    let passive_model_one = hardware_device_dto(HwiDevice {
+        passive: true,
+        model: "trezor_1".to_owned(),
+        capability: "opaque-passive-model-one".to_owned(),
+        fingerprint: None,
+        device_type: "trezor".to_owned(),
+        path: "hid:model-one".to_owned(),
+        code: None,
+        error: None,
+        needs_pin_sent: false,
+        needs_passphrase_sent: false,
+        warnings: vec![],
+    });
+    assert_eq!(passive_model_one.status, "needs_pin");
+    assert_eq!(passive_model_one.action, "prompt_pin");
+
+    let passive_coldcard = hardware_device_dto(HwiDevice {
+        passive: true,
+        capability: "opaque-passive-coldcard".to_owned(),
+        fingerprint: None,
+        device_type: "coldcard".to_owned(),
+        model: "coldcard".to_owned(),
+        path: "coldcard-path".to_owned(),
+        code: None,
+        error: None,
+        needs_pin_sent: false,
+        needs_passphrase_sent: false,
+        warnings: vec![],
+    });
+    assert_eq!(passive_coldcard.status, "detected");
+    assert_eq!(passive_coldcard.action, "import");
+    assert!(!passive_coldcard.message.contains("coldcard-path"));
+
     let safe_3 = hardware_device_dto(HwiDevice {
+        passive: false,
         capability: "opaque-safe-3".to_owned(),
         fingerprint: Some("a1b2c3d4".to_owned()),
         device_type: "trezor".to_owned(),
@@ -3467,6 +3520,7 @@ fn not_ready_hardware_remains_visible_with_safe_device_specific_actions() {
     assert!(!safe_3.message.contains("sensitive-safe-3-path"));
 
     let unsupported_safe_3 = hardware_device_dto(HwiDevice {
+        passive: false,
         capability: "opaque-device".to_owned(),
         fingerprint: None,
         device_type: "trezor".to_owned(),
@@ -3487,6 +3541,7 @@ fn not_ready_hardware_remains_visible_with_safe_device_specific_actions() {
     assert!(!unsupported_safe_3.message.contains("webusb:sensitive-path"));
 
     let trezor = hardware_device_dto(HwiDevice {
+        passive: false,
         capability: "opaque-device".to_owned(),
         fingerprint: None,
         device_type: "trezor".to_owned(),
@@ -3504,6 +3559,7 @@ fn not_ready_hardware_remains_visible_with_safe_device_specific_actions() {
     assert!(!trezor.message.contains("sensitive-usb-path"));
 
     let locked_passphrase_trezor = hardware_device_dto(HwiDevice {
+        passive: false,
         capability: "opaque-device".to_owned(),
         fingerprint: None,
         device_type: "trezor".to_owned(),
@@ -3522,6 +3578,7 @@ fn not_ready_hardware_remains_visible_with_safe_device_specific_actions() {
     assert!(locked_passphrase_trezor.fingerprint.is_none());
 
     let bitbox = hardware_device_dto(HwiDevice {
+        passive: false,
         capability: "opaque-device".to_owned(),
         fingerprint: None,
         device_type: "bitbox02".to_owned(),
@@ -3538,6 +3595,7 @@ fn not_ready_hardware_remains_visible_with_safe_device_specific_actions() {
     assert!(bitbox.message.contains("password again"));
 
     let locked_nova = hardware_device_dto(HwiDevice {
+        passive: false,
         capability: "opaque-device".to_owned(),
         fingerprint: None,
         device_type: "bitbox02".to_owned(),
@@ -3557,6 +3615,7 @@ fn not_ready_hardware_remains_visible_with_safe_device_specific_actions() {
     assert!(!locked_nova.message.contains("sensitive-nova-path"));
 
     let ready_nova = hardware_device_dto(HwiDevice {
+        passive: false,
         capability: "opaque-device".to_owned(),
         fingerprint: Some("deadbeef".to_owned()),
         device_type: "bitbox02".to_owned(),
@@ -3573,6 +3632,7 @@ fn not_ready_hardware_remains_visible_with_safe_device_specific_actions() {
     assert_eq!(ready_nova.action, "import");
 
     let jade = hardware_device_dto(HwiDevice {
+        passive: false,
         capability: "opaque-device".to_owned(),
         fingerprint: None,
         device_type: "jade".to_owned(),
@@ -3589,6 +3649,7 @@ fn not_ready_hardware_remains_visible_with_safe_device_specific_actions() {
     assert!(jade.message.contains("enter your PIN on Jade"));
 
     let ledger = hardware_device_dto(HwiDevice {
+        passive: false,
         capability: "opaque-device".to_owned(),
         fingerprint: Some("f00dbabe".to_owned()),
         device_type: "ledger".to_owned(),
@@ -3609,6 +3670,7 @@ fn not_ready_hardware_remains_visible_with_safe_device_specific_actions() {
         ("coldcard", "USB communication", "retry"),
     ] {
         let device = hardware_device_dto(HwiDevice {
+            passive: false,
             capability: "opaque-device".to_owned(),
             fingerprint: None,
             device_type: device_type.to_owned(),
@@ -3626,6 +3688,7 @@ fn not_ready_hardware_remains_visible_with_safe_device_specific_actions() {
     }
 
     let keepkey = hardware_device_dto(HwiDevice {
+        passive: false,
         capability: "opaque-device".to_owned(),
         fingerprint: None,
         device_type: "keepkey".to_owned(),
@@ -3645,6 +3708,7 @@ fn not_ready_hardware_remains_visible_with_safe_device_specific_actions() {
     );
 
     let ready = hardware_device_dto(HwiDevice {
+        passive: false,
         capability: "opaque-device".to_owned(),
         fingerprint: Some("f00dbabe".to_owned()),
         device_type: "coldcard".to_owned(),
@@ -3663,6 +3727,7 @@ fn not_ready_hardware_remains_visible_with_safe_device_specific_actions() {
 #[test]
 fn trezor_passphrase_warning_requires_explicit_standard_wallet_selection() {
     let hwi_device = HwiDevice {
+        passive: false,
         capability: "opaque-device".to_owned(),
         fingerprint: Some("emptywallet".to_owned()),
         device_type: "trezor".to_owned(),

@@ -1,5 +1,32 @@
 # Mainnet hardware checkpoint — 2026-09-12
 
+## Sep 30 passive-inventory source correction and host probe; no packaged pass
+
+The Mainnet source-policy tripwire is refreshed for the final reviewed sources;
+the complete digests remain executable policy in
+`verify-mainnet-source-policy.mjs`, not duplicated authority in this ledger. The
+correction removes type-only and fingerprint-selected post-selection HWI
+actions, requires a non-empty exact path, shares one discovery cache epoch across
+concurrent callers, invalidates late canceled results, and cancels native scans
+when a picker closes.
+
+The follow-up implements ADR 0075's macOS picker with read-only HID,
+USB-registry, and serial enumeration. Picker discovery launches no HWI process
+and opens no vendor session. It admits only exact approved passive identities;
+pre-USB Coldcard is necessarily absent, and Mainnet omits the shared passive
+Safe 3 revision-A/Model-T identity rather than guessing. Exact-pinned inventory
+dependencies and classifier/concurrency fixtures are source evidence only. A
+direct ignored-test host probe with a connected current-firmware Model One and
+Safe 3 passed: read-only metadata distinguished the Model One's exact WebUSB
+release tuple from the Safe 3, and both appeared without an HWI launch, device
+open, unlock request, or PIN prompt. This proves only passive host inventory in
+the development process, not packaged discovery or a signing flow.
+
+This review does not close packaged latency, same-family physical-device,
+firmware, trusted-display, signing, or release rows. The complete packaged
+seven-device matrix remains a release blocker. The host probe above is the only
+new physical observation and is not credited as packaged certification.
+
 ## Sep 28 owner-reported focused retest
 
 Subsequent owner screenshots identify build ab92d31d and a Nano S Plus wallet:

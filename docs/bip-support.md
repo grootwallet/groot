@@ -1,5 +1,16 @@
 # Bitcoin Improvement Proposal support
 
+The 2026-09-30 hardware-pipeline correction has no BIP, descriptor, derivation,
+transaction-construction, PSBT, signing, backup, interoperability, or
+persisted-format impact. It replaces macOS picker HWI enumeration with passive
+host inventory, narrows HWI transport selection after an explicit device choice,
+fixes discovery capability lifecycle, and keeps health review active across the
+existing bounded operation. Exact-pinned `hidapi`, `nusb`, and `serialport`
+dependencies are transport inventory only; they do not parse or construct wallet
+protocol data. BIP32/BIP48/BIP84 identity proof and BIP174 signature validation
+are unchanged. Fixture coverage is not physical hardware evidence and adds no
+support claim.
+
 The 2026-09-30 signer-layout, Trezor PIN, modal-backdrop, acceleration-requote,
 and concise-copy correction changes no descriptor, derivation, transaction,
 PSBT, signing, recovery, dependency, or persisted format. It restores the

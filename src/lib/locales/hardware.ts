@@ -154,6 +154,14 @@ export const hardwareCopy = {
       fr: 'Détecté. Continuez pour lire et vérifier la clé publique du compte. BitBox peut redemander son mot de passe pour la nouvelle connexion sécurisée.',
       es: 'Detectado. Continúa para leer y verificar la clave pública de la cuenta. BitBox puede volver a solicitar su contraseña para la nueva conexión segura.'
     },
+  'Detected. Continue to read and verify the public account key.': {
+    fr: 'Détecté. Continuez pour lire et vérifier la clé publique du compte.',
+    es: 'Detectado. Continúa para leer y verificar la clave pública de la cuenta.'
+  },
+  'Detected. Select this Trezor and follow any unlock request on the device.': {
+    fr: 'Détecté. Sélectionnez ce Trezor et suivez toute demande de déverrouillage sur l’appareil.',
+    es: 'Detectado. Selecciona este Trezor y sigue cualquier solicitud de desbloqueo en el dispositivo.'
+  },
   'BitBox may request its password again for this new secure connection. Enter it only on BitBox.':
     {
       fr: 'BitBox peut redemander son mot de passe pour cette nouvelle connexion sécurisée. Saisissez-le uniquement sur BitBox.',
@@ -235,6 +243,18 @@ export const hardwareCopy = {
   'Could not scan hardware': {
     fr: 'Impossible de rechercher les appareils matériels',
     es: 'No se pudieron buscar dispositivos físicos'
+  },
+  'Could not stop hardware scan': {
+    fr: 'Impossible d’arrêter la recherche des appareils matériels',
+    es: 'No se pudo detener la búsqueda de dispositivos físicos'
+  },
+  'Could not stop the hardware scan.': {
+    fr: 'Impossible d’arrêter la recherche des appareils matériels.',
+    es: 'No se pudo detener la búsqueda de dispositivos físicos.'
+  },
+  'Continuing with this signer.': {
+    fr: 'Poursuite avec ce signataire.',
+    es: 'Continuando con este firmante.'
   },
   'Could not start hardware unlock': {
     fr: 'Impossible de démarrer le déverrouillage matériel',

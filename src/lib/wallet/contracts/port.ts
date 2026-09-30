@@ -3,6 +3,7 @@ import type { SwitchableNetwork } from '$lib/config';
 import type { CosignerDraft, PolicyDraft } from '$lib/multisig/policy';
 import type {
   HardwareDevice,
+  HardwarePinPrompt,
   ExternalSigner,
   ExternalSignerBackup,
   ExternalSignerSource,
@@ -174,7 +175,7 @@ export interface WalletHardwarePort {
     derivationPath: string;
     xpub: string;
   }): Promise<HardwareDevice>;
-  promptHardwarePin(deviceId: string): Promise<string>;
+  promptHardwarePin(deviceId: string): Promise<HardwarePinPrompt>;
   sendHardwarePin(challengeId: string, pinPositions: string): Promise<void>;
   checkHardwareCosigner(
     cosigner: CosignerDraft,

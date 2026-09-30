@@ -11,20 +11,47 @@ prompted, signed with, reset, or re-paired during this investigation.
    already coalesces concurrent scans; a CLI type filter does not make the
    upstream scan selective.
 2. BitBox enumeration initializes and closes a client. Account proof opens
-   another client. Fingerprint-selected display invokes upstream discovery and
-   opens another client again. Groot's exclusive lease prevents competing Groot
-   calls but is not a persistent vendor session. Unrelated backends can delay it.
-3. Receive display already reopens by freshly proven fingerprint; draft/saved
-   policy display still used the cached HID path. The patch aligns policy display
-   with receive display. Full account proof, private stdin, cancellation, exact
+   another client. The former type-only account request and fingerprint-selected
+   display both invoked upstream aggregate discovery. Groot's exclusive lease
+   prevented competing Groot calls but did not prevent HWI from opening an
+   unselected backend inside one process.
+3. The Sep 30 correction binds BitBox account proof, retries, policy display,
+   receive display, and signing to the exact path selected from the latest
+   capability. Empty, synthetic, type-only, and fingerprint-only action selectors
+   fail before spawn. Full account proof, private stdin, cancellation, exact
    expected-address comparison, and final context revalidation remain mandatory.
-   This is a reconnect candidate, not a discovery-speed improvement.
-4. Three sequential baseline bundled HWI `--version` launches, with cleared
+   This removes hidden rediscovery; it is not a persistent-client optimization.
+4. The follow-up macOS correction replaces picker enumeration with read-only
+   native HID, USB-registry, and serial inventory. It does not launch HWI or
+   open a vendor session. Only selection starts an exact-path HWI action.
+5. Three sequential baseline bundled HWI `--version` launches, with cleared
    environment and 15-second per-process deadline, took **4016, 3387, 3346 ms**.
    This measures startup/teardown without USB, not end-to-end device latency or
    statistical p95. Three `codesign --verify --deep --strict` app checks took
    **31, 28, 29 ms**. That is a CLI proxy, not the exact Rust Security.framework
    and digest check. Removing signature checks is neither justified nor acceptable.
+
+## Sep 30 comparison
+
+| Path                                                        | Before                                                                                                | After                                                                                     | Timing conclusion                                                                                                |
+| ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| One picker request for three or all five supported families | One aggregate HWI process                                                                             | One in-process passive macOS inventory; zero HWI processes                                | Removes the measured HWI-launch floor from the picker by construction; new packaged latency is not yet measured. |
+| Two concurrent picker callers                               | One shared process, but each caller advanced the cache epoch so a valid peer result could be rejected | One shared native inventory and one shared epoch; both callers redeem the same capability | Removes duplicate cache churn and retry pressure; no physical wall-time claim.                                   |
+| BitBox BIP84 account identity                               | One type-only HWI process containing hidden aggregate enumeration                                     | One exact-path HWI process                                                                | Same process count; unselected backends are no longer eligible to be opened by this action.                      |
+| BitBox identity plus policy/address display                 | Two HWI processes; the second used fingerprint lookup and hidden aggregate enumeration                | Two exact-path HWI processes under one Groot lease                                        | Same startup count; narrower action scope, with persistent-client/startup optimization still open.               |
+| Closed picker                                               | Renderer ignored a late result and native cancellation could leave a cache repopulation race          | Native operation is canceled and its epoch is invalidated before termination wait         | Avoids a stale retry; cancellation latency still needs packaged and physical measurement.                        |
+
+The deterministic passive-scan regression sleeps 50 ms per inventory call.
+Three-family and all-family requests each increment the call counter once; two
+concurrent callers also increment it once and receive one generation/epoch.
+Classifier fixtures cover the approved HID, WebUSB, and serial identities,
+including Mainnet omission of the passively ambiguous Safe 3 revision-A/Model-T
+record. The current-firmware Model One's exact WebUSB release tuple is classified
+as `trezor_1`, and its selected path retains the complete USB port chain. An
+ignored-test host probe with a connected Model One and Safe 3 found both without
+launching HWI or producing an unlock prompt. This verifies passive host
+classification, not p50/p95, reconnect, selected-action, or packaged timing; see
+ADR 0075.
 
 Sources: [HWI commands](https://github.com/bitcoin-core/HWI/blob/3.2.0/hwilib/commands.py),
 [BitBox adapter](https://github.com/bitcoin-core/HWI/blob/3.2.0/hwilib/devices/bitbox02.py),
@@ -33,8 +60,8 @@ Groot owners: `hardware.rs`, `wallet/hardware_commands.rs`, ADRs 0041 and 0043.
 
 ## Proposed speed work, in order
 
-- Add opt-in, bounded, identifier-free phase timing: admission, helper
-  authentication, startup, enumeration, identity proof, display, cleanup.
+- Add opt-in, bounded, identifier-free phase timing: admission, native
+  enumeration, HWI authentication/startup, identity proof, display, cleanup.
   Separate device waiting from CPU/startup. Never log arguments, responses,
   USB paths, fingerprints, keys, PINs, addresses, or PSBTs.
 - Benchmark a reproducibly built, signed **one-directory HWI bundle** from
@@ -43,19 +70,19 @@ Groot owners: `hardware.rs`, `wallet/hardware_commands.rs`, ADRs 0041 and 0043.
   work. This changes provenance and needs an ADR, supply-chain/SBOM review,
   signature/tamper tests, and packaged physical retests. Do not unpack the current
   helper into a mutable runtime cache.
-- Prototype a bounded isolated helper operation that inventories transports
-  without login, opens only the selected device, and holds one client through
-  full account proof and one approved action. This targets repeated BitBox
+- If repeated selected-device startup remains material, prototype a bounded
+  isolated action helper that holds only the selected client through full
+  account proof and one approved action. This targets repeated BitBox
   secure-session handoffs. Stock HWI CLI does not provide that contract; a new
   reviewed helper protocol, cancellation tests, and exact-model certification
   are required before adoption.
 - Do not parallelize vendor logins, silently retry approvals/signatures, lengthen
   timeouts, skip account proof, trust cached fingerprints, or kill companion apps.
 
-No new HWI artifact or transport rewrite is included in the policy patch. The
-physical reason replug cleared the owner's stall remains unproven: teardown,
-firmware state, ownership, and pairing need controlled isolation. Do not delete
-pairing state as a diagnostic shortcut.
+The native picker does not change the reviewed HWI action artifact. The physical
+reason replug cleared the owner's selected-action stall remains unproven:
+teardown, firmware state, ownership, and pairing need controlled isolation. Do
+not delete pairing state as a diagnostic shortcut.
 
 ## Assisted hardware loop
 

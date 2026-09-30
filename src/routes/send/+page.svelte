@@ -943,9 +943,19 @@
     hardwareScanGeneration += 1;
     broadcasting = false;
     deviceOpen = false;
+    void walletService.cancelHardwareOperations(true).catch((cause) => {
+      const description = localizedError(cause, $locale, 'Could not stop the hardware scan.');
+      deviceError = description;
+      toast({
+        title: translate($locale, 'Could not stop hardware scan'),
+        description,
+        tone: 'danger'
+      });
+    });
   }
   async function startHardwarePin(device: HardwareDevice) {
     const releaseHardwareReview = walletShell.beginHardwareReview();
+    let continueWithoutPin = false;
     pinBusy = true;
     deviceError = '';
     pinError = '';
@@ -956,7 +966,15 @@
     deviceOpen = false;
     pinOpen = true;
     try {
-      pinChallenge = await walletService.promptHardwarePin(device.id);
+      const prompt = await walletService.promptHardwarePin(device.id);
+      if (!prompt.pinRequired) {
+        pinOpen = false;
+        pinDevice = null;
+        deviceOpen = true;
+        continueWithoutPin = true;
+      } else {
+        pinChallenge = prompt.challengeId ?? '';
+      }
     } catch (cause) {
       if (await redirectExpiredHardwareSession(cause)) return;
       pinErrorCode = cause instanceof WalletError ? cause.code : 'internal_error';
@@ -965,6 +983,7 @@
       releaseHardwareReview();
       pinBusy = false;
     }
+    if (continueWithoutPin) await signHardware(device, true);
   }
   async function submitHardwarePin() {
     if (!pinChallenge || !pinPositions || pinBusy) return;
@@ -992,10 +1011,10 @@
       pinBusy = false;
     }
   }
-  async function signHardware(device: HardwareDevice) {
+  async function signHardware(device: HardwareDevice, pinReady = false) {
     if (accelerationConfirmed || broadcasting) return;
     if (!proposal || !externalProposal) return;
-    if (device.action === 'prompt_pin') {
+    if (device.action === 'prompt_pin' && !pinReady) {
       await startHardwarePin(device);
       return;
     }

@@ -193,8 +193,12 @@
     await runScan();
   }
 
-  async function chooseDevice(device: HardwareDevice) {
+  async function chooseDevice(device: HardwareDevice, pinResolved = false) {
     if (hardwareWalletMembership(device, eligibleFingerprints) === 'unrelated') return;
+    if (pinResolved) {
+      await verifyAddress(device);
+      return;
+    }
     switch (receiveVerificationIntent(device)) {
       case 'prompt_pin':
         await startPin(device);
@@ -222,7 +226,15 @@
     verifyOpen = false;
     pinOpen = true;
     try {
-      pinChallenge = await walletService.promptHardwarePin(device.id);
+      const prompt = await walletService.promptHardwarePin(device.id);
+      if (!prompt.pinRequired) {
+        pinOpen = false;
+        pinDevice = null;
+        verifyOpen = true;
+        await chooseDevice(device, true);
+        return;
+      }
+      pinChallenge = prompt.challengeId ?? '';
     } catch (cause) {
       const failure = localizedReceiveVerificationFailure(
         cause,
@@ -244,6 +256,7 @@
     pinError = '';
     pinErrorCode = '';
     const positions = pinPositions;
+    const unlockedDevice = pinDevice;
     pinPositions = '';
     try {
       await walletService.sendHardwarePin(pinChallenge, positions);
@@ -256,7 +269,8 @@
         description: translate($locale, 'Refreshing device identity. Select the signer to verify.'),
         tone: 'success'
       });
-      await runScan();
+      if (unlockedDevice) await chooseDevice(unlockedDevice, true);
+      else await runScan();
     } catch (cause) {
       pinChallenge = '';
       const failure = localizedReceiveVerificationFailure(

@@ -278,7 +278,14 @@
     healthPinPositions = '';
     healthPinChallenge = '';
     try {
-      healthPinChallenge = await walletService.promptHardwarePin(device.id);
+      const prompt = await walletService.promptHardwarePin(device.id);
+      if (!prompt.pinRequired) {
+        healthPinDevice = null;
+        healthPinOpen = false;
+        await runHealthCheck(device);
+        return;
+      }
+      healthPinChallenge = prompt.challengeId ?? '';
       healthPinDevice = device;
       healthPinOpen = true;
     } catch (cause) {

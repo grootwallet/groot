@@ -59,7 +59,9 @@ use crate::build_network::{
 use crate::external_signer::{
     self, singlesig_account_path, ExternalSignerInput, ExternalSignerWallet, SignerSource,
 };
-use crate::hardware::{HardwareError, HardwareTransport, HwiChain, HwiCli};
+use crate::hardware::{
+    passive_hardware_inventory, HardwareError, HardwareTransport, HwiChain, HwiCli,
+};
 use crate::label_provenance::{
     self, LabelOrigin, LabelSuggestionDto, PermanentLabelDto, ProvenanceState, ProvenanceSummaryDto,
 };
@@ -1400,6 +1402,13 @@ pub struct HardwareDeviceDto {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct HardwarePinPromptDto {
+    challenge_id: Option<String>,
+    pin_required: bool,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CosignerHealthDto {
     status: &'static str,
     checked_at: String,
@@ -1504,6 +1513,8 @@ pub struct RecoveryDrillDto {
 struct HwiDevice {
     #[serde(skip)]
     capability: String,
+    #[serde(skip)]
+    passive: bool,
     #[serde(default)]
     fingerprint: Option<String>,
     #[serde(default, rename = "type")]
@@ -1654,6 +1665,7 @@ fn hardware_device_dto(device: HwiDevice) -> HardwareDeviceDto {
         ("ledger", "ledger_nano_s_plus") => "Ledger Nano S Plus".to_owned(),
         ("trezor", "trezor_1") => "Trezor Model One".to_owned(),
         ("trezor", "trezor_t2b1" | "trezor_t3b1" | "trezor_safe 3") => "Trezor Safe 3".to_owned(),
+        ("trezor", "trezor_candidate") => "Trezor".to_owned(),
         // HWI exposes only a Jade family identity. Do not falsely claim that a
         // connected device was authenticated as the physically certified
         // Jade Classic model.
@@ -1673,8 +1685,9 @@ fn hardware_device_dto(device: HwiDevice) -> HardwareDeviceDto {
     };
     // A locked Trezor can report both PIN and passphrase requirements. PIN must
     // be resolved first because no wallet fingerprint exists until it is unlocked.
-    let pin_required = device_type == "trezor"
-        && (device.needs_pin_sent || (device.code == Some(-12) && !device.needs_passphrase_sent));
+    let passive_trezor_on_device_unlock =
+        device_type == "trezor" && device.passive && normalized_model != "trezor_1";
+    let pin_required = hardware_pin_prompt_required(&device);
     let unsupported_trezor_model = device_type == "trezor"
         && device.code == Some(-13)
         && device
@@ -1701,6 +1714,12 @@ fn hardware_device_dto(device: HwiDevice) -> HardwareDeviceDto {
             "Locked. Start the PIN matrix, then tap the blank cells matching the locations shown on the device.",
             "prompt_pin",
         )
+    } else if passive_trezor_on_device_unlock {
+        (
+            "needs_device_unlock",
+            "Detected. Select this Trezor and follow any unlock request on the device.",
+            "unlock",
+        )
     } else if hwi_warns_about_empty_passphrase(&device) {
         (
             "needs_passphrase",
@@ -1725,6 +1744,12 @@ fn hardware_device_dto(device: HwiDevice) -> HardwareDeviceDto {
         )
     } else if device_type == "ledger" {
         ("needs_device_unlock", ledger_unlock_message, "unlock")
+    } else if device_type == "coldcard" && device.passive {
+        (
+            "detected",
+            "Detected. Continue to read and verify the public account key.",
+            "import",
+        )
     } else if device_type == "coldcard" {
         (
             "needs_device_unlock",
@@ -1748,6 +1773,14 @@ fn hardware_device_dto(device: HwiDevice) -> HardwareDeviceDto {
         message: message.to_owned(),
         action,
     }
+}
+
+fn hardware_pin_prompt_required(device: &HwiDevice) -> bool {
+    device.device_type.eq_ignore_ascii_case("trezor")
+        && ((device.passive && device.model.eq_ignore_ascii_case("trezor_1"))
+            || (!device.passive
+                && (device.needs_pin_sent
+                    || (device.code == Some(-12) && !device.needs_passphrase_sent))))
 }
 
 fn require_explicit_standard_wallet_selection(

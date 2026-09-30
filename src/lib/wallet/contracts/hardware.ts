@@ -16,6 +16,11 @@ export type HardwareDevice = {
   action: 'import' | 'unlock' | 'prompt_pin' | 'confirm_empty_passphrase' | 'retry' | 'none';
 };
 
+export type HardwarePinPrompt = {
+  challengeId: string | null;
+  pinRequired: boolean;
+};
+
 export type ExternalSignerSource = 'usb' | 'qr' | 'file' | 'manual';
 export type ExternalSigner = {
   label: string;

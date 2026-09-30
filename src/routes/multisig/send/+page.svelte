@@ -1019,10 +1019,12 @@
     updateAvailable();
   }
   function deviceHasSigned(device: HardwareDevice) {
+    const signer = savedSignerForDevice(device);
+    const fingerprint = device.fingerprint ?? signer?.fingerprint;
     return Boolean(
-      device.fingerprint &&
+      fingerprint &&
       proposal?.signedFingerprints.some(
-        (fingerprint) => fingerprint.toLowerCase() === device.fingerprint!.toLowerCase()
+        (signedFingerprint) => signedFingerprint.toLowerCase() === fingerprint.toLowerCase()
       )
     );
   }
@@ -1104,6 +1106,15 @@
     hardwareScanGeneration += 1;
     busy = false;
     deviceOpen = false;
+    void walletService.cancelHardwareOperations(true).catch((cause) => {
+      const description = localizedError(cause, $locale, 'Could not stop the hardware scan.');
+      deviceError = description;
+      toast({
+        title: translate($locale, 'Could not stop hardware scan'),
+        description,
+        tone: 'danger'
+      });
+    });
   }
   function closePolicyReview() {
     if (policyReviewBusy) {
@@ -1115,7 +1126,7 @@
     policyReviewError = '';
     deviceOpen = true;
   }
-  async function handleHardware(device: HardwareDevice) {
+  async function handleHardware(device: HardwareDevice, pinResolved = false) {
     if (
       hardwareWalletMembership(
         device,
@@ -1124,7 +1135,7 @@
     )
       return;
     if (deviceHasSigned(device)) return;
-    if (device.action === 'prompt_pin') {
+    if (device.action === 'prompt_pin' && !pinResolved) {
       await startHardwarePin(device);
       return;
     }
@@ -1189,6 +1200,7 @@
   }
   async function startHardwarePin(device: HardwareDevice) {
     const releaseHardwareReview = walletShell.beginHardwareReview();
+    let continueWithoutPin = false;
     busy = true;
     pinBusy = true;
     deviceError = '';
@@ -1200,7 +1212,15 @@
     deviceOpen = false;
     pinOpen = true;
     try {
-      pinChallenge = await walletService.promptHardwarePin(device.id);
+      const prompt = await walletService.promptHardwarePin(device.id);
+      if (!prompt.pinRequired) {
+        pinOpen = false;
+        pinDevice = null;
+        deviceOpen = true;
+        continueWithoutPin = true;
+      } else {
+        pinChallenge = prompt.challengeId ?? '';
+      }
     } catch (cause) {
       if (await redirectExpiredHardwareSession(cause)) return;
       const message = localizedError(cause, $locale, 'Could not start the PIN matrix.');
@@ -1211,6 +1231,7 @@
       busy = false;
       pinBusy = false;
     }
+    if (continueWithoutPin) await handleHardware(device, true);
   }
   async function submitHardwarePin() {
     if (!pinChallenge || !pinPositions || pinBusy) return;
@@ -1219,6 +1240,7 @@
     pinError = '';
     pinErrorCode = '';
     let positions = pinPositions;
+    const unlockedDevice = pinDevice;
     pinPositions = '';
     try {
       await walletService.sendHardwarePin(pinChallenge, positions);
@@ -1227,11 +1249,12 @@
       pinDevice = null;
       toast({
         title: 'Hardware signer unlocked',
-        description: 'Device status refreshed. Select this signer to continue.',
+        description: 'Continuing with this signer.',
         tone: 'success'
       });
       deviceOpen = true;
-      await scan();
+      if (unlockedDevice) await handleHardware(unlockedDevice, true);
+      else await scan();
     } catch (cause) {
       if (await redirectExpiredHardwareSession(cause)) return;
       pinChallenge = '';

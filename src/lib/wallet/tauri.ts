@@ -547,7 +547,7 @@ export class TauriWalletAdapter implements WalletPort {
     });
   }
   promptHardwarePin(deviceId: string) {
-    return command<string>('hardware_prompt_pin', { deviceId });
+    return command<import('./contracts').HardwarePinPrompt>('hardware_prompt_pin', { deviceId });
   }
   sendHardwarePin(challengeId: string, pinPositions: string) {
     return command<void>('hardware_send_pin', { challengeId, pinPositions });

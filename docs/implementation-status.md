@@ -1,5 +1,29 @@
 # Implementation status
 
+Sep 30 hardware-pipeline correction implements ADR 0075's passive picker on
+macOS. Read-only HID, USB-registry, and serial enumeration classifies only exact
+allowlisted host endpoints and mints process-local capabilities; it never
+launches HWI or opens a vendor session. Every selected-device HWI account-key,
+unlock/PIN continuation, policy, trusted-display, and signing command is bound to
+the selected non-empty exact path; the former BitBox type-only import and
+fingerprint-selected display paths are removed. Same-family devices retain
+distinct capabilities. Concurrent discovery callers share the leader's cache
+epoch, modal close invalidates native discovery, late canceled results cannot
+repopulate the cache, and health checks suspend inactivity expiry for their
+bounded operation. Classifier fixtures cover approved HID/WebUSB/serial records,
+one native inventory call for concurrent requesters, exact-path BitBox retries,
+and Mainnet omission of the passively ambiguous Safe 3 revision-A/Model-T
+identity. Current WebUSB Model One is distinguished from core-family Trezors by
+its exact legacy USB release tuple, and a connected Model One passes the ignored
+physical inventory probe alongside Safe 3. Coldcard remains absent until its
+firmware exposes USB after local unlock. Exact-pinned macOS dependencies add
+`hidapi` 2.6.7, `nusb` 0.2.7, and
+`serialport` 4.10.1; Cargo lock/SBOM/supply-chain review applies. Physical
+seven-device, packaged timing, and non-macOS inventory remain open release
+blockers; no physical-device or release certification is claimed. No persisted
+format, descriptor, derivation, PSBT, signing-semantics, or BIP support changes;
+no migration is required.
+
 Sep 30 acceleration/modal follow-up bounds the shared desktop overlay itself to
 the title-bar-inclusive viewport, reserves backdrop padding on every edge, and
 keeps expanded modal content in the existing internal scroll body. Single-key

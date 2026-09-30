@@ -134,6 +134,12 @@
     hardwareScanGeneration += 1;
     busy = false;
     scanOpen = false;
+    void walletService.cancelHardwareOperations(true).catch((cause) => {
+      const description = localizedError(cause, $locale, 'Could not stop the hardware scan.');
+      errorTitle = 'Could not stop hardware scan';
+      error = description;
+      toast({ title: translate($locale, errorTitle), description, tone: 'danger' });
+    });
   }
   async function useDevice(
     device: HardwareDevice,
@@ -218,7 +224,15 @@
     scanOpen = false;
     pinOpen = true;
     try {
-      pinChallenge = await walletService.promptHardwarePin(device.id);
+      const prompt = await walletService.promptHardwarePin(device.id);
+      if (!prompt.pinRequired) {
+        pinOpen = false;
+        pinDevice = null;
+        scanOpen = true;
+        await useDevice(device, false, true);
+        return;
+      }
+      pinChallenge = prompt.challengeId ?? '';
     } catch (cause) {
       const message = localizedError(cause, $locale, 'Could not start the PIN matrix.');
       pinErrorCode = cause instanceof WalletError ? cause.code : 'internal_error';

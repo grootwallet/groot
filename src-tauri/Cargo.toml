@@ -54,11 +54,18 @@ libc = "=0.2.186"
 [target.'cfg(target_os = "macos")'.dependencies]
 block2 = "=0.6.2"
 core-foundation = "=0.10.1"
+# Passive hardware inventory only. These exact versions enumerate cached OS
+# HID, USB, and serial metadata without opening a device; HWI remains the sole
+# selected-device action boundary. hidapi carries its reviewed upstream C
+# implementation, while nusb is pure Rust and serialport is MPL-2.0.
+hidapi = { version = "=2.6.7", default-features = false }
+nusb = "=0.2.7"
 objc2 = "=0.6.4"
 objc2-app-kit = "=0.3.2"
 objc2-core-foundation = "=0.3.2"
 objc2-foundation = "=0.3.2"
 objc2-web-kit = { version = "=0.3.2", default-features = false, features = ["block2", "objc2-core-foundation", "WKPDFConfiguration", "WKWebView"] }
+serialport = { version = "=4.10.1", default-features = false }
 # The packaged HWI sidecar is checked with macOS Code Signing Services before
 # execution. Both crates were already pinned transitively by the keychain stack.
 security-framework = "=3.7.0"
