@@ -611,6 +611,18 @@ export const dynamicCopy = {
     fr: 'Vérifiez le destinataire, le montant, les frais et la monnaie, puis approuvez la transaction sur l’appareil.',
     es: 'Revisa el destinatario, el importe, la comisión y el cambio; luego aprueba la transacción en el dispositivo.'
   },
+  'Review and approve on the device.': {
+    fr: 'Vérifiez et approuvez sur l’appareil.',
+    es: 'Revisa y aprueba en el dispositivo.'
+  },
+  'Keep the signer connected and follow its prompts.': {
+    fr: 'Gardez le signataire connecté et suivez ses instructions.',
+    es: 'Mantén el firmante conectado y sigue sus indicaciones.'
+  },
+  'Keep each signer connected and follow its prompts.': {
+    fr: 'Gardez chaque signataire connecté et suivez ses instructions.',
+    es: 'Mantén cada firmante conectado y sigue sus indicaciones.'
+  },
   'Review the recipient, amount, fee, change, and wallet policy, then approve on the device.': {
     fr: 'Vérifiez le destinataire, le montant, les frais, la monnaie et la politique du portefeuille, puis approuvez sur l’appareil.',
     es: 'Revisa el destinatario, el importe, la comisión, el cambio y la política; luego aprueba en el dispositivo.'

@@ -1,5 +1,17 @@
 # Bitcoin Improvement Proposal support
 
+The 2026-09-30 signer-layout, Trezor PIN, modal-backdrop, acceleration-requote,
+and concise-copy correction changes no descriptor, derivation, transaction,
+PSBT, signing, recovery, dependency, or persisted format. It restores the
+existing blind PIN-matrix flow before a selected locked single-key Trezor can
+sign and changes only renderer orchestration around the same native HWI
+commands. Owner-reported Mainnet BIP84 evidence on the `87fab724` candidate is
+scoped to Coldcard Mk4 CPFP completion with correct accounting after restart,
+BitBox02 Nova CPFP signing, and Jade Classic and Trezor Safe 3 CPFP signing and
+broadcast. Trezor Model One remained blocked at unlock, and no result is inferred
+for original BitBox02, transaction confirmation, firmware binding, negative
+paths, clean recovery, or the replacement package.
+
 The 2026-09-30 acceleration and modal-containment correction changes no BIP,
 descriptor, derivation, transaction construction, PSBT, signing, backup, or
 persisted format. RBF/CPFP quote failures now remain visibly fail-closed, and the

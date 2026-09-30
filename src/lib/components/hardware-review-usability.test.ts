@@ -183,9 +183,17 @@ describe('hardware signing review usability', () => {
     expect(singleSend).toContain('class="single-hardware-device-pane"');
     expect(singleSend).toContain('coldcardDefaultFeeLimitExceededPercent');
     expect(singleSend).toContain("translate($locale, 'Coldcard fee limit')");
-    expect(singleSend).toContain('Groot will not bypass device safety checks.');
+    expect(singleSend).toContain("Coldcard's 10% limit may reject it.");
     expect(appCss).toMatch(
       /\.single-hardware-signing-layout\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1\.15fr\) minmax\(230px, 0\.85fr\);/s
     );
+  });
+
+  it('unlocks a selected single-key Trezor before attempting to sign', () => {
+    expect(singleSend).toContain("if (device.action === 'prompt_pin')");
+    expect(singleSend).toContain('await startHardwarePin(device)');
+    expect(singleSend).toContain('walletService.promptHardwarePin(device.id)');
+    expect(singleSend).toContain('walletService.sendHardwarePin(pinChallenge, positions)');
+    expect(singleSend).toContain('<TrezorPinModal');
   });
 });

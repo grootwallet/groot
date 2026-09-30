@@ -616,6 +616,26 @@ independent-review, or GA gates.
 
 ### Next physical steps
 
+The next owner follow-up supplies screenshots identifying internal Mainnet
+candidate `87fab724` and reports these single-key BIP84 acceleration results:
+
+- Coldcard Mk4 completed the CPFP flow; wallet accounting was correct and
+  persisted across restart.
+- BitBox02 Nova signed a CPFP. Broadcast, confirmation, and restart accounting
+  were not separately reported for this row.
+- Jade Classic and Trezor Safe 3 each signed and broadcast a CPFP.
+- Trezor Model One remained blocked at the single-key unlock handoff. The
+  replacement source now opens Groot's existing blind PIN matrix only after the
+  owner selects the locked row, then refreshes discovery before signing. This is
+  a source correction, not replacement-package evidence.
+- No BIP84 spend/sign result was supplied for original BitBox02.
+
+The Coldcard percentage warning was accepted as correct and is retained in a
+shorter form. None of these reports closes confirmation, exact firmware,
+disconnect/retry, rejection, altered-PSBT, clean-recovery, independent-review,
+or replacement-package rows. No sensitive transaction or signer identifiers are
+retained.
+
 On 2026-09-30 the owner clarified that Multi B is exactly Jade Classic, original
 BitBox02, and Trezor Safe 3. The earlier statement naming Jade plus BitBox02 Nova
 in Multi B was a wallet-label/model mismatch and is withdrawn rather than
@@ -666,13 +686,12 @@ transaction sequence on the exact device.
    inactivity rows; never broadcast negative fixtures. Multi C partial-signature
    restart/resume and accounting are already owner-reported and need only the
    final frozen-candidate regression required by this certification record.
-6. After the six reported BIP84 deposits confirm, complete one ordinary
-   spend/sweep, broadcast, confirmation, and restart/accounting row for Coldcard
-   Mk4, Trezor Model One, Trezor Safe 3, Jade Classic, original BitBox02, and
-   BitBox02 Nova. Do not require Coldcard to approve a CPFP above its configured
-   limit; lower the fee, wait, or deliberately change the device setting first.
-   Ledger's positive BIP84 sweep sign/broadcast is already recorded; only its
-   open confirmation/restart and frozen-package rows remain.
+6. On the replacement package, repeat Trezor Model One unlock then complete its
+   BIP84 sign/broadcast row. Complete original BitBox02's BIP84 sign/broadcast
+   row. Confirm the reported Coldcard, Jade, Safe 3, Nova, and Ledger transactions
+   and fill only their still-unreported broadcast/restart rows. Do not require
+   Coldcard to approve a CPFP above its configured limit; lower the fee, wait, or
+   deliberately change the device setting first.
 7. Verify public-backup reconstruction and independent recovery/reviewer rows on
    the frozen candidate. Preserve the owner's existing profiles.
 

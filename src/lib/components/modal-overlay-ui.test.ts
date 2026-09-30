@@ -11,10 +11,11 @@ describe('modal overlay', () => {
     expect(modal).toContain('node.remove()');
   });
 
-  it('overdraws the translucent macOS title-bar strip on desktop', () => {
+  it('pins the backdrop to every edge of the web viewport', () => {
     expect(styles).toMatch(
-      /\.modal-layer\s*\{[\s\S]*?position:\s*absolute;[\s\S]*?top:\s*var\(--modal-document-top\);[\s\S]*?height:\s*calc\(100dvh \+ 32px\);[\s\S]*?box-sizing:\s*border-box;[\s\S]*?overflow:\s*hidden;[\s\S]*?align-items:\s*flex-start;[\s\S]*?padding:\s*clamp\(48px, 5vh, 60px\) 18px 18px;/
+      /\.modal-layer\s*\{[\s\S]*?position:\s*fixed;[\s\S]*?inset:\s*0;[\s\S]*?height:\s*100dvh;[\s\S]*?box-sizing:\s*border-box;[\s\S]*?overflow:\s*hidden;[\s\S]*?align-items:\s*flex-start;[\s\S]*?padding:\s*clamp\(48px, 5vh, 60px\) 18px 18px;/
     );
+    expect(modal).not.toContain('--modal-document-top');
   });
 
   it('top-weights every desktop dialog and keeps tall content inside a scrollable body', () => {
@@ -33,12 +34,8 @@ describe('modal overlay', () => {
     );
   });
 
-  it('reanchors an open desktop dialog after the window viewport changes', () => {
-    expect(modal).toContain("window.addEventListener('resize', updateDocumentTop)");
-    expect(modal).toContain("window.visualViewport?.addEventListener('resize', updateDocumentTop)");
-    expect(modal).toContain("window.removeEventListener('resize', updateDocumentTop)");
-    expect(modal).toContain(
-      "window.visualViewport?.removeEventListener('resize', updateDocumentTop)"
-    );
+  it('does not depend on scroll-derived backdrop coordinates', () => {
+    expect(modal).not.toContain('updateDocumentTop');
+    expect(modal).not.toContain("window.addEventListener('scroll'");
   });
 });

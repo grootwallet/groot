@@ -900,6 +900,37 @@ test('creates an external-signer wallet, signs by cable, and configures its isol
   await expect(
     page.locator('.send-signers').getByText('Travel signing key', { exact: true })
   ).toBeVisible();
+  const signerList = page.locator('.send-signer-list');
+  const signerCard = signerList.locator('article').first();
+  const currentViewport = page.viewportSize();
+  if ((currentViewport?.width ?? 1180) <= 760) {
+    const [listBox, cardBox] = await Promise.all([
+      signerList.boundingBox(),
+      signerCard.boundingBox()
+    ]);
+    expect(listBox).not.toBeNull();
+    expect(cardBox).not.toBeNull();
+    expect(cardBox!.width).toBeGreaterThanOrEqual(listBox!.width - 2);
+  } else {
+    await page.setViewportSize({ width: 885, height: 900 });
+    const layout = page.locator('.send-flow-layout.with-signers');
+    const stage = layout.locator('.send-flow-content');
+    const signerPanel = layout.locator('.signer-side-panel');
+    const [layoutBox, stageBox, signerPanelBox] = await Promise.all([
+      layout.boundingBox(),
+      stage.boundingBox(),
+      signerPanel.boundingBox()
+    ]);
+    expect(layoutBox).not.toBeNull();
+    expect(stageBox).not.toBeNull();
+    expect(signerPanelBox).not.toBeNull();
+    expect(signerPanelBox!.width).toBeGreaterThanOrEqual(layoutBox!.width - 2);
+    expect(stageBox!.y).toBeGreaterThanOrEqual(signerPanelBox!.y + signerPanelBox!.height);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+      885
+    );
+    await page.setViewportSize(currentViewport!);
+  }
   const psbtDownload = page.waitForEvent('download');
   await page.getByRole('button', { name: 'Save unsigned PSBT' }).click();
   await expect((await psbtDownload).suggestedFilename()).toMatch(/^groot-[a-z0-9]{1,6}-s0\.psbt$/);
@@ -958,7 +989,7 @@ test('creates an external-signer wallet, signs by cable, and configures its isol
   await expect(hardwareReview.getByText('Transaction inputs', { exact: true })).toHaveCount(0);
   await hardwareReview.getByRole('button', { name: /^Travel signing key / }).click();
   await expect(page.getByRole('status', { name: 'Waiting for hardware signature' })).toContainText(
-    'Review the recipient, amount, fee, and change'
+    'Review and approve on the device.'
   );
   await expect(page.getByText('Signature verified')).toBeVisible();
   const signedReview = page.getByRole('region', { name: 'Signed transaction review' });

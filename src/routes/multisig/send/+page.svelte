@@ -201,6 +201,8 @@
   let rbfQuote = $state<AccelerationQuote | null>(null);
   let cpfpQuote = $state<CpfpAccelerationQuote | null>(null);
   let accelerationQuoteFailed = $state(false);
+  let accelerationQuoteRevision = 0;
+  let accelerationQuoteTimer: ReturnType<typeof setTimeout> | undefined;
   const broadcastExplorerUrl = $derived(
     txid ? transactionExplorerUrl(defaultConfig.network, txid) : null
   );
@@ -425,6 +427,8 @@
   let walletLoadError = $state('');
   onDestroy(() => {
     walletLoadActive = false;
+    accelerationQuoteRevision += 1;
+    if (accelerationQuoteTimer) clearTimeout(accelerationQuoteTimer);
     if (maxSpendFeeTimer) clearTimeout(maxSpendFeeTimer);
     if (!suppressDraftSave) void saveCurrentDraft();
     hardwareScanGeneration += 1;
@@ -647,11 +651,6 @@
           cause,
           $locale
         );
-        toast({
-          title: accelerationUnavailableTitle(accelerationRequest.method),
-          description: feeEstimateError,
-          tone: 'warning'
-        });
       } else walletLoadError = localizedError(cause, $locale, 'Could not load wallet.');
     } finally {
       accelerationLoading = false;
@@ -917,6 +916,56 @@
         maxSpendFeeTimer = setTimeout(() => void useMaxAmount(rate, false), 180);
       }
     }
+  }
+  async function refreshAccelerationQuote(revision = ++accelerationQuoteRevision) {
+    const request = accelerationRequest;
+    if (!request || !customFeeValid) return;
+    try {
+      if (request.method === 'rbf') {
+        const quote = await walletService.quoteRbf(request.txid, feeRate(selectedRateNumber));
+        if (
+          revision !== accelerationQuoteRevision ||
+          accelerationRequest?.txid !== request.txid ||
+          accelerationRequest.method !== request.method
+        )
+          return;
+        rbfQuote = quote;
+        selectedRate = Number(quote.targetFeeRate);
+      } else {
+        const quote = await walletService.quoteCpfp(request.txid, feeRate(selectedRateNumber));
+        if (
+          revision !== accelerationQuoteRevision ||
+          accelerationRequest?.txid !== request.txid ||
+          accelerationRequest.method !== request.method
+        )
+          return;
+        cpfpQuote = quote;
+        selectedRate = Number(quote.targetFeeRate);
+      }
+      feeEstimateError = '';
+      accelerationQuoteFailed = false;
+    } catch (cause) {
+      if (
+        revision !== accelerationQuoteRevision ||
+        accelerationRequest?.txid !== request.txid ||
+        accelerationRequest.method !== request.method
+      )
+        return;
+      accelerationQuoteFailed = true;
+      feeEstimateError = accelerationUnavailableDescription(request.method, cause, $locale);
+    }
+  }
+  function scheduleAccelerationQuote() {
+    const revision = ++accelerationQuoteRevision;
+    if (accelerationQuoteTimer) clearTimeout(accelerationQuoteTimer);
+    accelerationQuoteTimer = undefined;
+    feeEstimateError = '';
+    accelerationQuoteFailed = false;
+    if (!customFeeValid) return;
+    accelerationQuoteTimer = setTimeout(() => {
+      accelerationQuoteTimer = undefined;
+      void refreshAccelerationQuote(revision);
+    }, 240);
   }
   async function prepareCustomAcceleration() {
     if (accelerationConfirmed) return;
@@ -1899,33 +1948,7 @@
                     <input
                       aria-label={translate($locale, 'Custom acceleration fee rate')}
                       bind:value={selectedRate}
-                      onblur={async () => {
-                        if (!accelerationRequest || !customFeeValid) return;
-                        try {
-                          if (accelerationRequest.method === 'rbf') {
-                            rbfQuote = await walletService.quoteRbf(
-                              accelerationRequest.txid,
-                              feeRate(selectedRateNumber)
-                            );
-                            selectedRate = Number(rbfQuote.targetFeeRate);
-                          } else {
-                            cpfpQuote = await walletService.quoteCpfp(
-                              accelerationRequest.txid,
-                              feeRate(selectedRateNumber)
-                            );
-                            selectedRate = Number(cpfpQuote.targetFeeRate);
-                          }
-                          feeEstimateError = '';
-                          accelerationQuoteFailed = false;
-                        } catch (cause) {
-                          accelerationQuoteFailed = true;
-                          feeEstimateError = accelerationUnavailableDescription(
-                            accelerationRequest.method,
-                            cause,
-                            $locale
-                          );
-                        }
-                      }}
+                      oninput={() => queueMicrotask(scheduleAccelerationQuote)}
                       inputmode="decimal"
                       placeholder={translate($locale, 'Enter a fee rate')}
                     /><b>{translate($locale, 'sat/vB')}</b>
@@ -2003,6 +2026,7 @@
                   <input
                     aria-label={translate($locale, 'Custom acceleration fee rate')}
                     bind:value={selectedRate}
+                    oninput={() => queueMicrotask(scheduleAccelerationQuote)}
                     inputmode="decimal"
                     placeholder={translate($locale, 'Enter a fee rate')}
                   /><b>{translate($locale, 'sat/vB')}</b>
@@ -2021,7 +2045,7 @@
                 role="alert"
                 icon
                 class="acceleration-unavailable-notice inline-action"
-                ><Button variant="secondary" size="small" onclick={() => window.location.reload()}
+                ><Button variant="secondary" size="small" onclick={() => refreshAccelerationQuote()}
                   ><RefreshCw size={14} />{translate($locale, 'Try again')}</Button
                 ></WarningNotice
               >{/if}<Button
@@ -2823,8 +2847,8 @@
         hardwareCancelRequested
           ? 'Reject or cancel the pending request on the device. Groot will close this dialog after the device responds.'
           : hardwareAction === 'sign'
-            ? 'Review the recipient, amount, fee, change, and wallet policy, then approve on the device.'
-            : 'Keep each signer connected and unlocked. Follow any instructions shown on the device.'
+            ? 'Review and approve on the device.'
+            : 'Keep each signer connected and follow its prompts.'
       )}
       label={translate(
         $locale,

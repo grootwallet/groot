@@ -21,6 +21,11 @@ export const hardwareCopy = {
     fr: 'Limite de frais Coldcard',
     es: 'Límite de comisión de Coldcard'
   },
+  "Fee is {percent}% of outputs. Coldcard's 10% limit may reject it. Lower the fee, wait, or change the device limit.":
+    {
+      fr: 'Les frais représentent {percent} % des sorties. La limite de 10 % de Coldcard peut les refuser. Réduisez les frais, attendez ou modifiez la limite de l’appareil.',
+      es: 'La comisión es el {percent} % de las salidas. El límite del 10 % de Coldcard puede rechazarla. Reduce la comisión, espera o cambia el límite del dispositivo.'
+    },
   "This CPFP fee is {percent}% of its outputs. Coldcard's default 10% Max Network Fee setting will reject it. Lower the package rate if possible, wait for the parent, or deliberately change that setting on Coldcard before retrying. Groot will not bypass device safety checks.":
     {
       fr: 'Ces frais CPFP représentent {percent} % de ses sorties. Le réglage Max Network Fee de Coldcard, fixé à 10 % par défaut, les refusera. Réduisez le taux du paquet si possible, attendez la confirmation de la transaction parente ou modifiez délibérément ce réglage sur Coldcard avant de réessayer. Groot ne contournera pas les contrôles de sécurité de l’appareil.',

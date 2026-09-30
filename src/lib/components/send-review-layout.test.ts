@@ -31,6 +31,15 @@ describe('send review layout', () => {
     );
   });
 
+  it('stacks the signer rail before cards become narrow and expands a lone mobile signer', () => {
+    expect(appCss).toMatch(
+      /@media \(min-width: 761px\) and \(max-width: 1050px\)[\s\S]*?\.send-flow-layout\.with-signers,[\s\S]*?\.multisig-signing-layout\s*\{[^}]*grid-template-columns:\s*1fr;/s
+    );
+    expect(appCss).toMatch(
+      /@media \(max-width: 760px\)[\s\S]*?\.send-signer-list article:only-child\s*\{[^}]*flex-basis:\s*100%;/s
+    );
+  });
+
   it('returns a completed multisig payment to the selected wallet overview', () => {
     expect(multisigSend).toContain(
       `<Button href="/">{translate($locale, 'Return to wallet')}</Button>`
@@ -208,6 +217,10 @@ describe('send review layout', () => {
   it('fails closed with a separated warning when an acceleration quote is unavailable', () => {
     for (const route of [singleSend, multisigSend]) {
       expect(route).toContain('let accelerationQuoteFailed = $state(false)');
+      expect(route).toContain('function scheduleAccelerationQuote()');
+      expect(route).toContain('queueMicrotask(scheduleAccelerationQuote)');
+      expect(route).toContain('onclick={() => refreshAccelerationQuote()}');
+      expect(route).not.toContain('onclick={() => window.location.reload()}');
       expect(route).toContain('class="acceleration-unavailable-notice inline-action"');
       expect(route).toContain('disabled={!customFeeValid || accelerationQuoteFailed}');
       expect(route).toContain("tone: 'warning'");

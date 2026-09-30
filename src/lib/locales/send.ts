@@ -454,6 +454,10 @@ export const sendCopy = {
       fr: 'Vérifiez l’adresse, le montant et les frais sur le signataire. Groot ne reçoit jamais sa clé privée ni sa phrase secrète matérielle.',
       es: 'Verifica la dirección, el importe y la comisión en el firmante. Groot nunca recibe su clave privada ni su frase de contraseña.'
     },
+  'Verify and approve on the device.': {
+    fr: 'Vérifiez et approuvez sur l’appareil.',
+    es: 'Verifica y aprueba en el dispositivo.'
+  },
   'View policy reference': {
     fr: 'Afficher la référence de politique',
     es: 'Ver referencia de política'

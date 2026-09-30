@@ -61,7 +61,6 @@
   --step-complete-bg: #dbe8ff;
   --step-complete-fg: #194faa;
   --step-complete-border: #a9c7ff;
-  --modal-document-top: -32px;
 }
 
 button:not(:disabled),
@@ -2371,15 +2370,9 @@ code {
 }
 
 .modal-layer {
-  /* WKWebView permits document-positioned content beneath the translucent
-     macOS title bar, but clips fixed-position content to the web viewport.
-     Anchor the layer to the current document scroll position so it can cover
-     the native strip while the body is locked. */
-  position: absolute;
-  top: var(--modal-document-top);
-  right: 0;
-  left: 0;
-  height: calc(100dvh + 32px);
+  position: fixed;
+  inset: 0;
+  height: 100dvh;
   box-sizing: border-box;
   z-index: 100;
   overflow: hidden;
@@ -11180,6 +11173,9 @@ code {
     flex: 0 0 156px;
     scroll-snap-align: start;
   }
+  .send-signer-list article:only-child {
+    flex-basis: 100%;
+  }
   .send-stage-heading h2 {
     font-size: 16px;
   }
@@ -11659,6 +11655,24 @@ code {
   .page {
     padding-inline: 36px;
   }
+  .send-flow-layout.with-signers,
+  .multisig-signing-layout {
+    grid-template-columns: 1fr;
+  }
+  .send-flow-layout.with-signers > .signer-side-panel,
+  .signer-side-panel {
+    order: -1;
+  }
+  .signer-side-panel .send-signers {
+    position: static;
+  }
+  .signer-side-panel .send-signers > header {
+    display: flex;
+    align-items: center;
+  }
+  .signer-side-panel .send-signer-list {
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  }
   .wallet-switcher-label {
     align-items: flex-start;
     flex-direction: column;
@@ -11679,21 +11693,8 @@ code {
 }
 
 @media (min-width: 761px) and (max-width: 900px) {
-  .multisig-signing-layout {
-    grid-template-columns: 1fr;
-  }
-  .signer-side-panel {
-    order: -1;
-  }
-  .signer-side-panel .send-signers {
-    position: static;
-  }
-  .signer-side-panel .send-signers > header {
-    display: flex;
-    align-items: center;
-  }
   .signer-side-panel .send-signer-list {
-    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   }
 }
 

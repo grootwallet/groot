@@ -16,8 +16,6 @@
     children
   } = $props();
   let dialog = $state<HTMLDivElement>();
-  const desktopTitlebarOverlap = 32;
-  let documentTop = $state(-desktopTitlebarOverlap);
   let attentionActive = $state(false);
   let attentionRunning = false;
   let attentionFrame: number | null = null;
@@ -76,22 +74,14 @@
     if (!open || typeof document === 'undefined') return;
     const previousFocus =
       document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    updateDocumentTop();
     const releaseScrollLock = lockModalScroll(document);
-    window.addEventListener('resize', updateDocumentTop);
-    window.addEventListener('scroll', updateDocumentTop);
-    window.visualViewport?.addEventListener('resize', updateDocumentTop);
     queueMicrotask(() => {
-      updateDocumentTop();
       const first = dialog?.querySelector<HTMLElement>(
         'button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [href], [tabindex]:not([tabindex="-1"])'
       );
       (first ?? dialog)?.focus();
     });
     return () => {
-      window.removeEventListener('resize', updateDocumentTop);
-      window.removeEventListener('scroll', updateDocumentTop);
-      window.visualViewport?.removeEventListener('resize', updateDocumentTop);
       releaseScrollLock();
       previousFocus?.focus();
     };
@@ -124,10 +114,6 @@
       first.focus();
     }
   }
-
-  function updateDocumentTop() {
-    documentTop = window.scrollY - desktopTitlebarOverlap;
-  }
 </script>
 
 {#if open}
@@ -135,7 +121,6 @@
     class="modal-layer"
     class:modal-layer-upper={upper}
     use:portal
-    style:--modal-document-top={`${documentTop}px`}
     role="presentation"
     onclick={(e) => e.target === e.currentTarget && onclose()}
   >

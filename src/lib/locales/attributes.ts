@@ -430,6 +430,10 @@ export const attributeCopy = {
     fr: 'Utilisez le même signataire matériel protégé par phrase secrète dont vous avez importé l’empreinte.',
     es: 'Usa el mismo firmante físico protegido con frase de contraseña cuya huella importaste.'
   },
+  'Use the signer imported for this wallet.': {
+    fr: 'Utilisez le signataire importé pour ce portefeuille.',
+    es: 'Usa el firmante importado para esta cartera.'
+  },
   'Use your written 24 words for a private native proof, or reveal them securely first if you still need to make the backup.':
     {
       fr: 'Utilisez vos 24 mots écrits pour une preuve native privée, ou affichez-les d’abord de façon sécurisée si vous devez encore créer la sauvegarde.',

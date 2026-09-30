@@ -35,6 +35,7 @@
   import RecipientAddressModal from '$lib/components/RecipientAddressModal.svelte';
   import SendProgress from '$lib/components/SendProgress.svelte';
   import SignerSummary from '$lib/components/SignerSummary.svelte';
+  import TrezorPinModal from '$lib/components/TrezorPinModal.svelte';
   import WarningNotice from '$lib/components/WarningNotice.svelte';
   import { psbtFilename, readTransferFile } from '$lib/transfer';
   import { copyText } from '$lib/clipboard';
@@ -53,7 +54,8 @@
     type FeeEstimates,
     type HardwareDevice,
     type MultisigProposal,
-    type PaymentProposal
+    type PaymentProposal,
+    type WalletErrorCode
   } from '$lib/wallet';
   import type { LabelSuggestion, Utxo } from '$lib/types';
   import { defaultConfig, networkName, transactionExplorerUrl } from '$lib/config';
@@ -164,6 +166,8 @@
   let cpfpQuote = $state<CpfpAccelerationQuote | null>(null);
   let accelerationQuoteFailed = $state(false);
   let accelerationConfirmed = $state(false);
+  let accelerationQuoteRevision = 0;
+  let accelerationQuoteTimer: ReturnType<typeof setTimeout> | undefined;
   const broadcastExplorerUrl = $derived(
     txid ? transactionExplorerUrl(defaultConfig.network, txid) : null
   );
@@ -195,6 +199,13 @@
     imported = $state(''),
     urFrames = $state<string[]>([]),
     scannedFrames = $state<string[]>([]);
+  let pinOpen = $state(false),
+    pinBusy = $state(false),
+    pinChallenge = $state(''),
+    pinPositions = $state(''),
+    pinError = $state(''),
+    pinErrorCode = $state<WalletErrorCode | ''>(''),
+    pinDevice = $state<HardwareDevice | null>(null);
   let importError = $state('');
   let hardwareAction = $state<'scan' | 'sign'>('scan');
   let hardwareAttentionSignal = $state(0),
@@ -512,11 +523,6 @@
       if (accelerationRequest) {
         accelerationQuoteFailed = true;
         feeEstimateError = description ?? 'Could not prepare fee acceleration.';
-        toast({
-          title: accelerationUnavailableTitle(accelerationRequest.method),
-          description: feeEstimateError,
-          tone: 'warning'
-        });
       } else {
         toast({ title: 'Could not load wallet', description, tone: 'danger' });
       }
@@ -530,9 +536,13 @@
 
   onDestroy(() => {
     ++walletLoadGeneration;
+    accelerationQuoteRevision += 1;
+    if (accelerationQuoteTimer) clearTimeout(accelerationQuoteTimer);
     if (!suppressDraftSave) void saveCurrentDraft();
     hardwareScanGeneration += 1;
     passphrase = '';
+    pinPositions = '';
+    pinChallenge = '';
   });
 
   async function saveCurrentDraft() {
@@ -691,6 +701,58 @@
     if (refreshMaximum && Number.isFinite(rate) && rate > 0) void useMaxAmount(rate, false);
   }
 
+  async function refreshAccelerationQuote(revision = ++accelerationQuoteRevision) {
+    const request = accelerationRequest;
+    if (!request || !customFeeValid) return;
+    try {
+      if (request.method === 'rbf') {
+        const quote = await walletService.quoteRbf(request.txid, asFeeRate(Number(customFee)));
+        if (
+          revision !== accelerationQuoteRevision ||
+          accelerationRequest?.txid !== request.txid ||
+          accelerationRequest.method !== request.method
+        )
+          return;
+        rbfQuote = quote;
+        customFee = String(quote.targetFeeRate);
+      } else {
+        const quote = await walletService.quoteCpfp(request.txid, asFeeRate(Number(customFee)));
+        if (
+          revision !== accelerationQuoteRevision ||
+          accelerationRequest?.txid !== request.txid ||
+          accelerationRequest.method !== request.method
+        )
+          return;
+        cpfpQuote = quote;
+        customFee = String(quote.targetFeeRate);
+      }
+      feeEstimateError = '';
+      accelerationQuoteFailed = false;
+    } catch (cause) {
+      if (
+        revision !== accelerationQuoteRevision ||
+        accelerationRequest?.txid !== request.txid ||
+        accelerationRequest.method !== request.method
+      )
+        return;
+      accelerationQuoteFailed = true;
+      feeEstimateError = accelerationUnavailableDescription(request.method, cause, $locale);
+    }
+  }
+
+  function scheduleAccelerationQuote() {
+    const revision = ++accelerationQuoteRevision;
+    if (accelerationQuoteTimer) clearTimeout(accelerationQuoteTimer);
+    accelerationQuoteTimer = undefined;
+    feeEstimateError = '';
+    accelerationQuoteFailed = false;
+    if (!customFeeValid) return;
+    accelerationQuoteTimer = setTimeout(() => {
+      accelerationQuoteTimer = undefined;
+      void refreshAccelerationQuote(revision);
+    }, 240);
+  }
+
   async function prepareCustomAcceleration() {
     if (accelerationConfirmed) return;
     const request = accelerationRequest;
@@ -825,6 +887,10 @@
     hardwareScanGeneration += 1;
     broadcasting = false;
     deviceOpen = false;
+    pinOpen = false;
+    pinChallenge = '';
+    pinPositions = '';
+    pinDevice = null;
     deviceError = '';
     toast({
       title: 'Wallet locked',
@@ -878,9 +944,61 @@
     broadcasting = false;
     deviceOpen = false;
   }
+  async function startHardwarePin(device: HardwareDevice) {
+    const releaseHardwareReview = walletShell.beginHardwareReview();
+    pinBusy = true;
+    deviceError = '';
+    pinError = '';
+    pinErrorCode = '';
+    pinPositions = '';
+    pinChallenge = '';
+    pinDevice = device;
+    deviceOpen = false;
+    pinOpen = true;
+    try {
+      pinChallenge = await walletService.promptHardwarePin(device.id);
+    } catch (cause) {
+      if (await redirectExpiredHardwareSession(cause)) return;
+      pinErrorCode = cause instanceof WalletError ? cause.code : 'internal_error';
+      pinError = localizedError(cause, $locale, 'Could not start the PIN matrix.');
+    } finally {
+      releaseHardwareReview();
+      pinBusy = false;
+    }
+  }
+  async function submitHardwarePin() {
+    if (!pinChallenge || !pinPositions || pinBusy) return;
+    const releaseHardwareReview = walletShell.beginHardwareReview();
+    pinBusy = true;
+    pinError = '';
+    pinErrorCode = '';
+    const positions = pinPositions;
+    pinPositions = '';
+    try {
+      await walletService.sendHardwarePin(pinChallenge, positions);
+      pinChallenge = '';
+      pinOpen = false;
+      pinDevice = null;
+      toast({ title: 'Hardware signer unlocked', tone: 'success' });
+      deviceOpen = true;
+      await scanHardware();
+    } catch (cause) {
+      if (await redirectExpiredHardwareSession(cause)) return;
+      pinChallenge = '';
+      pinErrorCode = cause instanceof WalletError ? cause.code : 'internal_error';
+      pinError = localizedError(cause, $locale, 'Trezor did not accept that matrix entry.');
+    } finally {
+      releaseHardwareReview();
+      pinBusy = false;
+    }
+  }
   async function signHardware(device: HardwareDevice) {
     if (accelerationConfirmed || broadcasting) return;
     if (!proposal || !externalProposal) return;
+    if (device.action === 'prompt_pin') {
+      await startHardwarePin(device);
+      return;
+    }
     const releaseHardwareReview = walletShell.beginHardwareReview();
     hardwareAction = 'sign';
     hardwareCancelRequested = false;
@@ -1259,33 +1377,7 @@
                     <input
                       aria-label={translate($locale, 'Custom acceleration fee rate')}
                       bind:value={customFee}
-                      onblur={async () => {
-                        if (!accelerationRequest || !customFeeValid) return;
-                        try {
-                          if (accelerationRequest.method === 'rbf') {
-                            rbfQuote = await walletService.quoteRbf(
-                              accelerationRequest.txid,
-                              asFeeRate(Number(customFee))
-                            );
-                            customFee = String(rbfQuote.targetFeeRate);
-                          } else {
-                            cpfpQuote = await walletService.quoteCpfp(
-                              accelerationRequest.txid,
-                              asFeeRate(Number(customFee))
-                            );
-                            customFee = String(cpfpQuote.targetFeeRate);
-                          }
-                          feeEstimateError = '';
-                          accelerationQuoteFailed = false;
-                        } catch (cause) {
-                          accelerationQuoteFailed = true;
-                          feeEstimateError = accelerationUnavailableDescription(
-                            accelerationRequest.method,
-                            cause,
-                            $locale
-                          );
-                        }
-                      }}
+                      oninput={() => queueMicrotask(scheduleAccelerationQuote)}
                       inputmode="decimal"
                       placeholder={translate($locale, 'Enter a fee rate')}
                     /><b>{translate($locale, 'sat/vB')}</b>
@@ -1363,6 +1455,7 @@
                   <input
                     aria-label={translate($locale, 'Custom acceleration fee rate')}
                     bind:value={customFee}
+                    oninput={() => queueMicrotask(scheduleAccelerationQuote)}
                     inputmode="decimal"
                     placeholder={translate($locale, 'Enter a fee rate')}
                   /><b>{translate($locale, 'sat/vB')}</b>
@@ -1381,7 +1474,7 @@
                 role="alert"
                 icon
                 class="acceleration-unavailable-notice inline-action"
-                ><Button variant="secondary" size="small" onclick={loadWallet}
+                ><Button variant="secondary" size="small" onclick={() => refreshAccelerationQuote()}
                   ><RefreshCw size={14} />{translate($locale, 'Try again')}</Button
                 ></WarningNotice
               >{/if}
@@ -1743,10 +1836,7 @@
               <span class="sign-icon"><Cpu size={25} /></span>
               <h2>{translate($locale, 'Sign on your hardware')}</h2>
               <p>
-                {translate(
-                  $locale,
-                  'Verify the address, amount, and fee on the signer. Groot never receives its private key or\n          hardware passphrase.'
-                )}
+                {translate($locale, 'Verify and approve on the device.')}
               </p>
             {/if}
             <section
@@ -2074,10 +2164,7 @@
 <Modal
   open={deviceOpen && !accelerationConfirmed}
   title={translate($locale, 'Sign with hardware')}
-  description={translate(
-    $locale,
-    'Use the same passphrase-protected hardware signer whose fingerprint you imported.'
-  )}
+  description={translate($locale, 'Use the signer imported for this wallet.')}
   onclose={closeHardwareScan}
   attentionSignal={hardwareAttentionSignal}
   upper
@@ -2145,7 +2232,7 @@
           title={translate($locale, 'Coldcard fee limit')}
           body={translate(
             $locale,
-            "This CPFP fee is {percent}% of its outputs. Coldcard's default 10% Max Network Fee setting will reject it. Lower the package rate if possible, wait for the parent, or deliberately change that setting on Coldcard before retrying. Groot will not bypass device safety checks.",
+            "Fee is {percent}% of outputs. Coldcard's 10% limit may reject it. Lower the fee, wait, or change the device limit.",
             { percent: coldcardCpfpFeePercent }
           )}
           role="note"
@@ -2165,8 +2252,8 @@
             hardwareCancelRequested
               ? 'Reject or cancel the pending request on the device. Groot will close this dialog after the device responds.'
               : hardwareAction === 'sign'
-                ? 'Review the recipient, amount, fee, and change, then approve the transaction on the device.'
-                : 'Keep the signer connected. Follow any unlock instructions shown by Groot or the device.'
+                ? 'Review and approve on the device.'
+                : 'Keep the signer connected and follow its prompts.'
           )}
           label={translate(
             $locale,
@@ -2199,6 +2286,31 @@
     </div>
   </div></Modal
 >
+<TrezorPinModal
+  open={pinOpen && !accelerationConfirmed}
+  busy={pinBusy}
+  challengeReady={Boolean(pinChallenge)}
+  positions={pinPositions}
+  device={pinDevice}
+  errorCode={pinErrorCode}
+  error={pinError}
+  onappend={(position) => (pinPositions += position)}
+  ondelete={() => (pinPositions = pinPositions.slice(0, -1))}
+  onclear={() => (pinPositions = '')}
+  onsubmit={submitHardwarePin}
+  onretry={() => {
+    if (pinDevice) startHardwarePin(pinDevice);
+  }}
+  onclose={() => {
+    pinOpen = false;
+    pinPositions = '';
+    pinChallenge = '';
+    pinDevice = null;
+    pinError = '';
+    pinErrorCode = '';
+    deviceOpen = true;
+  }}
+/>
 <Modal
   open={importOpen && !accelerationConfirmed}
   title={translate($locale, 'Import signed PSBT')}
