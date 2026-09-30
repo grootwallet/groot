@@ -256,7 +256,7 @@ test('keeps multisig receive verification disclosure visibly expandable', async 
       theme
     );
     await page.screenshot({
-      path: `/private/tmp/groot-membership-${page.viewportSize()?.width}-${theme}.png`,
+      path: test.info().outputPath(`groot-membership-${page.viewportSize()?.width}-${theme}.png`),
       fullPage: true,
       animations: 'disabled'
     });
@@ -310,7 +310,9 @@ test('keeps multisig receive verification disclosure visibly expandable', async 
       await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)
     ).toBe(true);
     await page.screenshot({
-      path: `/private/tmp/groot-multisig-discard-${page.viewportSize()?.width}-${theme}.png`,
+      path: test
+        .info()
+        .outputPath(`groot-multisig-discard-${page.viewportSize()?.width}-${theme}.png`),
       animations: 'disabled'
     });
   }
@@ -321,7 +323,9 @@ test('keeps multisig receive verification disclosure visibly expandable', async 
       theme
     );
     await page.screenshot({
-      path: `/private/tmp/groot-receive-followup-${page.viewportSize()?.width}-${theme}.png`,
+      path: test
+        .info()
+        .outputPath(`groot-receive-followup-${page.viewportSize()?.width}-${theme}.png`),
       fullPage: true,
       animations: 'disabled'
     });
@@ -369,7 +373,11 @@ test('confirmed original stops fee acceleration on both wallet routes', async ({
         theme
       );
       await page.screenshot({
-        path: `/private/tmp/groot-confirmed-${route.includes('multisig') ? 'multi' : 'single'}-${page.viewportSize()?.width}-${theme}.png`,
+        path: test
+          .info()
+          .outputPath(
+            `groot-confirmed-${route.includes('multisig') ? 'multi' : 'single'}-${page.viewportSize()?.width}-${theme}.png`
+          ),
         fullPage: true,
         animations: 'disabled'
       });
@@ -419,7 +427,11 @@ test('confirmed RBF proposal keeps its review until explicitly discarded', async
         theme
       );
       await page.screenshot({
-        path: `/private/tmp/groot-rbf-review-${route.includes('multisig') ? 'multi' : 'single'}-${page.viewportSize()?.width}-${theme}.png`,
+        path: test
+          .info()
+          .outputPath(
+            `groot-rbf-review-${route.includes('multisig') ? 'multi' : 'single'}-${page.viewportSize()?.width}-${theme}.png`
+          ),
         fullPage: true,
         animations: 'disabled'
       });
@@ -2015,7 +2027,7 @@ test('exports and validates the recommended BSMS record', async ({ page }) => {
       theme
     );
     await page.screenshot({
-      path: `/private/tmp/groot-backup-${page.viewportSize()?.width}-${theme}.png`,
+      path: test.info().outputPath(`groot-backup-${page.viewportSize()?.width}-${theme}.png`),
       animations: 'disabled'
     });
   }
@@ -2121,7 +2133,9 @@ test('gates and simulates guided Miniscript recovery policies', async ({ page })
 
   await page.goto('/multisig/policy?fixture-policy-maturity=1');
   await expect(page.getByText('Experimental analysis only')).toBeVisible();
-  await expect(page.getByText(/Analysis never changes the selected wallet/)).toBeVisible();
+  await expect(
+    page.getByText(/To use a different policy, create and back up a separate recovery wallet/)
+  ).toBeVisible();
   await expect(page.getByText('Separate recovery key required')).toHaveCount(0);
   const noticeBounds = await page.locator('.policy-lab-notice').boundingBox();
   const templateBounds = await page.getByText('Template', { exact: true }).boundingBox();
