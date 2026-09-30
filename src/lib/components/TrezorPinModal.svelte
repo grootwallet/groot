@@ -142,13 +142,12 @@
         label={translate($locale, 'Trezor unlock in progress')}
       />
     {:else if gridAvailable}
-      {#if positions}
-        <output
-          aria-label={translate($locale, '{count} PIN positions selected', {
-            count: positions.length
-          })}>{'•'.repeat(positions.length)}</output
-        >
-      {/if}
+      <output
+        aria-live="polite"
+        aria-label={translate($locale, '{count} PIN positions selected', {
+          count: positions.length
+        })}>{'•'.repeat(positions.length) || '\u00a0'}</output
+      >
       <div class="pin-matrix" aria-label={translate($locale, 'Blind PIN position grid')}>
         {#each TREZOR_PIN_CELLS as cell}
           <button

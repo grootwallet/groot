@@ -44,6 +44,11 @@ there even if that means a host-visible device is not offered.
    deterministic sorting are mandatory. Windows, Linux, and mobile remain
    unsupported until their own boundary and evidence exist; macOS transport
    assumptions do not transfer to another platform.
+   The macOS HID manager and every refresh using it live on one dedicated,
+   process-lifetime inventory thread. They must not be created or destroyed on
+   arbitrary async blocking workers: macOS schedules `IOHIDManager` on its
+   initializing thread's run loop, and moving successive inventories between
+   worker threads can terminate the process inside IOKit/CoreFoundation.
 4. Only an explicit user-selected capability may start an interactive HWI
    action. Every HWI account-key, unlock/PIN continuation, policy, address, and
    signing command must contain the selected non-empty exact device path. Empty,
@@ -72,9 +77,12 @@ there even if that means a host-visible device is not offered.
 
 The macOS inventory, exact-path action, shared-epoch, cancellation-invalidation,
 and activity-guard parts of this decision are implemented in the 2026-09-30
-pipeline correction. Stock HWI aggregate `enumerate` is not production-callable
-from the picker. Until the packaged seven-device matrix exists, the result must
-not be described as physically certified or assigned a measured p50/p95.
+pipeline correction. The subsequent crash correction pins the HID manager to
+its dedicated process-lifetime worker and a connected Model One survives twenty
+consecutive in-process inventories. Stock HWI aggregate `enumerate` is not
+production-callable from the picker. Until the packaged seven-device matrix
+exists, the result must not be described as physically certified or assigned a
+measured p50/p95.
 
 ## Compatibility
 

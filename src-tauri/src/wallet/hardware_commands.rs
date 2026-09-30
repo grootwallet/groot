@@ -2,6 +2,7 @@ use super::*;
 use std::sync::{Condvar, OnceLock};
 
 const HARDWARE_SCAN_CACHE_TIMEOUT: Duration = Duration::from_secs(15 * 60);
+const HARDWARE_UNLOCK_OBSERVATION_TIMEOUT: Duration = Duration::from_secs(5 * 60);
 const MAX_TARGET_DEVICE_TYPES: usize = 8;
 const MAX_DISCOVERED_DEVICES: usize = 64;
 const BITBOX_ACCOUNT_KEY_ATTEMPTS: usize = 3;
@@ -544,6 +545,22 @@ fn remember_hardware_scan(
             "A newer hardware scan replaced this result. Use the latest scan.",
         ));
     }
+    let connected_paths = devices
+        .iter()
+        .map(|device| device.path.clone())
+        .collect::<std::collections::HashSet<_>>();
+    let mut unlocked_paths = state
+        .recently_unlocked_hardware_paths
+        .lock()
+        .map_err(internal)?;
+    unlocked_paths.retain(|path, observed_at| {
+        observed_at.elapsed() <= HARDWARE_UNLOCK_OBSERVATION_TIMEOUT
+            && connected_paths.contains(path)
+    });
+    for device in devices.iter_mut() {
+        device.observed_unlocked = unlocked_paths.contains_key(&device.path);
+    }
+    drop(unlocked_paths);
     let prior_capabilities = scans
         .as_ref()
         .filter(|scan| scan.generation == Some(generation))
@@ -570,6 +587,17 @@ fn remember_hardware_scan(
         created_at: Instant::now(),
         generation: Some(generation),
     });
+    Ok(())
+}
+
+fn remember_unlocked_hardware_path(state: &AppState, path: &str) -> ApiResult<()> {
+    let mut unlocked_paths = state
+        .recently_unlocked_hardware_paths
+        .lock()
+        .map_err(internal)?;
+    unlocked_paths
+        .retain(|_, observed_at| observed_at.elapsed() <= HARDWARE_UNLOCK_OBSERVATION_TIMEOUT);
+    unlocked_paths.insert(path.to_owned(), Instant::now());
     Ok(())
 }
 
@@ -857,6 +885,42 @@ mod targeted_scan_tests {
         });
         assert_eq!(generic.code, "hardware_unavailable");
         assert!(!generic.message.to_ascii_lowercase().contains("wrong pin"));
+    }
+
+    #[test]
+    fn successful_trezor_pin_observation_survives_rescan_only_for_the_connected_path() {
+        let state = AppState::default();
+        let path = "webusb:007:4";
+        remember_unlocked_hardware_path(&state, path).unwrap();
+
+        let request_epoch = forget_hardware_scan(&state).unwrap();
+        let mut connected = [HwiDevice {
+            passive: true,
+            device_type: "trezor".into(),
+            model: "trezor_1".into(),
+            path: path.into(),
+            ..HwiDevice::default()
+        }];
+        remember_hardware_scan(&state, request_epoch, 1, &mut connected).unwrap();
+        assert!(connected[0].observed_unlocked);
+        let ready = hardware_device_dto(connected[0].clone());
+        assert_eq!(ready.status, "ready");
+        assert_eq!(ready.action, "prompt_pin");
+
+        let request_epoch = forget_hardware_scan(&state).unwrap();
+        let mut disconnected = [];
+        remember_hardware_scan(&state, request_epoch, 2, &mut disconnected).unwrap();
+
+        let request_epoch = forget_hardware_scan(&state).unwrap();
+        let mut reconnected = [HwiDevice {
+            passive: true,
+            device_type: "trezor".into(),
+            model: "trezor_1".into(),
+            path: path.into(),
+            ..HwiDevice::default()
+        }];
+        remember_hardware_scan(&state, request_epoch, 3, &mut reconnected).unwrap();
+        assert!(!reconnected[0].observed_unlocked);
     }
 
     #[test]
@@ -1439,6 +1503,7 @@ pub async fn hardware_prompt_pin(
     let _activity = begin_optional_unlocked_user_operation(&app, &state)?;
     let hwi = hwi_cli(&app)?;
     let device = recently_scanned_hardware_device(&state, &device_id)?;
+    let selected_path = device.path.clone();
     let pending = tauri::async_runtime::spawn_blocking(move || {
         if !hardware_pin_prompt_required(&device) {
             return Err(api_error(
@@ -1475,6 +1540,7 @@ pub async fn hardware_prompt_pin(
             .lock()
             .map_err(internal)?
             .clear();
+        remember_unlocked_hardware_path(&state, &selected_path)?;
         return Ok(HardwarePinPromptDto {
             challenge_id: None,
             pin_required: false,
@@ -1528,6 +1594,7 @@ pub async fn hardware_send_pin(
             "The PIN request expired. Start the PIN matrix again.",
         ));
     }
+    let unlocked_path = pending.device_path.clone();
     let hwi = hwi_cli(&app)?;
     tauri::async_runtime::spawn_blocking(move || {
         let output = hwi
@@ -1540,7 +1607,8 @@ pub async fn hardware_send_pin(
         Ok(())
     })
     .await
-    .map_err(internal)?
+    .map_err(internal)??;
+    remember_unlocked_hardware_path(&state, &unlocked_path)
 }
 
 fn hardware_pin_response_error(response: HwiSuccess) -> ApiError {

@@ -555,6 +555,7 @@ pub struct AppState {
     verified_recovery: Mutex<HashMap<Uuid, String>>,
     pending_hardware_pins: Mutex<HashMap<String, PendingHardwarePin>>,
     recent_hardware_scan: Mutex<Option<RecentHardwareScan>>,
+    recently_unlocked_hardware_paths: Mutex<HashMap<String, Instant>>,
     pending_hardware_admissions: Mutex<HashMap<String, Instant>>,
     hardware_scan_epoch: AtomicU64,
     node_auth: Mutex<HashMap<Uuid, NodeAuthSession>>,
@@ -1515,6 +1516,8 @@ struct HwiDevice {
     capability: String,
     #[serde(skip)]
     passive: bool,
+    #[serde(skip)]
+    observed_unlocked: bool,
     #[serde(default)]
     fingerprint: Option<String>,
     #[serde(default, rename = "type")]
@@ -1707,6 +1710,12 @@ fn hardware_device_dto(device: HwiDevice) -> HardwareDeviceDto {
             "not_ready",
             "This Groot release's bundled HWI 3.2.0 does not support this Trezor model. Update Groot when a reviewed release adds support, then scan again.",
             "retry",
+        )
+    } else if pin_required && device.observed_unlocked {
+        (
+            "ready",
+            "Unlocked. Select this signer to continue.",
+            "prompt_pin",
         )
     } else if pin_required {
         (

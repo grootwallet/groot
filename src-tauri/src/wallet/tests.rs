@@ -3239,6 +3239,7 @@ fn loaded_hardware_wallet_descriptors_must_match_receive_and_change_identity() {
 fn cached_hwi_connection_identity_must_match_the_saved_signer() {
     let device = HwiDevice {
         passive: false,
+        observed_unlocked: false,
         capability: "opaque-device".to_owned(),
         fingerprint: Some("d34db33f".to_owned()),
         device_type: "trezor".to_owned(),
@@ -3453,6 +3454,7 @@ fn hwi_response_codes_become_safe_actionable_errors() {
 fn not_ready_hardware_remains_visible_with_safe_device_specific_actions() {
     let passive_trezor = hardware_device_dto(HwiDevice {
         passive: true,
+        observed_unlocked: false,
         capability: "opaque-passive-trezor".to_owned(),
         fingerprint: None,
         device_type: "trezor".to_owned(),
@@ -3471,6 +3473,7 @@ fn not_ready_hardware_remains_visible_with_safe_device_specific_actions() {
 
     let passive_model_one = hardware_device_dto(HwiDevice {
         passive: true,
+        observed_unlocked: false,
         model: "trezor_1".to_owned(),
         capability: "opaque-passive-model-one".to_owned(),
         fingerprint: None,
@@ -3487,6 +3490,7 @@ fn not_ready_hardware_remains_visible_with_safe_device_specific_actions() {
 
     let passive_coldcard = hardware_device_dto(HwiDevice {
         passive: true,
+        observed_unlocked: false,
         capability: "opaque-passive-coldcard".to_owned(),
         fingerprint: None,
         device_type: "coldcard".to_owned(),
@@ -3504,6 +3508,7 @@ fn not_ready_hardware_remains_visible_with_safe_device_specific_actions() {
 
     let safe_3 = hardware_device_dto(HwiDevice {
         passive: false,
+        observed_unlocked: false,
         capability: "opaque-safe-3".to_owned(),
         fingerprint: Some("a1b2c3d4".to_owned()),
         device_type: "trezor".to_owned(),
@@ -3521,6 +3526,7 @@ fn not_ready_hardware_remains_visible_with_safe_device_specific_actions() {
 
     let unsupported_safe_3 = hardware_device_dto(HwiDevice {
         passive: false,
+        observed_unlocked: false,
         capability: "opaque-device".to_owned(),
         fingerprint: None,
         device_type: "trezor".to_owned(),
@@ -3542,6 +3548,7 @@ fn not_ready_hardware_remains_visible_with_safe_device_specific_actions() {
 
     let trezor = hardware_device_dto(HwiDevice {
         passive: false,
+        observed_unlocked: false,
         capability: "opaque-device".to_owned(),
         fingerprint: None,
         device_type: "trezor".to_owned(),
@@ -3560,6 +3567,7 @@ fn not_ready_hardware_remains_visible_with_safe_device_specific_actions() {
 
     let locked_passphrase_trezor = hardware_device_dto(HwiDevice {
         passive: false,
+        observed_unlocked: false,
         capability: "opaque-device".to_owned(),
         fingerprint: None,
         device_type: "trezor".to_owned(),
@@ -3579,6 +3587,7 @@ fn not_ready_hardware_remains_visible_with_safe_device_specific_actions() {
 
     let bitbox = hardware_device_dto(HwiDevice {
         passive: false,
+        observed_unlocked: false,
         capability: "opaque-device".to_owned(),
         fingerprint: None,
         device_type: "bitbox02".to_owned(),
@@ -3596,6 +3605,7 @@ fn not_ready_hardware_remains_visible_with_safe_device_specific_actions() {
 
     let locked_nova = hardware_device_dto(HwiDevice {
         passive: false,
+        observed_unlocked: false,
         capability: "opaque-device".to_owned(),
         fingerprint: None,
         device_type: "bitbox02".to_owned(),
@@ -3616,6 +3626,7 @@ fn not_ready_hardware_remains_visible_with_safe_device_specific_actions() {
 
     let ready_nova = hardware_device_dto(HwiDevice {
         passive: false,
+        observed_unlocked: false,
         capability: "opaque-device".to_owned(),
         fingerprint: Some("deadbeef".to_owned()),
         device_type: "bitbox02".to_owned(),
@@ -3633,6 +3644,7 @@ fn not_ready_hardware_remains_visible_with_safe_device_specific_actions() {
 
     let jade = hardware_device_dto(HwiDevice {
         passive: false,
+        observed_unlocked: false,
         capability: "opaque-device".to_owned(),
         fingerprint: None,
         device_type: "jade".to_owned(),
@@ -3650,6 +3662,7 @@ fn not_ready_hardware_remains_visible_with_safe_device_specific_actions() {
 
     let ledger = hardware_device_dto(HwiDevice {
         passive: false,
+        observed_unlocked: false,
         capability: "opaque-device".to_owned(),
         fingerprint: Some("f00dbabe".to_owned()),
         device_type: "ledger".to_owned(),
@@ -3671,6 +3684,7 @@ fn not_ready_hardware_remains_visible_with_safe_device_specific_actions() {
     ] {
         let device = hardware_device_dto(HwiDevice {
             passive: false,
+            observed_unlocked: false,
             capability: "opaque-device".to_owned(),
             fingerprint: None,
             device_type: device_type.to_owned(),
@@ -3689,6 +3703,7 @@ fn not_ready_hardware_remains_visible_with_safe_device_specific_actions() {
 
     let keepkey = hardware_device_dto(HwiDevice {
         passive: false,
+        observed_unlocked: false,
         capability: "opaque-device".to_owned(),
         fingerprint: None,
         device_type: "keepkey".to_owned(),
@@ -3709,6 +3724,7 @@ fn not_ready_hardware_remains_visible_with_safe_device_specific_actions() {
 
     let ready = hardware_device_dto(HwiDevice {
         passive: false,
+        observed_unlocked: false,
         capability: "opaque-device".to_owned(),
         fingerprint: Some("f00dbabe".to_owned()),
         device_type: "coldcard".to_owned(),
@@ -3728,6 +3744,7 @@ fn not_ready_hardware_remains_visible_with_safe_device_specific_actions() {
 fn trezor_passphrase_warning_requires_explicit_standard_wallet_selection() {
     let hwi_device = HwiDevice {
         passive: false,
+        observed_unlocked: false,
         capability: "opaque-device".to_owned(),
         fingerprint: Some("emptywallet".to_owned()),
         device_type: "trezor".to_owned(),

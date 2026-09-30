@@ -643,6 +643,21 @@ independent-review, or GA gates.
 
 ### Next physical steps
 
+Internal candidate `0881a194` supplied valuable but failed Model One regression
+evidence. The owner confirmed that passive discovery and unplug/replug rescans
+were immediate, and PIN unlock completed. However, the PIN entry row appeared
+only after the first tap and shifted the matrix; the post-PIN automatic rescan
+then terminated Groot. After relaunch, the device remained labeled Locked despite
+the successful unlock, and an explicit rescan terminated Groot again. Two macOS
+crash reports independently terminate in `IOHIDDeviceScheduleWithRunLoop` while
+initializing `IOHIDManager` on a Tokio blocking worker. Therefore no Model One
+signing, reconnect, restart, or release row transfers from `0881a194`. The source
+correction keeps one HID manager on a dedicated process-lifetime worker, removes
+the redundant post-PIN scan, reserves PIN-entry height before the first tap, and
+retains a bounded exact-path Ready observation. A connected-device source probe
+survives twenty consecutive inventories; the replacement package still needs the
+owner-facing unlock/sign/rescan sequence below.
+
 The next owner follow-up supplies screenshots identifying internal Mainnet
 candidate `87fab724` and reports these single-key BIP84 acceleration results:
 

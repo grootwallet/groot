@@ -151,6 +151,9 @@ describe('hardware receive verification UI', () => {
     expect(pinModal).not.toContain('recovery words or a hardware passphrase');
     expect(pinModal).toContain("import WarningNotice from '$lib/components/WarningNotice.svelte'");
     expect(pinModal).not.toContain('pin-error-card');
+    expect(pinModal).toContain('aria-live="polite"');
+    expect(pinModal).toContain("'•'.repeat(positions.length) || '\\u00a0'");
+    expect(pinModal).not.toContain('{#if positions}<output');
   });
 
   it('continues Trezor import without a second aggregate discovery', () => {
@@ -164,6 +167,10 @@ describe('hardware receive verification UI', () => {
   });
 
   it('continues every Trezor PIN flow on the admitted capability without rescanning', () => {
+    const singleSendPin = singleKeySend.slice(
+      singleKeySend.indexOf('async function submitHardwarePin()'),
+      singleKeySend.indexOf('async function signHardware(')
+    );
     const receivePin = verificationFlow.slice(
       verificationFlow.indexOf('async function submitPin()'),
       verificationFlow.indexOf('async function verifyAddress')
@@ -196,6 +203,8 @@ describe('hardware receive verification UI', () => {
     expect(multisigHealthPin).not.toContain('findSavedHardwareDevice');
     expect(multisigDraftHealthPin).toContain('await runDraftHealthCheck(unlockedDevice)');
     expect(multisigDraftHealthPin).not.toContain('findSavedHardwareDevice');
+    expect(singleSendPin).toContain('await signHardware(unlockedDevice, true)');
+    expect(singleSendPin).not.toContain('await scanHardware()');
   });
 
   it('blocks every modal dismissal while a Trezor PIN challenge is active', () => {

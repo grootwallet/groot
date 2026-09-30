@@ -24,6 +24,8 @@ const MAX_OUTPUT_BYTES: u64 = 384 * 1024;
 const PIPE_CLEANUP_TIMEOUT: Duration = Duration::from_secs(2);
 const CANCELLATION_CLEANUP_TIMEOUT: Duration = Duration::from_secs(5);
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(90);
+#[cfg(target_os = "macos")]
+const PASSIVE_INVENTORY_TIMEOUT: Duration = Duration::from_secs(10);
 // HWI 3.2.0 opens and initializes every BitBox02 client before `enumerate`
 // can return its path-only row. A locked device can therefore ask for its
 // password during aggregate discovery itself, before Groot has a capability
@@ -179,13 +181,15 @@ fn passive_jade_serial_candidate(
 }
 
 #[cfg(target_os = "macos")]
-fn macos_passive_hardware_inventory(
+fn collect_macos_passive_hardware_inventory(
     active_network: Network,
+    hid: &mut hidapi::HidApi,
 ) -> Result<Vec<PassiveHardwareCandidate>, HardwareError> {
     use nusb::MaybeFuture as _;
     use serialport::SerialPortType;
 
-    let hid = hidapi::HidApi::new().map_err(|_| HardwareError::Unavailable)?;
+    hid.refresh_devices()
+        .map_err(|_| HardwareError::Unavailable)?;
     let mut candidates = hid
         .device_list()
         .filter_map(|device| {
@@ -236,6 +240,76 @@ fn macos_passive_hardware_inventory(
             .then_with(|| left.path.cmp(&right.path))
     });
     Ok(candidates)
+}
+
+#[cfg(target_os = "macos")]
+struct MacosPassiveInventoryRequest {
+    active_network: Network,
+    response: mpsc::SyncSender<Result<Vec<PassiveHardwareCandidate>, HardwareError>>,
+}
+
+#[cfg(target_os = "macos")]
+struct MacosPassiveInventoryWorker {
+    requests: mpsc::Sender<MacosPassiveInventoryRequest>,
+}
+
+#[cfg(target_os = "macos")]
+static MACOS_PASSIVE_INVENTORY_WORKER: OnceLock<
+    Result<MacosPassiveInventoryWorker, HardwareError>,
+> = OnceLock::new();
+
+#[cfg(target_os = "macos")]
+fn macos_passive_inventory_worker() -> Result<&'static MacosPassiveInventoryWorker, HardwareError> {
+    match MACOS_PASSIVE_INVENTORY_WORKER.get_or_init(|| {
+        let (requests, receiver) = mpsc::channel::<MacosPassiveInventoryRequest>();
+        thread::Builder::new()
+            .name("groot-passive-hardware-inventory".to_owned())
+            .spawn(move || {
+                // hidapi's macOS backend owns a process-global IOHIDManager
+                // scheduled on the thread that initializes it. Creating and
+                // dropping HidApi from arbitrary Tokio workers can leave that
+                // manager attached to a dead run loop and crash inside
+                // IOHIDManager on the next scan. Keep both the manager and all
+                // of its refresh calls on this one process-lifetime thread.
+                let mut hid = hidapi::HidApi::new().ok();
+                while let Ok(request) = receiver.recv() {
+                    if hid.is_none() {
+                        hid = hidapi::HidApi::new().ok();
+                    }
+                    let result = hid.as_mut().map_or_else(
+                        || Err(HardwareError::Unavailable),
+                        |hid| collect_macos_passive_hardware_inventory(request.active_network, hid),
+                    );
+                    let _ = request.response.send(result);
+                }
+            })
+            .map_err(|_| HardwareError::Unavailable)?;
+        Ok(MacosPassiveInventoryWorker { requests })
+    }) {
+        Ok(worker) => Ok(worker),
+        Err(error) => Err(*error),
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn macos_passive_hardware_inventory(
+    active_network: Network,
+) -> Result<Vec<PassiveHardwareCandidate>, HardwareError> {
+    let worker = macos_passive_inventory_worker()?;
+    let (response, receiver) = mpsc::sync_channel(1);
+    worker
+        .requests
+        .send(MacosPassiveInventoryRequest {
+            active_network,
+            response,
+        })
+        .map_err(|_| HardwareError::Unavailable)?;
+    receiver
+        .recv_timeout(PASSIVE_INVENTORY_TIMEOUT)
+        .map_err(|error| match error {
+            mpsc::RecvTimeoutError::Timeout => HardwareError::TimedOut,
+            mpsc::RecvTimeoutError::Disconnected => HardwareError::Unavailable,
+        })?
 }
 
 pub fn passive_hardware_inventory(
@@ -1569,11 +1643,13 @@ mod tests {
     #[test]
     #[ignore = "requires a connected Trezor Model One on macOS"]
     fn connected_model_one_is_passively_inventoried_without_hwi() {
-        let candidates = passive_hardware_inventory(Network::Bitcoin)
-            .expect("macOS passive hardware inventory should be available");
-        assert!(candidates.iter().any(|candidate| {
-            candidate.device_type == "trezor" && candidate.model == "trezor_1"
-        }));
+        for _ in 0..20 {
+            let candidates = passive_hardware_inventory(Network::Bitcoin)
+                .expect("macOS passive hardware inventory should be available");
+            assert!(candidates.iter().any(|candidate| {
+                candidate.device_type == "trezor" && candidate.model == "trezor_1"
+            }));
+        }
     }
 
     #[cfg(unix)]

@@ -1,5 +1,22 @@
 # Implementation status
 
+Sep 30 Model One crash correction addresses the two owner-observed process
+terminations in internal candidate `0881a194`. Both macOS crash reports end on a
+Tokio blocking worker in `IOHIDDeviceScheduleWithRunLoop` while creating a new
+`IOHIDManager`; passive HID inventory now owns one manager on one dedicated,
+process-lifetime thread and routes every refresh through it. A hardware-backed
+regression completes twenty consecutive connected-Model-One inventories in one
+process. Successful PIN submission continues directly on the already selected
+capability instead of launching another discovery, and a bounded exact-path
+unlock observation lets a later passive scan render that connected Model One as
+Ready while still rechecking the exact device before an action. Disconnecting
+removes the observation. The PIN-position output reserves its height before the
+first tap, so the matrix never moves. No persisted wallet, profile, registry,
+proposal, node, transaction, descriptor, PSBT, database, or BIP format changes;
+no migration is required. The transient node error after the crashed process is
+not treated as a node-config change and still requires replacement-package
+observation.
+
 Sep 30 hardware-pipeline correction implements ADR 0075's passive picker on
 macOS. Read-only HID, USB-registry, and serial enumeration classifies only exact
 allowlisted host endpoints and mints process-local capabilities; it never
@@ -59,9 +76,10 @@ rows for derivation path and address type. Standard multisig is identified as
 the redundant funding-label heading, and the non-actionable estimated-weight
 disclosure; selectable rows now expose hover/focus feedback. Single-key signing
 uses the complete discovered-device list and the shared status badges while Rust
-continues to reject non-wallet identities. Model One PIN success now performs a
-fresh discovery before any signing action, preventing a synthetic stale locked
-row from being reused. No persisted format, descriptor, derivation, transaction,
+continues to reject non-wallet identities. Model One PIN success in that source
+line performed a fresh discovery before signing; the Sep 30 crash correction
+supersedes that handoff by continuing on the already selected capability and
+retaining exact-device proof in the action. No persisted format, descriptor, derivation, transaction,
 PSBT, dependency, or BIP support behavior changes; no migration is required.
 Stock HWI 3.2.0 aggregate discovery can still enter a vendor-owned unlock/login
 flow before Groot has a selected signer. Passive transport inventory remains a

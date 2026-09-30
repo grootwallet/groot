@@ -987,20 +987,29 @@
   }
   async function submitHardwarePin() {
     if (!pinChallenge || !pinPositions || pinBusy) return;
+    if (!pinDevice) return;
     const releaseHardwareReview = walletShell.beginHardwareReview();
     pinBusy = true;
     pinError = '';
     pinErrorCode = '';
     const positions = pinPositions;
+    const unlockedDevice: HardwareDevice = {
+      ...pinDevice,
+      status: 'ready',
+      message: 'Unlocked. Select this signer to continue.'
+    };
     pinPositions = '';
     try {
       await walletService.sendHardwarePin(pinChallenge, positions);
       pinChallenge = '';
       pinOpen = false;
       pinDevice = null;
+      devices = devices.map((device) =>
+        device.id === unlockedDevice.id ? unlockedDevice : device
+      );
       toast({ title: 'Hardware signer unlocked', tone: 'success' });
       deviceOpen = true;
-      await scanHardware();
+      await signHardware(unlockedDevice, true);
     } catch (cause) {
       if (await redirectExpiredHardwareSession(cause)) return;
       pinChallenge = '';

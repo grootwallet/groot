@@ -23,7 +23,10 @@ prompted, signed with, reset, or re-paired during this investigation.
    This removes hidden rediscovery; it is not a persistent-client optimization.
 4. The follow-up macOS correction replaces picker enumeration with read-only
    native HID, USB-registry, and serial inventory. It does not launch HWI or
-   open a vendor session. Only selection starts an exact-path HWI action.
+   open a vendor session. Only selection starts an exact-path HWI action. The
+   HID manager is created once and remains on one dedicated process-lifetime
+   thread; recreating it across async blocking workers caused repeat-scan process
+   terminations inside macOS `IOHIDDeviceScheduleWithRunLoop`.
 5. Three sequential baseline bundled HWI `--version` launches, with cleared
    environment and 15-second per-process deadline, took **4016, 3387, 3346 ms**.
    This measures startup/teardown without USB, not end-to-end device latency or
@@ -49,7 +52,9 @@ including Mainnet omission of the passively ambiguous Safe 3 revision-A/Model-T
 record. The current-firmware Model One's exact WebUSB release tuple is classified
 as `trezor_1`, and its selected path retains the complete USB port chain. An
 ignored-test host probe with a connected Model One and Safe 3 found both without
-launching HWI or producing an unlock prompt. This verifies passive host
+launching HWI or producing an unlock prompt. After the worker-affinity correction,
+the same connected-Model-One probe completed twenty consecutive inventories in
+one process. This verifies passive host
 classification, not p50/p95, reconnect, selected-action, or packaged timing; see
 ADR 0075.
 

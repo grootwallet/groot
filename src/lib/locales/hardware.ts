@@ -186,6 +186,10 @@ export const hardwareCopy = {
       fr: 'Verrouillé. Démarrez la matrice du PIN, puis touchez les cases vides correspondant aux positions affichées sur l’appareil.',
       es: 'Bloqueado. Inicia la matriz del PIN y toca las casillas vacías que correspondan a las posiciones mostradas en el dispositivo.'
     },
+  'Unlocked. Select this signer to continue.': {
+    fr: 'Déverrouillé. Sélectionnez ce signataire pour continuer.',
+    es: 'Desbloqueado. Selecciona este firmante para continuar.'
+  },
   'Passphrase protection is enabled. Choose the standard wallet with no passphrase, or select a hidden wallet on-device when supported.':
     {
       fr: 'La protection par phrase secrète est activée. Choisissez le portefeuille standard sans phrase secrète, ou sélectionnez un portefeuille masqué sur l’appareil lorsque cela est pris en charge.',

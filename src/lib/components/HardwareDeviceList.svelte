@@ -39,9 +39,9 @@
   }
 
   function status(device: HardwareDevice) {
+    if (device.status === 'ready') return 'Ready';
     if (device.action === 'prompt_pin') return 'Locked';
     if (device.action === 'unlock') return 'Unlock & continue';
-    if (device.status === 'ready') return 'Ready';
     if (device.status === 'detected') return 'Detected';
     if (device.action === 'confirm_empty_passphrase') return 'Choose wallet';
     return 'Attention';

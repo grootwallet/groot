@@ -1406,7 +1406,12 @@ test('unlocks a detected Trezor with the bounded PIN-position flow', async ({ pa
   await expect(pin).toHaveClass(/modal-attention/);
   await pin.getByRole('button', { name: 'Continue PIN entry' }).click();
   await expect(pin.getByRole('button', { name: 'Top left position' })).toHaveText('');
-  await pin.getByRole('button', { name: 'Top left position' }).click();
+  await expect(pin.getByLabel('0 PIN positions selected')).toBeVisible();
+  const topLeft = pin.getByRole('button', { name: 'Top left position' });
+  const initialTopLeftBox = await topLeft.boundingBox();
+  await topLeft.click();
+  const selectedTopLeftBox = await topLeft.boundingBox();
+  expect(selectedTopLeftBox?.y).toBe(initialTopLeftBox?.y);
   await pin.getByRole('button', { name: 'Bottom left position' }).click();
   await pin.getByRole('button', { name: 'Top right position' }).click();
   await expect(pin.getByLabel('3 PIN positions selected')).toHaveText('•••');
