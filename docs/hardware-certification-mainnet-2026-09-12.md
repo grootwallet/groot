@@ -740,3 +740,44 @@ transaction sequence on the exact device.
 No new transaction, clean recovery, exact-firmware certification, or GA pass is
 claimed. No wallet IDs, fingerprints, addresses, descriptors, PSBTs, credentials,
 device paths, or node details are retained.
+
+### Sep 30 owner completion report on c4a3070c
+
+The owner identifies exact internal multi-network candidate `c4a3070c` in the
+supplied screenshots and reports the following results. No wallet identifier,
+fingerprint, address, transaction identifier, descriptor, PSBT, credential,
+device path, or raw HWI output is retained.
+
+- Trezor Model One completed blind-PIN unlock, BIP84 signing and broadcast, and
+  correct accounting after restart. The picker returned the same device to a
+  usable state; no crash was reported in this session.
+- Original Bitcoin-only BitBox02 completed BIP84 signing and broadcast with
+  correct accounting. BitBox02 Nova passed rejection, interruption,
+  unplug/replug, signing, broadcast, and accounting.
+- Coldcard Mk4, Ledger Nano S Plus, Jade Classic, and Trezor Safe 3 passed the
+  owner's remaining exercised positive and negative rows.
+- The owner declares all required BIP84 and BIP48 signer positive and negative
+  flows passing across Regtest, Testnet4, and Mainnet. Earlier completed BIP48
+  pair evidence is not expanded into new combinatorial pair claims.
+- Managed Fulcrum completed owner-operated full rescans, connection tests for
+  single-key and multisig wallets, broadcast, restart, managed/local-node
+  switching in both directions, and explicit network-setup copying.
+- Trezor displayed `2.23 sat/vB` while Groot displayed `2.25 sat/vB` for one
+  successfully signed transaction. Groot's value is derived from the
+  authoritative PSBT using wallet-policy satisfaction weight, while the signer
+  independently estimates final signed size; the absolute fee and outputs were
+  accepted and broadcast. This is recorded as a presentation difference, not an
+  amount or transaction mismatch.
+
+The screenshots also show a remaining presentation defect: fingerprint-less
+Trezor/Jade rows were offered for BitBox02-family saved wallets. The replacement
+source disables a fingerprint-less family absent from the wallet as **Not part
+of this wallet**, while retaining **Unlock to identify** for an eligible
+same-family device until native exact-account proof. Cancellation guidance is
+shortened. These source changes require the focused replacement-package visual
+and interaction regression and do not transfer the `c4a3070c` physical results.
+
+This report does not infer exact firmware versions from the release targets and
+does not close signed/notarized-artifact repetition, clean-profile recovery not
+explicitly reported here, independent witnessing, reproducible-build, or final
+release-approval rows.

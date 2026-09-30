@@ -349,7 +349,13 @@
             eligibleDeviceTypes={savedSignerDeviceType ? [savedSignerDeviceType] : []}
             eligibleFingerprints={savedSignerFingerprint ? [savedSignerFingerprint] : []}
             savedSigners={savedSignerFingerprint && savedSignerLabel
-              ? [{ fingerprint: savedSignerFingerprint, label: savedSignerLabel }]
+              ? [
+                  {
+                    fingerprint: savedSignerFingerprint,
+                    label: savedSignerLabel,
+                    deviceType: savedSignerDeviceType
+                  }
+                ]
               : []}
             onverified={applyVerifiedAddress}
           />{/if}<Button variant="ghost-danger" onclick={() => requestDiscard(current!)}

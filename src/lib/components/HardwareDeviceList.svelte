@@ -63,7 +63,10 @@
     {#each devices as device (device.id)}
       {@const membership = hardwareWalletMembership(
         device,
-        savedSigners.map((signer) => signer.fingerprint)
+        savedSigners.map((signer) => signer.fingerprint),
+        savedSigners
+          .map((signer) => signer.deviceType)
+          .filter((deviceType): deviceType is string => Boolean(deviceType))
       )}
       {@const deviceDetail = detail(device, membership)}
       <button

@@ -169,7 +169,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src/routes/receive/+page.svelte',
-    '233db25ab597e28b4e8b92eae47fd057597f0bf4b1052eff198cd5ccba924e73'
+    '502338a683123f8703eaa1ec8706d57ce37533053c51f160f54a923688dfaaef'
   ],
   [
     'src/routes/multisig/receive/+page.svelte',

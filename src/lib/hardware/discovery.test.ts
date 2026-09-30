@@ -54,6 +54,16 @@ describe('hardware device display names', () => {
       'unrelated'
     );
   });
+  it('disables a locked device from an unrelated family without prompting it', () => {
+    expect(hardwareWalletMembership(device('trezor'), ['aabbccdd'], ['bitbox02'])).toBe(
+      'unrelated'
+    );
+    expect(hardwareWalletMembership(device('jade'), ['aabbccdd'], ['ledger'])).toBe('unrelated');
+    expect(hardwareWalletMembership(device('trezor'), ['aabbccdd'], ['trezor'])).toBe('unknown');
+    expect(hardwareWalletMembership(device('bitbox02_nova'), ['aabbccdd'], ['bitbox02'])).toBe(
+      'unknown'
+    );
+  });
   it('uses the saved user name after an exact fingerprint match', () => {
     const jade = { ...device('jade'), fingerprint: '1B9B9B49', label: 'jade' };
     expect(

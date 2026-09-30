@@ -25,12 +25,17 @@ draft on navigation. Before a proposal exists, an Overview exit remains availabl
 It never auto-broadcasts or deletes a proposal. Native stale-input validation remains authoritative.
 
 In existing-wallet hardware selection, scan results retain known non-wallet
-devices as disabled rows labelled **Not part of this wallet**. Unidentified
-devices say **Unlock to identify**. Matching candidates have no explanatory
+devices as disabled rows labelled **Not part of this wallet**. A locked or
+otherwise fingerprint-less device from a family absent from the saved wallet is
+likewise labelled and disabled without starting unlock. An unidentified device
+from an eligible family says **Unlock to identify** because multiple devices of
+that family cannot be distinguished until Rust reads the public identity.
+Matching candidates have no explanatory
 subtitle; receive shows **Policy unverified** only when required policy evidence
 is absent. The receive picker retains every discovered family, including those
 not represented by the wallet. Selecting an
-unknown device can start identification, never establish membership by its brand.
+eligible unknown device can start identification; family compatibility never
+establishes membership by itself.
 Native saved-account proof still gates receive display, policy authorization,
 and signing. This does not change initial key enrollment, where no saved wallet
 membership exists yet.

@@ -192,6 +192,18 @@ cross-application interoperability results. They do not satisfy the independent-
 review requirement, replace a clean Groot-profile recovery, or certify a later
 signed package.
 
+Exact internal multi-network candidate `c4a3070c` now has an owner completion
+report covering the seven approved models' exercised BIP84/BIP48 positive and
+negative flows across Regtest, Testnet4, and Mainnet, including Model One and
+original BitBox02 sign/broadcast plus restart accounting and Nova rejection,
+interruption, reconnect, sign/broadcast, and accounting. The same report covers
+managed-Fulcrum full rescans, single-key/multisig connection checks, broadcast,
+restart, managed/local switching, and network-setup copying. This materially
+advances owner-operated candidate evidence, but the checkboxes below remain open
+until exact firmware is captured, the small post-report picker/copy change is
+repeated on the signed/notarized artifact, sanitized summaries are reviewed, and
+the independent rows pass. Evidence: [`hardware-certification-mainnet-2026-09-12.md`](hardware-certification-mainnet-2026-09-12.md#sep-30-owner-completion-report-on-c4a3070c).
+
 - [ ] Coldcard Mk4 firmware 5.6.1 certification record complete and sanitized summary reviewed.
 - [ ] Trezor Model One firmware 1.14.1 certification record complete and sanitized summary reviewed.
 - [ ] Ledger Nano S Plus firmware 1.6.1 with Bitcoin app 2.5.0 certification record complete and sanitized summary reviewed.

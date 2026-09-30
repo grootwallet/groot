@@ -1,5 +1,21 @@
 # Bitcoin Improvement Proposal support
 
+The 2026-09-30 saved-wallet device-membership and cancellation-copy follow-up has
+no BIP, descriptor, derivation, transaction, PSBT, signing, recovery,
+interoperability, or persisted-format impact. It disables a fingerprint-less
+device when its HWI family is absent from the saved BIP84/BIP48 wallet and keeps
+same-family devices unidentified until the existing native account proof. The
+owner reports that exact internal multi-network candidate `c4a3070c` completed
+BIP84 and BIP48 positive and negative hardware flows across Regtest, Testnet4,
+and Mainnet for the seven approved device models, including Model One blind-PIN
+unlock, sign/broadcast, and restart accounting; original BitBox02 sign/broadcast
+and accounting; and Nova rejection, interruption, unplug/replug, sign/broadcast,
+and accounting. The owner likewise reports Coldcard Mk4, Ledger Nano S Plus,
+Jade Classic, and Safe 3 passing their exercised rows. These are owner-operated
+candidate observations, not firmware capture, independent review, or signed-
+artifact certification, and they do not transfer to the changed replacement
+candidate.
+
 The 2026-09-30 hardware-pipeline correction has no BIP, descriptor, derivation,
 transaction-construction, PSBT, signing, backup, interoperability, or
 persisted-format impact. It replaces macOS picker HWI enumeration with passive

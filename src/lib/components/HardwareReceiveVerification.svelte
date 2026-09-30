@@ -194,7 +194,8 @@
   }
 
   async function chooseDevice(device: HardwareDevice, pinResolved = false) {
-    if (hardwareWalletMembership(device, eligibleFingerprints) === 'unrelated') return;
+    if (hardwareWalletMembership(device, eligibleFingerprints, eligibleDeviceTypes) === 'unrelated')
+      return;
     if (pinResolved) {
       await verifyAddress(device);
       return;
@@ -401,7 +402,7 @@
       detail={translate(
         $locale,
         cancelRequested
-          ? 'Reject or cancel the pending request on the device. Groot will close this dialog after the device responds.'
+          ? 'Reject the request on the device.'
           : verificationAction !== 'scan'
             ? coldcardReturnsAddressAutomatically
               ? 'Coldcard has no approval step. Compare the address while Groot verifies it automatically.'
@@ -426,7 +427,11 @@
   {:else if devices.length}
     <div class="source-list hardware-device-list">
       {#each devices as device}
-        {@const membership = hardwareWalletMembership(device, eligibleFingerprints)}
+        {@const membership = hardwareWalletMembership(
+          device,
+          eligibleFingerprints,
+          eligibleDeviceTypes
+        )}
         {@const membershipLabel = hardwareWalletMembershipLabel(
           membership,
           isMultisig &&

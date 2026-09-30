@@ -34,8 +34,11 @@ Receive discard confirmation shows every assigned label and the compact target
 address, with **Show address details** revealing the full copyable address and
 derivation. It always uses the discard target, not the currently featured request.
 Receive signer selection lists all discovered families; unrelated identities
-remain disabled. Matching signers omit technical membership prose and show
-**Policy unverified** only when required saved policy evidence is absent.
+remain disabled. A fingerprint-less device from a family absent from the saved
+wallet is also disabled without initiating unlock; only an eligible same-family
+device says **Unlock to identify** until Rust proves its exact account identity.
+Matching signers omit technical membership prose and show **Policy unverified**
+only when required saved policy evidence is absent.
 
 Address-reuse notices count external outputs in BDK's canonical transaction
 history, including receipts that have since been spent. Retained replaced or

@@ -1,5 +1,17 @@
 # Implementation status
 
+Sep 30 release-candidate picker follow-up applies the saved-wallet eligibility
+copy consistently to BIP84 signing, BIP48 signing, and receive verification. A
+fingerprint-less device from a family absent from the wallet is now a disabled
+**Not part of this wallet** row and cannot be selected to trigger unlock. An
+eligible same-family device remains **Unlock to identify** until the existing
+native exact fingerprint, derivation, and account-xpub proof succeeds; this is
+intentionally conservative for multiple devices and for BitBox02-family records,
+whose persisted public signer record names the HWI family rather than a hardware
+submodel. Hardware cancellation guidance is shortened to **Reject the request on
+the device.** No wallet, profile, registry, proposal, backup, descriptor, PSBT,
+transaction, or database format changes; no migration is required.
+
 Sep 30 Model One crash correction addresses the two owner-observed process
 terminations in internal candidate `0881a194`. Both macOS crash reports end on a
 Tokio blocking worker in `IOHIDDeviceScheduleWithRunLoop` while creating a new

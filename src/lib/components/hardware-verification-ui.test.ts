@@ -269,6 +269,7 @@ describe('hardware receive verification UI', () => {
     expect(verificationFlow).toContain('cancelRequested = true');
     expect(verificationFlow).toContain("verificationAction !== 'scan'");
     expect(verificationFlow).toContain('Cancel on your hardware device');
+    expect(verificationFlow).toContain('Reject the request on the device.');
     expect(verificationFlow).toContain('finishVerificationClose(false)');
   });
 
@@ -711,6 +712,7 @@ describe('hardware receive verification UI', () => {
       expect(route).toContain('hardwareAttentionSignal += 1');
       expect(route).toContain('attentionSignal={hardwareAttentionSignal}');
       expect(route).toContain('Cancel on your hardware device');
+      expect(route).toContain('Reject the request on the device.');
       expect(route).toContain('Waiting for hardware cancellation');
     }
     expect(multisigSend).toContain('onclose={closePolicyReview}');

@@ -1098,8 +1098,7 @@
       hardwareCancelRequested = true;
       hardwareAttentionSignal += 1;
       if (policyReviewOpen) {
-        policyReviewError =
-          'Reject or cancel the pending request on the device. Groot will close this dialog after the device responds.';
+        policyReviewError = 'Reject the request on the device.';
       }
       return;
     }
@@ -1130,7 +1129,10 @@
     if (
       hardwareWalletMembership(
         device,
-        (wallet?.cosigners ?? []).map((signer) => signer.fingerprint)
+        (wallet?.cosigners ?? []).map((signer) => signer.fingerprint),
+        (wallet?.cosigners ?? [])
+          .map((signer) => signer.deviceType)
+          .filter((deviceType): deviceType is string => Boolean(deviceType))
       ) === 'unrelated'
     )
       return;
@@ -2868,7 +2870,7 @@
       detail={translate(
         $locale,
         hardwareCancelRequested
-          ? 'Reject or cancel the pending request on the device. Groot will close this dialog after the device responds.'
+          ? 'Reject the request on the device.'
           : hardwareAction === 'sign'
             ? 'Review and approve on the device.'
             : 'Keep each signer connected and follow its prompts.'
@@ -2895,7 +2897,10 @@
           requiresPolicySetup(device)}{@const policyVerified =
           devicePolicyVerification(device)}{@const membership = hardwareWalletMembership(
           device,
-          (wallet?.cosigners ?? []).map((signer) => signer.fingerprint)
+          (wallet?.cosigners ?? []).map((signer) => signer.fingerprint),
+          (wallet?.cosigners ?? [])
+            .map((signer) => signer.deviceType)
+            .filter((deviceType): deviceType is string => Boolean(deviceType))
         )}<button
           disabled={membership === 'unrelated' ||
             alreadySigned ||

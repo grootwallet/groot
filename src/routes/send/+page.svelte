@@ -2278,7 +2278,7 @@
           detail={translate(
             $locale,
             hardwareCancelRequested
-              ? 'Reject or cancel the pending request on the device. Groot will close this dialog after the device responds.'
+              ? 'Reject the request on the device.'
               : hardwareAction === 'sign'
                 ? 'Review and approve on the device.'
                 : 'Keep the signer connected and follow its prompts.'
