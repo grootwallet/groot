@@ -1355,3 +1355,23 @@ existing data volume. Initial indexing and exact-candidate live timing, stale
 index, reorg, restart, recovery, fee, broadcast, route-observation, and
 no-fallback evidence remain open before GA. No wallet/profile/database format
 changes and no migration are required.
+
+On 2026-09-30 the managed service reached Bitcoin Core's exact Mainnet tip at
+height 969,314. A controlled Fulcrum stop/restart returned to the same tip.
+Bitcoin Core, the Groot Core gateway, NGINX, and Fulcrum were active; Fulcrum's
+TCP and admin listeners remained loopback-only, and external connection attempts
+timed out. The deployed gateway source hash matched the repository. A temporary
+authenticated principal successfully returned Core's exact tip and the expected
+transaction/height for a public output in block 750,000; Groot's gateway result
+was checked against the full Core block. Malformed, duplicate, over-limit, and
+forbidden requests were rejected, and a controlled Fulcrum outage returned the
+bounded `history_unavailable` failure instead of falling back. The temporary
+principal was revoked after the probe.
+
+Indexing is therefore complete; future acceptance work must not wait for it.
+This remains infrastructure evidence, not wallet-level sync or GA evidence. The
+authenticated HTTPS/NGINX path, bounded malformed-backend responses, stale-index
+client failure, gateway restart, no-fallback behavior, fee/mempool/broadcast
+source verification, exact-tip full-block wallet reconciliation, repository
+evidence, complete validation, and a fresh internal multi-network build remain
+open alongside the physical-device and independent-review gates.

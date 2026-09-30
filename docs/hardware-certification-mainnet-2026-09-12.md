@@ -590,6 +590,24 @@ close the discovery stall. Removing redundant renderer lookups is not proof that
 HWI latency or the reconnect defect is resolved. Retest one/multiple devices,
 locked/unlocked, on the replacement package; record timings without raw HWI data.
 
+### Managed Mainnet backend checkpoint
+
+On 2026-09-30 Fulcrum reached Bitcoin Core's exact Mainnet tip at height 969,314
+and returned to that tip after a controlled stop/restart. Its TCP and admin
+listeners remained loopback-only, the deployed gateway source matched the
+repository, authenticated tip and public block-750,000 history probes matched
+Core's full-block truth, malformed/duplicate/over-limit/forbidden requests were
+rejected, and a controlled Fulcrum outage returned `history_unavailable` without
+fallback. The temporary test principal was revoked.
+
+Indexing is complete: do not ask the physical tester to wait for it. Before
+promoting the frozen candidate, the infrastructure owner must still record the
+authenticated HTTPS/NGINX path, bounded malformed-backend handling, stale-index
+client failure, gateway restart, no silent fallback, fee/mempool/broadcast source
+verification, and exact-tip full-block wallet-level reconciliation. These rows
+are separate from signer certification and do not close physical-device,
+recovery, independent-review, or GA gates.
+
 ### Next physical steps
 
 On 2026-09-30 the owner clarified that Multi B is exactly Jade Classic, original
@@ -627,26 +645,29 @@ inputs and then register/sign each inferred policy. Do not mark that regression
 fixed until a reviewed HWI-boundary correction produces one policy and one
 transaction sequence on the exact device.
 
-1. Capture exact package commit, firmware, and Ledger Bitcoin app version. Confirm
+1. Complete the open managed-backend rows above, then start the packaged wallet
+   at the exact tip and confirm Core-backed balance/history from verified full
+   blocks. Indexing itself is no longer a prerequisite or waiting step.
+2. Capture exact package commit, firmware, and Ledger Bitcoin app version. Confirm
    preserved Core-backed wallet accounting survives restart.
-2. Before funding each group, compare its labeled receive address on a capable
+3. Before funding each group, compare its labeled receive address on a capable
    signer. Policy verification is not proof for every later receive address.
-3. Bind each completed positive BIP48 pair to its exact package and signer
+4. Bind each completed positive BIP48 pair to its exact package and signer
    versions; Multi B's corrected roster is Jade Classic/original BitBox02/Trezor
    Safe 3. Do not reinstate the withdrawn Multi B Jade/Nova statement.
-4. On the frozen candidate, cover the still-open confirmation, rejection, wrong
+5. On the frozen candidate, cover the still-open confirmation, rejection, wrong
    device, disconnect/retry, foreign/altered/stale-PSBT, and foreground-scan
    inactivity rows; never broadcast negative fixtures. Multi C partial-signature
    restart/resume and accounting are already owner-reported and need only the
    final frozen-candidate regression required by this certification record.
-5. After the six reported BIP84 deposits confirm, complete one ordinary
+6. After the six reported BIP84 deposits confirm, complete one ordinary
    spend/sweep, broadcast, confirmation, and restart/accounting row for Coldcard
    Mk4, Trezor Model One, Trezor Safe 3, Jade Classic, original BitBox02, and
    BitBox02 Nova. Do not require Coldcard to approve a CPFP above its configured
    limit; lower the fee, wait, or deliberately change the device setting first.
    Ledger's positive BIP84 sweep sign/broadcast is already recorded; only its
    open confirmation/restart and frozen-package rows remain.
-6. Verify public-backup reconstruction and independent recovery/reviewer rows on
+7. Verify public-backup reconstruction and independent recovery/reviewer rows on
    the frozen candidate. Preserve the owner's existing profiles.
 
 No new transaction, clean recovery, exact-firmware certification, or GA pass is
