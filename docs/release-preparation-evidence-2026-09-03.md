@@ -211,7 +211,7 @@ release/quality tests, retained a clean worktree, and found no physical build
 path in evidence. The complete frozen environment, source hashes, inventories,
 path scans, deviations, and disposition are recorded in
 [`reproducible-mainnet-builds-2026-09-04.md`](reproducible-mainnet-builds-2026-09-04.md).
-Private coordination issue [#79](https://github.com/thibistaken/groot/issues/79)
+Private coordination issue [#79](https://github.com/grootwallet/groot/issues/79)
 records Machine B's independent report and the subsequent comparison. The
 unsigned reproducibility checklist row is closed; every other mainnet release
 gate retains its prior status.

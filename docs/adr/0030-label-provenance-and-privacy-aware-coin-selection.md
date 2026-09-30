@@ -27,4 +27,4 @@ The webview receives typed label/provenance summaries and renders them without r
 
 ## Tracking
 
-Closes [issue #9](https://github.com/thibistaken/groot/issues/9).
+Closes [issue #9](https://github.com/grootwallet/groot/issues/9).

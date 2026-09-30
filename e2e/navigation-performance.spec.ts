@@ -73,6 +73,8 @@ test('saved signer identity appears before the slow coin snapshot on Send', asyn
   await page.goto('/send?fixture-delayed-wallet-data=1', { waitUntil: 'commit' });
   await expect(page.locator('.send-signers')).toBeVisible();
   await expect(page.locator('.send-signers')).not.toHaveClass(/loading/);
-  await expect(page.getByRole('button', { name: 'Continue to amount' })).toBeDisabled();
+  await expect(page.getByRole('status', { name: 'Loading wallet data' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Continue to amount' })).toHaveCount(0);
   await page.clock.runFor(1000);
+  await expect(page.getByRole('button', { name: 'Continue to amount' })).toBeDisabled();
 });

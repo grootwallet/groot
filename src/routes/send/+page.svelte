@@ -1305,7 +1305,12 @@
       </div>{/if}
   </header>
   {#if walletLoading && !initialAcceleration}
-    <WalletSkeleton />
+    <div class="send-flow-layout" class:with-signers={signerSummaryReady}>
+      <div class="send-flow-content"><WalletSkeleton /></div>
+      {#if signerSummaryReady}<aside class="signer-side-panel">
+          <SignerSummary signers={signerItems} loading={false} />
+        </aside>{/if}
+    </div>
   {:else if walletLoadError && !initialAcceleration}
     <LoadFailure
       title={translate($locale, 'Wallet details are unavailable')}

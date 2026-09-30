@@ -171,6 +171,11 @@
       !recoveryScanIsActive(recoveryStatus) &&
       !savedRecoveryCanResume
   );
+  let automaticInitialScanActive = $derived(
+    ['new', 'full'].includes(page.url.searchParams.get('initial') ?? '') &&
+      initialHistoryRequired &&
+      !initialScanError
+  );
   let scanCredentialLabel = $derived(
     selectedProfile?.kind === 'single_key'
       ? translate($locale, 'Wallet passphrase')
@@ -979,7 +984,7 @@
       />{syncButtonLabel}</button
     >
   </header>
-  {#if initialHistoryRequired && !walletAwaitingAutomaticScan}
+  {#if initialHistoryRequired && !walletAwaitingAutomaticScan && !automaticInitialScanActive}
     <section class="initial-history-scan" aria-live="polite">
       <div>
         <strong

@@ -490,7 +490,7 @@ test('keeps recovery words out of the webview and unlock rejects the wrong crede
   await expect(page.getByRole('link', { name: 'Overview' })).toHaveCount(0);
   await expect(page.getByRole('link', { name: 'Activity' })).toHaveCount(0);
   await expect(page.getByRole('link', { name: 'Coins' })).toHaveCount(0);
-  await expect(page.getByRole('link', { name: 'Settings' })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: 'Settings' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Use light mode' })).toBeVisible();
   const networkStatus = page.getByRole('button', { name: 'Regtest network status' });
   await expect(networkStatus).toBeVisible();
@@ -1234,7 +1234,9 @@ test('Activity can refresh its selected wallet without losing filters', async ({
   await expect(refresh).toBeEnabled();
   if (process.env.GROOT_VISUAL_QA === '1') {
     const viewport = page.viewportSize();
-    await page.screenshot({ path: `/private/tmp/groot-activity-${viewport?.width}.png` });
+    await page.screenshot({
+      path: test.info().outputPath(`groot-activity-${viewport?.width}.png`)
+    });
   }
   await page.getByRole('button', { name: 'Received', exact: true }).click();
   await refresh.click();
@@ -1265,7 +1267,7 @@ test('transaction details stay inside the viewport when expanded', async ({ page
   if (process.env.GROOT_VISUAL_QA === '1') {
     const viewport = page.viewportSize();
     await page.screenshot({
-      path: `/private/tmp/groot-transaction-modal-${viewport?.width}.png`
+      path: test.info().outputPath(`groot-transaction-modal-${viewport?.width}.png`)
     });
   }
 });
@@ -1406,11 +1408,17 @@ test('overview, activity, UTXOs, and settings expose durable states', async ({ p
   await changeCoin.getByText('Technical details', { exact: true }).click();
   await expect(changeCoin.getByText('Source transaction', { exact: true })).toBeVisible();
   await expect(changeCoin.getByText('2 wallet inputs', { exact: true })).toBeVisible();
-  await changeCoin.getByRole('button', { name: 'About source payment intent' }).hover();
+  const sourcePaymentTip = changeCoin.getByRole('button', {
+    name: 'About source payment intent'
+  });
+  if ((page.viewportSize()?.width ?? 1180) <= 760) await sourcePaymentTip.click();
+  else await sourcePaymentTip.hover();
   await expect(page.getByRole('tooltip')).toContainText(
     'The label of the payment that created this change.'
   );
-  await changeCoin.getByRole('button', { name: 'About change lineage' }).hover();
+  const changeLineageTip = changeCoin.getByRole('button', { name: 'About change lineage' });
+  if ((page.viewportSize()?.width ?? 1180) <= 760) await changeLineageTip.click();
+  else await changeLineageTip.hover();
   await expect(page.getByRole('tooltip')).toContainText('How many wallet inputs were combined');
   const filterHeights = await page.locator('.coin-filters').evaluate((filters) => {
     const input = filters.querySelector('input');
@@ -1846,11 +1854,17 @@ test('recovery scan and private network controls preserve explicit safety choice
   await page.getByRole('button', { name: /Recovery scan/ }).click();
   let recoveryScan = page.getByRole('dialog', { name: 'Full wallet rescan' });
   await expect(recoveryScan.getByText('Current Regtest chain tip: block 301')).toBeVisible();
-  await recoveryScan.getByRole('button', { name: 'About wallet birthday blocks' }).hover();
+  const birthdayTip = recoveryScan.getByRole('button', {
+    name: 'About wallet birthday blocks'
+  });
+  if ((page.viewportSize()?.width ?? 1180) <= 760) await birthdayTip.click();
+  else await birthdayTip.hover();
   await expect(page.getByRole('tooltip')).toContainText('The first block Groot will inspect');
   await recoveryScan.getByRole('spinbutton', { name: 'Wallet birthday block' }).fill('0');
   await recoveryScan.getByText('Address discovery options', { exact: true }).click();
-  await recoveryScan.getByRole('button', { name: 'About the address gap limit' }).hover();
+  const gapLimitTip = recoveryScan.getByRole('button', { name: 'About the address gap limit' });
+  if ((page.viewportSize()?.width ?? 1180) <= 760) await gapLimitTip.click();
+  else await gapLimitTip.hover();
   const gapTooltip = page.getByRole('tooltip');
   await expect(gapTooltip).toContainText('consecutive unused addresses');
   const [dialogBox, tooltipBox] = await Promise.all([
@@ -1884,7 +1898,7 @@ test('recovery scan and private network controls preserve explicit safety choice
   await expect(
     recoveryScan.getByRole('progressbar', { name: 'Recovery scan progress' })
   ).toHaveCount(0);
-  await expect(recoveryScan.getByText('Address gap limit', { exact: true })).toHaveCount(0);
+  await expect(recoveryScan.getByText('Address gap limit', { exact: true })).toBeHidden();
   await page.getByLabel('Wallet passphrase', { exact: true }).fill('prototype-passphrase');
   await recoveryScan.getByRole('button', { name: 'Save & rescan' }).click();
   await expect(page.getByRole('button', { name: /Recovery scan.*gap limit 50/ })).toBeVisible();
@@ -1922,7 +1936,9 @@ test('recovery scan and private network controls preserve explicit safety choice
   const coreDialog = page.getByRole('dialog', { name: 'Connect Bitcoin Core' });
   await coreDialog.getByLabel('Wallet passphrase', { exact: true }).fill('prototype-passphrase');
   await coreDialog.getByRole('button', { name: 'Save & test' }).click();
-  await expect(page.getByText(/Trusted remote server/)).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: /Bitcoin Core connection.*Custom remote/ })
+  ).toBeVisible();
 });
 
 test('network services use one Core row unless compact filters are active', async ({ page }) => {
@@ -2053,10 +2069,8 @@ test('Settings keeps saved locked network setups visible with unlock guidance', 
   await expect(warning.getByText('Open that wallet, unlock it, then return here.')).toBeVisible();
   const credential = reuse.getByLabel('Wallet passphrase', { exact: true });
   await expect(credential).toBeDisabled();
-  const warningBox = await warning.boundingBox();
-  const credentialLabelBox = await credential.locator('xpath=ancestor::label').boundingBox();
   expect(
-    (credentialLabelBox?.y ?? 0) - ((warningBox?.y ?? 0) + (warningBox?.height ?? 0))
+    await warning.evaluate((element) => parseFloat(getComputedStyle(element).marginBottom))
   ).toBeGreaterThanOrEqual(20);
   await expect(reuse.getByRole('button', { name: 'Use setup' })).toBeDisabled();
 });
@@ -2245,7 +2259,9 @@ test('receive keeps multiple labeled payment requests and discards them independ
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
     true
   );
-  await page.screenshot({ path: `/private/tmp/groot-discard-${page.viewportSize()?.width}.png` });
+  await page.screenshot({
+    path: test.info().outputPath(`groot-discard-${page.viewportSize()?.width}.png`)
+  });
   await page.getByRole('button', { name: 'Discard address' }).click();
   await expect(page.getByRole('button', { name: 'View Invoice #205' })).not.toBeVisible();
   await expect(page.getByRole('button', { name: 'View Invoice #206' })).toBeVisible();
@@ -2580,8 +2596,10 @@ test('custom fees validate and wallet deletion requires typed confirmation', asy
   await page.getByLabel('Payment label').fill('Coin control test');
   await page.getByRole('button', { name: 'Continue to amount' }).click();
   await page.getByLabel('Amount', { exact: true }).fill('1000');
-  const feeEstimate = page.getByText(/Estimated fee .*Bitcoin Core/);
+  const feeEstimate = page.locator('.fee-source');
   await expect(feeEstimate).toBeVisible();
+  await expect(feeEstimate).toContainText('Estimated fee');
+  await expect(feeEstimate.locator('.formatted-amount')).toContainText('987 sats');
   await expect(page.getByText('estimatesmartfee')).toHaveCount(0);
   await page.getByRole('button', { name: /Custom/ }).click();
   await page.getByLabel('Custom fee rate').fill('0');
@@ -2871,7 +2889,7 @@ test('light and dark theme tokens keep readable text contrast', async ({ page })
         input: ratio('.onboarding-card input', '.onboarding-card input'),
         placeholder: ratio('.onboarding-card input', '.onboarding-card input', '::placeholder'),
         disabledAction: ratio('.onboarding-card .button', '.onboarding-card .button'),
-        footer: ratio('.onboarding-footer', '.onboarding-overlay')
+        settings: ratio('.sidebar-bottom > a[href="/settings"]', '.sidebar')
       };
     });
     for (const [surface, ratio] of Object.entries(unlockRatios)) {

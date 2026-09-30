@@ -334,7 +334,7 @@ Current local status on 2026-08-24:
   open physical evidence.
 
 GitHub issue state is intentionally not duplicated as a large static list. The
-live tracker is <https://github.com/thibistaken/groot/issues>. At this snapshot,
+live tracker is <https://github.com/grootwallet/groot/issues>. At this snapshot,
 label provenance issue #9 is closed; compact filters #7, Payjoin #10, active
 PSBT overview #11, hardware roadmap #25, BitBox02 Nova Whisper/Bluetooth #32,
 and BitBox02 Nova USB #34 are open. Recheck before repeating these states.

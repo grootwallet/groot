@@ -48,6 +48,7 @@ pub struct PassiveHardwareCandidate {
     pub path: String,
 }
 
+#[cfg(any(target_os = "macos", test))]
 const JADE_SERIAL_IDS: &[(u16, u16)] = &[
     (0x10c4, 0xea60),
     (0x1a86, 0x55d4),
@@ -57,6 +58,7 @@ const JADE_SERIAL_IDS: &[(u16, u16)] = &[
     (0x303a, 0x1001),
 ];
 
+#[cfg(any(target_os = "macos", test))]
 fn passive_hid_candidate(
     vendor_id: u16,
     product_id: u16,
@@ -101,6 +103,7 @@ fn passive_hid_candidate(
     })
 }
 
+#[cfg(any(target_os = "macos", test))]
 struct PassiveTrezorUsbObservation<'a> {
     device_id: (u16, u16),
     device_version: u16,
@@ -111,6 +114,7 @@ struct PassiveTrezorUsbObservation<'a> {
     port_chain: &'a [u8],
 }
 
+#[cfg(any(target_os = "macos", test))]
 fn passive_trezor_webusb_candidate(
     active_network: Network,
     observation: PassiveTrezorUsbObservation<'_>,
@@ -162,6 +166,7 @@ fn passive_trezor_webusb_candidate(
     })
 }
 
+#[cfg(any(target_os = "macos", test))]
 fn passive_jade_serial_candidate(
     vendor_id: u16,
     product_id: u16,
