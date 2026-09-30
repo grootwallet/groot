@@ -2069,10 +2069,8 @@ test('Settings keeps saved locked network setups visible with unlock guidance', 
   await expect(warning.getByText('Open that wallet, unlock it, then return here.')).toBeVisible();
   const credential = reuse.getByLabel('Wallet passphrase', { exact: true });
   await expect(credential).toBeDisabled();
-  const warningBox = await warning.boundingBox();
-  const credentialLabelBox = await credential.locator('xpath=ancestor::label').boundingBox();
   expect(
-    (credentialLabelBox?.y ?? 0) - ((warningBox?.y ?? 0) + (warningBox?.height ?? 0))
+    await warning.evaluate((element) => parseFloat(getComputedStyle(element).marginBottom))
   ).toBeGreaterThanOrEqual(20);
   await expect(reuse.getByRole('button', { name: 'Use setup' })).toBeDisabled();
 });
