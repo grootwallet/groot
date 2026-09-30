@@ -1368,10 +1368,17 @@ forbidden requests were rejected, and a controlled Fulcrum outage returned the
 bounded `history_unavailable` failure instead of falling back. The temporary
 principal was revoked after the probe.
 
+The authenticated HTTPS path through NGINX subsequently served
+`getblockchaininfo` on Mainnet, `getmempoolinfo`, `estimatesmartfee`, and
+`groot_getscripthistory`; forbidden `stop` remained a 403. A controlled gateway
+restart recovered authenticated Core access at the then-current exact tip of
+969,317. Each live probe used a temporary principal revoked in a `finally`
+cleanup. The gateway's 26 loopback integration tests also passed, including
+malformed Fulcrum response rejection and response-size bounds.
+
 Indexing is therefore complete; future acceptance work must not wait for it.
 This remains infrastructure evidence, not wallet-level sync or GA evidence. The
-authenticated HTTPS/NGINX path, bounded malformed-backend responses, stale-index
-client failure, gateway restart, no-fallback behavior, fee/mempool/broadcast
-source verification, exact-tip full-block wallet reconciliation, repository
-evidence, complete validation, and a fresh internal multi-network build remain
-open alongside the physical-device and independent-review gates.
+stale-index client failure, wallet-level no-fallback behavior, broadcast-source
+verification, exact-tip full-block wallet reconciliation, repository evidence,
+complete validation, and a fresh internal multi-network build remain open
+alongside the physical-device and independent-review gates.

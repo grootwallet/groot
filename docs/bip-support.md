@@ -699,8 +699,14 @@ the explicit BIP157/BIP158 peer source is unchanged.
 The 2026-09-30 exact-tip Fulcrum restart and authenticated gateway probes add
 deployment evidence only and no BIP support claim. Indexing is complete, but
 wallet-level full-block reconciliation, stale-index failure, no-fallback,
-fee/mempool/broadcast sourcing, frozen-package hardware tests, and independent
-review remain separate open gates.
+broadcast sourcing, frozen-package hardware tests, and independent review remain
+separate open gates.
+
+The subsequent authenticated HTTPS/NGINX method probes, gateway restart, and
+bounded malformed-response integration suite are also transport evidence only.
+They close no descriptor, transaction, signing, recovery, or interoperability
+BIP row; wallet-level stale-index/no-fallback and broadcast-source evidence
+remain open.
 
 The local-Core sparse-checkpoint confirmation repair has no BIP support impact.
 It reactivates an already persisted BDK transaction anchor only after Bitcoin Core

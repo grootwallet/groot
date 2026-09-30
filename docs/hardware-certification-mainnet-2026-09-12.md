@@ -600,13 +600,19 @@ Core's full-block truth, malformed/duplicate/over-limit/forbidden requests were
 rejected, and a controlled Fulcrum outage returned `history_unavailable` without
 fallback. The temporary test principal was revoked.
 
+Authenticated HTTPS through NGINX then served Mainnet `getblockchaininfo`,
+`getmempoolinfo`, `estimatesmartfee`, and `groot_getscripthistory`; forbidden
+`stop` remained a 403. A controlled gateway restart recovered authenticated Core
+access at exact tip 969,317. Every live probe used a temporary principal revoked
+afterward. All 26 loopback gateway integration tests passed, including malformed
+Fulcrum-response rejection and response bounds.
+
 Indexing is complete: do not ask the physical tester to wait for it. Before
-promoting the frozen candidate, the infrastructure owner must still record the
-authenticated HTTPS/NGINX path, bounded malformed-backend handling, stale-index
-client failure, gateway restart, no silent fallback, fee/mempool/broadcast source
-verification, and exact-tip full-block wallet-level reconciliation. These rows
-are separate from signer certification and do not close physical-device,
-recovery, independent-review, or GA gates.
+promoting the frozen candidate, the infrastructure owner must still record
+stale-index client failure, wallet-level no silent fallback, broadcast-source
+verification, and exact-tip full-block wallet reconciliation. These rows are
+separate from signer certification and do not close physical-device, recovery,
+independent-review, or GA gates.
 
 ### Next physical steps
 
