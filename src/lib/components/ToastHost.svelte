@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Check, X, Radio } from '@lucide/svelte';
+  import { Check, X, Radio, TriangleAlert } from '@lucide/svelte';
   import { toasts, dismissToast } from '$lib/stores/toasts';
   import { locale } from '$lib/i18n';
   import { translate } from '$lib/i18n-catalog';
@@ -8,11 +8,25 @@
 
 <div class="toast-region" aria-live="polite">
   {#each $toasts as item (item.id)}
-    <div class="toast" transition:fly={{ x: 12, duration: 180 }}>
-      <div class="toast-mark" class:success={item.tone === 'success'}>
-        {#if item.tone === 'success'}<Check size={15} strokeWidth={2.5} />{:else}<Radio
+    <div
+      class="toast"
+      class:warning={item.tone === 'warning'}
+      class:danger={item.tone === 'danger'}
+      transition:fly={{ x: 12, duration: 180 }}
+    >
+      <div
+        class="toast-mark"
+        class:success={item.tone === 'success'}
+        class:warning={item.tone === 'warning'}
+        class:danger={item.tone === 'danger'}
+      >
+        {#if item.tone === 'success'}<Check
             size={15}
-          />{/if}
+            strokeWidth={2.5}
+          />{:else if item.tone === 'warning' || item.tone === 'danger'}<TriangleAlert
+            size={15}
+            strokeWidth={2.25}
+          />{:else}<Radio size={15} />{/if}
       </div>
       <div class="toast-copy">
         <strong>{translate($locale, item.title)}</strong>{#if item.description}<span

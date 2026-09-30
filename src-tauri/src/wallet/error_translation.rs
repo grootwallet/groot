@@ -374,14 +374,6 @@ pub(super) fn hardware_device_api_error(error: HardwareError, device_type: &str)
             return api_error(error.code(), message);
         }
     }
-    if device_type.eq_ignore_ascii_case("coldcard")
-        && matches!(error, HardwareError::CommandFailed(Some(-7)))
-    {
-        return api_error(
-            error.code(),
-            "Coldcard does not recognize this multisig wallet. Save the wallet policy in Groot, import it from Settings → Multisig Wallets → Import on Coldcard, verify the threshold and fingerprints, then try again.",
-        );
-    }
     if device_type.eq_ignore_ascii_case("bitbox02")
         && matches!(error, HardwareError::CommandFailed(Some(-8 | -9)))
     {
@@ -402,6 +394,29 @@ pub(super) fn hardware_device_api_error(error: HardwareError, device_type: &str)
         );
     }
     hardware_api_error(error)
+}
+
+pub(super) fn hardware_signing_api_error(
+    error: HardwareError,
+    device_type: &str,
+    multisig: bool,
+) -> ApiError {
+    if device_type.eq_ignore_ascii_case("coldcard")
+        && matches!(error, HardwareError::CommandFailed(Some(-7)))
+    {
+        return if multisig {
+            api_error(
+                error.code(),
+                "Coldcard rejected this multisig transaction. Confirm that the wallet policy is imported and that the threshold and fingerprints match, then review any on-device warning and try again.",
+            )
+        } else {
+            api_error(
+                error.code(),
+                "Coldcard rejected the transaction. Review the message on Coldcard. For a high-fee CPFP, lower the package rate, wait for the parent, or deliberately change Coldcard's Max Network Fee setting before retrying; Groot will not bypass device safety checks.",
+            )
+        };
+    }
+    hardware_device_api_error(error, device_type)
 }
 
 pub(super) fn missing_hardware_fingerprint(device_type: &str) -> ApiError {
@@ -438,11 +453,14 @@ pub(super) fn missing_hardware_psbt(
     device_type: &str,
     code: Option<i64>,
     fallback: &str,
+    multisig: bool,
 ) -> ApiError {
     match code {
-        Some(code) => {
-            hardware_device_api_error(HardwareError::CommandFailed(Some(code)), device_type)
-        }
+        Some(code) => hardware_signing_api_error(
+            HardwareError::CommandFailed(Some(code)),
+            device_type,
+            multisig,
+        ),
         None => missing_hwi_value(None, fallback),
     }
 }

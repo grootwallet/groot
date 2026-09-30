@@ -3282,11 +3282,22 @@ fn hwi_response_codes_become_safe_actionable_errors() {
         "coldcard",
         Some(-7),
         "The device did not return a signed PSBT.",
+        true,
     );
     assert_eq!(coldcard_policy.code, "hardware_command_failed");
     assert!(coldcard_policy
         .message
-        .contains("does not recognize this multisig wallet"));
+        .contains("rejected this multisig transaction"));
+
+    let coldcard_single = missing_hardware_psbt(
+        "coldcard",
+        Some(-7),
+        "The device did not return a signed PSBT.",
+        false,
+    );
+    assert_eq!(coldcard_single.code, "hardware_command_failed");
+    assert!(coldcard_single.message.contains("high-fee CPFP"));
+    assert!(!coldcard_single.message.contains("multisig"));
 
     let bitbox = hardware_device_api_error(HardwareError::CommandFailed(Some(-12)), "bitbox02");
     assert_eq!(bitbox.code, "hardware_command_failed");

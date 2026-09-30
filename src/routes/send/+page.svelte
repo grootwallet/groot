@@ -82,7 +82,8 @@
   import {
     accelerationOriginalConfirmed,
     accelerationUnavailableDescription,
-    accelerationUnavailableTitle
+    accelerationUnavailableTitle,
+    coldcardDefaultFeeLimitExceededPercent
   } from '$lib/wallet/acceleration-presentation';
   import {
     automaticStrategyMessage,
@@ -161,6 +162,7 @@
   let accelerationLoading = $state(Boolean(initialAcceleration));
   let rbfQuote = $state<AccelerationQuote | null>(null);
   let cpfpQuote = $state<CpfpAccelerationQuote | null>(null);
+  let accelerationQuoteFailed = $state(false);
   let accelerationConfirmed = $state(false);
   const broadcastExplorerUrl = $derived(
     txid ? transactionExplorerUrl(defaultConfig.network, txid) : null
@@ -272,6 +274,12 @@
       hardwareSignerIdentity
     )
   );
+  const coldcardCpfpFeePercent = $derived.by(() => {
+    if (proposal?.acceleration?.method !== 'cpfp' || !/coldcard/i.test(hardwareSignerIdentity))
+      return null;
+    const outputValue = Number(proposal.amount) + Number(proposal.change);
+    return coldcardDefaultFeeLimitExceededPercent(Number(proposal.fee), outputValue);
+  });
 
   $effect(() => {
     const outpoints = selectedCoins;
@@ -347,6 +355,7 @@
     let dataLoaded = false;
     walletLoadError = '';
     walletLoading = true;
+    if (accelerationRequest) accelerationQuoteFailed = false;
     try {
       const shellWallets = walletShell.profiles();
       const shellSelectedWalletId = walletShell.selectedWalletId();
@@ -398,7 +407,7 @@
         toast({
           title: 'Fee estimates unavailable',
           description: feeEstimateError,
-          tone: 'danger'
+          tone: 'warning'
         });
       }
       if (generation !== walletLoadGeneration) return;
@@ -413,10 +422,12 @@
           rbfQuote = await walletService.quoteRbf(accelerationTxid);
           customFee = String(rbfQuote.targetFeeRate);
           speed = 'custom';
+          accelerationQuoteFailed = false;
         } else if (estimates) {
           cpfpQuote = await walletService.quoteCpfp(accelerationTxid);
           customFee = String(cpfpQuote.targetFeeRate);
           speed = 'custom';
+          accelerationQuoteFailed = false;
         } else {
           customFee = '';
         }
@@ -499,11 +510,12 @@
           ? `The amount plus network fee exceeds the ${selectedCoins.length ? 'selected coin balance' : 'available balance'}.`
           : localizedError(cause, $locale);
       if (accelerationRequest) {
+        accelerationQuoteFailed = true;
         feeEstimateError = description ?? 'Could not prepare fee acceleration.';
         toast({
           title: accelerationUnavailableTitle(accelerationRequest.method),
           description: feeEstimateError,
-          tone: 'danger'
+          tone: 'warning'
         });
       } else {
         toast({ title: 'Could not load wallet', description, tone: 'danger' });
@@ -692,6 +704,7 @@
         cpfpQuote = await walletService.quoteCpfp(request.txid, asFeeRate(Number(customFee)));
         customFee = String(cpfpQuote.targetFeeRate);
       }
+      accelerationQuoteFailed = false;
       proposal = await walletService.prepareAcceleration(
         request.txid,
         request.method,
@@ -709,11 +722,12 @@
       accelerationRequest = null;
       step = 2;
     } catch (cause) {
+      accelerationQuoteFailed = true;
       feeEstimateError = accelerationUnavailableDescription(request.method, cause, $locale);
       toast({
         title: accelerationUnavailableTitle(request.method),
         description: feeEstimateError,
-        tone: 'danger'
+        tone: 'warning'
       });
     } finally {
       preparing = false;
@@ -1262,7 +1276,9 @@
                             customFee = String(cpfpQuote.targetFeeRate);
                           }
                           feeEstimateError = '';
+                          accelerationQuoteFailed = false;
                         } catch (cause) {
+                          accelerationQuoteFailed = true;
                           feeEstimateError = accelerationUnavailableDescription(
                             accelerationRequest.method,
                             cause,
@@ -1359,14 +1375,19 @@
                 ></label
               >
             {/if}
-            {#if feeEstimateError}<LoadFailure
-                title={accelerationUnavailableTitle(accelerationRequest.method)}
-                description={feeEstimateError}
-                onretry={loadWallet}
-              />{/if}
+            {#if feeEstimateError}<WarningNotice
+                title={translate($locale, accelerationUnavailableTitle(accelerationRequest.method))}
+                body={feeEstimateError}
+                role="alert"
+                icon
+                class="acceleration-unavailable-notice inline-action"
+                ><Button variant="secondary" size="small" onclick={loadWallet}
+                  ><RefreshCw size={14} />{translate($locale, 'Try again')}</Button
+                ></WarningNotice
+              >{/if}
             <Button
               type="submit"
-              disabled={!customFeeValid}
+              disabled={!customFeeValid || accelerationQuoteFailed}
               loading={preparing}
               loadingLabel={translate($locale, 'Preparing acceleration…')}
               size="large"
@@ -2060,101 +2081,123 @@
   onclose={closeHardwareScan}
   attentionSignal={hardwareAttentionSignal}
   upper
-  >{#if proposal}<section
-      class="hardware-review"
-      aria-label={translate($locale, 'Authoritative transaction details')}
-    >
-      <div class="hardware-review-amount">
-        <span>{translate($locale, 'You send')}</span><Amount value={proposal.amount} interactive />
-      </div>
-      <dl class="details-list hardware-review-primary">
-        <div>
-          <dt>{translate($locale, 'To')}</dt>
-          <dd>
-            <button
-              type="button"
-              class="compact-address-button"
-              onclick={() => (hardwareAddressOpen = true)}
-              >{compactAddress(hardwareRecipient)}</button
-            >
-          </dd>
-        </div>
-        <div class="label-details-row">
-          <dt>{translate($locale, 'Label')}</dt>
-          <dd><PermanentLabelTags labels={proposal.labels ?? [proposal.label]} prominent /></dd>
-        </div>
-        <div>
-          <dt>{translate($locale, 'Network')}</dt>
-          <dd>{proposal.network}</dd>
-        </div>
-        <div>
-          <dt>{translate($locale, 'Network fee')}</dt>
-          <dd><Amount value={proposal.fee} interactive /></dd>
-        </div>
-        <div class="total">
-          <dt>{translate($locale, 'Total')}</dt>
-          <dd><Amount value={proposal.total} interactive /></dd>
-        </div>
-      </dl>
-      {#if hardwareTestnetAddressDevice}<p class="verification-network-note">
-          {hardwareTestnetAddressDevice}
-          {translate($locale, 'shows the Regtest output with a')}
-          <code>{translate($locale, 'tb1')}</code>
-          {translate(
+  wide
+  ><div class="single-hardware-signing-layout">
+    <div class="single-hardware-review-pane">
+      {#if proposal}<section
+          class="hardware-review"
+          aria-label={translate($locale, 'Authoritative transaction details')}
+        >
+          <div class="hardware-review-amount">
+            <span>{translate($locale, 'You send')}</span><Amount
+              value={proposal.amount}
+              interactive
+            />
+          </div>
+          <dl class="details-list hardware-review-primary">
+            <div>
+              <dt>{translate($locale, 'To')}</dt>
+              <dd>
+                <button
+                  type="button"
+                  class="compact-address-button"
+                  onclick={() => (hardwareAddressOpen = true)}
+                  >{compactAddress(hardwareRecipient)}</button
+                >
+              </dd>
+            </div>
+            <div class="label-details-row">
+              <dt>{translate($locale, 'Label')}</dt>
+              <dd><PermanentLabelTags labels={proposal.labels ?? [proposal.label]} prominent /></dd>
+            </div>
+            <div>
+              <dt>{translate($locale, 'Network')}</dt>
+              <dd>{proposal.network}</dd>
+            </div>
+            <div>
+              <dt>{translate($locale, 'Network fee')}</dt>
+              <dd><Amount value={proposal.fee} interactive /></dd>
+            </div>
+            <div class="total">
+              <dt>{translate($locale, 'Total')}</dt>
+              <dd><Amount value={proposal.total} interactive /></dd>
+            </div>
+          </dl>
+          {#if hardwareTestnetAddressDevice}<p class="verification-network-note">
+              {hardwareTestnetAddressDevice}
+              {translate($locale, 'shows the Regtest output with a')}
+              <code>{translate($locale, 'tb1')}</code>
+              {translate(
+                $locale,
+                'prefix. Rust\n          supplied this alias only after proving it decodes to the identical Bitcoin output script.'
+              )}
+            </p>{/if}<TransactionReviewDetails
+            {proposal}
+            compact
+            interactiveAmounts
+            changeAddressOverride={hardwareChangeAddress}
+            onChangeAddress={() => (hardwareChangeAddressOpen = true)}
+          />
+        </section>{/if}
+    </div>
+    <div class="single-hardware-device-pane">
+      {#if coldcardCpfpFeePercent !== null}<WarningNotice
+          title={translate($locale, 'Coldcard fee limit')}
+          body={translate(
             $locale,
-            'prefix. Rust\n          supplied this alias only after proving it decodes to the identical Bitcoin output script.'
+            "This CPFP fee is {percent}% of its outputs. Coldcard's default 10% Max Network Fee setting will reject it. Lower the package rate if possible, wait for the parent, or deliberately change that setting on Coldcard before retrying. Groot will not bypass device safety checks.",
+            { percent: coldcardCpfpFeePercent }
           )}
-        </p>{/if}<TransactionReviewDetails
-        {proposal}
-        compact
-        interactiveAmounts
-        changeAddressOverride={hardwareChangeAddress}
-        onChangeAddress={() => (hardwareChangeAddressOpen = true)}
-      />
-    </section>{/if}{#if broadcasting}<HardwareActionPrompt
-      title={translate(
-        $locale,
-        hardwareCancelRequested
-          ? 'Cancel on your hardware device'
-          : hardwareAction === 'sign'
-            ? 'Check your hardware device'
-            : 'Looking for hardware devices'
-      )}
-      detail={translate(
-        $locale,
-        hardwareCancelRequested
-          ? 'Reject or cancel the pending request on the device. Groot will close this dialog after the device responds.'
-          : hardwareAction === 'sign'
-            ? 'Review the recipient, amount, fee, and change, then approve the transaction on the device.'
-            : 'Keep the signer connected. Follow any unlock instructions shown by Groot or the device.'
-      )}
-      label={translate(
-        $locale,
-        hardwareCancelRequested
-          ? 'Waiting for hardware cancellation'
-          : hardwareAction === 'sign'
-            ? 'Waiting for hardware signature'
-            : 'Hardware device scan in progress'
-      )}
-    />{:else}<HardwareDeviceList
-      {devices}
-      savedSigners={externalWallet ? [externalWallet.signer] : []}
-      detailedStatus={Boolean(externalWallet)}
-      emptyMessage={translate(
-        $locale,
-        'Connect the signer and scan again. If another wallet app is open, quit it so Groot can use USB.'
-      )}
-      onselect={signHardware}
-      onrescan={scanHardware}
-      showRescan
-    />{/if}{#if deviceError}<div class="hardware-inline-error" role="alert">
-      <AlertTriangle size={18} /><span
-        ><strong>{translate($locale, 'Hardware signing failed')}</strong><small>{deviceError}</small
-        ></span
-      ><Button variant="secondary" size="small" onclick={scanHardware}
-        >{translate($locale, 'Rescan')}</Button
-      >
-    </div>{/if}</Modal
+          role="note"
+          icon
+        />{/if}
+      {#if broadcasting}<HardwareActionPrompt
+          title={translate(
+            $locale,
+            hardwareCancelRequested
+              ? 'Cancel on your hardware device'
+              : hardwareAction === 'sign'
+                ? 'Check your hardware device'
+                : 'Looking for hardware devices'
+          )}
+          detail={translate(
+            $locale,
+            hardwareCancelRequested
+              ? 'Reject or cancel the pending request on the device. Groot will close this dialog after the device responds.'
+              : hardwareAction === 'sign'
+                ? 'Review the recipient, amount, fee, and change, then approve the transaction on the device.'
+                : 'Keep the signer connected. Follow any unlock instructions shown by Groot or the device.'
+          )}
+          label={translate(
+            $locale,
+            hardwareCancelRequested
+              ? 'Waiting for hardware cancellation'
+              : hardwareAction === 'sign'
+                ? 'Waiting for hardware signature'
+                : 'Hardware device scan in progress'
+          )}
+        />{:else}<HardwareDeviceList
+          {devices}
+          savedSigners={externalWallet ? [externalWallet.signer] : []}
+          detailedStatus={Boolean(externalWallet)}
+          emptyMessage={translate(
+            $locale,
+            'Connect the signer and scan again. If another wallet app is open, quit it so Groot can use USB.'
+          )}
+          onselect={signHardware}
+          onrescan={scanHardware}
+          showRescan
+        />{/if}{#if deviceError}<div class="hardware-inline-error" role="alert">
+          <AlertTriangle size={18} /><span
+            ><strong>{translate($locale, 'Hardware signing failed')}</strong><small
+              >{deviceError}</small
+            ></span
+          ><Button variant="secondary" size="small" onclick={scanHardware}
+            >{translate($locale, 'Rescan')}</Button
+          >
+        </div>{/if}
+    </div>
+  </div></Modal
 >
 <Modal
   open={importOpen && !accelerationConfirmed}

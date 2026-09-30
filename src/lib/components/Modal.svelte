@@ -16,7 +16,8 @@
     children
   } = $props();
   let dialog = $state<HTMLDivElement>();
-  let documentTop = $state(-32);
+  const desktopTitlebarOverlap = 32;
+  let documentTop = $state(-desktopTitlebarOverlap);
   let attentionActive = $state(false);
   let attentionRunning = false;
   let attentionFrame: number | null = null;
@@ -125,7 +126,7 @@
   }
 
   function updateDocumentTop() {
-    documentTop = window.scrollY - 32;
+    documentTop = window.scrollY - desktopTitlebarOverlap;
   }
 </script>
 

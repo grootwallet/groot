@@ -1,5 +1,20 @@
 # Implementation status
 
+Sep 30 acceleration/modal follow-up bounds the shared desktop overlay itself to
+the title-bar-inclusive viewport, reserves backdrop padding on every edge, and
+keeps expanded modal content in the existing internal scroll body. Single-key
+hardware signing uses the shared wide-modal variant so device selection remains
+visible beside transaction review, with a one-column mobile fallback. RBF/CPFP
+quote failures now use amber inline/toast warning treatment and disable signing;
+a successful retry is required to proceed. Coldcard CPFP review proactively
+explains its documented default 10% Max Network Fee check, and HWI code `-7` no
+longer produces a false multisig-policy instruction in a BIP84 wallet. Groot does
+not bypass device safety. Wallet, profile, proposal, registry, backup,
+transaction, descriptor, PSBT, and database formats are unchanged, no migration
+is required, and BIP behavior is unchanged. Owner-operated Mainnet BIP84 receive
+address/deposit and corrected BIP48 roster evidence is recorded separately in
+the certification ledger.
+
 Sep 28 hardware-review follow-up aligns the compact single-key and multisig
 signing modal with the primary Review & sign hierarchy: the amount leads, the
 same `To → Label → Network → Network fee → Total` rows use the established type

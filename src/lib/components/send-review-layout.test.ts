@@ -204,4 +204,14 @@ describe('send review layout', () => {
       /\.send-signers\.loading::after\s*\{[^}]*skeleton-shimmer 1\.15s linear/s
     );
   });
+
+  it('fails closed with a separated warning when an acceleration quote is unavailable', () => {
+    for (const route of [singleSend, multisigSend]) {
+      expect(route).toContain('let accelerationQuoteFailed = $state(false)');
+      expect(route).toContain('class="acceleration-unavailable-notice inline-action"');
+      expect(route).toContain('disabled={!customFeeValid || accelerationQuoteFailed}');
+      expect(route).toContain("tone: 'warning'");
+    }
+    expect(appCss).toMatch(/\.acceleration-unavailable-notice\s*\{[^}]*margin:\s*18px 0;/s);
+  });
 });

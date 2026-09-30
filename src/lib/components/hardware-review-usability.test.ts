@@ -177,4 +177,15 @@ describe('hardware signing review usability', () => {
     expect(multisigSend).not.toContain("? 'No setup needed'");
     expect(multisigSend).toContain('policyRequired && !policyVerified');
   });
+
+  it('keeps the single-key signer visible beside review details and explains Coldcard fee limits', () => {
+    expect(singleSend).toContain('class="single-hardware-signing-layout"');
+    expect(singleSend).toContain('class="single-hardware-device-pane"');
+    expect(singleSend).toContain('coldcardDefaultFeeLimitExceededPercent');
+    expect(singleSend).toContain("translate($locale, 'Coldcard fee limit')");
+    expect(singleSend).toContain('Groot will not bypass device safety checks.');
+    expect(appCss).toMatch(
+      /\.single-hardware-signing-layout\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1\.15fr\) minmax\(230px, 0\.85fr\);/s
+    );
+  });
 });

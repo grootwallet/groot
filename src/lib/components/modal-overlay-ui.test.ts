@@ -13,12 +13,12 @@ describe('modal overlay', () => {
 
   it('overdraws the translucent macOS title-bar strip on desktop', () => {
     expect(styles).toMatch(
-      /\.modal-layer\s*\{[\s\S]*?position:\s*absolute;[\s\S]*?top:\s*var\(--modal-document-top\);[\s\S]*?min-height:\s*calc\(100dvh \+ 32px\);[\s\S]*?align-items:\s*flex-start;[\s\S]*?padding:\s*clamp\(56px, 6vh, 72px\) 18px 18px;/
+      /\.modal-layer\s*\{[\s\S]*?position:\s*absolute;[\s\S]*?top:\s*var\(--modal-document-top\);[\s\S]*?height:\s*calc\(100dvh \+ 32px\);[\s\S]*?box-sizing:\s*border-box;[\s\S]*?overflow:\s*hidden;[\s\S]*?align-items:\s*flex-start;[\s\S]*?padding:\s*clamp\(48px, 5vh, 60px\) 18px 18px;/
     );
   });
 
   it('top-weights every desktop dialog and keeps tall content inside a scrollable body', () => {
-    expect(styles).toMatch(/\.modal\s*\{[^}]*max-height:\s*min\(720px, calc\(100dvh - 96px\)\);/s);
+    expect(styles).toMatch(/\.modal\s*\{[^}]*max-height:\s*min\(720px, 100%\);/s);
     expect(styles).toMatch(
       /\.modal-body\s*\{[^}]*min-height:\s*0;[^}]*flex:\s*1 1 auto;[^}]*overflow-y:\s*auto;[^}]*scrollbar-gutter:\s*stable;/s
     );
@@ -27,6 +27,9 @@ describe('modal overlay', () => {
   it('uses the normal safe-area viewport on mobile', () => {
     expect(styles).toMatch(
       /@media \(max-width: 760px\)[\s\S]*?\.modal-layer\s*\{[\s\S]*?position:\s*fixed;[\s\S]*?inset:\s*0;/
+    );
+    expect(styles).toMatch(
+      /@media \(max-width: 760px\)[\s\S]*?\.modal-layer\s*\{[\s\S]*?height:\s*auto;/
     );
   });
 

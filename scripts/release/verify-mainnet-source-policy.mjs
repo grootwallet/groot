@@ -59,7 +59,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src-tauri/src/wallet/error_translation.rs',
-    '90fe8ccafb3fdb9af3ec72b16d4394d40a34d025484c56252f7b4378cd4d6bdb'
+    '99427e7b78f6fe43ed2148f56c5fef70652406dd90e874288d53c230e9ef1d7d'
   ],
   [
     'src-tauri/src/wallet/explorer_commands.rs',
@@ -71,7 +71,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src-tauri/src/wallet/hardware_commands.rs',
-    'e249726ac65f1465f1371706cd5ed80e2ca7089559bb6de7f36383c49ca3075f'
+    '0416bbeb43ed4fd18c20a86a259799c8edb7a2268b8fcf5a9c5368c831846b26'
   ],
   [
     'src-tauri/src/wallet/label_interchange.rs',
@@ -83,7 +83,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src-tauri/src/wallet/multisig_proposal_commands.rs',
-    'e1d144096e9834f1ebbaf8bd2ec78e52c79f7edc26c8fd92aaef2243e577f280'
+    'e3715f1c88352f49b0e0649c8a99dc343265d4f11aeb9f9df98eb25dac893f04'
   ],
   [
     'src-tauri/src/wallet/profile_commands.rs',

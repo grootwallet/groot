@@ -6,7 +6,7 @@ import type { Locale } from '$lib/i18n';
 export type WalletNotificationPresentation = {
   title: string;
   description?: string;
-  tone?: 'default' | 'success' | 'danger';
+  tone?: 'default' | 'success' | 'warning' | 'danger';
   action?: { label: string; run: () => void | Promise<void> };
 };
 

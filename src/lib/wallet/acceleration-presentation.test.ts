@@ -4,10 +4,18 @@ import {
   accelerationOriginalConfirmed,
   accelerationUnavailableDescription,
   accelerationUnavailableTitle,
+  coldcardDefaultFeeLimitExceededPercent,
   RBF_FUNDING_SHORTFALL_MESSAGE
 } from './acceleration-presentation';
 
 describe('acceleration presentation', () => {
+  it("reports only fees above Coldcard's default maximum-fee percentage", () => {
+    expect(coldcardDefaultFeeLimitExceededPercent(421, 2_579)).toBe(16.3);
+    expect(coldcardDefaultFeeLimitExceededPercent(257, 2_579)).toBeNull();
+    expect(coldcardDefaultFeeLimitExceededPercent(421, 0)).toBeNull();
+    expect(coldcardDefaultFeeLimitExceededPercent(Number.NaN, 2_579)).toBeNull();
+  });
+
   it('stops acceleration only for the exact confirmed original transaction', () => {
     expect(
       accelerationOriginalConfirmed('original', [{ id: 'original', status: 'confirmed' }])

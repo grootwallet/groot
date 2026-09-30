@@ -17,6 +17,15 @@ export const hardwareCopy = {
   },
   'Ledger Nano S Plus': { fr: 'Ledger Nano S Plus', es: 'Ledger Nano S Plus' },
   'Coldcard Mk4': { fr: 'Coldcard Mk4', es: 'Coldcard Mk4' },
+  'Coldcard fee limit': {
+    fr: 'Limite de frais Coldcard',
+    es: 'Límite de comisión de Coldcard'
+  },
+  "This CPFP fee is {percent}% of its outputs. Coldcard's default 10% Max Network Fee setting will reject it. Lower the package rate if possible, wait for the parent, or deliberately change that setting on Coldcard before retrying. Groot will not bypass device safety checks.":
+    {
+      fr: 'Ces frais CPFP représentent {percent} % de ses sorties. Le réglage Max Network Fee de Coldcard, fixé à 10 % par défaut, les refusera. Réduisez le taux du paquet si possible, attendez la confirmation de la transaction parente ou modifiez délibérément ce réglage sur Coldcard avant de réessayer. Groot ne contournera pas les contrôles de sécurité de l’appareil.',
+      es: 'Esta comisión CPFP representa el {percent} % de sus salidas. El ajuste Max Network Fee de Coldcard, configurado en un 10 % de forma predeterminada, la rechazará. Reduce la tasa del paquete si es posible, espera a que se confirme la transacción principal o cambia deliberadamente ese ajuste en Coldcard antes de volver a intentarlo. Groot no omitirá las comprobaciones de seguridad del dispositivo.'
+    },
   'Before connecting, initialize and unlock the signer, select any hardware passphrase on-device, and finish its recovery backup. Groot imports public data only.':
     {
       fr: 'Avant de le connecter, initialisez et déverrouillez le signataire, choisissez toute phrase secrète directement sur l’appareil et terminez la sauvegarde de récupération. Groot importe uniquement des données publiques.',

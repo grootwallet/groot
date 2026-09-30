@@ -1,5 +1,24 @@
 # Groot product specification
 
+An unavailable RBF or CPFP quote is a fail-closed warning state. The send flow
+shows an amber inline explanation separated from adjacent controls, repeats that
+severity in its bounded toast, and disables **Continue to sign** until a fresh
+valid quote exists. A zero-balance full-value spend cannot fund a higher RBF fee;
+CPFP is available only when the wallet still controls an eligible unspent child
+output. Neither path may present a transaction for signing after quote failure.
+
+The single-hardware signing dialog keeps the selected signer and its actionable
+state visible beside the authoritative transaction review on desktop, stacking
+them on narrow screens. If a Coldcard CPFP fee exceeds the device's default
+maximum-network-fee percentage, Groot explains the expected rejection before the
+user selects the device. Groot must not suppress or bypass that signer safety
+check; a deliberate device-setting change remains the owner's decision.
+
+Every modal backdrop covers the complete usable window, including the translucent
+desktop title-bar overlap, while preserving visible padding around the panel. The
+panel is bounded by that padded viewport and its body owns vertical scrolling, so
+collapsed and expanded transaction details never escape the backdrop.
+
 When an acceleration's original transaction confirms, a saved proposal remains
 visible for review but cannot be signed, exported for signing, or broadcast.
 The sole proposal action is explicit discard through native cancellation; the

@@ -5,7 +5,7 @@ export type Toast = {
   id: number;
   title: string;
   description?: string;
-  tone?: 'default' | 'success' | 'danger';
+  tone?: 'default' | 'success' | 'warning' | 'danger';
   action?: ToastAction;
 };
 export const toasts = writable<Toast[]>([]);

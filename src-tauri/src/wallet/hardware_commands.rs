@@ -2827,7 +2827,7 @@ pub async fn hardware_sign_external(
                 prove_live_external_signer_identity(&hwi, &operation, &device, &expected_signer)?;
             let output = hwi
                 .sign_psbt_in_operation(&operation, &identity.device_type, &device.path, &encoded)
-                .map_err(|error| hardware_device_api_error(error, &identity.device_type))?;
+                .map_err(|error| hardware_signing_api_error(error, &identity.device_type, false))?;
             let response: HwiPsbt = serde_json::from_slice(&output).map_err(internal)?;
             response.psbt.ok_or_else(|| {
                 drop(response.error);
@@ -2835,6 +2835,7 @@ pub async fn hardware_sign_external(
                     &identity.device_type,
                     response.code,
                     "The device did not return a signed PSBT.",
+                    false,
                 )
             })
         })

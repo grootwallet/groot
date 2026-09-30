@@ -1,5 +1,20 @@
 # Wallet and coordinator flows
 
+Fee acceleration fails closed before signing. If RBF has no remaining
+wallet-controlled value or CPFP has no eligible unspent child output, the quote
+stage shows an amber inline warning with retry and disables **Continue to sign**.
+A later successful quote clears the warning. For a single-key Coldcard CPFP,
+Groot compares the reviewed fee with the transaction's output value and warns
+when the device's default 10% Max Network Fee setting is expected to reject it.
+The user may lower the package rate, wait for the parent, or deliberately change
+the setting on Coldcard; Groot does not bypass the check. The signing dialog keeps
+the device selector visible beside the transaction review on desktop and below it
+on narrow screens.
+
+Transaction-details and hardware-signing dialogs are sized inside a padded modal
+overlay. Optional detail expansion scrolls only the body, keeps the header and
+close action visible, and preserves backdrop gutter at every window edge.
+
 Receive PIN unlock now returns to a refreshed device picker for explicit address
 verification; it does not immediately reuse the pre-unlock capability. During RBF
 or CPFP review, a wallet-scoped update confirming the original leaves any saved

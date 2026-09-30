@@ -20,6 +20,19 @@ async function expectAmountUnitsSeparated(scope: Locator) {
   }
 }
 
+async function expectModalContained(page: Page, dialog: Locator) {
+  const bounds = await dialog.boundingBox();
+  const layerBounds = await dialog.locator('xpath=..').boundingBox();
+  const viewport = await page.evaluate(() => ({ width: innerWidth, height: innerHeight }));
+  expect(bounds && layerBounds).toBeTruthy();
+  expect(layerBounds!.y).toBeLessThanOrEqual(0);
+  expect(layerBounds!.y + layerBounds!.height).toBeGreaterThanOrEqual(viewport.height);
+  expect(bounds!.x).toBeGreaterThanOrEqual(10);
+  expect(bounds!.y).toBeGreaterThanOrEqual(0);
+  expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(viewport.width - 10);
+  expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(viewport.height - 4);
+}
+
 async function confirmGeneratedBackup(page: Page) {
   const words = await page.locator('.mnemonic-grid strong').allTextContents();
   expect(words).toHaveLength(24);
@@ -1205,6 +1218,27 @@ test('Activity can refresh its selected wallet without losing filters', async ({
   }
 });
 
+test('transaction details stay inside the viewport when expanded', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible();
+  await page.locator('.tx-row').first().click();
+
+  const dialog = page.getByRole('dialog', { name: 'Transaction details' });
+  await expect(dialog).toBeVisible();
+  await expectModalContained(page, dialog);
+  await dialog.getByText('View more details', { exact: true }).click();
+  await expect(dialog.getByText('View less details', { exact: true })).toBeVisible();
+  await expectModalContained(page, dialog);
+  await expect(dialog.locator('.modal-body')).toHaveCSS('overflow-y', 'auto');
+
+  if (process.env.GROOT_VISUAL_QA === '1') {
+    const viewport = page.viewportSize();
+    await page.screenshot({
+      path: `/private/tmp/groot-transaction-modal-${viewport?.width}.png`
+    });
+  }
+});
+
 test('overview, activity, UTXOs, and settings expose durable states', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible();
@@ -1230,12 +1264,14 @@ test('overview, activity, UTXOs, and settings expose durable states', async ({ p
   await expect(page.locator('.modal-layer')).not.toHaveAttribute('style', /opacity/);
   await expect(page.locator('.modal-layer')).toHaveCSS('opacity', '1');
   const overviewDetails = page.getByRole('dialog', { name: 'Transaction details' });
+  await expectModalContained(page, overviewDetails);
   await expect(
     overviewDetails.getByRole('list', { name: 'Assigned labels' }).first()
   ).toBeVisible();
   await expect(overviewDetails.getByText('Transaction ID', { exact: true })).toBeHidden();
   await expect(overviewDetails.getByText('Inputs', { exact: true })).toBeHidden();
   await overviewDetails.getByText('View more details', { exact: true }).click();
+  await expectModalContained(page, overviewDetails);
   await expect(overviewDetails.getByText('View less details', { exact: true })).toBeVisible();
   await expect(overviewDetails.locator('.transaction-more-details > .details-list')).toHaveCSS(
     'border-top-width',
@@ -1284,14 +1320,12 @@ test('overview, activity, UTXOs, and settings expose durable states', async ({ p
   const expandedBox = await transactionDialog.boundingBox();
   expect(compactBox).not.toBeNull();
   expect(expandedBox).not.toBeNull();
-  const compactCenter = compactBox!.y + compactBox!.height / 2;
-  const expandedCenter = expandedBox!.y + expandedBox!.height / 2;
   if ((page.viewportSize()?.width ?? 1180) <= 760) {
     const compactBottom = compactBox!.y + compactBox!.height;
     const expandedBottom = expandedBox!.y + expandedBox!.height;
     expect(expandedBottom).toBeCloseTo(compactBottom, 0);
   } else {
-    expect(expandedCenter).toBeCloseTo(compactCenter, 0);
+    expect(expandedBox!.y).toBeCloseTo(compactBox!.y, 0);
   }
   await transactionDialog.getByRole('button', { name: 'Show compact address' }).click();
   const collapsedTop = (await transactionDialog.boundingBox())?.y;

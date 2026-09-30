@@ -200,6 +200,7 @@
   let accelerationConfirmed = $state(false);
   let rbfQuote = $state<AccelerationQuote | null>(null);
   let cpfpQuote = $state<CpfpAccelerationQuote | null>(null);
+  let accelerationQuoteFailed = $state(false);
   const broadcastExplorerUrl = $derived(
     txid ? transactionExplorerUrl(defaultConfig.network, txid) : null
   );
@@ -479,6 +480,7 @@
   async function loadWallet() {
     walletLoading = true;
     walletLoadError = '';
+    if (accelerationRequest) accelerationQuoteFailed = false;
     try {
       const [loadedWallet, snapshot, proposals, registry] = await Promise.all([
         walletService.multisigWallet().then((value) => {
@@ -627,15 +629,18 @@
         if (method === 'rbf') {
           rbfQuote = await walletService.quoteRbf(txid);
           selectedRate = Number(rbfQuote.targetFeeRate);
+          accelerationQuoteFailed = false;
         } else if (estimates) {
           cpfpQuote = await walletService.quoteCpfp(txid);
           selectedRate = Number(cpfpQuote.targetFeeRate);
+          accelerationQuoteFailed = false;
         } else {
           selectedRate = '';
         }
       }
     } catch (cause) {
       if (accelerationRequest) {
+        accelerationQuoteFailed = true;
         if (accelerationRequest.method === 'rbf' && !rbfQuote) selectedRate = '';
         feeEstimateError = accelerationUnavailableDescription(
           accelerationRequest.method,
@@ -645,7 +650,7 @@
         toast({
           title: accelerationUnavailableTitle(accelerationRequest.method),
           description: feeEstimateError,
-          tone: 'danger'
+          tone: 'warning'
         });
       } else walletLoadError = localizedError(cause, $locale, 'Could not load wallet.');
     } finally {
@@ -927,6 +932,7 @@
         cpfpQuote = await walletService.quoteCpfp(request.txid, feeRate(selectedRateNumber));
         selectedRate = Number(cpfpQuote.targetFeeRate);
       }
+      accelerationQuoteFailed = false;
       proposal = await walletService.prepareMultisigAcceleration(
         request.txid,
         request.method,
@@ -934,11 +940,12 @@
       );
       accelerationRequest = null;
     } catch (cause) {
+      accelerationQuoteFailed = true;
       feeEstimateError = accelerationUnavailableDescription(request.method, cause, $locale);
       toast({
         title: accelerationUnavailableTitle(request.method),
         description: feeEstimateError,
-        tone: 'danger'
+        tone: 'warning'
       });
     } finally {
       busy = false;
@@ -1909,7 +1916,9 @@
                             selectedRate = Number(cpfpQuote.targetFeeRate);
                           }
                           feeEstimateError = '';
+                          accelerationQuoteFailed = false;
                         } catch (cause) {
+                          accelerationQuoteFailed = true;
                           feeEstimateError = accelerationUnavailableDescription(
                             accelerationRequest.method,
                             cause,
@@ -2006,15 +2015,20 @@
                 ></label
               >
             {/if}
-            {#if feeEstimateError}<LoadFailure
-                title={accelerationUnavailableTitle(accelerationRequest.method)}
-                description={feeEstimateError}
-                onretry={() => window.location.reload()}
-              />{/if}<Button
+            {#if feeEstimateError}<WarningNotice
+                title={translate($locale, accelerationUnavailableTitle(accelerationRequest.method))}
+                body={feeEstimateError}
+                role="alert"
+                icon
+                class="acceleration-unavailable-notice inline-action"
+                ><Button variant="secondary" size="small" onclick={() => window.location.reload()}
+                  ><RefreshCw size={14} />{translate($locale, 'Try again')}</Button
+                ></WarningNotice
+              >{/if}<Button
               type="submit"
               size="large"
               class="full"
-              disabled={!customFeeValid}
+              disabled={!customFeeValid || accelerationQuoteFailed}
               loading={busy}
               loadingLabel={translate($locale, 'Preparing acceleration…')}
               >{translate($locale, 'Continue to sign')}</Button
