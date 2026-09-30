@@ -1943,8 +1943,12 @@ test('creates and verifies a simple 2-of-3 descriptor wallet', async ({ page }) 
       .getByRole('link', { name: /Add wallet/ })
       .click();
   }
-  await page.getByRole('button', { name: 'Add wallet' }).click();
-  await page.getByRole('button', { name: /Multisig wallet/ }).click();
+  await expect(page).toHaveURL(/\/welcome\?add=1$/);
+  const onboarding = page.locator('.onboarding-card');
+  await expect(onboarding.getByRole('heading', { name: 'Add a wallet' })).toBeVisible();
+  await onboarding.getByRole('button', { name: 'Add wallet', exact: true }).click();
+  await expect(onboarding.getByRole('heading', { name: 'Choose your wallet' })).toBeVisible();
+  await onboarding.getByRole('button', { name: /Multisig wallet/ }).click();
   await page.getByRole('link', { name: /Recover from backup/ }).click();
   const publicDescriptor = JSON.parse(descriptorBackup).wallet.externalDescriptor as string;
   await page.getByLabel('Choose recovery backup file').setInputFiles({
