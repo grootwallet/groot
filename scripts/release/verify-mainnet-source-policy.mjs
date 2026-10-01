@@ -135,7 +135,11 @@ const pinnedPolicySources = new Map([
   ],
   [
     'scripts/release/package-macos-ga.mjs',
-    'f59977db80ee67418ea416e1a9b0d9a429e2337beb3491db4dd48609723d08a5'
+    'b4adb4014ab75b5af54550c9bbbfc21d556fad072345c15e30a8ea68c8d1f416'
+  ],
+  [
+    'scripts/release/build-packaged-macos-app.sh',
+    '074c01851bc904596292266ba90f48865faa8755cf0c820732796dd91138037b'
   ],
   [
     'scripts/release/verify-packaged-hwi.mjs',

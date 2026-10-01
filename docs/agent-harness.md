@@ -94,7 +94,9 @@ signed-HWI manifest. Run it once, freeze the resulting helper and manifest as
 release inputs, and provide those exact public inputs to both independent build
 machines. `pnpm release:package:macos:ga` accepts only matching sealed
 multi-network evidence, requires the packaged pre-sign Groot executable to
-equal that reproduced executable byte for byte, signs the outer app without
+equal that reproduced executable byte for byte, recreates the evidence build's
+source epoch and reproducible Rust path/linker environment, normalizes the
+packaged Mach-O UUID before that comparison, signs the outer app without
 the HWI entitlement, notarizes and staples the app and DMG, verifies Gatekeeper
 and packaged HWI policy, and emits signed SBOM/provenance/checksum evidence. It
 never creates, imports, or prints signing credentials; the Developer ID identity
