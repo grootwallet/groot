@@ -45,6 +45,7 @@ configure_reproducible_rust_env "$repo_root" "$cargo_target"
 mkdir -p "$release_out"
 pnpm install --frozen-lockfile
 pnpm validate
+pnpm build:multi
 cargo build --locked --release --manifest-path src-tauri/Cargo.toml --features tauri/custom-protocol
 
 built_executable="$cargo_target/release/Groot"
