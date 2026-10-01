@@ -68,9 +68,15 @@ test('multi-network evidence builder is release-bound and uses signed HWI proven
 
 test('production package binds the exact reproduced payload before signing', () => {
   const source = read('./package-macos-ga.mjs');
+  const normalization = source.indexOf(
+    "'scripts/release/normalize-macho-uuid.mjs', builtExecutable"
+  );
   const comparison = source.indexOf("digest(builtExecutable) !== digest(join(evidence, 'Groot'))");
   const appSigning = source.indexOf("run('codesign', ['--force', '--sign', identity");
-  assert.ok(comparison >= 0 && appSigning > comparison);
+  assert.ok(normalization >= 0 && comparison > normalization && appSigning > comparison);
+  assert.match(source, /SOURCE_DATE_EPOCH: sourceDateEpoch/);
+  assert.match(source, /buildInfo\.source_date_epoch !== sourceDateEpoch/);
+  assert.match(source, /build-packaged-macos-app\.sh/);
   assert.match(source, /GROOT_BUILD_NETWORK: 'multi'/);
   assert.match(source, /GROOT_HWI_SHA256: hwiVerification\.manifest\.artifact\.sha256/);
   assert.match(source, /'ls-remote', '--exit-code', 'origin', 'refs\/heads\/main'/);
@@ -87,6 +93,14 @@ test('production package binds the exact reproduced payload before signing', () 
     packageJson.scripts['release:package:macos:ga'],
     'node scripts/release/package-macos-ga.mjs'
   );
+});
+
+test('packaged app build uses the same reproducible Rust environment as evidence', () => {
+  const source = read('./build-packaged-macos-app.sh');
+  assert.match(source, /source "\$repo_root\/scripts\/release\/reproducible-rust-env\.sh"/);
+  assert.match(source, /configure_reproducible_rust_env "\$repo_root" "\$cargo_target"/);
+  assert.match(source, /src-tauri\/tauri\.multi\.conf\.json/);
+  assert.match(source, /--bundles app/);
 });
 
 test('signed HWI is authenticated before any version execution', () => {

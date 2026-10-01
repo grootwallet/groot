@@ -139,8 +139,12 @@ const status = run('git', ['status', '--porcelain=v1', '--untracked-files=all'],
 });
 if (status.trim()) fail('a clean tracked and untracked worktree is required');
 const buildInfo = parseBuildInfo(join(evidence, 'BUILD-INFO'));
+const sourceDateEpoch = run('git', ['show', '-s', '--format=%ct', commit], {
+  encoding: 'utf8'
+}).trim();
 if (
   buildInfo.commit !== commit ||
+  buildInfo.source_date_epoch !== sourceDateEpoch ||
   buildInfo.compiled_network !== 'multi' ||
   buildInfo.bundle_identifier !== 'app.groot.wallet' ||
   buildInfo.signing_team_id !== teamId
@@ -173,6 +177,7 @@ try {
   run('pnpm', ['validate']);
   const buildEnvironment = {
     ...process.env,
+    SOURCE_DATE_EPOCH: sourceDateEpoch,
     GROOT_BUILD_COMMIT: commit,
     GROOT_BUILD_NETWORK: 'multi',
     GROOT_BUNDLED_HWI_RESOURCE: 'hwi',
@@ -180,15 +185,15 @@ try {
     GROOT_MACOS_SIGNING_TEAM_ID: teamId
   };
   delete buildEnvironment.APPLE_SIGNING_IDENTITY;
-  run(
-    'pnpm',
-    ['exec', 'tauri', 'build', '--config', 'src-tauri/tauri.multi.conf.json', '--bundles', 'app'],
-    { env: buildEnvironment }
-  );
+  run('bash', ['scripts/release/build-packaged-macos-app.sh', targetDirectory], {
+    env: buildEnvironment
+  });
 
   const builtApp = join(targetDirectory, 'release/bundle/macos/Groot.app');
   const builtExecutable = join(builtApp, 'Contents/MacOS/Groot');
   requireRegular(builtExecutable, 'packaged Groot executable', { executable: true });
+  run('node', ['scripts/release/normalize-macho-uuid.mjs', builtExecutable]);
+  run('codesign', ['--verify', '--strict', builtExecutable]);
   if (digest(builtExecutable) !== digest(join(evidence, 'Groot'))) {
     fail('packaged pre-sign executable differs from the independently reproduced executable');
   }

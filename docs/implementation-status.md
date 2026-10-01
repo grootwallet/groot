@@ -1447,7 +1447,9 @@ manifest. `release:unsigned:multi` verifies that immutable signed helper input
 and compiles its post-sign digest into reproducible multi-network Groot evidence.
 `release:package:macos:ga` accepts only sealed evidence from the current clean
 remote-main commit, requires the packaged pre-sign executable to match the
-independently reproduced Groot bytes, signs the outer app without the HWI
+independently reproduced Groot bytes, self-configures the same source epoch and
+reproducible Rust environment as the evidence builder, normalizes the packaged
+Mach-O UUID before comparison, signs the outer app without the HWI
 entitlement, notarizes and staples the app and DMG, re-verifies Gatekeeper and
 the bundled helper, and emits final signed SBOM, provenance, and checksums.
 
