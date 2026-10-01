@@ -95,8 +95,10 @@ release inputs, and provide those exact public inputs to both independent build
 machines. `pnpm release:package:macos:ga` accepts only matching sealed
 multi-network evidence, requires the packaged pre-sign Groot executable to
 equal that reproduced executable byte for byte, recreates the evidence build's
-source epoch and reproducible Rust path/linker environment, normalizes the
-packaged Mach-O UUID before that comparison, signs the outer app without
+source epoch and reproducible Rust path/linker environment, runs the exact
+evidence Cargo command and Mach-O normalization, and uses Tauri's bundle-only
+command with Tauri signing disabled so it cannot rebuild or mutate the verified
+executable before that comparison. It signs the outer app without
 the HWI entitlement, notarizes and staples the app and DMG, verifies Gatekeeper
 and packaged HWI policy, and emits signed SBOM/provenance/checksum evidence. It
 never creates, imports, or prints signing credentials; the Developer ID identity

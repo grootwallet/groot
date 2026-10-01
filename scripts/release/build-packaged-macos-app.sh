@@ -15,6 +15,19 @@ fi
 cargo_target="$(cd "$1" && pwd -P)"
 configure_reproducible_rust_env "$repo_root" "$cargo_target"
 
-exec pnpm exec tauri build \
+pnpm build:multi
+cargo build \
+  --locked \
+  --release \
+  --manifest-path src-tauri/Cargo.toml \
+  --features tauri/custom-protocol
+
+built_executable="$cargo_target/release/Groot"
+codesign --verify --strict "$built_executable"
+node scripts/release/normalize-macho-uuid.mjs "$built_executable"
+codesign --verify --strict "$built_executable"
+
+exec pnpm exec tauri bundle \
   --config src-tauri/tauri.multi.conf.json \
-  --bundles app
+  --bundles app \
+  --no-sign

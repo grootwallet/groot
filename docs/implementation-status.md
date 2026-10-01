@@ -478,6 +478,14 @@ are unchanged; this release-tooling correction has no BIP impact. The unsigned b
 used by the packaged application and avoiding Tauri's development-only embedded
 configuration-parent path.
 
+The production macOS packager now invokes that exact evidence Cargo command and
+normalizer before calling Tauri's bundle-only command with Tauri signing
+disabled. This prevents `tauri build` from recompiling with CLI-specific build
+environment and preserves the independently reproduced executable byte for byte
+inside the pre-sign app. The outer app remains Developer ID signed only after
+that equality gate. This release-tooling correction changes no runtime behavior,
+persisted format, descriptor, transaction, recovery rule, or BIP support.
+
 Fresh Machine A and independent Machine B builds of frozen detached commit
 `2110eaf0afd0339754c1b9bbba31011c66aa3d69` passed on the exact macOS 26.6.2,
 Xcode 26.1.1, SDK 26.1, Node 24.19.0, pnpm 11.13.1, repository Rust 1.97.1,
