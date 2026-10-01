@@ -34,6 +34,25 @@ describe('restart-bound Bitcoin network switching', () => {
     expect(welcome).toContain('href="/settings"');
   });
 
+  it('loads multi-network controls when the selected network has no wallets', () => {
+    const runtimeLoad = settings.indexOf('walletService.runtimePlatform()');
+    const registryLoad = settings.indexOf('walletService.profiles()', runtimeLoad);
+    const runtimeAssignment = settings.indexOf('runtime = nextRuntime', registryLoad);
+    const guardedSession = settings.indexOf(
+      'registry.selectedWalletId ? await walletService.session() : null',
+      runtimeAssignment
+    );
+
+    expect(runtimeLoad).toBeGreaterThan(-1);
+    expect(registryLoad).toBeGreaterThan(runtimeLoad);
+    expect(runtimeAssignment).toBeGreaterThan(registryLoad);
+    expect(guardedSession).toBeGreaterThan(runtimeAssignment);
+    expect(settings).toContain('walletUnlocked = session?.unlocked ?? false');
+    expect(settings).toContain(
+      "{#if runtime === null}{translate(\n                $locale,\n                'Loading…'"
+    );
+  });
+
   it('applies native network endpoints before wallet routes mount', () => {
     const original = { ...defaultConfig };
     applyRuntimeNetwork('testnet4');
