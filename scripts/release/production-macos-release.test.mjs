@@ -99,8 +99,17 @@ test('packaged app build uses the same reproducible Rust environment as evidence
   const source = read('./build-packaged-macos-app.sh');
   assert.match(source, /source "\$repo_root\/scripts\/release\/reproducible-rust-env\.sh"/);
   assert.match(source, /configure_reproducible_rust_env "\$repo_root" "\$cargo_target"/);
+  assert.match(source, /pnpm build:multi/);
+  assert.match(
+    source,
+    /cargo build[\s\\]*--locked[\s\\]*--release[\s\\]*--manifest-path src-tauri\/Cargo\.toml[\s\\]*--features tauri\/custom-protocol/
+  );
+  assert.match(source, /normalize-macho-uuid\.mjs "\$built_executable"/);
+  assert.match(source, /pnpm exec tauri bundle/);
   assert.match(source, /src-tauri\/tauri\.multi\.conf\.json/);
   assert.match(source, /--bundles app/);
+  assert.match(source, /--no-sign/);
+  assert.doesNotMatch(source, /pnpm exec tauri build/);
 });
 
 test('signed HWI is authenticated before any version execution', () => {
