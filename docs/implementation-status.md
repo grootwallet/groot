@@ -1461,6 +1461,18 @@ Mach-O UUID before comparison, signs the outer app without the HWI
 entitlement, notarizes and staples the app and DMG, re-verifies Gatekeeper and
 the bundled helper, and emits final signed SBOM, provenance, and checksums.
 
+The first `v0.4.95` prerelease candidate was withdrawn on 2026-10-01 before GA
+after launch verification detected that its native executable had been paired
+with a browser-prototype frontend. The release helpers had invoked the Vite
+multi-network build outside Tauri without setting `TAURI_ENV_PLATFORM`, so the
+frontend composition root selected `DummyWalletAdapter`; the native/web build
+identity check correctly failed closed before wallet access. Both reproducible
+evidence and package builders now bind `TAURI_ENV_PLATFORM=macos` and reject the
+generated frontend unless it contains the native runtime bridge and excludes
+browser-fixture markers. A replacement candidate requires fresh exact-commit
+reproducibility, signing, notarization, and launch acceptance. This correction
+does not change wallet behavior or persisted formats and has no BIP impact.
+
 This changes release infrastructure only. Wallet/profile/database/registry,
 backup, proposal, descriptor, credential, and network-selector formats are
 unchanged; no migration is required. It has no BIP support impact. The existing

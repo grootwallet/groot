@@ -15,7 +15,8 @@ fi
 cargo_target="$(cd "$1" && pwd -P)"
 configure_reproducible_rust_env "$repo_root" "$cargo_target"
 
-pnpm build:multi
+TAURI_ENV_PLATFORM=macos pnpm build:multi
+node scripts/release/verify-native-frontend-output.mjs build
 cargo build \
   --locked \
   --release \

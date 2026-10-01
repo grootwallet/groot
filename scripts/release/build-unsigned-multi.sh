@@ -45,7 +45,8 @@ configure_reproducible_rust_env "$repo_root" "$cargo_target"
 mkdir -p "$release_out"
 pnpm install --frozen-lockfile
 pnpm validate
-pnpm build:multi
+TAURI_ENV_PLATFORM=macos pnpm build:multi
+node scripts/release/verify-native-frontend-output.mjs build
 cargo build --locked --release --manifest-path src-tauri/Cargo.toml --features tauri/custom-protocol
 
 built_executable="$cargo_target/release/Groot"

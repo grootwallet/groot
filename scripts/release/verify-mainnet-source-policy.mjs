@@ -123,7 +123,11 @@ const pinnedPolicySources = new Map([
   ],
   [
     'scripts/release/build-unsigned-multi.sh',
-    '0172b3ea9420c6ccfce8d425d4e50ffc96ca0ce0188180dd9771a26bef4237eb'
+    '2b41651abb9e67ce8239a915a897f0d2513f5280c47e890b450417b788cf031f'
+  ],
+  [
+    'scripts/release/verify-native-frontend-output.mjs',
+    '955510f1a602d0fd8d64c4930e3ee0487827d641bac506f9c3e451a1dfb40eec'
   ],
   [
     'scripts/release/prepare-signed-hwi.mjs',
@@ -139,7 +143,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'scripts/release/build-packaged-macos-app.sh',
-    '4c4835819eae9632acdd7dbe58322d56984ce4dc02fd5ec1bb2a458b87899f7b'
+    'cd8e3d2b1c26e5caec7dedaffc3b044c629e3fdc369f234120623649f29ecd3b'
   ],
   [
     'scripts/release/verify-packaged-hwi.mjs',
