@@ -322,16 +322,17 @@
     );
     const generation = ++profileReadGeneration;
     theme = currentTheme();
-    const [nextRuntime, registry, session] = await Promise.all([
+    const [nextRuntime, registry] = await Promise.all([
       walletService.runtimePlatform(),
-      walletService.profiles(),
-      walletService.session()
+      walletService.profiles()
     ]);
     if (generation !== profileReadGeneration) return;
     runtime = nextRuntime;
     profiles = registry.wallets;
     selectedWalletId = registry.selectedWalletId;
-    walletUnlocked = session.unlocked;
+    const session = registry.selectedWalletId ? await walletService.session() : null;
+    if (generation !== profileReadGeneration) return;
+    walletUnlocked = session?.unlocked ?? false;
     inactivityTimeoutMinutes = registry.inactivityTimeoutMinutes;
     const activeProfile = registry.wallets.find(
       (wallet) => wallet.id === registry.selectedWalletId
@@ -1508,14 +1509,15 @@
       <div class="setting-row bitcoin-network-row">
         <span class="setting-icon"><Network size={18} /></span><span
           ><strong>{translate($locale, 'Bitcoin network')}</strong><small
-            >{runtime?.networkSwitching
-              ? translate(
-                  $locale,
-                  'Switching restarts Groot. Each network keeps separate wallets and settings.'
-                )
-              : translate($locale, 'Fixed to {network}.', {
-                  network: networkName(defaultConfig.network)
-                })}</small
+            >{#if runtime === null}{translate(
+                $locale,
+                'Loading…'
+              )}{:else if runtime.networkSwitching}{translate(
+                $locale,
+                'Switching restarts Groot. Each network keeps separate wallets and settings.'
+              )}{:else}{translate($locale, 'Fixed to {network}.', {
+                network: networkName(defaultConfig.network)
+              })}{/if}</small
           ></span
         ><span
           class="theme-choice network-choice"
