@@ -2,7 +2,16 @@
 
 import { createHash } from 'node:crypto';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { lstatSync, readFileSync, statSync } from 'node:fs';
+import {
+  chmodSync,
+  copyFileSync,
+  lstatSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync
+} from 'node:fs';
+import { tmpdir } from 'node:os';
 import { basename, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -31,6 +40,22 @@ function codesignOutput(arguments_) {
   const result = spawnSync('codesign', arguments_, { encoding: 'utf8' });
   if (result.status !== 0) fail(`codesign inspection failed for ${arguments_.at(-1)}`);
   return `${result.stdout ?? ''}\n${result.stderr ?? ''}`;
+}
+
+export function probeHwiVersionOnDisposableCopy(hwi) {
+  const probeDirectory = mkdtempSync(resolve(tmpdir(), 'groot-hwi-version-'));
+  const probe = resolve(probeDirectory, 'hwi');
+  try {
+    copyFileSync(hwi, probe);
+    chmodSync(probe, 0o700);
+    return execFileSync(probe, ['--version'], {
+      encoding: 'utf8',
+      env: { HOME: process.env.HOME ?? '/var/empty' },
+      timeout: 30_000
+    }).trim();
+  } finally {
+    rmSync(probeDirectory, { recursive: true, force: true });
+  }
 }
 
 export function validateSignedHwiSignatureMetadata(signature, entitlements, expectedTeamId) {
@@ -126,12 +151,12 @@ export function verifySignedHwiArtifact(hwiPath, manifestPath, expectedTeamId) {
   } catch (error) {
     fail(error instanceof Error ? error.message : String(error));
   }
-  const version = execFileSync(hwi, ['--version'], {
-    encoding: 'utf8',
-    env: { HOME: process.env.HOME ?? '/var/empty' },
-    timeout: 30_000
-  }).trim();
+  // PyInstaller one-file executables can cause macOS to invalidate the vnode they
+  // execute from even when their bytes remain unchanged. Never execute the frozen
+  // release input itself: probe an authenticated disposable copy instead.
+  const version = probeHwiVersionOnDisposableCopy(hwi);
   if (version !== `hwi ${canonical.version}`) fail(`unexpected version output: ${version}`);
+  execFileSync('codesign', ['--verify', '--strict', '--verbose=2', hwi], { stdio: 'pipe' });
   return { hwi, manifestFile, manifest, version };
 }
 

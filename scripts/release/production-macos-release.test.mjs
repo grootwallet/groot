@@ -92,8 +92,14 @@ test('production package binds the exact reproduced payload before signing', () 
 test('signed HWI is authenticated before any version execution', () => {
   const source = read('./verify-signed-hwi.mjs');
   const signatureVerification = source.indexOf("execFileSync('codesign', ['--verify'");
-  const versionExecution = source.indexOf("execFileSync(hwi, ['--version']");
+  const versionExecution = source.indexOf('probeHwiVersionOnDisposableCopy(hwi);');
   assert.ok(signatureVerification >= 0 && versionExecution > signatureVerification);
+  assert.match(source, /copyFileSync\(hwi, probe\)/);
+  assert.match(source, /execFileSync\(probe, \['--version'\]/);
+  assert.doesNotMatch(source, /execFileSync\(hwi, \['--version'\]/);
+  assert.ok(
+    source.indexOf("execFileSync('codesign', ['--verify'", versionExecution) > versionExecution
+  );
 });
 
 test('HWI signing is isolated to its reviewed entitlement and does not notarize', () => {
