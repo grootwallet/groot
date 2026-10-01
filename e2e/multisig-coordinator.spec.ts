@@ -1607,7 +1607,10 @@ test('opens and checks an imported hardware signer during setup', async ({ page 
 });
 
 test('creates and verifies a simple 2-of-3 descriptor wallet', async ({ page }) => {
-  test.setTimeout(60_000);
+  // This full lifecycle captures four screenshots and runs close to 60 seconds
+  // on the shared mobile CI runner. Keep a bounded hang detector with enough
+  // headroom for the verified 45-second focused path under concurrent load.
+  test.setTimeout(90_000);
   const hardwareKeys = [
     { ...keys[0], fingerprint: 'f00dbabe' },
     { ...keys[1], fingerprint: '1ed9e001' },
