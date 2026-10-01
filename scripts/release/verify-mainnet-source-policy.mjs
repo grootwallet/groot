@@ -15,7 +15,7 @@ const pinnedPolicySources = new Map([
   ['src-tauri/src/session.rs', '82da6d3a2643710aaa0974f69f0fb7c932172a401ecf33c186e440c8170f35e0'],
   ['.env.mainnet', '1623f3f97de588daea2bbeae1f9c56ebc896b6bc2c22ac238563b46b688ced85'],
   ['.env.multi', '33fc3d5022968d9eaa25bfe749c0b01691c0570611a65255100718d2c50df723'],
-  ['package.json', '11cd0626ef8f795919abaa142ab307bced9a589e81645f09617e2db26e192970'],
+  ['package.json', '34c22d09d1ab4aec5e604a6fba91ca771510858ca4f8b55c6cdd4e9162a089ed'],
   ['src-tauri/src/lib.rs', 'c10997e4a806be08742fde042200d57ae479a2a458a234bc7b8344b408c34c2a'],
   [
     'src-tauri/src/managed_gateway.rs',
@@ -120,6 +120,30 @@ const pinnedPolicySources = new Map([
   [
     'scripts/release/build-unsigned-mainnet.sh',
     '35b13554ff2de5ff9e7fa5a43d28338502fadbda23a9f0e4a41b688a830ed160'
+  ],
+  [
+    'scripts/release/build-unsigned-multi.sh',
+    'cf5c979bd51cd0c477475da94923851502196ebe8ab5033ddea03f916630f20d'
+  ],
+  [
+    'scripts/release/prepare-signed-hwi.mjs',
+    '2a2d9d33c49f6bdb057a17910548aa53f3b6066fdef5b477290fb0b1cfaecfe2'
+  ],
+  [
+    'scripts/release/verify-signed-hwi.mjs',
+    '919a53b83b309e9e16496f907e47a90ceba2358d47fb1fcc11125154e066d92e'
+  ],
+  [
+    'scripts/release/package-macos-ga.mjs',
+    'f59977db80ee67418ea416e1a9b0d9a429e2337beb3491db4dd48609723d08a5'
+  ],
+  [
+    'scripts/release/verify-packaged-hwi.mjs',
+    '6f2f26f710e00b201aa2cd5701e847eb8ad7dfd66d26080e1dc7aeaa5b25564f'
+  ],
+  [
+    'scripts/release/hwi-entitlements.plist',
+    '7dfc81db3e5e4a8337b49aa59b01820abcaef80bd74bada5b489e32473e17a54'
   ],
   [
     'scripts/release/reproducible-rust-env.sh',

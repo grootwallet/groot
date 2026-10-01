@@ -1436,3 +1436,24 @@ stale-index client failure, wallet-level no-fallback behavior, broadcast-source
 verification, exact-tip full-block wallet reconciliation, repository evidence,
 complete validation, and a fresh internal multi-network build remain open
 alongside the physical-device and independent-review gates.
+
+## 2026-10-01 Multi-network production release tooling
+
+The accepted ADR 0069 GA identity now has a separate fail-closed release path.
+`release:prepare:signed-hwi` signs only the manifest-pinned HWI helper with the
+reviewed PyInstaller library-validation entitlement, hardened runtime, secure
+timestamp, and expected Developer ID team, then emits a bounded generated
+manifest. `release:unsigned:multi` verifies that immutable signed helper input
+and compiles its post-sign digest into reproducible multi-network Groot evidence.
+`release:package:macos:ga` accepts only sealed evidence from the current clean
+remote-main commit, requires the packaged pre-sign executable to match the
+independently reproduced Groot bytes, signs the outer app without the HWI
+entitlement, notarizes and staples the app and DMG, re-verifies Gatekeeper and
+the bundled helper, and emits final signed SBOM, provenance, and checksums.
+
+This changes release infrastructure only. Wallet/profile/database/registry,
+backup, proposal, descriptor, credential, and network-selector formats are
+unchanged; no migration is required. It has no BIP support impact. The existing
+`76fb54e8` two-machine result is exact fixed-Mainnet supporting evidence, not a
+substitute for the required final multi-network reproduction and signed-package
+acceptance campaign.
