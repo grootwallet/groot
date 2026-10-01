@@ -53,12 +53,16 @@ test('signed HWI policy requires the exact team, hardened runtime, timestamp, an
 
 test('multi-network evidence builder is release-bound and uses signed HWI provenance', () => {
   const source = read('./build-unsigned-multi.sh');
+  const validation = source.indexOf('pnpm validate');
+  const frontendBuild = source.indexOf('pnpm build:multi');
+  const cargoBuild = source.indexOf('cargo build --locked');
   assert.match(source, /export GROOT_BUILD_NETWORK=multi/);
   assert.match(source, /bundle_identifier=app\.groot\.wallet/);
   assert.match(source, /--features tauri\/custom-protocol/);
   assert.match(source, /verify-signed-hwi\.mjs/);
   assert.match(source, /signed_hwi_manifest_sha256=/);
   assert.match(source, /multi_config_sha256=/);
+  assert.ok(validation >= 0 && frontendBuild > validation && cargoBuild > frontendBuild);
   assert.doesNotMatch(source, /GROOT_MACOS_SIGNING_IDENTITY|notarytool|stapler/);
   assert.equal(
     packageJson.scripts['release:unsigned:multi'],
@@ -68,12 +72,13 @@ test('multi-network evidence builder is release-bound and uses signed HWI proven
 
 test('production package binds the exact reproduced payload before signing', () => {
   const source = read('./package-macos-ga.mjs');
-  const normalization = source.indexOf(
-    "'scripts/release/normalize-macho-uuid.mjs', builtExecutable"
-  );
   const comparison = source.indexOf("digest(builtExecutable) !== digest(join(evidence, 'Groot'))");
   const appSigning = source.indexOf("run('codesign', ['--force', '--sign', identity");
-  assert.ok(normalization >= 0 && comparison > normalization && appSigning > comparison);
+  assert.ok(comparison >= 0 && appSigning > comparison);
+  assert.doesNotMatch(
+    source,
+    /normalize-macho-uuid\.mjs', builtExecutable|--verify', '--strict', builtExecutable/
+  );
   assert.match(source, /SOURCE_DATE_EPOCH: sourceDateEpoch/);
   assert.match(source, /buildInfo\.source_date_epoch !== sourceDateEpoch/);
   assert.match(source, /build-packaged-macos-app\.sh/);

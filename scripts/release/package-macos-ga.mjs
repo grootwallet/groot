@@ -192,8 +192,6 @@ try {
   const builtApp = join(targetDirectory, 'release/bundle/macos/Groot.app');
   const builtExecutable = join(builtApp, 'Contents/MacOS/Groot');
   requireRegular(builtExecutable, 'packaged Groot executable', { executable: true });
-  run('node', ['scripts/release/normalize-macho-uuid.mjs', builtExecutable]);
-  run('codesign', ['--verify', '--strict', builtExecutable]);
   if (digest(builtExecutable) !== digest(join(evidence, 'Groot'))) {
     fail('packaged pre-sign executable differs from the independently reproduced executable');
   }
