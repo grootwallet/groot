@@ -131,7 +131,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'scripts/release/verify-signed-hwi.mjs',
-    '919a53b83b309e9e16496f907e47a90ceba2358d47fb1fcc11125154e066d92e'
+    '9502a15c634fc6d2254e562158b4f9fa9ef6f8b415ef3b598ad293394653be95'
   ],
   [
     'scripts/release/package-macos-ga.mjs',
@@ -139,7 +139,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'scripts/release/verify-packaged-hwi.mjs',
-    '6f2f26f710e00b201aa2cd5701e847eb8ad7dfd66d26080e1dc7aeaa5b25564f'
+    'e0e571de9307ebba1e1a070d329eb94eb4f70af577b97470a70b3b0dc24e6061'
   ],
   [
     'scripts/release/hwi-entitlements.plist',

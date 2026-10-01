@@ -5,7 +5,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { lstatSync, readFileSync, statSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { verifySignedHwiArtifact } from './verify-signed-hwi.mjs';
+import { probeHwiVersionOnDisposableCopy, verifySignedHwiArtifact } from './verify-signed-hwi.mjs';
 
 const repoRoot = resolve(fileURLToPath(new URL('../../', import.meta.url)));
 const canonicalManifestPath = join(repoRoot, 'docs/hwi-artifact-manifest-3.2.0-mac-arm64.json');
@@ -96,8 +96,9 @@ export function verifyPackagedHwi(
     fail('unsupported artifact manifest');
   }
   const hwi = join(app, 'Contents', 'Resources', 'hwi');
+  let version;
   if (requireProductionSigning) {
-    verifySignedHwiArtifact(hwi, manifestPath, expectedTeamId);
+    version = verifySignedHwiArtifact(hwi, manifestPath, expectedTeamId).version;
   }
   const linkMetadata = lstatSync(hwi);
   if (linkMetadata.isSymbolicLink() || !linkMetadata.isFile()) fail('HWI is not a regular file');
@@ -107,11 +108,7 @@ export function verifyPackagedHwi(
   if (basename(hwi) !== manifest.artifact.filename) fail('unexpected HWI resource name');
   if (digest(hwi) !== manifest.artifact.sha256) fail('HWI SHA-256 does not match the manifest');
 
-  const version = execFileSync(hwi, ['--version'], {
-    encoding: 'utf8',
-    env: { HOME: process.env.HOME ?? '/var/empty' },
-    timeout: 30_000
-  }).trim();
+  version ??= probeHwiVersionOnDisposableCopy(hwi);
   if (version !== `hwi ${manifest.version}`) fail(`unexpected version output: ${version}`);
 
   execFileSync('codesign', ['--verify', '--strict', '--verbose=2', hwi], { stdio: 'pipe' });
