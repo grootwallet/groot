@@ -68,6 +68,16 @@ contains_fixed "export GROOT_BUILD_NETWORK=mainnet" scripts/release/build-unsign
   || fail "the unsigned mainnet evidence builder is not network-bound"
 contains_fixed "--features tauri/custom-protocol" scripts/release/build-unsigned-mainnet.sh \
   || fail "the unsigned mainnet evidence builder is not using Tauri's production protocol mode"
+contains_fixed "export GROOT_BUILD_NETWORK=multi" scripts/release/build-unsigned-multi.sh \
+  || fail "the unsigned GA evidence builder is not multi-network bound"
+contains_fixed "verify-signed-hwi.mjs" scripts/release/build-unsigned-multi.sh \
+  || fail "the unsigned GA evidence builder is not bound to the production-signed HWI input"
+contains_fixed "packaged pre-sign executable differs from the independently reproduced executable" scripts/release/package-macos-ga.mjs \
+  || fail "the production package no longer binds the exact reproduced executable before signing"
+contains_fixed "'notarytool'" scripts/release/package-macos-ga.mjs \
+  || fail "the production package no longer requires Apple notarization"
+contains_fixed "'stapler', 'staple'" scripts/release/package-macos-ga.mjs \
+  || fail "the production package no longer staples the notarization ticket"
 contains_fixed "singlesig_account_path: \"m/84'/0'/0'\"" src-tauri/src/build_network.rs \
   || fail "the dormant mainnet BIP84 account path is no longer explicit"
 contains_fixed "multisig_account_path: \"m/48'/0'/0'/2'\"" src-tauri/src/build_network.rs \
@@ -105,4 +115,4 @@ contains_fixed "Blockstream Jade" docs/mainnet-release-checklist.md \
 contains_fixed "secure-storage and lifecycle certification for every platform included in that candidate" docs/mainnet-threat-model.md \
   || fail "the threat model no longer scopes platform evidence to the candidate"
 
-echo "Mainnet candidate gate: dedicated build enabled; distribution remains blocked."
+echo "Mainnet candidate gate: fixed and multi-network evidence builds enabled; distribution remains blocked."

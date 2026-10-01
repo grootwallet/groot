@@ -62,7 +62,12 @@ Native Signet and Testnet4 package commands require a clean tracked and
 untracked worktree, then generate a fresh target-specific SBOM after the
 executable exists. `pnpm release:unsigned` does the same for the unsigned
 release evidence set, while `pnpm release:unsigned:mainnet` creates the dedicated
-mainnet evidence set. The macOS evidence records stable exact OS, Xcode, Clang,
+fixed-Mainnet supporting evidence set. `pnpm release:unsigned:multi` is the ADR
+0069 GA evidence builder. It requires the frozen production-signed HWI helper
+and its generated provenance manifest, verifies the helper's exact upstream
+digest, Developer ID team, hardened runtime, secure timestamp, and HWI-only
+library-validation entitlement, then compiles that signed helper digest into
+the independently reproduced multi-network Groot executable. The macOS evidence records stable exact OS, Xcode, Clang,
 SDK, architecture, and language-toolchain inputs without binding otherwise
 independent machines to one Apple hardware-family kernel suffix. These generated
 files bind the exact commit and lockfiles to the built executable digest. The
@@ -82,6 +87,19 @@ Tauri's production
 `custom-protocol` feature so the evidence binary matches the packaged execution
 mode. Generated evidence remains untracked build artifacts.
 
+`pnpm release:prepare:signed-hwi` is the only production HWI signing step. It
+copies the manifest-pinned upstream HWI, applies the reviewed HWI-only
+entitlement with hardened runtime and a secure timestamp, and emits a bounded
+signed-HWI manifest. Run it once, freeze the resulting helper and manifest as
+release inputs, and provide those exact public inputs to both independent build
+machines. `pnpm release:package:macos:ga` accepts only matching sealed
+multi-network evidence, requires the packaged pre-sign Groot executable to
+equal that reproduced executable byte for byte, signs the outer app without
+the HWI entitlement, notarizes and staples the app and DMG, verifies Gatekeeper
+and packaged HWI policy, and emits signed SBOM/provenance/checksum evidence. It
+never creates, imports, or prints signing credentials; the Developer ID identity
+and notarization profile must already exist in Keychain.
+
 `pnpm build:native:mainnet:internal` and `pnpm build:native:multi:internal` are
 the separate non-distributable physical-testing builders. Each requires a clean
 exact commit, bundles the pinned HWI, compiles the runtime signature requirement
@@ -90,10 +108,12 @@ as `REHEARSAL_ONLY`, applies only an ad-hoc identity, and verifies the copied
 Mainnet command remains supporting evidence. Neither command signs with
 Developer ID, notarizes, staples, packages for distribution, or pushes source.
 
-The completed independent `2110eaf` Mainnet Build A/Build B run, including
+The completed independent fixed-Mainnet `76fb54e8` Build A/Build B run, including
 exact evidence hashes, validation totals, deviations, and path-leak results, is
 recorded in
 [`reproducible-mainnet-builds-2026-09-04.md`](reproducible-mainnet-builds-2026-09-04.md).
+It is supporting evidence only; the final ADR 0069 multi-network commit must
+repeat the two-machine campaign using the frozen signed-HWI input.
 
 Real-Core integration scripts create disposable isolated data. Never redirect
 them to the funded physical-certification profile. Do not recreate or replace a

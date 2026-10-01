@@ -5,6 +5,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { lstatSync, readFileSync, statSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { verifySignedHwiArtifact } from './verify-signed-hwi.mjs';
 
 const repoRoot = resolve(fileURLToPath(new URL('../../', import.meta.url)));
 const canonicalManifestPath = join(repoRoot, 'docs/hwi-artifact-manifest-3.2.0-mac-arm64.json');
@@ -95,6 +96,9 @@ export function verifyPackagedHwi(
     fail('unsupported artifact manifest');
   }
   const hwi = join(app, 'Contents', 'Resources', 'hwi');
+  if (requireProductionSigning) {
+    verifySignedHwiArtifact(hwi, manifestPath, expectedTeamId);
+  }
   const linkMetadata = lstatSync(hwi);
   if (linkMetadata.isSymbolicLink() || !linkMetadata.isFile()) fail('HWI is not a regular file');
   const metadata = statSync(hwi);
@@ -154,7 +158,9 @@ export function verifyPackagedHwi(
 
 const invokedPath = process.argv[1] ? resolve(process.argv[1]) : '';
 if (invokedPath === fileURLToPath(import.meta.url)) {
-  const result = verifyPackagedHwi(process.argv[2]);
+  const result = verifyPackagedHwi(process.argv[2], {
+    manifestPath: process.argv[3] ? resolve(process.argv[3]) : canonicalManifestPath
+  });
   console.log(
     `Packaged HWI verified: Groot ${result.appVersion}, ${result.version}, ${result.sha256}`
   );

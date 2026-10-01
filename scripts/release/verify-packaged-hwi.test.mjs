@@ -53,8 +53,21 @@ function fixture() {
     manifestPath,
     `${JSON.stringify({
       artifact: { filename: 'hwi', sha256: digest(hwi) },
-      name: 'Bitcoin Core HWI',
+      kind: 'groot-signed-hwi',
+      platform: 'macos-arm64',
       schemaVersion: 1,
+      signing: {
+        entitlements: ['com.apple.security.cs.disable-library-validation'],
+        hardenedRuntime: true,
+        secureTimestamp: true,
+        teamId: 'ABCDEFGHIJ'
+      },
+      upstream: {
+        filename: 'hwi',
+        licenseSha256: 'fd02c0dfea382dd4c42bcf87f1d638fcc5962238a319447d3ca035074bcd07f7',
+        sha256: '87a8991848a0216213ddf6497c753cebbda492626afaf5608c30931155c922c3',
+        sourceArchiveSha256: '4a225a2e22990fa114066feafcd3cb66a6ecaa3711a0d8a0cad61e7f8c507455'
+      },
       version: '3.2.0'
     })}\n`
   );
@@ -110,7 +123,8 @@ macTest('rejects an HWI changed after the app was sealed', () => {
       () =>
         verifyPackagedHwi(value.app, {
           manifestPath: value.manifestPath,
-          expectedAppVersion: '0.4.8'
+          expectedAppVersion: '0.4.8',
+          requireProductionSigning: false
         }),
       /SHA-256 does not match/
     );
