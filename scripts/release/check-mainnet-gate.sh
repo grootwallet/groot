@@ -70,8 +70,16 @@ contains_fixed "--features tauri/custom-protocol" scripts/release/build-unsigned
   || fail "the unsigned mainnet evidence builder is not using Tauri's production protocol mode"
 contains_fixed "export GROOT_BUILD_NETWORK=multi" scripts/release/build-unsigned-multi.sh \
   || fail "the unsigned GA evidence builder is not multi-network bound"
+contains_fixed "TAURI_ENV_PLATFORM=macos pnpm build:multi" scripts/release/build-unsigned-multi.sh \
+  || fail "the unsigned GA evidence builder is not compiling the native frontend"
+contains_fixed "verify-native-frontend-output.mjs build" scripts/release/build-unsigned-multi.sh \
+  || fail "the unsigned GA evidence builder does not verify the native frontend"
 contains_fixed "verify-signed-hwi.mjs" scripts/release/build-unsigned-multi.sh \
   || fail "the unsigned GA evidence builder is not bound to the production-signed HWI input"
+contains_fixed "TAURI_ENV_PLATFORM=macos pnpm build:multi" scripts/release/build-packaged-macos-app.sh \
+  || fail "the production package builder is not compiling the native frontend"
+contains_fixed "verify-native-frontend-output.mjs build" scripts/release/build-packaged-macos-app.sh \
+  || fail "the production package builder does not verify the native frontend"
 contains_fixed "packaged pre-sign executable differs from the independently reproduced executable" scripts/release/package-macos-ga.mjs \
   || fail "the production package no longer binds the exact reproduced executable before signing"
 contains_fixed "'notarytool'" scripts/release/package-macos-ga.mjs \

@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import test from 'node:test';
+import { verifyNativeFrontendOutput } from './verify-native-frontend-output.mjs';
 import { validateSignedHwiSignatureMetadata } from './verify-signed-hwi.mjs';
 
 const read = (path) => readFileSync(new URL(path, import.meta.url), 'utf8');
@@ -54,7 +57,10 @@ test('signed HWI policy requires the exact team, hardened runtime, timestamp, an
 test('multi-network evidence builder is release-bound and uses signed HWI provenance', () => {
   const source = read('./build-unsigned-multi.sh');
   const validation = source.indexOf('pnpm validate');
-  const frontendBuild = source.indexOf('pnpm build:multi');
+  const frontendBuild = source.indexOf('TAURI_ENV_PLATFORM=macos pnpm build:multi');
+  const frontendVerification = source.indexOf(
+    'node scripts/release/verify-native-frontend-output.mjs build'
+  );
   const cargoBuild = source.indexOf('cargo build --locked');
   assert.match(source, /export GROOT_BUILD_NETWORK=multi/);
   assert.match(source, /bundle_identifier=app\.groot\.wallet/);
@@ -62,7 +68,12 @@ test('multi-network evidence builder is release-bound and uses signed HWI proven
   assert.match(source, /verify-signed-hwi\.mjs/);
   assert.match(source, /signed_hwi_manifest_sha256=/);
   assert.match(source, /multi_config_sha256=/);
-  assert.ok(validation >= 0 && frontendBuild > validation && cargoBuild > frontendBuild);
+  assert.ok(
+    validation >= 0 &&
+      frontendBuild > validation &&
+      frontendVerification > frontendBuild &&
+      cargoBuild > frontendVerification
+  );
   assert.doesNotMatch(source, /GROOT_MACOS_SIGNING_IDENTITY|notarytool|stapler/);
   assert.equal(
     packageJson.scripts['release:unsigned:multi'],
@@ -102,9 +113,16 @@ test('production package binds the exact reproduced payload before signing', () 
 
 test('packaged app build uses the same reproducible Rust environment as evidence', () => {
   const source = read('./build-packaged-macos-app.sh');
+  const frontendBuild = source.indexOf('TAURI_ENV_PLATFORM=macos pnpm build:multi');
+  const frontendVerification = source.indexOf(
+    'node scripts/release/verify-native-frontend-output.mjs build'
+  );
+  const cargoBuild = source.indexOf('cargo build');
   assert.match(source, /source "\$repo_root\/scripts\/release\/reproducible-rust-env\.sh"/);
   assert.match(source, /configure_reproducible_rust_env "\$repo_root" "\$cargo_target"/);
-  assert.match(source, /pnpm build:multi/);
+  assert.ok(
+    frontendBuild >= 0 && frontendVerification > frontendBuild && cargoBuild > frontendVerification
+  );
   assert.match(
     source,
     /cargo build[\s\\]*--locked[\s\\]*--release[\s\\]*--manifest-path src-tauri\/Cargo\.toml[\s\\]*--features tauri\/custom-protocol/
@@ -115,6 +133,40 @@ test('packaged app build uses the same reproducible Rust environment as evidence
   assert.match(source, /--bundles app/);
   assert.match(source, /--no-sign/);
   assert.doesNotMatch(source, /pnpm exec tauri build/);
+});
+
+test('native frontend verification rejects browser and missing-bridge bundles', () => {
+  const root = mkdtempSync(join(tmpdir(), 'groot-native-frontend-test-'));
+  try {
+    const nativeOutput = join(root, 'native');
+    mkdirSync(join(nativeOutput, '_app'), { recursive: true });
+    writeFileSync(join(nativeOutput, '_app', 'native.js'), 'const command = "runtime_platform";');
+    assert.deepEqual(verifyNativeFrontendOutput(nativeOutput), {
+      output: nativeOutput,
+      javascriptFiles: 1
+    });
+
+    const browserOutput = join(root, 'browser');
+    mkdirSync(browserOutput);
+    writeFileSync(
+      join(browserOutput, 'browser.js'),
+      'const command = "runtime_platform"; const fixture = "virtual-ledger-outsider";'
+    );
+    assert.throws(
+      () => verifyNativeFrontendOutput(browserOutput),
+      /browser prototype code survived/
+    );
+
+    const missingBridgeOutput = join(root, 'missing-bridge');
+    mkdirSync(missingBridgeOutput);
+    writeFileSync(join(missingBridgeOutput, 'app.js'), 'const app = "Groot";');
+    assert.throws(
+      () => verifyNativeFrontendOutput(missingBridgeOutput),
+      /native runtime bridge is absent/
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test('signed HWI is authenticated before any version execution', () => {
