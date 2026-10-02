@@ -152,7 +152,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'scripts/release/create-macos-dmg.mjs',
-    'b306fb9b1dedc3e5d33ebfcbcae2b175e7751a230d05d52a7d00dd12c88137db'
+    '8e9db267915578612d805f263db912531aec40eb0fb8831aa2a233970fe804ad'
   ],
   [
     'scripts/release/assets/groot-dmg-background.svg',
@@ -274,7 +274,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'scripts/release/build-mainnet-internal-rc.mjs',
-    'da4f6c82f50fc839718e56dbe6ad608e305c256c52c13b0ae7b2b7d9edd255fa'
+    'f18dea025bff665a3e7c4da895184a843eea54f90cfeb7f810c021744953f8a4'
   ],
   [
     'docs/adr/0068-restart-bound-multi-network-settings.md',

@@ -104,6 +104,11 @@ and packaged HWI policy, and emits signed SBOM/provenance/checksum evidence. It
 never creates, imports, or prints signing credentials; the Developer ID identity
 and notarization profile must already exist in Keychain.
 
+The macOS DMG helper copies the reviewed deterministic Finder metadata asset into
+the image before `hdiutil` runs. It requires the exact `Groot` volume name and
+does not ask Finder to generate `.DS_Store`, so user Finder preferences cannot
+silently remove the branded drag-to-Applications layout.
+
 `pnpm build:native:mainnet:internal` and `pnpm build:native:multi:internal` are
 the separate non-distributable physical-testing builders. Each requires a clean
 exact commit, bundles the pinned HWI, compiles the runtime signature requirement

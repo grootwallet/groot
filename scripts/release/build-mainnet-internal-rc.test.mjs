@@ -34,5 +34,5 @@ test('internal multi-network RC uses the HWI-sealed multi configuration', () => 
 test('internal RC creates the same branded drag-to-Applications DMG used by production', () => {
   assert.match(source, /scripts\/release\/create-macos-dmg\.mjs/);
   assert.match(source, /outputDmg/);
-  assert.match(source, /Functional/);
+  assert.match(source, /outputDmg,[\s\S]*'Groot'/);
 });

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -114,17 +115,23 @@ test('production package binds the exact reproduced payload before signing', () 
 test('macOS DMG presents a compact branded drag-to-Applications layout', () => {
   const source = read('./create-macos-dmg.mjs');
   const background = read('./assets/groot-dmg-background.svg');
+  const finderLayout = readFileSync(new URL('./assets/groot-dmg.DS_Store', import.meta.url));
   const renderedBackground = readFileSync(
     new URL('./assets/groot-dmg-background.png', import.meta.url)
   );
   assert.match(source, /symlinkSync\('\/Applications'/);
-  assert.match(source, /set icon size[\s\S]*104/);
-  assert.match(source, /set position of item "Groot\.app"[\s\S]*\{285, 205\}/);
-  assert.match(source, /set position of item "Applications"[\s\S]*\{615, 205\}/);
+  assert.match(source, /volumeName !== 'Groot'/);
+  assert.match(source, /groot-dmg\.DS_Store/);
+  assert.doesNotMatch(source, /osascript|tell application "Finder"/);
   assert.match(source, /groot-dmg-background\.png/);
   assert.match(background, />Install Groot</);
   assert.match(background, />Drag the app into Applications</);
   assert.ok(renderedBackground.length > 10_000);
+  assert.equal(finderLayout.length, 10_244);
+  assert.equal(
+    createHash('sha256').update(finderLayout).digest('hex'),
+    '26e006bf8e4965f75c976fea86e219abc109763673e0685650576cc303d65ec7'
+  );
 });
 
 test('packaged app build uses the same reproducible Rust environment as evidence', () => {

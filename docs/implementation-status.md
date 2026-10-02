@@ -1502,7 +1502,10 @@ all connected signers, and distinguish exact wallet matches, identities that
 still require proof, and devices proven unrelated to the open wallet. Network
 and receive-verification failures use the shared structured warning component.
 The DMG retains the Applications link and adds a compact branded Finder layout
-with enlarged icons and explicit drag direction. These changes do not alter
+with enlarged icons and explicit drag direction. Its reviewed Finder metadata is
+now copied deterministically before image creation instead of relying on Finder
+to persist `.DS_Store`; the helper rejects any volume name other than `Groot`.
+These changes do not alter
 wallet, registry, proposal, descriptor, backup, or network-selection formats
 and have no BIP impact.
 

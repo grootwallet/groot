@@ -129,16 +129,10 @@ try {
   execFileSync('codesign', ['--verify', '--deep', '--strict', '--verbose=2', outputApp], {
     stdio: 'pipe'
   });
-  execFileSync(
-    'node',
-    [
-      'scripts/release/create-macos-dmg.mjs',
-      outputApp,
-      outputDmg,
-      `${buildIdentity.appName.replace(/\.app$/, '')} Functional`
-    ],
-    { cwd: repoRoot, stdio: 'inherit' }
-  );
+  execFileSync('node', ['scripts/release/create-macos-dmg.mjs', outputApp, outputDmg, 'Groot'], {
+    cwd: repoRoot,
+    stdio: 'inherit'
+  });
   const executable = join(outputApp, 'Contents', 'MacOS', 'Groot');
   const buildInfo = [
     `commit=${commit}`,
