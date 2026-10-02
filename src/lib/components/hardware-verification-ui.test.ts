@@ -312,7 +312,7 @@ describe('hardware receive verification UI', () => {
     expect(verificationFlow).toContain('walletService.sendHardwarePin(pinChallenge, positions)');
     expect(verificationFlow).toContain('<TrezorPinModal');
     expect(verificationFlow).toContain('Refreshing device identity. Select the signer to verify.');
-    expect(verificationFlow).toContain("device.action === 'confirm_empty_passphrase'");
+    expect(verificationFlow).toContain("case 'confirm_standard_wallet'");
     expect(verificationFlow).toContain("title={translate($locale, 'Use Trezor standard wallet?')}");
     expect(verificationFlow).toContain('onclick={confirmStandardWallet}');
     expect(verificationFlow).not.toContain(
@@ -324,17 +324,15 @@ describe('hardware receive verification UI', () => {
   });
 
   it('redeems a detected unlock capability without starting another scan', () => {
-    expect(verificationFlow).toContain("device.action === 'unlock'");
+    expect(verificationFlow).toContain("case 'unlock'");
     expect(verificationFlow).toContain('verifyAddress(device, true)');
-    expect(verificationFlow).toMatch(
-      /disabled=\{membership === 'unrelated' \|\|\s*device.action === 'none' \|\|\s*device.action === 'retry'\}/
-    );
-    expect(multisigSend).toContain('hardwareWalletMembershipLabel(membership)');
+    expect(verificationFlow).toContain('<HardwareDeviceList');
+    expect(multisigSend).toContain('<HardwareDeviceList');
     expect(hardwareDeviceList).toContain("membership === 'unrelated'");
-    expect(verificationFlow).toContain("'Unlock & continue'");
+    expect(hardwareDeviceList).toContain('deviceStateLabel(device, membership)');
     expect(hardwareSetup).toContain("device.action !== 'unlock'");
     expect(multisigSetup).toContain("device.action === 'unlock'");
-    expect(multisigSend).toContain("device.action === 'unlock'");
+    expect(multisigSend).toContain('hardwareDeviceStateLabel(device, membership)');
   });
 
   it('exposes the shared identity health check for external single-key signers', () => {
@@ -362,10 +360,9 @@ describe('hardware receive verification UI', () => {
   });
 
   it('renders receive-verification failures with the shared hardware alert treatment', () => {
-    expect(verificationFlow).toContain(
-      'class="hardware-inline-error" role="alert" aria-live="polite"'
-    );
-    expect(verificationFlow).toContain("translate($locale, 'Device needs attention')");
+    expect(verificationFlow).toContain('<WarningNotice');
+    expect(verificationFlow).toContain('title={translate($locale, verifyErrorTitle)}');
+    expect(verificationFlow).toContain("verifyErrorTitle = 'Signer is not part of this wallet'");
     expect(verificationFlow).not.toContain('<p class="form-error" role="alert">{verifyError}</p>');
     expect(verificationFlow).toContain('onclick={retryVerificationDevice}');
     expect(verificationFlow).toContain("translate($locale, 'Try this signer again')");
@@ -427,9 +424,11 @@ describe('hardware receive verification UI', () => {
     expect(hardwareSetup).toContain(
       "'BitBox may request its password again for this new secure connection. Enter it only on BitBox.'"
     );
-    expect(hardwareDeviceList).toContain("if (device.status === 'detected') return 'Detected'");
-    expect(hardwareDeviceList).toContain("if (device.action === 'prompt_pin') return 'Locked'");
-    expect(hardwareDeviceList).toContain("if (device.action === 'prompt_pin') return ''");
+    expect(hardwareDeviceList).toContain('hardwareDeviceStateLabel(device, membership');
+    expect(hardwareDeviceList).toMatch(
+      /\{#if device\.fingerprint\}<small\s*>\{device\.fingerprint\}<\/small\s*>\{\/if\}/
+    );
+    expect(hardwareDeviceList).not.toContain('device.message');
   });
 
   it('moves selected Trezor work into the shared targeted PIN flow', () => {
@@ -454,7 +453,7 @@ describe('hardware receive verification UI', () => {
   it('shows saved signer names only after matching scanned fingerprints', () => {
     expect(hardwareDeviceList).toContain('hardwareDeviceDisplayName(device, savedSigners)');
     expect(singleKeySend).toContain('savedSigners={externalWallet ? [externalWallet.signer] : []}');
-    expect(multisigSend).toContain('hardwareDeviceDisplayName(device, wallet?.cosigners ?? [])');
+    expect(multisigSend).toContain('savedSigners={wallet?.cosigners ?? []}');
     expect(singleKeyReceive).toContain('savedSigners={savedSignerFingerprint && savedSignerLabel');
     expect(multisigReceive).toContain('savedSigners={wallet?.cosigners ?? []}');
   });

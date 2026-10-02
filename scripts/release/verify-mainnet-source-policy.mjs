@@ -15,8 +15,8 @@ const pinnedPolicySources = new Map([
   ['src-tauri/src/session.rs', '82da6d3a2643710aaa0974f69f0fb7c932172a401ecf33c186e440c8170f35e0'],
   ['.env.mainnet', '1623f3f97de588daea2bbeae1f9c56ebc896b6bc2c22ac238563b46b688ced85'],
   ['.env.multi', '33fc3d5022968d9eaa25bfe749c0b01691c0570611a65255100718d2c50df723'],
-  ['package.json', 'e1d83d61e2531ea64dcb941739fc4bfc7dca6194b91927d68e9d67817fbc45ac'],
-  ['src-tauri/src/lib.rs', 'c10997e4a806be08742fde042200d57ae479a2a458a234bc7b8344b408c34c2a'],
+  ['package.json', 'f8c983c809dc146a3978a339b1659b1165a07b307b8049d13a34fb1d62fb2e78'],
+  ['src-tauri/src/lib.rs', 'dabdac71e693caf73f267f2bcb935e29b1150fe7a0772b6237915e0aacd1683a'],
   [
     'src-tauri/src/managed_gateway.rs',
     '7e5bf0ab7c25346448e4423bab2e748de96684612230c38b797a075fef5866d0'
@@ -33,7 +33,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src-tauri/src/build_network.rs',
-    'f4e06c2259ac862a5552071b6c3c378b3467144f1604d5d7f001baeef9f8cff2'
+    '2cef2d88cda022c23fda1dac4c448b4cae6ee497b6cf39397775a279a96afbb9'
   ],
   [
     'src-tauri/src/process_lock.rs',
@@ -61,7 +61,7 @@ const pinnedPolicySources = new Map([
     'bd019caa540dcf49428c3665c3ceb1e6c6699b2d53e33f4a6a51899194bb69ed'
   ],
   ['src-tauri/src/proposal.rs', '9d90a4910b2c0cf91320c59e49f9a8e97e59fca4e4612edcc7dbee6fbaef63ba'],
-  ['src-tauri/src/wallet.rs', 'cd9779728e3c6b12b0c9764be73119f07573f2036ce7e4cc327c902dffa80296'],
+  ['src-tauri/src/wallet.rs', '5f5ac9b78eb826bcc78fab4f4e4c5ddb75b980546aed3fb34e2ce254c850adf2'],
   [
     'src-tauri/src/wallet/diagnostics.rs',
     '0378b4dadf9698b2a6e04361950d51c65390e175c0c7fc50d88ac6deb2de8b5f'
@@ -148,7 +148,15 @@ const pinnedPolicySources = new Map([
   ],
   [
     'scripts/release/package-macos-ga.mjs',
-    '20212e213247eeef001cda953eff7c2d93047d5a838f8f7d14ac5b816a0a1436'
+    'a2ff35133c2fc5a106fe266b974b5144de41127af487f17032d7cba5b2c52de7'
+  ],
+  [
+    'scripts/release/create-macos-dmg.mjs',
+    '08f51060ec80b00b8810b621ce1529a6f99b5d3c5d3b422bbdfdeeb787aa50bd'
+  ],
+  [
+    'scripts/release/assets/groot-dmg-background.svg',
+    'e0372faed535958a61e54eeb1a0bf05bded24e144bef91065c5d9f3a7b027dc2'
   ],
   [
     'scripts/release/build-packaged-macos-app.sh',
@@ -181,7 +189,7 @@ const pinnedPolicySources = new Map([
   ['src/lib/wallet/tauri.ts', '8652a1e472c459ef63fbb4020df7ecd8cb783ca492c48702c99e8aa15af5ded2'],
   [
     'src/lib/wallet/contracts/errors.ts',
-    'c24fbc5876dc7aaaf32f4f801506540707eb903882a4dadbadb93559f20fd9ac'
+    '6e63267785c41e26e7d41815df26e462d0763800166d7a1c0cf01b3c109e7a10'
   ],
   [
     'src/lib/wallet/contracts/port.ts',
@@ -218,7 +226,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src/routes/settings/+page.svelte',
-    '973bc7bffc252171896daec88873643153cd96fe1288c2cfdd6547c3b7975db0'
+    '727745cd95830b691511cc3e8bf89a97ccab373aeae6610c4d7e7d7de97f6b3f'
   ],
   [
     'services/core-gateway/gateway.py',
@@ -250,7 +258,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src/routes/multisig/new/+page.svelte',
-    'fc078493cc139f8094b8225abb8403193acf5f30f5f2081bbe9bb6b74521bf86'
+    '7f64640a98b12a86b84187e65bc4abd98e963921c6c169f6fcf7f61038cf4200'
   ],
   [
     'src/lib/multisig/policy.ts',
@@ -266,7 +274,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'scripts/release/build-mainnet-internal-rc.mjs',
-    'b72c626a47e97e4f3c7a25135cdc79acef53a91d5122d2d84a7b1646a0d59401'
+    'da4f6c82f50fc839718e56dbe6ad608e305c256c52c13b0ae7b2b7d9edd255fa'
   ],
   [
     'docs/adr/0068-restart-bound-multi-network-settings.md',

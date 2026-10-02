@@ -11,6 +11,7 @@ use uuid::Uuid;
 const NETWORK_SELECTION_VERSION: u8 = 1;
 const NETWORK_SELECTION_FILE: &str = "network-selection.json";
 const MAX_NETWORK_SELECTION_BYTES: u64 = 256;
+const MULTI_NETWORK_APP_DATA_OVERRIDE: &str = "GROOT_MULTI_NETWORK_APP_DATA_DIR";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct NetworkParameters {
@@ -32,6 +33,8 @@ pub enum NetworkSelectionError {
     UnsafeSelection,
     #[error("the Bitcoin network selection could not be saved")]
     Io,
+    #[error("the isolated multi-network app-data directory is unsafe")]
+    UnsafeTestRoot,
 }
 
 impl NetworkSelectionError {
@@ -41,6 +44,7 @@ impl NetworkSelectionError {
             Self::Unsupported => "invalid_network",
             Self::UnsafeSelection => "unsafe_network_selection",
             Self::Io => "network_selection_failed",
+            Self::UnsafeTestRoot => "unsafe_test_root",
         }
     }
 }
@@ -166,6 +170,48 @@ pub fn multisig_account_path() -> &'static str {
 
 pub const fn switching_enabled() -> bool {
     cfg!(groot_network = "multi")
+}
+
+fn validate_multi_network_app_data_override(
+    path: PathBuf,
+    switching: bool,
+) -> Result<PathBuf, NetworkSelectionError> {
+    if !switching || !path.is_absolute() {
+        return Err(NetworkSelectionError::UnsafeTestRoot);
+    }
+    let filename = path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .ok_or(NetworkSelectionError::UnsafeTestRoot)?;
+    let parent = path
+        .parent()
+        .ok_or(NetworkSelectionError::UnsafeTestRoot)?
+        .canonicalize()
+        .map_err(|_| NetworkSelectionError::UnsafeTestRoot)?;
+    #[cfg(unix)]
+    let temporary_root = Path::new("/tmp")
+        .canonicalize()
+        .map_err(|_| NetworkSelectionError::UnsafeTestRoot)?;
+    #[cfg(not(unix))]
+    let temporary_root = std::env::temp_dir()
+        .canonicalize()
+        .map_err(|_| NetworkSelectionError::UnsafeTestRoot)?;
+    if parent != temporary_root || !filename.starts_with("groot-multi-") {
+        return Err(NetworkSelectionError::UnsafeTestRoot);
+    }
+    if let Ok(metadata) = fs::symlink_metadata(&path) {
+        if metadata.file_type().is_symlink() || !metadata.is_dir() {
+            return Err(NetworkSelectionError::UnsafeTestRoot);
+        }
+    }
+    Ok(path)
+}
+
+pub fn multi_network_app_data_override() -> Result<Option<PathBuf>, NetworkSelectionError> {
+    std::env::var_os(MULTI_NETWORK_APP_DATA_OVERRIDE)
+        .map(PathBuf::from)
+        .map(|path| validate_multi_network_app_data_override(path, switching_enabled()))
+        .transpose()
 }
 
 pub fn activate_selection(root: &Path) -> Result<(), NetworkSelectionError> {
@@ -338,6 +384,10 @@ mod tests {
             "unsafe_network_selection"
         );
         assert_eq!(NetworkSelectionError::Io.code(), "network_selection_failed");
+        assert_eq!(
+            NetworkSelectionError::UnsafeTestRoot.code(),
+            "unsafe_test_root"
+        );
     }
 
     #[test]
@@ -473,6 +523,37 @@ mod tests {
         assert_eq!(
             data_directory_for(root.clone(), Network::Bitcoin, false),
             root
+        );
+    }
+
+    #[test]
+    fn isolated_multi_network_root_is_strictly_temporary_and_mode_bound() {
+        #[cfg(unix)]
+        let temporary_root = Path::new("/tmp").canonicalize().unwrap();
+        #[cfg(not(unix))]
+        let temporary_root = std::env::temp_dir().canonicalize().unwrap();
+        let valid = temporary_root.join(format!("groot-multi-{}", Uuid::new_v4()));
+        assert_eq!(
+            validate_multi_network_app_data_override(valid.clone(), true),
+            Ok(valid)
+        );
+        assert_eq!(
+            validate_multi_network_app_data_override(
+                temporary_root.join(format!("groot-regtest-{}", Uuid::new_v4())),
+                true
+            ),
+            Err(NetworkSelectionError::UnsafeTestRoot)
+        );
+        assert_eq!(
+            validate_multi_network_app_data_override(
+                temporary_root.join(format!("groot-multi-{}", Uuid::new_v4())),
+                false
+            ),
+            Err(NetworkSelectionError::UnsafeTestRoot)
+        );
+        assert_eq!(
+            validate_multi_network_app_data_override(PathBuf::from("groot-multi-relative"), true),
+            Err(NetworkSelectionError::UnsafeTestRoot)
         );
     }
 

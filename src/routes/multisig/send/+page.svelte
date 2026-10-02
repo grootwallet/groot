@@ -25,6 +25,7 @@
   import WalletSkeleton from '$lib/components/WalletSkeleton.svelte';
   import PermanentLabelEditor from '$lib/components/PermanentLabelEditor.svelte';
   import HardwareActionPrompt from '$lib/components/HardwareActionPrompt.svelte';
+  import HardwareDeviceList from '$lib/components/HardwareDeviceList.svelte';
   import TransactionReviewDetails from '$lib/components/TransactionReviewDetails.svelte';
   import Modal from '$lib/components/Modal.svelte';
   import PasswordField from '$lib/components/PasswordField.svelte';
@@ -103,9 +104,9 @@
     shouldShowColdcardPolicyHelp
   } from '$lib/hardware/policy-readiness';
   import {
-    hardwareDeviceDisplayName,
+    hardwareDeviceStateLabel,
     hardwareWalletMembership,
-    hardwareWalletMembershipLabel
+    type HardwareWalletMembership
   } from '$lib/hardware/discovery';
   import { fly } from 'svelte/transition';
   import { discreetMode } from '$lib/privacy';
@@ -2891,71 +2892,37 @@
       ><Button variant="secondary" onclick={scan}>{translate($locale, 'Scan again')}</Button>
     </div>
   {:else}
-    <div class="source-list hardware-device-list">
-      {#each devices as device}{@const alreadySigned =
-          deviceHasSigned(device)}{@const policyRequired =
-          requiresPolicySetup(device)}{@const policyVerified =
-          devicePolicyVerification(device)}{@const membership = hardwareWalletMembership(
-          device,
-          (wallet?.cosigners ?? []).map((signer) => signer.fingerprint),
-          (wallet?.cosigners ?? [])
-            .map((signer) => signer.deviceType)
-            .filter((deviceType): deviceType is string => Boolean(deviceType))
-        )}<button
-          disabled={membership === 'unrelated' ||
-            alreadySigned ||
-            device.action === 'none' ||
-            policyRegistrationProfile(device).registration === 'unsupported'}
-          onclick={() => handleHardware(device)}
-          ><Cpu size={18} /><span
-            ><strong>{hardwareDeviceDisplayName(device, wallet?.cosigners ?? [])}</strong
-            >{#if hardwareWalletMembershipLabel(membership)}<small
-                >{translate($locale, hardwareWalletMembershipLabel(membership))}</small
-              >{/if}{#if (membership === 'candidate' || membership === 'unrelated') && device.action !== 'prompt_pin' && device.fingerprint}<small
-                >{device.fingerprint}</small
-              >{/if}<em
-              class:ready={membership === 'candidate' &&
-                !alreadySigned &&
-                (device.status === 'ready' || device.status === 'detected') &&
-                (!policyRequired || !!policyVerified)}
-              class:signed={alreadySigned}
-              class:attention={(policyRequired && !policyVerified) ||
-                policyRegistrationProfile(device).registration === 'unsupported'}
-              >{#if membership !== 'candidate'}{translate(
-                  $locale,
-                  device.action === 'prompt_pin'
-                    ? 'Locked'
-                    : device.action === 'unlock'
-                      ? 'Unlock & continue'
-                      : 'Detected'
-                )}{:else if alreadySigned}<Check size={11} />{translate(
-                  $locale,
-                  'Already signed'
-                )}{:else if policyRegistrationProfile(device).registration === 'unsupported' || (policyRequired && !policyVerified)}{translate(
-                  $locale,
-                  policyReadinessLabel(device, policyVerified)
-                )}{:else}{translate(
-                  $locale,
-                  device.status === 'ready' || device.status === 'detected'
-                    ? 'Ready'
-                    : device.action === 'unlock'
-                      ? 'Unlock & continue'
-                      : device.action === 'prompt_pin'
-                        ? 'Locked'
-                        : device.action === 'retry'
-                          ? 'Scan again'
-                          : 'Attention'
-                )}{/if}</em
-            ></span
-          ></button
-        >{/each}<button class="hardware-rescan" onclick={scan}
-        ><RefreshCw size={16} /><span
-          ><strong>{translate($locale, 'Rescan devices')}</strong><small
-            >{translate($locale, 'Refresh after connecting or unlocking another signer.')}</small
-          ></span
-        ></button
-      >
-    </div>
+    <HardwareDeviceList
+      {devices}
+      emptyMessage=""
+      onselect={handleHardware}
+      onrescan={scan}
+      showRescan
+      detailedStatus
+      savedSigners={wallet?.cosigners ?? []}
+      eligibleFingerprints={(wallet?.cosigners ?? []).map((signer) => signer.fingerprint)}
+      eligibleDeviceTypes={(wallet?.cosigners ?? [])
+        .map((signer) => signer.deviceType)
+        .filter((deviceType): deviceType is string => Boolean(deviceType))}
+      deviceDisabled={(device, membership) =>
+        membership === 'unrelated' ||
+        deviceHasSigned(device) ||
+        device.action === 'none' ||
+        policyRegistrationProfile(device).registration === 'unsupported'}
+      deviceStateLabel={(device, membership: HardwareWalletMembership) => {
+        const policyRequired = requiresPolicySetup(device);
+        const policyVerified = devicePolicyVerification(device);
+        if (membership !== 'candidate') return hardwareDeviceStateLabel(device, membership);
+        if (deviceHasSigned(device)) return 'Already signed';
+        if (
+          policyRegistrationProfile(device).registration === 'unsupported' ||
+          (policyRequired && !policyVerified)
+        ) {
+          return policyReadinessLabel(device, policyVerified);
+        }
+        return hardwareDeviceStateLabel(device, membership);
+      }}
+    />
   {/if}
   {#if !busy && showColdcardPolicyHelp}<div class="hardware-policy-help">
       <strong>{translate($locale, 'Coldcard must know this wallet policy')}</strong><span

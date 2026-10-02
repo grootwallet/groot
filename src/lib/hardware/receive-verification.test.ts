@@ -25,7 +25,7 @@ describe('receive hardware-verification orchestration', () => {
     ['retry', 'unavailable'],
     ['none', 'unavailable'],
     ['import', 'verify'],
-    ['confirm_empty_passphrase', 'verify']
+    ['confirm_empty_passphrase', 'confirm_standard_wallet']
   ] as const)('maps %s devices to the %s transition', (action, expected) => {
     expect(receiveVerificationIntent(device(action))).toBe(expected);
   });

@@ -59,6 +59,7 @@ const outputRoot = resolve(
     join(repoRoot, 'release-artifacts', commit, buildIdentity.outputDirectory)
 );
 const outputApp = join(outputRoot, buildIdentity.appName);
+const outputDmg = join(outputRoot, `${buildIdentity.appName.replace(/\.app$/, '')}.dmg`);
 
 const digest = (path) => createHash('sha256').update(readFileSync(path)).digest('hex');
 const fail = (message) => {
@@ -128,6 +129,16 @@ try {
   execFileSync('codesign', ['--verify', '--deep', '--strict', '--verbose=2', outputApp], {
     stdio: 'pipe'
   });
+  execFileSync(
+    'node',
+    [
+      'scripts/release/create-macos-dmg.mjs',
+      outputApp,
+      outputDmg,
+      `${buildIdentity.appName.replace(/\.app$/, '')} Functional`
+    ],
+    { cwd: repoRoot, stdio: 'inherit' }
+  );
   const executable = join(outputApp, 'Contents', 'MacOS', 'Groot');
   const buildInfo = [
     `commit=${commit}`,
@@ -141,6 +152,7 @@ try {
   ].join('\n');
   writeFileSync(join(outputRoot, 'BUILD-INFO'), buildInfo, { mode: 0o644 });
   console.log(`Internal ${buildTarget} RC: ${outputApp}`);
+  console.log(`Internal ${buildTarget} RC DMG: ${outputDmg}`);
 } finally {
   rmSync(stageDirectory, { recursive: true, force: true });
 }

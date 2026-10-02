@@ -69,6 +69,7 @@
     "release:unsigned:multi": "bash scripts/release/build-unsigned-multi.sh",
     "release:prepare:signed-hwi": "node scripts/release/prepare-signed-hwi.mjs",
     "release:package:macos:ga": "node scripts/release/package-macos-ga.mjs",
+    "release:create:macos:dmg": "node scripts/release/create-macos-dmg.mjs",
     "release:sbom": "node scripts/release/generate-sbom.mjs",
     "release:compare": "bash scripts/release/compare-unsigned.sh",
     "release:verify:macos": "bash scripts/release/verify-macos-package.sh",

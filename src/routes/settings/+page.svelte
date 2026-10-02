@@ -1698,7 +1698,14 @@
         'The current network stays unchanged on disk. Switching back restores its wallets exactly as they were.'
       )}
     </p>{/if}
-  {#if networkSwitchError}<p class="form-error" role="alert">{networkSwitchError}</p>{/if}
+  {#if networkSwitchError}<WarningNotice
+      tone="danger"
+      icon
+      role="alert"
+      ariaLive="polite"
+      title={translate($locale, 'Network switch failed')}
+      body={networkSwitchError}
+    />{/if}
   <div class="modal-footer">
     <Button
       variant="secondary"

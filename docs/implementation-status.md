@@ -1493,6 +1493,19 @@ backup behavior, stale-input rejection after hardware interaction, strict sats
 parsing, and supply-chain parser hardening. The macOS DMG now also contains an
 Applications link for the conventional drag-to-install flow.
 
+Functional testing then found that the Regtest-only acceptance override was
+being reused for a clean multi-network profile, correctly disabling switching.
+The candidate now has a separate fail-closed `groot-multi-*` temporary-profile
+override that preserves restart-bound switching without accessing the normal
+profile. Hardware pickers use the shared compact three-line device row, retain
+all connected signers, and distinguish exact wallet matches, identities that
+still require proof, and devices proven unrelated to the open wallet. Network
+and receive-verification failures use the shared structured warning component.
+The DMG retains the Applications link and adds a compact branded Finder layout
+with enlarged icons and explicit drag direction. These changes do not alter
+wallet, registry, proposal, descriptor, backup, or network-selection formats
+and have no BIP impact.
+
 This candidate is not merged, signed, notarized, reproducibly built, tagged, or
 released. It must first pass the complete validation harness and an isolated
 unsigned/ad-hoc functional regression campaign. Envelope migration testing may

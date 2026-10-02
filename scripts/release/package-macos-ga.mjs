@@ -8,12 +8,10 @@ import {
   cpSync,
   existsSync,
   lstatSync,
-  mkdtempSync,
   mkdirSync,
   readFileSync,
   readdirSync,
   rmSync,
-  symlinkSync,
   statSync,
   writeFileSync
 } from 'node:fs';
@@ -227,27 +225,7 @@ try {
   const zip = join(output, `Groot-${packageMetadata.version}-macos-arm64.zip`);
   run('ditto', ['-c', '-k', '--keepParent', outputApp, zip]);
   const dmg = join(output, `Groot-${packageMetadata.version}-macos-arm64.dmg`);
-  const dmgRoot = mkdtempSync(join(process.env.TMPDIR ?? '/tmp', 'groot-dmg.'));
-  try {
-    cpSync(outputApp, join(dmgRoot, 'Groot.app'), {
-      recursive: true,
-      preserveTimestamps: true
-    });
-    symlinkSync('/Applications', join(dmgRoot, 'Applications'));
-    run('hdiutil', [
-      'create',
-      '-volname',
-      'Groot',
-      '-srcfolder',
-      dmgRoot,
-      '-ov',
-      '-format',
-      'UDZO',
-      dmg
-    ]);
-  } finally {
-    rmSync(dmgRoot, { recursive: true, force: true });
-  }
+  run('node', ['scripts/release/create-macos-dmg.mjs', outputApp, dmg, 'Groot']);
   run('codesign', ['--force', '--sign', identity, '--timestamp', dmg]);
   const dmgNotarization = submitForNotarization(dmg, notaryProfile);
   run('xcrun', ['stapler', 'staple', dmg]);

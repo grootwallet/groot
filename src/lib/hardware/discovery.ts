@@ -12,13 +12,15 @@ export type SavedHardwareSignerName = {
   deviceType?: string | null;
 };
 
+export type HardwareWalletMembership = 'candidate' | 'unknown' | 'unrelated';
+
 // Discovery is a UI hint, never the full account-key proof performed by Rust.
 // A locked device can withhold its fingerprint regardless of its model/name.
 export function hardwareWalletMembership(
   device: HardwareDevice,
   fingerprints: readonly string[],
   eligibleDeviceTypes: readonly string[] = []
-): 'candidate' | 'unknown' | 'unrelated' {
+): HardwareWalletMembership {
   const fingerprint = device.fingerprint?.trim().toLowerCase();
   if (!fingerprint) {
     const deviceKind = hardwareFamily(device);
@@ -42,10 +44,29 @@ export function hardwareWalletMembershipLabel(
   return membership === 'unrelated'
     ? 'Not part of this wallet'
     : membership === 'unknown'
-      ? 'Unlock to identify'
+      ? 'Wallet match unknown'
       : policyUnverified
         ? 'Policy unverified'
         : '';
+}
+
+export function hardwareDeviceStateLabel(
+  device: HardwareDevice,
+  membership: HardwareWalletMembership,
+  policyUnverified = false
+): string {
+  if (membership === 'unrelated') return 'Not part of this wallet';
+  if (membership === 'unknown') {
+    return device.action === 'prompt_pin'
+      ? 'Locked · wallet match unknown'
+      : 'Wallet match unknown';
+  }
+  if (policyUnverified) return 'Policy unverified';
+  if (device.action === 'prompt_pin') return 'Locked';
+  if (device.action === 'unlock') return 'Unlock required';
+  if (device.action === 'confirm_empty_passphrase') return 'Choose wallet';
+  if (device.status === 'ready' || device.status === 'detected') return 'Ready for this wallet';
+  return 'Attention required';
 }
 
 export function hardwareDeviceDisplayName(

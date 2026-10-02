@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   hardwareDeviceDisplayName,
+  hardwareDeviceStateLabel,
   hardwareWalletMembership,
   hardwareWalletMembershipLabel,
   mergeHardwareDiscovery
@@ -39,8 +40,21 @@ describe('hardware device display names', () => {
   it('keeps matching signer copy quiet unless policy evidence is missing', () => {
     expect(hardwareWalletMembershipLabel('candidate')).toBe('');
     expect(hardwareWalletMembershipLabel('candidate', true)).toBe('Policy unverified');
-    expect(hardwareWalletMembershipLabel('unknown', true)).toBe('Unlock to identify');
+    expect(hardwareWalletMembershipLabel('unknown', true)).toBe('Wallet match unknown');
     expect(hardwareWalletMembershipLabel('unrelated', true)).toBe('Not part of this wallet');
+  });
+  it('keeps each compact state honest about wallet membership', () => {
+    expect(hardwareDeviceStateLabel(device('trezor'), 'unknown')).toBe('Wallet match unknown');
+    expect(
+      hardwareDeviceStateLabel(
+        { ...device('trezor'), action: 'prompt_pin', status: 'needs_pin' },
+        'unknown'
+      )
+    ).toBe('Locked · wallet match unknown');
+    expect(hardwareDeviceStateLabel(device('safe3'), 'unrelated')).toBe('Not part of this wallet');
+    expect(hardwareDeviceStateLabel(device('model-one'), 'candidate')).toBe(
+      'Ready for this wallet'
+    );
   });
   it('never treats a locked device family as proof of wallet membership', () => {
     expect(hardwareWalletMembership(device('trezor'), ['aabbccdd'])).toBe('unknown');

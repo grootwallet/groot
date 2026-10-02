@@ -103,13 +103,28 @@ test('production package binds the exact reproduced payload before signing', () 
     source.indexOf("'stapler', 'staple'") <
       source.indexOf("'scripts/release/verify-macos-package.sh', outputApp")
   );
-  assert.match(source, /mkdtempSync[\s\S]*cpSync\(outputApp, join\(dmgRoot, 'Groot\.app'\)/);
-  assert.match(source, /symlinkSync\('\/Applications', join\(dmgRoot, 'Applications'\)\)/);
+  assert.match(source, /'scripts\/release\/create-macos-dmg\.mjs', outputApp, dmg, 'Groot'/);
   assert.doesNotMatch(source, /codesign[\s\S]{0,200}--deep[\s\S]{0,200}--sign/);
   assert.equal(
     packageJson.scripts['release:package:macos:ga'],
     'node scripts/release/package-macos-ga.mjs'
   );
+});
+
+test('macOS DMG presents a compact branded drag-to-Applications layout', () => {
+  const source = read('./create-macos-dmg.mjs');
+  const background = read('./assets/groot-dmg-background.svg');
+  const renderedBackground = readFileSync(
+    new URL('./assets/groot-dmg-background.png', import.meta.url)
+  );
+  assert.match(source, /symlinkSync\('\/Applications'/);
+  assert.match(source, /set icon size[\s\S]*112/);
+  assert.match(source, /set position of item "Groot\.app"[\s\S]*\{170, 220\}/);
+  assert.match(source, /set position of item "Applications"[\s\S]*\{490, 220\}/);
+  assert.match(source, /groot-dmg-background\.png/);
+  assert.match(background, />Install Groot</);
+  assert.match(background, />Drag the app into Applications</);
+  assert.ok(renderedBackground.length > 10_000);
 });
 
 test('packaged app build uses the same reproducible Rust environment as evidence', () => {
