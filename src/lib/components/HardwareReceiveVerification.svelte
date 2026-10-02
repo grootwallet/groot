@@ -187,7 +187,10 @@
   }
 
   async function chooseDevice(device: HardwareDevice, pinResolved = false) {
-    if (hardwareWalletMembership(device, eligibleFingerprints, eligibleDeviceTypes) === 'unrelated')
+    if (
+      hardwareWalletMembership(device, eligibleFingerprints, eligibleDeviceTypes, savedSigners) ===
+      'unrelated'
+    )
       return;
     if (pinResolved) {
       await verifyAddress(device);

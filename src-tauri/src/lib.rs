@@ -133,6 +133,12 @@ pub fn run() {
             initialize_network(app.handle())?;
             let lock = process_lock::ProcessLock::acquire_for_app(app.handle())?;
             app.manage(lock);
+            #[cfg(desktop)]
+            if let Some(window) = app.get_webview_window("main") {
+                window.show()?;
+                window.unminimize()?;
+                window.set_focus()?;
+            }
             let state = app.state::<wallet::AppState>();
             wallet::diagnostics::record(
                 app.handle(),

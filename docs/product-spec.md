@@ -35,8 +35,11 @@ address, with **Show address details** revealing the full copyable address and
 derivation. It always uses the discard target, not the currently featured request.
 Receive signer selection lists all discovered families; unrelated identities
 remain disabled. A fingerprint-less device from a family absent from the saved
-wallet is also disabled without initiating unlock; only an eligible same-family
-device says **Unlock to identify** until Rust proves its exact account identity.
+wallet is also disabled without initiating unlock. When passive inventory and
+every eligible saved signer both expose an exact model, a different model is
+disabled as **Not part of this wallet** and the matching model says **Select to
+confirm wallet**. Otherwise an eligible same-family device remains unknown until
+Rust proves its exact account identity.
 Matching signers omit technical membership prose and show **Policy unverified**
 only when required saved policy evidence is absent.
 
@@ -63,8 +66,10 @@ the configured node, not an external explorer. Existing proposals are not delete
 
 Hardware pickers for an existing wallet distinguish connection readiness from
 wallet membership. A non-matching discovered fingerprint is unavailable and
-labelled **Not part of this wallet**. A missing fingerprint is **Wallet membership
-unknown · unlock to identify**, never inferred to match from its brand/model.
+labelled **Not part of this wallet**. A missing fingerprint remains unknown unless
+exact passive model evidence can rule it out or identify it as the only compatible
+saved model; compatibility is presented as **Select to confirm wallet**, never as
+proof of membership or readiness.
 A matching fingerprint is only a candidate: native full account-key proof remains
 mandatory before address display, policy verification, or signing. Public backup
 recovery accepts importable text/BSMS/JSON, not the human-readable PDF export.

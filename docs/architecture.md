@@ -12,8 +12,11 @@ health, and snapshot reads; an offline status failure cannot be misreported as
 an HWI identity failure. Persisted representations and signer identity checks
 are unchanged.
 
-The native boundary owns an app-scoped `diagnostics-v1.jsonl` file separate from
-wallet databases and registry state. Call sites select closed event/outcome enums;
+The native boundary owns a current-network `diagnostics-v1.jsonl` file inside the
+active app-data namespace, separate from wallet databases and registry state.
+Isolated multi-network launches therefore never read or write the normal profile,
+and legacy shared records are filtered to the active network before display or
+export. Call sites select closed event/outcome enums;
 the renderer cannot submit log messages or context. Fixed scalar metadata and a
 stable-error allowlist are serialized before IPC, with unknown errors reduced to
 `internal_error`. Allowlisted failures may add a fixed safe explanation and closed,

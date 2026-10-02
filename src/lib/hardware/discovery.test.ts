@@ -78,6 +78,36 @@ describe('hardware device display names', () => {
       'unknown'
     );
   });
+  it('distinguishes exact Trezor models before interactive identity proof', () => {
+    const savedSafe3 = [{ fingerprint: 'aabbccdd', label: 'Trezor Safe 3', deviceType: 'trezor' }];
+    expect(
+      hardwareWalletMembership(
+        { ...device('model-one'), label: 'Trezor Model One', model: 'trezor' },
+        ['aabbccdd'],
+        ['trezor'],
+        savedSafe3
+      )
+    ).toBe('unrelated');
+    expect(
+      hardwareWalletMembership(
+        { ...device('safe-3'), label: 'Trezor Safe 3', model: 'trezor' },
+        ['aabbccdd'],
+        ['trezor'],
+        savedSafe3
+      )
+    ).toBe('compatible');
+    expect(hardwareDeviceStateLabel(device('safe-3'), 'compatible')).toBe(
+      'Select to confirm wallet'
+    );
+    expect(
+      hardwareWalletMembership(
+        { ...device('model-one'), label: 'Trezor Model One', model: 'trezor' },
+        ['aabbccdd', '11223344'],
+        ['trezor'],
+        [...savedSafe3, { fingerprint: '11223344', label: 'Alice', deviceType: 'trezor' }]
+      )
+    ).toBe('unknown');
+  });
   it('uses the saved user name after an exact fingerprint match', () => {
     const jade = { ...device('jade'), fingerprint: '1B9B9B49', label: 'jade' };
     expect(

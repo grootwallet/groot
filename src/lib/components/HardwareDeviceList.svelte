@@ -73,7 +73,8 @@
                 ? eligibleDeviceTypes
                 : savedSigners
                     .map((signer) => signer.deviceType)
-                    .filter((deviceType): deviceType is string => Boolean(deviceType))
+                    .filter((deviceType): deviceType is string => Boolean(deviceType)),
+              savedSigners
             )
           : 'candidate')}
       <button
@@ -87,7 +88,7 @@
             >{/if}<em
             class:ready={membership === 'candidate' &&
               (device.status === 'ready' || device.status === 'detected')}
-            class:attention={membership !== 'candidate' ||
+            class:attention={(membership !== 'candidate' && membership !== 'compatible') ||
               device.action === 'prompt_pin' ||
               device.action === 'confirm_empty_passphrase'}
             >{translate($locale, deviceStateLabel(device, membership))}</em

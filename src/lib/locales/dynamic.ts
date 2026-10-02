@@ -36,6 +36,10 @@ export const dynamicCopy = {
     fr: 'Ne fait pas partie de ce portefeuille',
     es: 'No forma parte de esta cartera'
   },
+  'Select to confirm wallet': {
+    fr: 'Sélectionnez pour confirmer le portefeuille',
+    es: 'Selecciona para confirmar la cartera'
+  },
   'Unlock to identify': {
     fr: 'Déverrouillez pour identifier',
     es: 'Desbloquea para identificar'
