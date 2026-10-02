@@ -152,11 +152,11 @@ const pinnedPolicySources = new Map([
   ],
   [
     'scripts/release/create-macos-dmg.mjs',
-    '08f51060ec80b00b8810b621ce1529a6f99b5d3c5d3b422bbdfdeeb787aa50bd'
+    'b306fb9b1dedc3e5d33ebfcbcae2b175e7751a230d05d52a7d00dd12c88137db'
   ],
   [
     'scripts/release/assets/groot-dmg-background.svg',
-    'e0372faed535958a61e54eeb1a0bf05bded24e144bef91065c5d9f3a7b027dc2'
+    '6dd2ade8c4028b33122020efaf41d1fb1399dd0f7f8f7c69af4ac7f6afeebadd'
   ],
   [
     'scripts/release/build-packaged-macos-app.sh',

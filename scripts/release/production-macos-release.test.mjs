@@ -118,9 +118,9 @@ test('macOS DMG presents a compact branded drag-to-Applications layout', () => {
     new URL('./assets/groot-dmg-background.png', import.meta.url)
   );
   assert.match(source, /symlinkSync\('\/Applications'/);
-  assert.match(source, /set icon size[\s\S]*112/);
-  assert.match(source, /set position of item "Groot\.app"[\s\S]*\{170, 220\}/);
-  assert.match(source, /set position of item "Applications"[\s\S]*\{490, 220\}/);
+  assert.match(source, /set icon size[\s\S]*104/);
+  assert.match(source, /set position of item "Groot\.app"[\s\S]*\{285, 205\}/);
+  assert.match(source, /set position of item "Applications"[\s\S]*\{615, 205\}/);
   assert.match(source, /groot-dmg-background\.png/);
   assert.match(background, />Install Groot</);
   assert.match(background, />Drag the app into Applications</);
