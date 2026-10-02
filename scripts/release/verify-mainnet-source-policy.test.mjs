@@ -26,7 +26,9 @@ fn main() {
 
 test('pins every reviewed mainnet-critical source byte', () => {
   const read = (path) => readFileSync(`${repoRoot}${path}`, 'utf8');
-  assert.doesNotThrow(() => validateMainnetSourcePolicy(read));
+  const readBytes = (path) => readFileSync(`${repoRoot}${path}`);
+  assert.doesNotThrow(() => validateMainnetSourcePolicy(read, readBytes));
+  assert.throws(() => validateMainnetSourcePolicy(read), /requires a binary-safe source reader/);
   for (const target of [
     'src/lib/config.ts',
     'src-tauri/src/secure_store.rs',
@@ -35,12 +37,22 @@ test('pins every reviewed mainnet-critical source byte', () => {
   ]) {
     assert.throws(
       () =>
-        validateMainnetSourcePolicy((path) =>
-          path === target ? `${read(path)}\n// unauthorized mutation` : read(path)
+        validateMainnetSourcePolicy(
+          (path) => (path === target ? `${read(path)}\n// unauthorized mutation` : read(path)),
+          readBytes
         ),
       /changed after the mainnet-candidate policy snapshot/
     );
   }
+  assert.throws(
+    () =>
+      validateMainnetSourcePolicy(read, (path) =>
+        path === 'scripts/release/assets/groot-dmg-background.png'
+          ? Buffer.concat([readBytes(path), Buffer.from([0])])
+          : readBytes(path)
+      ),
+    /groot-dmg-background\.png changed after the mainnet-candidate policy snapshot/
+  );
 });
 
 test('browser gate accepts only the four reviewed build identities', () => {

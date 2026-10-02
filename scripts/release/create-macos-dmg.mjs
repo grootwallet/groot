@@ -1,14 +1,16 @@
 #!/usr/bin/env node
 
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import {
-  copyFileSync,
   cpSync,
   existsSync,
   mkdtempSync,
   mkdirSync,
+  readFileSync,
   rmSync,
-  symlinkSync
+  symlinkSync,
+  writeFileSync
 } from 'node:fs';
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -30,6 +32,13 @@ if (!appArgument || !outputArgument || !isAbsolute(appArgument) || !isAbsolute(o
 }
 const app = resolve(appArgument);
 const output = resolve(outputArgument);
+const backgroundBytes = readFileSync(
+  join(repoRoot, 'scripts/release/assets/groot-dmg-background.png')
+);
+const backgroundDigest = createHash('sha256').update(backgroundBytes).digest('hex');
+if (backgroundDigest !== 'a6360c8591eb889ebfbd07cf185db40b8d46e438baa6ae09efc6daf54c941cd0') {
+  fail('the DMG background does not match the reviewed release asset');
+}
 if (!app.endsWith('.app') || !existsSync(app)) fail('the app bundle is missing');
 if (existsSync(output)) fail(`output already exists: ${output}`);
 if (volumeName !== 'Groot') fail('the release DMG volume name must be exactly Groot');
@@ -44,13 +53,10 @@ try {
   mkdirSync(join(staging, '.background'), { mode: 0o755 });
   cpSync(app, join(staging, 'Groot.app'), { recursive: true, preserveTimestamps: true });
   symlinkSync('/Applications', join(staging, 'Applications'));
-  copyFileSync(
-    join(repoRoot, 'scripts/release/assets/groot-dmg-background.png'),
-    join(staging, '.background/groot-dmg-background.png')
-  );
-  copyFileSync(
-    join(repoRoot, 'scripts/release/assets/groot-dmg.DS_Store'),
-    join(staging, '.DS_Store')
+  writeFileSync(join(staging, '.background/groot-dmg-background.png'), backgroundBytes);
+  writeFileSync(
+    join(staging, '.DS_Store'),
+    readFileSync(join(repoRoot, 'scripts/release/assets/groot-dmg.DS_Store'))
   );
   run('hdiutil', [
     'create',

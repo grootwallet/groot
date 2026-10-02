@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { parseDocument } from 'yaml';
 
 const root = new URL('../../', import.meta.url);
 const rootPath = fileURLToPath(root);
@@ -48,33 +49,81 @@ for (const dependency of cargo.packages[0].dependencies) {
   }
 }
 
-const workflow = read('.github/workflows/ci.yml');
-const parseWorkflowAction = (line) => {
-  const candidate = line.trimStart();
-  if (candidate.startsWith('#') || !/\buses\s*:/.test(line)) return null;
-  const match = line.match(/^\s*(?:-\s*)?uses\s*:\s*(["']?)([^\s#"']+)\1(?:\s+#.*)?\s*$/);
-  if (!match) fail(`cannot parse GitHub Action reference: ${line.trim()}`);
-  return match[2];
+const workflowActions = (source, label) => {
+  const document = parseDocument(source, {
+    maxAliasCount: 100,
+    prettyErrors: false,
+    uniqueKeys: true
+  });
+  if (document.errors.length > 0) fail(`cannot parse ${label}: ${document.errors[0].message}`);
+  let rootValue;
+  try {
+    rootValue = document.toJS({ maxAliasCount: 100 });
+  } catch (error) {
+    fail(`cannot resolve ${label}: ${error instanceof Error ? error.message : error}`);
+  }
+  const actions = [];
+  const visited = new WeakSet();
+  const visit = (value) => {
+    if (!value || typeof value !== 'object' || visited.has(value)) return;
+    visited.add(value);
+    if (Array.isArray(value)) {
+      for (const item of value) visit(item);
+      return;
+    }
+    for (const [key, child] of Object.entries(value)) {
+      if (key === 'uses') {
+        if (typeof child !== 'string' || child.trim().length === 0) {
+          fail(`${label} contains a non-string GitHub Action reference`);
+        }
+        actions.push(child.trim());
+      }
+      visit(child);
+    }
+  };
+  visit(rootValue);
+  return actions;
 };
 
-for (const [line, expected] of [
-  ['  - uses: owner/action@0123456789abcdef0123456789abcdef01234567', true],
-  ['  - uses: owner/action@0123456789abcdef0123456789abcdef01234567 # v1', true],
-  ['      uses: owner/action@0123456789abcdef0123456789abcdef01234567', true],
-  ['    uses: owner/repo/.github/workflows/ci.yml@v1', false],
-  ['  - uses: owner/action@v1 # mutable', false],
-  ['  - uses: owner/action@0123456', false]
+const immutableAction = 'owner/action@0123456789abcdef0123456789abcdef01234567';
+const isImmutableAction = (action) => /@[a-f0-9]{40}$/.test(action);
+for (const [source, label] of [
+  [`steps:\n  - uses: ${immutableAction}`, 'plain key'],
+  [`steps:\n  - "uses": "${immutableAction}"`, 'quoted key'],
+  [`steps: [{ "uses": ${immutableAction} }]`, 'flow mapping'],
+  [`steps:\n  - "u\\u0073es": ${immutableAction}`, 'escaped key'],
+  [`steps:\n  - &action\n    uses: ${immutableAction}\n  - *action`, 'alias']
 ]) {
-  const action = parseWorkflowAction(line);
-  if ((action !== null && /@[a-f0-9]{40}$/.test(action)) !== expected) {
-    fail(`internal GitHub Action pin parser regression for: ${line.trim()}`);
+  const actions = workflowActions(source, `internal ${label} fixture`);
+  if (actions.length !== 1 || actions[0] !== immutableAction) {
+    fail(`internal GitHub Action parser regression for ${label}`);
   }
 }
-for (const line of workflow.split('\n')) {
-  const action = parseWorkflowAction(line);
-  if (action && !/@[a-f0-9]{40}$/.test(action))
-    fail(`GitHub Action is not immutable-SHA pinned: ${action}`);
+for (const [source, label] of [
+  ['steps: [{ uses: owner/action@v1 }]', 'mutable flow mapping'],
+  ['steps:\n  - "u\\u0073es": owner/action@v1', 'mutable escaped key'],
+  ['steps:\n  - &action\n    uses: owner/action@v1\n  - *action', 'mutable alias']
+]) {
+  const actions = workflowActions(source, `internal ${label} fixture`);
+  if (actions.length !== 1 || isImmutableAction(actions[0])) {
+    fail(`internal GitHub Action parser regression for ${label}`);
+  }
 }
+
+const workflowDirectory = new URL('.github/workflows/', root);
+const workflowFiles = readdirSync(workflowDirectory, { withFileTypes: true })
+  .filter((entry) => entry.isFile() && /\.ya?ml$/i.test(entry.name))
+  .map((entry) => entry.name)
+  .sort();
+if (workflowFiles.length === 0) fail('no GitHub Actions workflows were found');
+for (const file of workflowFiles) {
+  for (const action of workflowActions(read(`.github/workflows/${file}`), file)) {
+    if (!isImmutableAction(action)) {
+      fail(`GitHub Action is not immutable-SHA pinned in ${file}: ${action}`);
+    }
+  }
+}
+const workflow = read('.github/workflows/ci.yml');
 if (!/^permissions:\n  contents: read$/m.test(workflow))
   fail('CI default permissions must remain contents: read');
 if (/persist-credentials:\s*true/.test(workflow)) fail('CI checkout credentials must not persist');

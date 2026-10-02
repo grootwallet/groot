@@ -124,9 +124,15 @@ test('macOS DMG presents a compact branded drag-to-Applications layout', () => {
   assert.match(source, /groot-dmg\.DS_Store/);
   assert.doesNotMatch(source, /osascript|tell application "Finder"/);
   assert.match(source, /groot-dmg-background\.png/);
+  assert.match(source, /the DMG background does not match the reviewed release asset/);
+  assert.match(source, /writeFileSync\([^;]+backgroundBytes\)/s);
   assert.match(background, />Install Groot</);
   assert.match(background, />Drag the app into Applications</);
   assert.ok(renderedBackground.length > 10_000);
+  assert.equal(
+    createHash('sha256').update(renderedBackground).digest('hex'),
+    'a6360c8591eb889ebfbd07cf185db40b8d46e438baa6ae09efc6daf54c941cd0'
+  );
   assert.equal(finderLayout.length, 10_244);
   assert.equal(
     createHash('sha256').update(finderLayout).digest('hex'),

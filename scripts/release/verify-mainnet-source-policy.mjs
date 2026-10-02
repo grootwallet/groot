@@ -15,7 +15,7 @@ const pinnedPolicySources = new Map([
   ['src-tauri/src/session.rs', '82da6d3a2643710aaa0974f69f0fb7c932172a401ecf33c186e440c8170f35e0'],
   ['.env.mainnet', '1623f3f97de588daea2bbeae1f9c56ebc896b6bc2c22ac238563b46b688ced85'],
   ['.env.multi', '33fc3d5022968d9eaa25bfe749c0b01691c0570611a65255100718d2c50df723'],
-  ['package.json', 'f8c983c809dc146a3978a339b1659b1165a07b307b8049d13a34fb1d62fb2e78'],
+  ['package.json', 'a97383a44d530e7a0d11a824b7d4f798b6bf016e7d195fcbf239a2ff51697827'],
   ['src-tauri/src/lib.rs', 'f91975ed53e93d004eb46818fb7d73fb8aa5a710eb2d9494c8d563c02e00a705'],
   [
     'src-tauri/src/managed_gateway.rs',
@@ -152,7 +152,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'scripts/release/create-macos-dmg.mjs',
-    '8e9db267915578612d805f263db912531aec40eb0fb8831aa2a233970fe804ad'
+    'e67d4a578a5862453d9870443f1256b0853bcbba359197bed95c78f45e975d9b'
   ],
   [
     'scripts/release/assets/groot-dmg-background.svg',
@@ -282,9 +282,25 @@ const pinnedPolicySources = new Map([
   ]
 ]);
 
-export function validatePinnedPolicySources(read) {
+const pinnedBinaryPolicySources = new Map([
+  [
+    'scripts/release/assets/groot-dmg-background.png',
+    'a6360c8591eb889ebfbd07cf185db40b8d46e438baa6ae09efc6daf54c941cd0'
+  ]
+]);
+
+export function validatePinnedPolicySources(read, readBytes) {
+  if (typeof readBytes !== 'function') {
+    throw new Error('the mainnet source policy requires a binary-safe source reader');
+  }
   for (const [path, expected] of pinnedPolicySources) {
     const actual = createHash('sha256').update(read(path)).digest('hex');
+    if (actual !== expected) {
+      throw new Error(`${path} changed after the mainnet-candidate policy snapshot was reviewed`);
+    }
+  }
+  for (const [path, expected] of pinnedBinaryPolicySources) {
+    const actual = createHash('sha256').update(readBytes(path)).digest('hex');
     if (actual !== expected) {
       throw new Error(`${path} changed after the mainnet-candidate policy snapshot was reviewed`);
     }
@@ -545,8 +561,8 @@ function crateRustSources() {
   return sources;
 }
 
-export function validateMainnetSourcePolicy(read) {
-  validatePinnedPolicySources(read);
+export function validateMainnetSourcePolicy(read, readBytes) {
+  validatePinnedPolicySources(read, readBytes);
   validateBrowserNetworkSource(read('src/lib/config.ts'));
   validateBuildScriptSource(read('src-tauri/build.rs'));
   validateReleasePolicySource(read('src-tauri/src/release_policy.rs'));
@@ -557,7 +573,10 @@ export function validateMainnetSourcePolicy(read) {
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
-    validateMainnetSourcePolicy((path) => readFileSync(resolve(repoRoot, path), 'utf8'));
+    validateMainnetSourcePolicy(
+      (path) => readFileSync(resolve(repoRoot, path), 'utf8'),
+      (path) => readFileSync(resolve(repoRoot, path))
+    );
     console.log(
       'Mainnet source policy: activation is confined to fixed builds and the restart-bound internal multi-network identity.'
     );
