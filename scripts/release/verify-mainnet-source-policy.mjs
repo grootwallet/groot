@@ -15,7 +15,7 @@ const pinnedPolicySources = new Map([
   ['src-tauri/src/session.rs', '82da6d3a2643710aaa0974f69f0fb7c932172a401ecf33c186e440c8170f35e0'],
   ['.env.mainnet', '1623f3f97de588daea2bbeae1f9c56ebc896b6bc2c22ac238563b46b688ced85'],
   ['.env.multi', '33fc3d5022968d9eaa25bfe749c0b01691c0570611a65255100718d2c50df723'],
-  ['package.json', '34c22d09d1ab4aec5e604a6fba91ca771510858ca4f8b55c6cdd4e9162a089ed'],
+  ['package.json', 'e1d83d61e2531ea64dcb941739fc4bfc7dca6194b91927d68e9d67817fbc45ac'],
   ['src-tauri/src/lib.rs', 'c10997e4a806be08742fde042200d57ae479a2a458a234bc7b8344b408c34c2a'],
   [
     'src-tauri/src/managed_gateway.rs',
@@ -25,11 +25,11 @@ const pinnedPolicySources = new Map([
     'scripts/network/check-native-builds.sh',
     '3a984ab7ef5f0d7c29d689d2ab39e114d61f1db0efd29a632cea980d7284bef4'
   ],
-  ['src/lib/config.ts', 'b3db968449ada8cb1ee021ea44ad4cfbf97f04e1a1f24344e82c0cf8d7e5ece9'],
+  ['src/lib/config.ts', '8b6d65ce63fc89423564072ceebf3509dc0ec2c48dac03ee14cb1172ad2045f7'],
   ['src-tauri/build.rs', 'ed1866cf57502e61199d75df9ff407b5ed0be54043ad94525ef6579ad98dfcb7'],
   [
     'src-tauri/src/release_policy.rs',
-    '98a4294d987279273e44b3be71d10aec5507394d7eb2aa7e94a8eab71f3ad12b'
+    '704afcc72ef43f3d51baafd12993c2f3f912c2ca7b45eceadc648474aa1f9c1c'
   ],
   [
     'src-tauri/src/build_network.rs',
@@ -52,7 +52,16 @@ const pinnedPolicySources = new Map([
   ['src-tauri/src/recovery.rs', '96eba2aaea0461d8ed067513c044f85f8845837dbf584eb3f93e6969ec5670dc'],
   ['src-tauri/src/network.rs', 'dcf011fb789a0b690b1832a9245df5fc0199318f03a820d10f9a3b1c90f5d76b'],
   ['src-tauri/src/registry.rs', '343aea20f5d09df6abd5c9fdba3b093efc6729c9ece8f180b27a150061753a18'],
-  ['src-tauri/src/wallet.rs', 'b3fdb51b0913ed5096b34a2b04ff19caf3726221a57fa197d6b4d21a4dd3c310'],
+  [
+    'src-tauri/src/secure_store.rs',
+    'aa0acfd33b41716f1d010fba1c7a83e5f50eab2be9def3b9a2d211360c16ebfe'
+  ],
+  [
+    'src-tauri/src/native_backup/macos.rs',
+    'bd019caa540dcf49428c3665c3ceb1e6c6699b2d53e33f4a6a51899194bb69ed'
+  ],
+  ['src-tauri/src/proposal.rs', '9d90a4910b2c0cf91320c59e49f9a8e97e59fca4e4612edcc7dbee6fbaef63ba'],
+  ['src-tauri/src/wallet.rs', 'cd9779728e3c6b12b0c9764be73119f07573f2036ce7e4cc327c902dffa80296'],
   [
     'src-tauri/src/wallet/diagnostics.rs',
     '0378b4dadf9698b2a6e04361950d51c65390e175c0c7fc50d88ac6deb2de8b5f'
@@ -67,11 +76,11 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src-tauri/src/wallet/export_commands.rs',
-    '89af70ad5cf3f5c21ce0a7c1a24a9645a915550e19804664f96e89a399c6dc01'
+    'df58ff8095a3db9b51fa7d857aaea4d4317f1d5432783247a0074070afdebd21'
   ],
   [
     'src-tauri/src/wallet/hardware_commands.rs',
-    '0f55b09c5a526e0f626373f66b812c1d93418cacac37c7dcd20eeba6cda92c0e'
+    '70026bcc60d626bb0fb939881f85a94eaaa688090ee9290f01b6990cfa08b125'
   ],
   [
     'src-tauri/src/wallet/label_interchange.rs',
@@ -87,7 +96,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src-tauri/src/wallet/profile_commands.rs',
-    'ddb069b53fe7c7b0df8690dd20dd551d81ffbf63d09259a4ed80b6c8358e34b1'
+    '5d6e5a34d3d43995fe5d8dc097a94d7354face4003ccf643b79347baaa1a2500'
   ],
   [
     'src-tauri/src/wallet/payment_draft_commands.rs',
@@ -95,7 +104,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src-tauri/src/wallet/proposal_review.rs',
-    '31fc39bf7ce25c99345c2584c186e52ae7e6b036c736d7b2d29d731dd9214b24'
+    '4ad22b36a572493f24ec1022bc9c5f9eedb322357f35c7436e782f3cbcc0fbab'
   ],
   [
     'src-tauri/src/wallet/recovery_scan.rs',
@@ -103,11 +112,11 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src-tauri/src/wallet/transaction_commands.rs',
-    '4e6b17435e8fc8591ffd166e612f29ff5934df9647584fb2a53c020a8fe84cb1'
+    'c144e23f962f07fdb7cb23382ea370538af1b560f95a0385ce251b3cb2be60ea'
   ],
   [
     'src-tauri/src/wallet/verification_evidence.rs',
-    '18e7dabda9b589338794dfa60ffd5081a2174e05d1d4fdcf2518469eda886c28'
+    '4ef0f98bc226851269cbdb5c41afed5031c6da150dff872b2a870d685e8670b6'
   ],
   [
     'src-tauri/tauri.mainnet.conf.json',
@@ -139,7 +148,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'scripts/release/package-macos-ga.mjs',
-    'c933a003591649cc342044f5263563174258a5d0b354011d223333a60454f2d6'
+    '20212e213247eeef001cda953eff7c2d93047d5a838f8f7d14ac5b816a0a1436'
   ],
   [
     'scripts/release/build-packaged-macos-app.sh',

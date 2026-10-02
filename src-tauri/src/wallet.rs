@@ -203,16 +203,23 @@ pub async fn public_backup_pdf_save(
 #[cfg(not(target_os = "macos"))]
 #[tauri::command]
 pub fn public_backup_pdf_prepare(
+    app: AppHandle,
+    state: State<'_, AppState>,
     window: WebviewWindow,
     suggested_filename: String,
 ) -> ApiResult<PendingPdfExportDto> {
-    export_commands::public_backup_pdf_prepare(window, suggested_filename)
+    export_commands::public_backup_pdf_prepare(app, state, window, suggested_filename)
 }
 
 #[cfg(not(target_os = "macos"))]
 #[tauri::command]
-pub fn public_backup_pdf_save(save_token: String, markup: String) -> ApiResult<SavedFileDto> {
-    export_commands::public_backup_pdf_save(save_token, markup)
+pub fn public_backup_pdf_save(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    save_token: String,
+    markup: String,
+) -> ApiResult<SavedFileDto> {
+    export_commands::public_backup_pdf_save(app, state, save_token, markup)
 }
 
 fn hwi_cli(app: &AppHandle) -> ApiResult<HwiCli> {
@@ -4102,9 +4109,20 @@ fn broadcast_transaction_with_rpc(rpc: &Client, transaction: &Transaction) -> Ap
             let in_mempool = rpc.get_mempool_entry(&expected).is_ok();
             let confirmed_in_active_chain = rpc
                 .get_raw_transaction_info(&expected, None)
-                .is_ok_and(|transaction| {
-                    transaction.confirmations.unwrap_or_default() > 0
-                        && transaction.in_active_chain.unwrap_or(true)
+                .ok()
+                .filter(|transaction| {
+                    transaction.txid == expected
+                        && transaction.confirmations.unwrap_or_default() > 0
+                })
+                .and_then(|transaction| transaction.blockhash)
+                .and_then(|blockhash| {
+                    rpc.get_raw_transaction_info(&expected, Some(&blockhash))
+                        .ok()
+                })
+                .is_some_and(|transaction| {
+                    transaction.txid == expected
+                        && transaction.confirmations.unwrap_or_default() > 0
+                        && transaction.in_active_chain == Some(true)
                 });
             if in_mempool || confirmed_in_active_chain {
                 Ok(expected)
@@ -4841,7 +4859,7 @@ fn decrypt_mnemonic(app: &AppHandle, credential: &str) -> ApiResult<Mnemonic> {
     let version = serde_json::from_str::<serde_json::Value>(&encoded)
         .ok()
         .and_then(|value| value.get("version").and_then(|version| version.as_u64()));
-    if matches!(version, Some(2 | 3)) {
+    if matches!(version, Some(2..=4)) {
         let plaintext = secure_store::load(&path, credential).map_err(secure_store_error)?;
         return parse_mnemonic_bytes(plaintext);
     }
@@ -5305,7 +5323,7 @@ fn verify_multisig_credential(app: &AppHandle, credential: &str) -> ApiResult<()
     let version = serde_json::from_str::<serde_json::Value>(&encoded)
         .ok()
         .and_then(|value| value.get("version").and_then(|version| version.as_u64()));
-    let mut plaintext = if matches!(version, Some(2 | 3)) {
+    let mut plaintext = if matches!(version, Some(2..=4)) {
         secure_store::load(&path, credential).map_err(secure_store_error)?
     } else {
         let secret: EncryptedSecret = serde_json::from_str(&encoded).map_err(internal)?;

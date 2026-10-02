@@ -18,10 +18,23 @@ Rust/Tauri is trusted for key derivation, credential verification, descriptor pa
 - Optional supplemental entropy accepts only 128–256 `H`/`T` coin outcomes or 50–100 `1`–`6` die outcomes. Rust bounds and validates the transcript, hashes its source/count/outcomes with explicit domain separation, and combines that digest with the independently generated 32-byte OS value through a second domain-separated SHA-256 extraction. The OS call remains mandatory and its value never enters the webview. Supplemental transcripts do enter the webview/IPC and therefore cannot compensate for a compromised renderer or host; they are cleared after every attempt, never persisted/logged, and are not assigned a guaranteed entropy claim by Groot.
 - Secret-envelope data keys, salts, and AEAD nonces use the same fallible OS CSPRNG boundary. Failure aborts secure storage with `secure_storage_unavailable`; it never reuses a value or substitutes application-generated randomness.
 - No generated mnemonic, seed, xprv, private descriptor, or decrypted signing material crosses into the webview. Deterministic browser fixtures contain no production secret.
-- Secret envelopes require the credential-derived Argon2id key. A copied encrypted profile is intentionally portable and therefore permits offline credential guessing. New software wallets require a minimum 16-character passphrase without composition rules; recovery and existing-wallet operations accept exact historical passphrases. Platform-calibrated KDF review, unpredictable credentials, full-disk encryption, and host access control remain required defense in depth.
+- Secret envelopes require the credential-derived Argon2id key. Version 4
+  stores and strictly validates its 64 MiB, three-iteration, one-lane profile;
+  authenticated v2/v3 envelopes migrate atomically after successful unlock.
+  Migration is upgrade-compatible but deliberately not downgrade-compatible.
+  A copied encrypted profile is intentionally portable and therefore permits
+  offline credential guessing. New software wallets require a minimum
+  16-character passphrase without composition rules; recovery and existing-
+  wallet operations accept exact historical passphrases. Platform-calibrated
+  KDF review, unpredictable credentials, full-disk encryption, and host access
+  control remain required defense in depth.
 - Credentials are never logged, included in analytics, persisted in plaintext, or retained after use. Native credential inputs are bounded, every credential-bearing Svelte route clears its field after success, failure, and component teardown, and CI rejects production logging/telemetry sinks or an analytics/crash-reporting dependency until explicitly reviewed.
 - Descriptor imports parse in Rust, require checksums on export, preserve origins, reject secret keys, and use a configured network.
 - Every transaction summary comes from the actual PSBT. Recipient amount and stored fee must match it exactly, and every other output must be proven wallet-controlled before review, signing, or broadcast. Imported partial PSBTs must match the stored proposal before merging, and every ECDSA partial signature must verify against the actual input sighash before it can count, merge, persist, or appear in progress.
+- Software signing replaces PSBT prevout metadata with canonical wallet history
+  and fails on missing, duplicate, or mismatched inputs. External-device signing
+  performs a second serialized coin-availability check after device interaction
+  and before merging or persisting any returned signature.
 - Address revelation fails closed before the next external derivation index would exceed the configured recoverable gap. Transaction preparation applies the same rule to the actual internal change output, preventing canceled proposals from pushing a later broadcast beyond recovery lookahead. A user cannot lower the limit below the longest already-revealed receive or change run.
 - Address reveal and immutable label persistence are atomic. Discard retires presentation only.
 - SQLite state and notification/proposal markers use atomic persistence, owner-only files on Unix, a bounded busy timeout, foreign-key enforcement, `trusted_schema=OFF`, and SQLite defensive mode. Proposal preparation commits the BDK changeset, proposal row, and optional acceleration lineage together; accepted broadcast status and its notification are likewise committed together. Notifications remain pending until explicit acknowledgement.

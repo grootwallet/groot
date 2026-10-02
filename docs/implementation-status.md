@@ -1479,3 +1479,23 @@ unchanged; no migration is required. It has no BIP support impact. The existing
 `76fb54e8` two-machine result is exact fixed-Mainnet supporting evidence, not a
 substitute for the required final multi-network reproduction and signed-package
 acceptance campaign.
+
+## 2026-10-02 v0.4.96 hardening candidate
+
+The v0.4.96 work is isolated from the published v0.4.95 prerelease on
+`codex/v0.4.96`. It ports only the reviewed hardening changes onto the exact
+v0.4.95 source commit while retaining the corrected multi-network release
+pipeline and dependency set. The candidate adds portable envelope v4 with
+authenticated v2/v3 migration, canonical software-signing prevout binding,
+final-PSBT Mainnet fee and total-debit caps, strict active-chain broadcast
+proof, Mainnet multisig quorum intersection, sparse-fee capping, bounded native
+backup behavior, stale-input rejection after hardware interaction, strict sats
+parsing, and supply-chain parser hardening. The macOS DMG now also contains an
+Applications link for the conventional drag-to-install flow.
+
+This candidate is not merged, signed, notarized, reproducibly built, tagged, or
+released. It must first pass the complete validation harness and an isolated
+unsigned/ad-hoc functional regression campaign. Envelope migration testing may
+use only disposable profiles or copies because a v4 write cannot be opened by
+older Groot versions. The stable v0.4.95 prerelease, tag, assets, and evidence
+remain unchanged.

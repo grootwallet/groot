@@ -27,15 +27,20 @@ fn main() {
 test('pins every reviewed mainnet-critical source byte', () => {
   const read = (path) => readFileSync(`${repoRoot}${path}`, 'utf8');
   assert.doesNotThrow(() => validateMainnetSourcePolicy(read));
-  assert.throws(
-    () =>
-      validateMainnetSourcePolicy((path) =>
-        path === 'src/lib/config.ts'
-          ? `${read(path)}\nSUPPORTED_NETWORKS.push(hidden);`
-          : read(path)
-      ),
-    /changed after the mainnet-candidate policy snapshot/
-  );
+  for (const target of [
+    'src/lib/config.ts',
+    'src-tauri/src/secure_store.rs',
+    'src-tauri/src/native_backup/macos.rs',
+    'src-tauri/src/proposal.rs'
+  ]) {
+    assert.throws(
+      () =>
+        validateMainnetSourcePolicy((path) =>
+          path === target ? `${read(path)}\n// unauthorized mutation` : read(path)
+        ),
+      /changed after the mainnet-candidate policy snapshot/
+    );
+  }
 });
 
 test('browser gate accepts only the four reviewed build identities', () => {

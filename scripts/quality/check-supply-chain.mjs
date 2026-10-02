@@ -49,8 +49,29 @@ for (const dependency of cargo.packages[0].dependencies) {
 }
 
 const workflow = read('.github/workflows/ci.yml');
+const parseWorkflowAction = (line) => {
+  const candidate = line.trimStart();
+  if (candidate.startsWith('#') || !/\buses\s*:/.test(line)) return null;
+  const match = line.match(/^\s*(?:-\s*)?uses\s*:\s*(["']?)([^\s#"']+)\1(?:\s+#.*)?\s*$/);
+  if (!match) fail(`cannot parse GitHub Action reference: ${line.trim()}`);
+  return match[2];
+};
+
+for (const [line, expected] of [
+  ['  - uses: owner/action@0123456789abcdef0123456789abcdef01234567', true],
+  ['  - uses: owner/action@0123456789abcdef0123456789abcdef01234567 # v1', true],
+  ['      uses: owner/action@0123456789abcdef0123456789abcdef01234567', true],
+  ['    uses: owner/repo/.github/workflows/ci.yml@v1', false],
+  ['  - uses: owner/action@v1 # mutable', false],
+  ['  - uses: owner/action@0123456', false]
+]) {
+  const action = parseWorkflowAction(line);
+  if ((action !== null && /@[a-f0-9]{40}$/.test(action)) !== expected) {
+    fail(`internal GitHub Action pin parser regression for: ${line.trim()}`);
+  }
+}
 for (const line of workflow.split('\n')) {
-  const action = line.match(/^\s*- uses: ([^\s]+)$/)?.[1];
+  const action = parseWorkflowAction(line);
   if (action && !/@[a-f0-9]{40}$/.test(action))
     fail(`GitHub Action is not immutable-SHA pinned: ${action}`);
 }

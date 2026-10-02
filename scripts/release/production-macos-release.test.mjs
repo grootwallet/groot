@@ -104,6 +104,7 @@ test('production package binds the exact reproduced payload before signing', () 
       source.indexOf("'scripts/release/verify-macos-package.sh', outputApp")
   );
   assert.match(source, /mkdtempSync[\s\S]*cpSync\(outputApp, join\(dmgRoot, 'Groot\.app'\)/);
+  assert.match(source, /symlinkSync\('\/Applications', join\(dmgRoot, 'Applications'\)\)/);
   assert.doesNotMatch(source, /codesign[\s\S]{0,200}--deep[\s\S]{0,200}--sign/);
   assert.equal(
     packageJson.scripts['release:package:macos:ga'],

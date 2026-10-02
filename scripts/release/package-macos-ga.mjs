@@ -13,6 +13,7 @@ import {
   readFileSync,
   readdirSync,
   rmSync,
+  symlinkSync,
   statSync,
   writeFileSync
 } from 'node:fs';
@@ -232,6 +233,7 @@ try {
       recursive: true,
       preserveTimestamps: true
     });
+    symlinkSync('/Applications', join(dmgRoot, 'Applications'));
     run('hdiutil', [
       'create',
       '-volname',

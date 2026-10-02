@@ -55,6 +55,7 @@ pub(super) fn validate_release_spend(
     acceleration: Option<AccelerationMethod>,
 ) -> ApiResult<()> {
     proposal_change_details(wallet, psbt, recipient, amount)?;
+    let fee = proposal_fee_amount(psbt)?;
     let policy = if matches!(acceleration, Some(AccelerationMethod::Cpfp)) {
         let wallet_owned_output = if network() == Network::Bitcoin {
             validate_cpfp_output_ownership(wallet, psbt, recipient)?;
@@ -62,9 +63,9 @@ pub(super) fn validate_release_spend(
         } else {
             false
         };
-        crate::release_policy::validate_cpfp(network(), 0, amount, wallet_owned_output)
+        crate::release_policy::validate_final_cpfp(network(), 0, amount, wallet_owned_output, fee)
     } else {
-        crate::release_policy::validate_spend(network(), 1, amount)
+        crate::release_policy::validate_final_spend(network(), 1, amount, fee)
     };
     policy.map_err(|_| api_error("invalid_amount", "This spend is blocked by release policy."))
 }
@@ -244,6 +245,98 @@ pub(super) fn validate_proposal_fee(psbt: &Psbt, expected_fee: u64) -> ApiResult
             "proposal_mismatch",
             "The stored proposal fee does not match the transaction.",
         ));
+    }
+    Ok(())
+}
+
+pub(super) fn bind_psbt_inputs_to_wallet(wallet: &Wallet, psbt: &mut Psbt) -> ApiResult<()> {
+    if psbt.inputs.len() != psbt.unsigned_tx.input.len() {
+        return Err(api_error(
+            "proposal_mismatch",
+            "The proposal has no complete input set.",
+        ));
+    }
+
+    let mut outpoints = HashSet::with_capacity(psbt.inputs.len());
+    let mut hydrated_bytes = 0_usize;
+    let mut canonical_transactions = Vec::with_capacity(psbt.inputs.len());
+    for (txin, input) in psbt.unsigned_tx.input.iter().zip(&psbt.inputs) {
+        if !outpoints.insert(txin.previous_output) {
+            return Err(api_error(
+                "proposal_mismatch",
+                "The proposal spends the same input more than once.",
+            ));
+        }
+        let canonical_tx = wallet
+            .get_tx(txin.previous_output.txid)
+            .ok_or_else(|| {
+                api_error(
+                    "proposal_mismatch",
+                    "A proposal input is not present in the canonical wallet history.",
+                )
+            })?
+            .tx_node
+            .tx;
+        let canonical = canonical_tx.as_ref();
+        if canonical.compute_txid() != txin.previous_output.txid {
+            return Err(api_error(
+                "proposal_mismatch",
+                "A proposal input does not match its canonical previous transaction.",
+            ));
+        }
+        let output = canonical
+            .output
+            .get(txin.previous_output.vout as usize)
+            .ok_or_else(|| {
+                api_error(
+                    "proposal_mismatch",
+                    "A proposal input points outside its canonical previous transaction.",
+                )
+            })?;
+        if wallet
+            .derivation_of_spk(output.script_pubkey.clone())
+            .is_none()
+        {
+            return Err(api_error(
+                "proposal_mismatch",
+                "A proposal input is not controlled by this wallet.",
+            ));
+        }
+        if input
+            .witness_utxo
+            .as_ref()
+            .is_some_and(|candidate| candidate != output)
+        {
+            return Err(api_error(
+                "proposal_mismatch",
+                "A proposal input does not match its canonical previous output.",
+            ));
+        }
+        if input
+            .non_witness_utxo
+            .as_ref()
+            .is_some_and(|candidate| candidate.compute_txid() != txin.previous_output.txid)
+        {
+            return Err(api_error(
+                "proposal_mismatch",
+                "A proposal input does not match its canonical previous transaction.",
+            ));
+        }
+        let canonical_bytes = bdk_wallet::bitcoin::consensus::serialize(canonical).len();
+        hydrated_bytes = hydrated_bytes
+            .checked_add(canonical_bytes)
+            .filter(|bytes| *bytes <= crate::proposal::MAX_PSBT_BYTES)
+            .ok_or_else(|| {
+                api_error(
+                    "proposal_mismatch",
+                    "The proposal's canonical input data exceeds the supported size.",
+                )
+            })?;
+        canonical_transactions.push(canonical.clone());
+    }
+
+    for (input, canonical) in psbt.inputs.iter_mut().zip(canonical_transactions) {
+        input.non_witness_utxo = Some(canonical);
     }
     Ok(())
 }
