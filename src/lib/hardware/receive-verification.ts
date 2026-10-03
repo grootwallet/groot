@@ -2,7 +2,8 @@ import type { Locale } from '$lib/i18n';
 import { localizedError, translate } from '$lib/i18n-catalog';
 import { walletErrorCode, type HardwareDevice, type WalletErrorCode } from '$lib/wallet/contracts';
 
-export type ReceiveVerificationIntent = 'prompt_pin' | 'unlock' | 'unavailable' | 'verify';
+export type ReceiveVerificationIntent =
+  'prompt_pin' | 'unlock' | 'confirm_standard_wallet' | 'unavailable' | 'verify';
 
 export type ReceiveVerificationFailure = {
   code: WalletErrorCode | 'internal_error';
@@ -12,6 +13,7 @@ export type ReceiveVerificationFailure = {
 export function receiveVerificationIntent(device: HardwareDevice): ReceiveVerificationIntent {
   if (device.action === 'prompt_pin') return 'prompt_pin';
   if (device.action === 'unlock') return 'unlock';
+  if (device.action === 'confirm_empty_passphrase') return 'confirm_standard_wallet';
   if (device.action === 'retry') return 'unavailable';
   if (device.action === 'none') return 'unavailable';
   return 'verify';

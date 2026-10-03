@@ -173,7 +173,7 @@ describe('hardware signing review usability', () => {
     for (const source of [singleSend, multisigSend]) {
       expect(source).not.toContain("translate($locale, 'Exact strategy comparison')");
     }
-    expect(multisigSend).toContain("? 'Ready'");
+    expect(multisigSend).toContain('hardwareDeviceStateLabel(device, membership)');
     expect(multisigSend).not.toContain("? 'No setup needed'");
     expect(multisigSend).toContain('policyRequired && !policyVerified');
   });

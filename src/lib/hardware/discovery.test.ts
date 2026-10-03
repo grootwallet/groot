@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   hardwareDeviceDisplayName,
+  hardwareDeviceStateLabel,
   hardwareWalletMembership,
   hardwareWalletMembershipLabel,
   mergeHardwareDiscovery
@@ -39,8 +40,21 @@ describe('hardware device display names', () => {
   it('keeps matching signer copy quiet unless policy evidence is missing', () => {
     expect(hardwareWalletMembershipLabel('candidate')).toBe('');
     expect(hardwareWalletMembershipLabel('candidate', true)).toBe('Policy unverified');
-    expect(hardwareWalletMembershipLabel('unknown', true)).toBe('Unlock to identify');
+    expect(hardwareWalletMembershipLabel('unknown', true)).toBe('Wallet match unknown');
     expect(hardwareWalletMembershipLabel('unrelated', true)).toBe('Not part of this wallet');
+  });
+  it('keeps each compact state honest about wallet membership', () => {
+    expect(hardwareDeviceStateLabel(device('trezor'), 'unknown')).toBe('Wallet match unknown');
+    expect(
+      hardwareDeviceStateLabel(
+        { ...device('trezor'), action: 'prompt_pin', status: 'needs_pin' },
+        'unknown'
+      )
+    ).toBe('Locked · wallet match unknown');
+    expect(hardwareDeviceStateLabel(device('safe3'), 'unrelated')).toBe('Not part of this wallet');
+    expect(hardwareDeviceStateLabel(device('model-one'), 'candidate')).toBe(
+      'Ready for this wallet'
+    );
   });
   it('never treats a locked device family as proof of wallet membership', () => {
     expect(hardwareWalletMembership(device('trezor'), ['aabbccdd'])).toBe('unknown');
@@ -63,6 +77,36 @@ describe('hardware device display names', () => {
     expect(hardwareWalletMembership(device('bitbox02_nova'), ['aabbccdd'], ['bitbox02'])).toBe(
       'unknown'
     );
+  });
+  it('distinguishes exact Trezor models before interactive identity proof', () => {
+    const savedSafe3 = [{ fingerprint: 'aabbccdd', label: 'Trezor Safe 3', deviceType: 'trezor' }];
+    expect(
+      hardwareWalletMembership(
+        { ...device('model-one'), label: 'Trezor Model One', model: 'trezor' },
+        ['aabbccdd'],
+        ['trezor'],
+        savedSafe3
+      )
+    ).toBe('unrelated');
+    expect(
+      hardwareWalletMembership(
+        { ...device('safe-3'), label: 'Trezor Safe 3', model: 'trezor' },
+        ['aabbccdd'],
+        ['trezor'],
+        savedSafe3
+      )
+    ).toBe('compatible');
+    expect(hardwareDeviceStateLabel(device('safe-3'), 'compatible')).toBe(
+      'Select to confirm wallet'
+    );
+    expect(
+      hardwareWalletMembership(
+        { ...device('model-one'), label: 'Trezor Model One', model: 'trezor' },
+        ['aabbccdd', '11223344'],
+        ['trezor'],
+        [...savedSafe3, { fingerprint: '11223344', label: 'Alice', deviceType: 'trezor' }]
+      )
+    ).toBe('unknown');
   });
   it('uses the saved user name after an exact fingerprint match', () => {
     const jade = { ...device('jade'), fingerprint: '1B9B9B49', label: 'jade' };

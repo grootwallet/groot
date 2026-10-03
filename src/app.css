@@ -6056,7 +6056,7 @@ code {
   color: var(--muted);
   font-size: var(--font-size-meta);
   font-style: normal;
-  font-weight: 550;
+  font-weight: 400;
 }
 .hardware-device-list em.ready,
 .hardware-device-list em.signed {

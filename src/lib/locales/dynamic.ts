@@ -36,6 +36,10 @@ export const dynamicCopy = {
     fr: 'Ne fait pas partie de ce portefeuille',
     es: 'No forma parte de esta cartera'
   },
+  'Select to confirm wallet': {
+    fr: 'Sélectionnez pour confirmer le portefeuille',
+    es: 'Selecciona para confirmar la cartera'
+  },
   'Unlock to identify': {
     fr: 'Déverrouillez pour identifier',
     es: 'Desbloquea para identificar'
@@ -391,6 +395,46 @@ export const dynamicCopy = {
   'Device needs attention': {
     fr: 'L’appareil requiert votre attention',
     es: 'El dispositivo requiere atención'
+  },
+  'Hardware scan failed': {
+    fr: 'Échec de la recherche de matériel',
+    es: 'Error al buscar dispositivos'
+  },
+  'Hardware verification failed': {
+    fr: 'Échec de la vérification matérielle',
+    es: 'Error en la verificación física'
+  },
+  'Signer is not part of this wallet': {
+    fr: 'Le signataire ne fait pas partie de ce portefeuille',
+    es: 'El firmante no forma parte de esta cartera'
+  },
+  'Choose one signer': {
+    fr: 'Choisissez un signataire',
+    es: 'Elige un firmante'
+  },
+  'Network switch failed': {
+    fr: 'Échec du changement de réseau',
+    es: 'Error al cambiar de red'
+  },
+  'Wallet match unknown': {
+    fr: 'Correspondance avec le portefeuille inconnue',
+    es: 'Coincidencia con la cartera desconocida'
+  },
+  'Locked · wallet match unknown': {
+    fr: 'Verrouillé · correspondance inconnue',
+    es: 'Bloqueado · coincidencia desconocida'
+  },
+  'Ready for this wallet': {
+    fr: 'Prêt pour ce portefeuille',
+    es: 'Listo para esta cartera'
+  },
+  'Unlock required': {
+    fr: 'Déverrouillage requis',
+    es: 'Se requiere desbloqueo'
+  },
+  'Attention required': {
+    fr: 'Attention requise',
+    es: 'Se requiere atención'
   },
   Disabled: { fr: 'Désactivé', es: 'Desactivado' },
   'Downloading and checking compact filters': {

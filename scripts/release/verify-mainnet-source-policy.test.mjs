@@ -26,15 +26,32 @@ fn main() {
 
 test('pins every reviewed mainnet-critical source byte', () => {
   const read = (path) => readFileSync(`${repoRoot}${path}`, 'utf8');
-  assert.doesNotThrow(() => validateMainnetSourcePolicy(read));
+  const readBytes = (path) => readFileSync(`${repoRoot}${path}`);
+  assert.doesNotThrow(() => validateMainnetSourcePolicy(read, readBytes));
+  assert.throws(() => validateMainnetSourcePolicy(read), /requires a binary-safe source reader/);
+  for (const target of [
+    'src/lib/config.ts',
+    'src-tauri/src/secure_store.rs',
+    'src-tauri/src/native_backup/macos.rs',
+    'src-tauri/src/proposal.rs'
+  ]) {
+    assert.throws(
+      () =>
+        validateMainnetSourcePolicy(
+          (path) => (path === target ? `${read(path)}\n// unauthorized mutation` : read(path)),
+          readBytes
+        ),
+      /changed after the mainnet-candidate policy snapshot/
+    );
+  }
   assert.throws(
     () =>
-      validateMainnetSourcePolicy((path) =>
-        path === 'src/lib/config.ts'
-          ? `${read(path)}\nSUPPORTED_NETWORKS.push(hidden);`
-          : read(path)
+      validateMainnetSourcePolicy(read, (path) =>
+        path === 'scripts/release/assets/groot-dmg-background.png'
+          ? Buffer.concat([readBytes(path), Buffer.from([0])])
+          : readBytes(path)
       ),
-    /changed after the mainnet-candidate policy snapshot/
+    /groot-dmg-background\.png changed after the mainnet-candidate policy snapshot/
   );
 });
 

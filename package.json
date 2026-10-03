@@ -1,7 +1,7 @@
 {
   "name": "groot-wallet",
   "private": true,
-  "version": "0.4.95",
+  "version": "0.4.96",
   "packageManager": "pnpm@11.13.1",
   "engines": {
     "node": "24.19.0",
@@ -69,6 +69,7 @@
     "release:unsigned:multi": "bash scripts/release/build-unsigned-multi.sh",
     "release:prepare:signed-hwi": "node scripts/release/prepare-signed-hwi.mjs",
     "release:package:macos:ga": "node scripts/release/package-macos-ga.mjs",
+    "release:create:macos:dmg": "node scripts/release/create-macos-dmg.mjs",
     "release:sbom": "node scripts/release/generate-sbom.mjs",
     "release:compare": "bash scripts/release/compare-unsigned.sh",
     "release:verify:macos": "bash scripts/release/verify-macos-package.sh",
@@ -93,7 +94,8 @@
     "svelte-check": "4.7.3",
     "typescript": "5.9.3",
     "vite": "8.1.5",
-    "vitest": "4.1.10"
+    "vitest": "4.1.10",
+    "yaml": "2.8.1"
   },
   "dependencies": {
     "@lucide/svelte": "1.24.0",

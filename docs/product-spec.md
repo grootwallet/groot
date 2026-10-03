@@ -35,8 +35,11 @@ address, with **Show address details** revealing the full copyable address and
 derivation. It always uses the discard target, not the currently featured request.
 Receive signer selection lists all discovered families; unrelated identities
 remain disabled. A fingerprint-less device from a family absent from the saved
-wallet is also disabled without initiating unlock; only an eligible same-family
-device says **Unlock to identify** until Rust proves its exact account identity.
+wallet is also disabled without initiating unlock. When passive inventory and
+every eligible saved signer both expose an exact model, a different model is
+disabled as **Not part of this wallet** and the matching model says **Select to
+confirm wallet**. Otherwise an eligible same-family device remains unknown until
+Rust proves its exact account identity.
 Matching signers omit technical membership prose and show **Policy unverified**
 only when required saved policy evidence is absent.
 
@@ -63,8 +66,10 @@ the configured node, not an external explorer. Existing proposals are not delete
 
 Hardware pickers for an existing wallet distinguish connection readiness from
 wallet membership. A non-matching discovered fingerprint is unavailable and
-labelled **Not part of this wallet**. A missing fingerprint is **Wallet membership
-unknown · unlock to identify**, never inferred to match from its brand/model.
+labelled **Not part of this wallet**. A missing fingerprint remains unknown unless
+exact passive model evidence can rule it out or identify it as the only compatible
+saved model; compatibility is presented as **Select to confirm wallet**, never as
+proof of membership or readiness.
 A matching fingerprint is only a candidate: native full account-key proof remains
 mandatory before address display, policy verification, or signing. Public backup
 recovery accepts importable text/BSMS/JSON, not the human-readable PDF export.
@@ -112,6 +117,10 @@ The distributed macOS application includes Groot's exact reviewed Bitcoin Core H
 - The intended macOS GA app lets a user choose Regtest, Testnet4, or Mainnet in Settings under ADR 0069. Global Settings remains reachable from first-run onboarding when the selected network has no wallets, and the active Bitcoin network, build identity, and cached public network status remain available while a selected wallet is locked; wallet-specific node configuration, sync configuration, credentials, and actions remain unavailable until unlock. The change is confirmation- and restart-bound, and every network owns a separate wallet/node-data namespace. Fixed network builds remain available for rehearsal and supporting evidence, but are not the intended GA artifact. Mainnet public distribution still requires ADR 0012, the threat model, physical hardware certification, multi-network isolation/restart evidence, reproducible release evidence, and the release checklist to be independently approved first.
 - Core RPC endpoints are configurable. Regtest uses an explicit deterministic test fee policy; public-network builds request economy, standard, and priority estimates from the configured, authenticated, exact-chain-verified Core node. A Mainnet profile without saved node settings asks the fixed Groot gateway for a unique revocable principal inside native Rust, verifies that exact node, and encrypts the one-time password under the wallet credential without exposing it to the webview. Existing local, custom remote, Tor, or managed settings are never replaced. Enrollment failure leaves the wallet explicitly offline; it never selects an alternate node or fee source. If Core has insufficient estimation data, presets remain unavailable and the user may enter a validated custom sat/vB rate. Remote Core requires non-redirecting direct HTTPS or an explicit numeric loopback Tor SOCKS5 proxy for a v3 `.onion` endpoint. RPC operations and responses are bounded; neither transport silently falls back to another endpoint, route, or fee. A custom trusted remote Core uses its synced basic block-filter index through bounded `scanblocks`. The fixed managed service instead uses a private Fulcrum script-history index behind the same authenticated gateway, requires exact Core/index tip agreement, and verifies every claimed transaction against its full active-chain Core block. Local Core retains the complete full-block path. Connection tests retry a bounded transient transport failure, but wrong-chain and missing-permission results fail immediately. The foreground scheduler starts the next attempt on the normal 35-second cadence after every completed attempt, including a failure; it never creates overlapping requests or an unbounded queue.
 - Mainnet node Settings separate **Groot managed**, **This Mac**, and **Custom remote**. The managed view never renders the generated RPC principal or password. An authenticated explicit **Renew managed access** action obtains and protects a new principal after revocation or when returning from a user-controlled node; it never runs as a fallback. An explicit unlock wakes sync immediately on every destination route, including Settings, and a never-synced wallet starts its saved safe first-history scan without depending on Overview being mounted.
+- Mainnet transaction policy is enforced from the final authoritative PSBT:
+  fees may not exceed 100,000 satoshis and recipient amount plus fee may not
+  exceed 1,000,000 satoshis. The same limits apply to ordinary sends, RBF, and
+  CPFP. Sparse fee estimates are capped rather than extrapolated without bound.
 
 ## Onboarding
 
@@ -384,13 +393,14 @@ offline watch-only coordinator even when its short-lived initial-import HWI
 admissions expired during a restart. Looking up or proving one saved signer
 during setup still must not erase other still-valid exact admissions. Before
 Groot issues a new labeled Mainnet multisig receive address, Rust requires
-descriptor-matching policy-and-first-address evidence from at least the
-spending threshold of distinct Ledger, BitBox02, or Jade signers and the saved
+descriptor-matching policy-and-first-address evidence from enough distinct
+Ledger, BitBox02, or Jade signers both to form a spending quorum and to
+intersect every possible quorum (`max(t, n - t + 1)`), plus the saved
 policy-file acknowledgement of each Coldcard in the policy. Trezor and Coldcard
 do not count toward this durable interactive quorum in the current HWI build;
 unsupported Mainnet signer combinations remain receive-blocked pending a
 reviewed device-specific path. External-signer creation and recovery import
-retain their live-admission rules. See ADR 0065.
+retain their live-admission rules. See ADRs 0065 and 0076.
 
 1. User names the wallet and chooses a recommended 2-of-3 or 3-of-5 recipe, or opens advanced M-of-N controls within the safe v1 envelope of 2–7 signatures and 3–7 signers. Groot does not offer 1-of-N because one stolen key could spend alone; users who want one key should create a single-key wallet.
 2. Add each signer through a Rust hardware transport or import its master fingerprint and BIP48 account tpub through bounded mounted file/manual flows. Coldcard file import accepts its public **Export XPUB** JSON, including descriptor-style `p2wsh_desc` output, but rejects private material, mainnet xpubs, and noncanonical origins with an actionable re-export instruction. Air-gapped PSBT exchange supports bounded `crypto-psbt` UR v2 animation and camera scanning through Groot's bundled local decoder; text and file fallback remain available until every target platform is certified.

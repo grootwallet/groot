@@ -12,6 +12,17 @@ const BITBOX_ACCOUNT_KEY_RETRY_DELAY: Duration = Duration::from_millis(750);
 const BITBOX_ACCOUNT_KEY_RETRY_DELAY: Duration = Duration::from_millis(5);
 const SUPPORTED_HWI_DEVICE_TYPES: &[&str] = &["bitbox02", "coldcard", "jade", "ledger", "trezor"];
 
+pub(super) fn require_external_proposal_inputs_available(inputs_available: bool) -> ApiResult<()> {
+    if inputs_available {
+        Ok(())
+    } else {
+        Err(api_error(
+            "coin_unavailable",
+            "This payment uses coins no longer available in the wallet. Sync, then cancel it and prepare a new payment; no signatures were changed.",
+        ))
+    }
+}
+
 fn hardware_admission_key(
     fingerprint: &str,
     xpub: &str,
@@ -2827,14 +2838,19 @@ pub async fn external_signer_proposals(app: AppHandle) -> ApiResult<Vec<Multisig
     .map_err(internal)?
 }
 
-pub(crate) fn import_external_proposal(
-    app: &AppHandle,
+fn import_external_proposal_in_db(
+    db: &mut Connection,
+    metadata: &ExternalSignerWallet,
     proposal_id: &str,
     signed_psbt: &str,
 ) -> ApiResult<MultisigProposalDto> {
-    let metadata = read_external_signer_metadata(app)?;
-    let mut db = open_db(app)?;
-    let current = load_external_proposal(&mut db, &metadata, proposal_id)?;
+    // This is the authoritative post-device check. Hardware interaction is
+    // deliberately performed without the wallet-operation lock, so the
+    // wallet may change while the user confirms on the device. Reload the
+    // proposal under that lock and reject stale coins before decoding,
+    // merging, finalizing, or persisting any returned signature.
+    let current = load_external_proposal(db, metadata, proposal_id)?;
+    require_external_proposal_inputs_available(current.inputs_available)?;
     let original_encoded = current.psbt.clone();
     let mut original = decode_psbt(&original_encoded).map_err(proposal_api_error)?;
     let imported = decode_psbt(signed_psbt).map_err(proposal_api_error)?;
@@ -2843,8 +2859,7 @@ pub(crate) fn import_external_proposal(
         .map_err(proposal_api_error)?;
     if progress.can_finalize {
         let mut validation = original.clone();
-        let mut wallet_db = open_db(app)?;
-        let wallet = load_wallet(&mut wallet_db)?;
+        let wallet = load_wallet(db)?;
         if !wallet
             .finalize_psbt(&mut validation, SignOptions::default())
             .map_err(internal)?
@@ -2870,7 +2885,7 @@ pub(crate) fn import_external_proposal(
             "The proposal changed while its signature was imported.",
         ));
     }
-    load_external_proposal(&mut db, &metadata, proposal_id)
+    load_external_proposal(db, metadata, proposal_id)
 }
 
 #[tauri::command]
@@ -2886,13 +2901,13 @@ pub fn external_signer_proposal_import(
     let metadata = read_external_signer_metadata(&app)?;
     let mut db = open_db(&app)?;
     let current = load_external_proposal(&mut db, &metadata, &proposal_id)?;
+    require_external_proposal_inputs_available(current.inputs_available)?;
     require_reviewed_psbt_unchanged(
         &current.psbt,
         &reviewed_psbt,
         "The proposal changed after review. Reload it before importing a signature.",
     )?;
-    drop(db);
-    import_external_proposal(&app, &proposal_id, &signed_psbt)
+    import_external_proposal_in_db(&mut db, &metadata, &proposal_id, &signed_psbt)
 }
 
 #[tauri::command]
@@ -2963,6 +2978,7 @@ pub async fn hardware_sign_external(
         let metadata = read_external_signer_metadata(&app)?;
         let mut db = open_db(&app)?;
         let proposal = load_external_proposal(&mut db, &metadata, &proposal_id)?;
+        require_external_proposal_inputs_available(proposal.inputs_available)?;
         require_reviewed_psbt_unchanged(
             &proposal.psbt,
             &reviewed_psbt,
@@ -2997,7 +3013,16 @@ pub async fn hardware_sign_external(
         let returned = decode_psbt(&signed).map_err(proposal_api_error)?;
         let signatures_only =
             hardware_signature_response(&reviewed, returned).map_err(proposal_api_error)?;
-        import_external_proposal(&app, &proposal_id, &encode_psbt(&signatures_only))
+        let _operation = operation_guard(&state)?;
+        require_unlocked(&app, &state)?;
+        let metadata = read_external_signer_metadata(&app)?;
+        let mut db = open_db(&app)?;
+        import_external_proposal_in_db(
+            &mut db,
+            &metadata,
+            &proposal_id,
+            &encode_psbt(&signatures_only),
+        )
     }
     .await;
     diagnostics::record_result(
@@ -3042,6 +3067,7 @@ pub async fn external_signer_proposal_broadcast(
         let metadata = read_external_signer_metadata(&app)?;
         let mut db = open_db(&app)?;
         let proposal = load_external_proposal(&mut db, &metadata, &proposal_id)?;
+        require_external_proposal_inputs_available(proposal.inputs_available)?;
         require_reviewed_psbt_unchanged(
             &proposal.psbt,
             &reviewed_psbt,

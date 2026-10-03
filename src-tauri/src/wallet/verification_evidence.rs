@@ -298,10 +298,20 @@ pub(super) fn require_multisig_receive_readiness(
             verified_signers += 1;
         }
     }
-    if verified_signers < wallet.threshold {
+    // Both a spendable verified quorum and an intersection with every possible
+    // signing quorum are required. Otherwise, for example, two unverified keys
+    // in a 2-of-4 wallet could form an attacker-only quorum even when two real
+    // devices had passed the old threshold-only check.
+    let quorum_intersection = wallet
+        .cosigners
+        .len()
+        .saturating_sub(wallet.threshold)
+        .saturating_add(1);
+    let required_verifications = wallet.threshold.max(quorum_intersection);
+    if verified_signers < required_verifications {
         return Err(api_error(
             "hardware_not_approved",
-            "Verify the complete wallet policy and first address on enough hardware signers before receiving bitcoin.",
+            "Verify the complete wallet policy and first address on enough hardware signers to intersect every signing quorum before receiving bitcoin.",
         ));
     }
     Ok(())

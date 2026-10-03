@@ -9,6 +9,9 @@ use crate::multisig::{multisig_account_path, CosignerInput, CosignerSource};
 use crate::recovery::{SpendingPath, TimedSpendingPath};
 use crate::secure_store::SecureStoreError;
 use bdk_wallet::bitcoin::NetworkKind;
+use bdk_wallet::bitcoin::{
+    absolute::LockTime, transaction::Version, ScriptBuf, Sequence, TxOut, Witness,
+};
 use bdk_wallet::error::CreateTxError;
 use std::{net::TcpListener, thread};
 
@@ -217,6 +220,154 @@ fn anchor_reconciliation_wallet(
         })
         .unwrap();
     (wallet, sparse_tip, block, txid)
+}
+
+fn canonical_prevout_psbt(wallet: &Wallet, txid: Txid) -> Psbt {
+    let previous = wallet.get_tx(txid).unwrap().tx_node.tx.as_ref().clone();
+    let transaction = Transaction {
+        version: Version::TWO,
+        lock_time: LockTime::ZERO,
+        input: vec![TxIn {
+            previous_output: OutPoint::new(txid, 0),
+            script_sig: ScriptBuf::new(),
+            sequence: Sequence::ENABLE_RBF_NO_LOCKTIME,
+            witness: Witness::new(),
+        }],
+        output: vec![TxOut {
+            value: Amount::from_sat(19_000),
+            script_pubkey: ScriptBuf::new(),
+        }],
+    };
+    let mut psbt = Psbt::from_unsigned_tx(transaction).unwrap();
+    psbt.inputs[0].witness_utxo = Some(previous.output[0].clone());
+    psbt
+}
+
+#[test]
+fn canonical_prevout_binding_enables_default_bdk_signing() {
+    let (wallet, _, _, txid) = anchor_reconciliation_wallet(51, 24, 33);
+    let mut psbt = canonical_prevout_psbt(&wallet, txid);
+
+    bind_psbt_inputs_to_wallet(&wallet, &mut psbt).unwrap();
+
+    assert_eq!(
+        psbt.inputs[0]
+            .non_witness_utxo
+            .as_ref()
+            .unwrap()
+            .compute_txid(),
+        txid
+    );
+    assert!(wallet.sign(&mut psbt, SignOptions::default()).unwrap());
+}
+
+#[test]
+fn canonical_prevout_binding_rejects_tampering_without_mutation() {
+    let (wallet, _, _, txid) = anchor_reconciliation_wallet(52, 25, 34);
+    let mut wrong_output = canonical_prevout_psbt(&wallet, txid);
+    wrong_output.inputs[0].witness_utxo.as_mut().unwrap().value += Amount::from_sat(1);
+    let before = wrong_output.clone();
+
+    let error = bind_psbt_inputs_to_wallet(&wallet, &mut wrong_output).unwrap_err();
+    assert_eq!(error.code, "proposal_mismatch");
+    assert_eq!(wrong_output, before);
+
+    let mut wrong_transaction = canonical_prevout_psbt(&wallet, txid);
+    wrong_transaction.inputs[0].non_witness_utxo = Some(Transaction {
+        version: Version::TWO,
+        lock_time: LockTime::ZERO,
+        input: Vec::new(),
+        output: Vec::new(),
+    });
+    let before = wrong_transaction.clone();
+    let error = bind_psbt_inputs_to_wallet(&wallet, &mut wrong_transaction).unwrap_err();
+    assert_eq!(error.code, "proposal_mismatch");
+    assert_eq!(wrong_transaction, before);
+
+    let mut missing = canonical_prevout_psbt(&wallet, txid);
+    missing.unsigned_tx.input[0].previous_output = OutPoint::new(Txid::all_zeros(), 0);
+    let before = missing.clone();
+    let error = bind_psbt_inputs_to_wallet(&wallet, &mut missing).unwrap_err();
+    assert_eq!(error.code, "proposal_mismatch");
+    assert_eq!(missing, before);
+}
+
+#[test]
+fn canonical_prevout_binding_accepts_equivalent_witness_variant() {
+    let (wallet, _, _, txid) = anchor_reconciliation_wallet(53, 26, 35);
+    let mut psbt = canonical_prevout_psbt(&wallet, txid);
+    let mut witness_variant = wallet.get_tx(txid).unwrap().tx_node.tx.as_ref().clone();
+    witness_variant.input[0].witness.push([1_u8]);
+    assert_eq!(witness_variant.compute_txid(), txid);
+    psbt.inputs[0].non_witness_utxo = Some(witness_variant);
+
+    bind_psbt_inputs_to_wallet(&wallet, &mut psbt).unwrap();
+
+    assert_eq!(
+        psbt.inputs[0].non_witness_utxo.as_ref().unwrap(),
+        wallet.get_tx(txid).unwrap().tx_node.tx.as_ref()
+    );
+}
+
+#[test]
+fn canonical_prevout_binding_rejects_duplicate_inputs_without_mutation() {
+    let (wallet, _, _, txid) = anchor_reconciliation_wallet(54, 27, 36);
+    let mut psbt = canonical_prevout_psbt(&wallet, txid);
+    psbt.unsigned_tx
+        .input
+        .push(psbt.unsigned_tx.input[0].clone());
+    psbt.inputs.push(psbt.inputs[0].clone());
+    let before = psbt.clone();
+
+    let error = bind_psbt_inputs_to_wallet(&wallet, &mut psbt).unwrap_err();
+
+    assert_eq!(error.code, "proposal_mismatch");
+    assert_eq!(psbt, before);
+}
+
+#[test]
+fn unavailable_external_proposal_inputs_fail_before_signing() {
+    assert!(hardware_commands::require_external_proposal_inputs_available(true).is_ok());
+    assert_eq!(
+        hardware_commands::require_external_proposal_inputs_available(false)
+            .unwrap_err()
+            .code,
+        "coin_unavailable"
+    );
+}
+
+#[test]
+fn hardware_signature_import_rechecks_inputs_under_operation_guard_before_mutation() {
+    let source = include_str!("hardware_commands.rs");
+    let import = source
+        .split("fn import_external_proposal_in_db")
+        .nth(1)
+        .unwrap()
+        .split("#[tauri::command]")
+        .next()
+        .unwrap();
+    let reload = import.find("load_external_proposal(db").unwrap();
+    let availability = import
+        .find("require_external_proposal_inputs_available(current.inputs_available)")
+        .unwrap();
+    let decode = import.find("decode_psbt(signed_psbt)").unwrap();
+    let persist = import.find("UPDATE groot_proposals SET psbt").unwrap();
+    assert!(reload < availability);
+    assert!(availability < decode);
+    assert!(decode < persist);
+
+    let command = source
+        .split("pub async fn hardware_sign_external")
+        .nth(1)
+        .unwrap()
+        .split("pub async fn external_signer_proposal_broadcast")
+        .next()
+        .unwrap();
+    let device_sign = command.find("sign_psbt_in_operation").unwrap();
+    let guard = command.rfind("operation_guard(&state)").unwrap();
+    let import = command.find("import_external_proposal_in_db").unwrap();
+    assert!(device_sign < guard);
+    assert!(guard < import);
 }
 
 impl jsonrpc::client::Transport for ManagedHistoryFixture {
@@ -1225,6 +1376,10 @@ fn core_fee_rates_fail_closed_and_preserve_sub_sat_per_vbyte_precision() {
         Some(1.0)
     );
     assert_eq!(sparse_mempool_fee_rate([(0, 1_000)]), None);
+    assert_eq!(
+        sparse_mempool_fee_rate([(100, (MAX_BACKEND_FEE_RATE_SAT_VB + 1) * 100)]),
+        None
+    );
     assert_eq!(
         sparse_mempool_fee_rate([(SPARSE_MEMPOOL_LIMIT_VBYTES + 1, 1_000)]),
         None
@@ -5956,7 +6111,7 @@ fn mainnet_receive_requires_a_verified_spendable_quorum_and_coldcard_import() {
     wallet.cosigners[0].device_type = Some("ledger".to_owned());
     wallet.cosigners[1].device_type = Some("bitbox02".to_owned());
     wallet.cosigners[2].device_type = Some("coldcard".to_owned());
-    wallet.cosigners[3].device_type = Some("trezor".to_owned());
+    wallet.cosigners[3].device_type = Some("jade".to_owned());
     let first_address = first_multisig_address(&wallet).unwrap();
     let evidence = |index: usize, address: &str| SignerPolicyVerificationDto {
         signer_fingerprint: wallet.cosigners[index].fingerprint.clone(),
@@ -5992,6 +6147,17 @@ fn mainnet_receive_requires_a_verified_spendable_quorum_and_coldcard_import() {
         &[
             evidence(0, &first_address),
             evidence(1, &first_address),
+            coldcard_import.clone()
+        ]
+    )
+    .is_err());
+    assert!(require_multisig_receive_readiness(
+        Network::Bitcoin,
+        &wallet,
+        &[
+            evidence(0, &first_address),
+            evidence(1, &first_address),
+            evidence(3, &first_address),
             coldcard_import.clone()
         ]
     )

@@ -1460,6 +1460,7 @@ pub async fn tx_sign_and_broadcast(
             &loaded_internal,
             Some((&signing_external, &signing_internal)),
         )?;
+        bind_psbt_inputs_to_wallet(&wallet, &mut proposal.psbt)?;
         validate_proposal_fee(&proposal.psbt, proposal.fee)?;
         let acceleration = proposal_acceleration_method(&db, &proposal_id)?;
         if matches!(acceleration, Some(AccelerationMethod::Rbf)) {
@@ -1480,14 +1481,7 @@ pub async fn tx_sign_and_broadcast(
         )?;
         validate_psbt_excludes_frozen(&proposal.psbt, &frozen_outpoints(&db)?)?;
         let finalized = signing_wallet
-            .sign(
-                &mut proposal.psbt,
-                SignOptions {
-                    // The PSBT was built and retained inside this trusted Rust process.
-                    trust_witness_utxo: true,
-                    ..SignOptions::default()
-                },
-            )
+            .sign(&mut proposal.psbt, SignOptions::default())
             .map_err(internal)?;
         if !finalized {
             return Err(internal("The transaction could not be fully signed."));

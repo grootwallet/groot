@@ -15,8 +15,8 @@ const pinnedPolicySources = new Map([
   ['src-tauri/src/session.rs', '82da6d3a2643710aaa0974f69f0fb7c932172a401ecf33c186e440c8170f35e0'],
   ['.env.mainnet', '1623f3f97de588daea2bbeae1f9c56ebc896b6bc2c22ac238563b46b688ced85'],
   ['.env.multi', '33fc3d5022968d9eaa25bfe749c0b01691c0570611a65255100718d2c50df723'],
-  ['package.json', '34c22d09d1ab4aec5e604a6fba91ca771510858ca4f8b55c6cdd4e9162a089ed'],
-  ['src-tauri/src/lib.rs', 'c10997e4a806be08742fde042200d57ae479a2a458a234bc7b8344b408c34c2a'],
+  ['package.json', 'a97383a44d530e7a0d11a824b7d4f798b6bf016e7d195fcbf239a2ff51697827'],
+  ['src-tauri/src/lib.rs', 'f91975ed53e93d004eb46818fb7d73fb8aa5a710eb2d9494c8d563c02e00a705'],
   [
     'src-tauri/src/managed_gateway.rs',
     '7e5bf0ab7c25346448e4423bab2e748de96684612230c38b797a075fef5866d0'
@@ -25,15 +25,15 @@ const pinnedPolicySources = new Map([
     'scripts/network/check-native-builds.sh',
     '3a984ab7ef5f0d7c29d689d2ab39e114d61f1db0efd29a632cea980d7284bef4'
   ],
-  ['src/lib/config.ts', 'b3db968449ada8cb1ee021ea44ad4cfbf97f04e1a1f24344e82c0cf8d7e5ece9'],
+  ['src/lib/config.ts', '8b6d65ce63fc89423564072ceebf3509dc0ec2c48dac03ee14cb1172ad2045f7'],
   ['src-tauri/build.rs', 'ed1866cf57502e61199d75df9ff407b5ed0be54043ad94525ef6579ad98dfcb7'],
   [
     'src-tauri/src/release_policy.rs',
-    '98a4294d987279273e44b3be71d10aec5507394d7eb2aa7e94a8eab71f3ad12b'
+    '704afcc72ef43f3d51baafd12993c2f3f912c2ca7b45eceadc648474aa1f9c1c'
   ],
   [
     'src-tauri/src/build_network.rs',
-    'f4e06c2259ac862a5552071b6c3c378b3467144f1604d5d7f001baeef9f8cff2'
+    'caa8b1d04204424207d41c2d67c6baaf35fadc4b42b4c7440e1aee61e264cfcc'
   ],
   [
     'src-tauri/src/process_lock.rs',
@@ -52,10 +52,19 @@ const pinnedPolicySources = new Map([
   ['src-tauri/src/recovery.rs', '96eba2aaea0461d8ed067513c044f85f8845837dbf584eb3f93e6969ec5670dc'],
   ['src-tauri/src/network.rs', 'dcf011fb789a0b690b1832a9245df5fc0199318f03a820d10f9a3b1c90f5d76b'],
   ['src-tauri/src/registry.rs', '343aea20f5d09df6abd5c9fdba3b093efc6729c9ece8f180b27a150061753a18'],
-  ['src-tauri/src/wallet.rs', 'b3fdb51b0913ed5096b34a2b04ff19caf3726221a57fa197d6b4d21a4dd3c310'],
+  [
+    'src-tauri/src/secure_store.rs',
+    'aa0acfd33b41716f1d010fba1c7a83e5f50eab2be9def3b9a2d211360c16ebfe'
+  ],
+  [
+    'src-tauri/src/native_backup/macos.rs',
+    'bd019caa540dcf49428c3665c3ceb1e6c6699b2d53e33f4a6a51899194bb69ed'
+  ],
+  ['src-tauri/src/proposal.rs', '9d90a4910b2c0cf91320c59e49f9a8e97e59fca4e4612edcc7dbee6fbaef63ba'],
+  ['src-tauri/src/wallet.rs', '5f5ac9b78eb826bcc78fab4f4e4c5ddb75b980546aed3fb34e2ce254c850adf2'],
   [
     'src-tauri/src/wallet/diagnostics.rs',
-    '0378b4dadf9698b2a6e04361950d51c65390e175c0c7fc50d88ac6deb2de8b5f'
+    'a08c4b4938db3ef29e7e5c8f6808986c132f7f40fdc25cf74bc182593405258e'
   ],
   [
     'src-tauri/src/wallet/error_translation.rs',
@@ -67,11 +76,11 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src-tauri/src/wallet/export_commands.rs',
-    '89af70ad5cf3f5c21ce0a7c1a24a9645a915550e19804664f96e89a399c6dc01'
+    'df58ff8095a3db9b51fa7d857aaea4d4317f1d5432783247a0074070afdebd21'
   ],
   [
     'src-tauri/src/wallet/hardware_commands.rs',
-    '0f55b09c5a526e0f626373f66b812c1d93418cacac37c7dcd20eeba6cda92c0e'
+    '70026bcc60d626bb0fb939881f85a94eaaa688090ee9290f01b6990cfa08b125'
   ],
   [
     'src-tauri/src/wallet/label_interchange.rs',
@@ -87,7 +96,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src-tauri/src/wallet/profile_commands.rs',
-    'ddb069b53fe7c7b0df8690dd20dd551d81ffbf63d09259a4ed80b6c8358e34b1'
+    '5d6e5a34d3d43995fe5d8dc097a94d7354face4003ccf643b79347baaa1a2500'
   ],
   [
     'src-tauri/src/wallet/payment_draft_commands.rs',
@@ -95,7 +104,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src-tauri/src/wallet/proposal_review.rs',
-    '31fc39bf7ce25c99345c2584c186e52ae7e6b036c736d7b2d29d731dd9214b24'
+    '4ad22b36a572493f24ec1022bc9c5f9eedb322357f35c7436e782f3cbcc0fbab'
   ],
   [
     'src-tauri/src/wallet/recovery_scan.rs',
@@ -103,11 +112,11 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src-tauri/src/wallet/transaction_commands.rs',
-    '4e6b17435e8fc8591ffd166e612f29ff5934df9647584fb2a53c020a8fe84cb1'
+    'c144e23f962f07fdb7cb23382ea370538af1b560f95a0385ce251b3cb2be60ea'
   ],
   [
     'src-tauri/src/wallet/verification_evidence.rs',
-    '18e7dabda9b589338794dfa60ffd5081a2174e05d1d4fdcf2518469eda886c28'
+    '4ef0f98bc226851269cbdb5c41afed5031c6da150dff872b2a870d685e8670b6'
   ],
   [
     'src-tauri/tauri.mainnet.conf.json',
@@ -139,7 +148,15 @@ const pinnedPolicySources = new Map([
   ],
   [
     'scripts/release/package-macos-ga.mjs',
-    'c933a003591649cc342044f5263563174258a5d0b354011d223333a60454f2d6'
+    'a2ff35133c2fc5a106fe266b974b5144de41127af487f17032d7cba5b2c52de7'
+  ],
+  [
+    'scripts/release/create-macos-dmg.mjs',
+    'e67d4a578a5862453d9870443f1256b0853bcbba359197bed95c78f45e975d9b'
+  ],
+  [
+    'scripts/release/assets/groot-dmg-background.svg',
+    '6dd2ade8c4028b33122020efaf41d1fb1399dd0f7f8f7c69af4ac7f6afeebadd'
   ],
   [
     'scripts/release/build-packaged-macos-app.sh',
@@ -172,7 +189,7 @@ const pinnedPolicySources = new Map([
   ['src/lib/wallet/tauri.ts', '8652a1e472c459ef63fbb4020df7ecd8cb783ca492c48702c99e8aa15af5ded2'],
   [
     'src/lib/wallet/contracts/errors.ts',
-    'c24fbc5876dc7aaaf32f4f801506540707eb903882a4dadbadb93559f20fd9ac'
+    '6e63267785c41e26e7d41815df26e462d0763800166d7a1c0cf01b3c109e7a10'
   ],
   [
     'src/lib/wallet/contracts/port.ts',
@@ -209,7 +226,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src/routes/settings/+page.svelte',
-    '973bc7bffc252171896daec88873643153cd96fe1288c2cfdd6547c3b7975db0'
+    '727745cd95830b691511cc3e8bf89a97ccab373aeae6610c4d7e7d7de97f6b3f'
   ],
   [
     'services/core-gateway/gateway.py',
@@ -241,7 +258,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src/routes/multisig/new/+page.svelte',
-    'fc078493cc139f8094b8225abb8403193acf5f30f5f2081bbe9bb6b74521bf86'
+    '7f64640a98b12a86b84187e65bc4abd98e963921c6c169f6fcf7f61038cf4200'
   ],
   [
     'src/lib/multisig/policy.ts',
@@ -257,7 +274,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'scripts/release/build-mainnet-internal-rc.mjs',
-    'b72c626a47e97e4f3c7a25135cdc79acef53a91d5122d2d84a7b1646a0d59401'
+    'f18dea025bff665a3e7c4da895184a843eea54f90cfeb7f810c021744953f8a4'
   ],
   [
     'docs/adr/0068-restart-bound-multi-network-settings.md',
@@ -265,9 +282,25 @@ const pinnedPolicySources = new Map([
   ]
 ]);
 
-export function validatePinnedPolicySources(read) {
+const pinnedBinaryPolicySources = new Map([
+  [
+    'scripts/release/assets/groot-dmg-background.png',
+    'a6360c8591eb889ebfbd07cf185db40b8d46e438baa6ae09efc6daf54c941cd0'
+  ]
+]);
+
+export function validatePinnedPolicySources(read, readBytes) {
+  if (typeof readBytes !== 'function') {
+    throw new Error('the mainnet source policy requires a binary-safe source reader');
+  }
   for (const [path, expected] of pinnedPolicySources) {
     const actual = createHash('sha256').update(read(path)).digest('hex');
+    if (actual !== expected) {
+      throw new Error(`${path} changed after the mainnet-candidate policy snapshot was reviewed`);
+    }
+  }
+  for (const [path, expected] of pinnedBinaryPolicySources) {
+    const actual = createHash('sha256').update(readBytes(path)).digest('hex');
     if (actual !== expected) {
       throw new Error(`${path} changed after the mainnet-candidate policy snapshot was reviewed`);
     }
@@ -528,8 +561,8 @@ function crateRustSources() {
   return sources;
 }
 
-export function validateMainnetSourcePolicy(read) {
-  validatePinnedPolicySources(read);
+export function validateMainnetSourcePolicy(read, readBytes) {
+  validatePinnedPolicySources(read, readBytes);
   validateBrowserNetworkSource(read('src/lib/config.ts'));
   validateBuildScriptSource(read('src-tauri/build.rs'));
   validateReleasePolicySource(read('src-tauri/src/release_policy.rs'));
@@ -540,7 +573,10 @@ export function validateMainnetSourcePolicy(read) {
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
-    validateMainnetSourcePolicy((path) => readFileSync(resolve(repoRoot, path), 'utf8'));
+    validateMainnetSourcePolicy(
+      (path) => readFileSync(resolve(repoRoot, path), 'utf8'),
+      (path) => readFileSync(resolve(repoRoot, path))
+    );
     console.log(
       'Mainnet source policy: activation is confined to fixed builds and the restart-bound internal multi-network identity.'
     );

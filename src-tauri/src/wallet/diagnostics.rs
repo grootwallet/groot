@@ -215,11 +215,17 @@ fn sanitized_error_fields(error: &ApiError) -> (String, String, Option<ApiErrorD
 }
 
 fn log_path(app: &AppHandle) -> ApiResult<PathBuf> {
-    Ok(app
-        .path()
-        .app_data_dir()
-        .map_err(internal)?
-        .join(LOG_FILENAME))
+    Ok(super::app_data_dir(app)?.join(LOG_FILENAME))
+}
+
+fn active_network_records(
+    records: impl IntoIterator<Item = DiagnosticRecordDto>,
+) -> Vec<DiagnosticRecordDto> {
+    let active_network = crate::build_network::name();
+    records
+        .into_iter()
+        .filter(|record| record.compiled_network == active_network)
+        .collect()
 }
 
 #[cfg(unix)]
@@ -377,7 +383,7 @@ fn read_records(app: &AppHandle, state: &AppState) -> ApiResult<Vec<DiagnosticRe
             )
         })?);
     }
-    Ok(records)
+    Ok(active_network_records(records))
 }
 
 #[tauri::command]
@@ -525,6 +531,44 @@ pub async fn diagnostics_export(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn diagnostic_record_for(network: &str) -> DiagnosticRecordDto {
+        DiagnosticRecordDto {
+            schema_version: 1,
+            timestamp: 1,
+            event: DiagnosticEventKind::AppStarted,
+            outcome: DiagnosticOutcome::Succeeded,
+            trigger: DiagnosticTrigger::Startup,
+            wallet_kind: None,
+            sync_source: None,
+            progress_percent: None,
+            item_count: None,
+            export_format: None,
+            error_code: None,
+            error_message: None,
+            error_details: None,
+            app_version: "0.4.96".to_owned(),
+            build_commit: "test".to_owned(),
+            compiled_network: network.to_owned(),
+            platform: "macos".to_owned(),
+        }
+    }
+
+    #[test]
+    fn diagnostics_only_return_the_active_network() {
+        let active = crate::build_network::name();
+        let foreign = if active == "mainnet" {
+            "regtest"
+        } else {
+            "mainnet"
+        };
+        let records = active_network_records([
+            diagnostic_record_for(foreign),
+            diagnostic_record_for(active),
+        ]);
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0].compiled_network, active);
+    }
 
     #[test]
     fn error_codes_are_strictly_allowlisted() {

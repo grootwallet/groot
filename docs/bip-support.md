@@ -1,5 +1,14 @@
 # Bitcoin Improvement Proposal support
 
+The 2026-10-02 v0.4.96 hardening changes encrypted-envelope KDF metadata and
+migration, trusted-boundary validation, and macOS packaging presentation. It
+does not change BIP39 passphrase semantics, derivation, descriptors, PSBT
+encoding, transactions, recovery, or interoperability. Canonical prevout
+binding verifies existing BIP174 input metadata against the wallet's recorded
+transactions before software signing. Fee/total-debit limits, active-chain
+broadcast proof, multisig quorum-intersection rules, and the post-device stale-
+input recheck add fail-closed policy without changing protocol formats.
+
 The 2026-09-30 saved-wallet device-membership and cancellation-copy follow-up has
 no BIP, descriptor, derivation, transaction, PSBT, signing, recovery,
 interoperability, or persisted-format impact. It disables a fingerprint-less

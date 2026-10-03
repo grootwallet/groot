@@ -5,7 +5,7 @@ use bdk_wallet::bitcoin::{
 use serde::Serialize;
 use std::{collections::HashSet, fmt};
 
-const MAX_PSBT_BYTES: usize = 1_048_576;
+pub(crate) const MAX_PSBT_BYTES: usize = 1_048_576;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProposalError {

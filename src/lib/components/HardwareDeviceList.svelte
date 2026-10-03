@@ -4,9 +4,10 @@
   import { Cpu, RefreshCw } from '@lucide/svelte';
   import type { HardwareDevice } from '$lib/wallet';
   import {
+    hardwareDeviceStateLabel,
     hardwareDeviceDisplayName,
     hardwareWalletMembership,
-    hardwareWalletMembershipLabel,
+    type HardwareWalletMembership,
     type SavedHardwareSignerName
   } from '$lib/hardware/discovery';
   import Button from './Button.svelte';
@@ -19,7 +20,15 @@
     disabled = false,
     showRescan = false,
     detailedStatus = false,
-    savedSigners = []
+    savedSigners = [],
+    eligibleFingerprints = [],
+    eligibleDeviceTypes = [],
+    membershipOverrides = {},
+    policyUnverified = () => false,
+    deviceDisplayName = (device) => hardwareDeviceDisplayName(device, savedSigners),
+    deviceStateLabel = (device, membership) =>
+      hardwareDeviceStateLabel(device, membership, policyUnverified(device)),
+    deviceDisabled = (_device, membership) => savedSigners.length > 0 && membership === 'unrelated'
   }: {
     devices: HardwareDevice[];
     emptyMessage: string;
@@ -29,23 +38,14 @@
     showRescan?: boolean;
     detailedStatus?: boolean;
     savedSigners?: readonly SavedHardwareSignerName[];
+    eligibleFingerprints?: readonly string[];
+    eligibleDeviceTypes?: readonly string[];
+    membershipOverrides?: Readonly<Record<string, HardwareWalletMembership>>;
+    policyUnverified?: (device: HardwareDevice) => boolean;
+    deviceDisplayName?: (device: HardwareDevice) => string;
+    deviceStateLabel?: (device: HardwareDevice, membership: HardwareWalletMembership) => string;
+    deviceDisabled?: (device: HardwareDevice, membership: HardwareWalletMembership) => boolean;
   } = $props();
-
-  function detail(device: HardwareDevice, membership: ReturnType<typeof hardwareWalletMembership>) {
-    if (device.action === 'prompt_pin') return '';
-    if (savedSigners.length && membership === 'unknown') return '';
-    if (device.fingerprint) return device.fingerprint;
-    return savedSigners.length ? '' : device.message;
-  }
-
-  function status(device: HardwareDevice) {
-    if (device.status === 'ready') return 'Ready';
-    if (device.action === 'prompt_pin') return 'Locked';
-    if (device.action === 'unlock') return 'Unlock & continue';
-    if (device.status === 'detected') return 'Detected';
-    if (device.action === 'confirm_empty_passphrase') return 'Choose wallet';
-    return 'Attention';
-  }
 </script>
 
 {#if !devices.length}
@@ -61,28 +61,39 @@
       devices.some((device) => device.action === 'prompt_pin')}
   >
     {#each devices as device (device.id)}
-      {@const membership = hardwareWalletMembership(
-        device,
-        savedSigners.map((signer) => signer.fingerprint),
-        savedSigners
-          .map((signer) => signer.deviceType)
-          .filter((deviceType): deviceType is string => Boolean(deviceType))
-      )}
-      {@const deviceDetail = detail(device, membership)}
+      {@const membership =
+        membershipOverrides[device.id] ??
+        (eligibleFingerprints.length || eligibleDeviceTypes.length || savedSigners.length
+          ? hardwareWalletMembership(
+              device,
+              eligibleFingerprints.length
+                ? eligibleFingerprints
+                : savedSigners.map((signer) => signer.fingerprint),
+              eligibleDeviceTypes.length
+                ? eligibleDeviceTypes
+                : savedSigners
+                    .map((signer) => signer.deviceType)
+                    .filter((deviceType): deviceType is string => Boolean(deviceType)),
+              savedSigners
+            )
+          : 'candidate')}
       <button
         onclick={() => onselect(device)}
-        disabled={disabled || (savedSigners.length > 0 && membership === 'unrelated')}
+        disabled={disabled || deviceDisabled(device, membership)}
       >
         <Cpu size={18} />
         <span
-          ><strong>{hardwareDeviceDisplayName(device, savedSigners)}</strong
-          >{#if savedSigners.length && hardwareWalletMembershipLabel(membership)}<small
-              >{translate($locale, hardwareWalletMembershipLabel(membership))}</small
-            >{/if}{#if deviceDetail}<small>{translate($locale, deviceDetail)}</small>{/if}</span
+          ><strong>{deviceDisplayName(device)}</strong>{#if device.fingerprint}<small
+              >{device.fingerprint}</small
+            >{/if}<em
+            class:ready={membership === 'candidate' &&
+              (device.status === 'ready' || device.status === 'detected')}
+            class:attention={(membership !== 'candidate' && membership !== 'compatible') ||
+              device.action === 'prompt_pin' ||
+              device.action === 'confirm_empty_passphrase'}
+            >{translate($locale, deviceStateLabel(device, membership))}</em
+          ></span
         >
-        {#if detailedStatus || device.action === 'prompt_pin'}<em
-            class:ready={device.status === 'ready'}>{translate($locale, status(device))}</em
-          >{/if}
       </button>
     {/each}
     {#if showRescan}

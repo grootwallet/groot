@@ -53,6 +53,7 @@ export function parseAmountInput(value: string, unit: Denomination): number {
   const trimmed = value.trim();
   if (!trimmed) return 0;
   if (unit === 'sats') {
+    if (!/^(?:\d+|\d{1,3}(?:,\d{3})+)$/.test(trimmed)) return Number.NaN;
     const parsed = Number(trimmed.replaceAll(',', ''));
     return Number.isSafeInteger(parsed) ? parsed : Number.NaN;
   }

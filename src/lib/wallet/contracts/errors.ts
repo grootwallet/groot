@@ -56,6 +56,7 @@ export const WALLET_ERROR_CODES = [
   'invalid_network',
   'unsafe_network_selection',
   'network_selection_failed',
+  'unsafe_test_root',
   'invalid_node_config',
   'invalid_scan_settings',
   'invalid_payment_request',

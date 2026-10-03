@@ -194,6 +194,7 @@ pub async fn wallet_select(app: AppHandle, wallet_id: String) -> ApiResult<Walle
         let state = app.state::<AppState>();
         cancel_foreground_sync(&state)?;
         let _operation = operation_guard(&state)?;
+        state.pending_mnemonic.lock().map_err(internal)?.take();
         let id = Uuid::parse_str(&wallet_id)
             .map_err(|_| api_error("wallet_not_found", "The selected wallet does not exist."))?;
         let mut registry = load_registry(&app)?;
@@ -538,6 +539,7 @@ pub async fn wallet_lock(app: AppHandle) -> ApiResult<()> {
         let state = app.state::<AppState>();
         cancel_foreground_sync(&state)?;
         let _operation = operation_guard(&state)?;
+        state.pending_mnemonic.lock().map_err(internal)?.take();
         state.proposals.lock().map_err(internal)?.clear();
         let profile = selected_profile(&app)?;
         lock_wallet(&state, profile.id)?;
@@ -948,6 +950,7 @@ pub(crate) fn ordered_fee_estimates(economy: f64, standard: f64, priority: f64) 
 }
 
 pub(crate) const SPARSE_MEMPOOL_LIMIT_VBYTES: u64 = 900_000;
+pub(crate) const MAX_BACKEND_FEE_RATE_SAT_VB: u64 = 1_000;
 
 pub(crate) fn sparse_mempool_fee_rate(
     entries: impl IntoIterator<Item = (u64, u64)>,
@@ -963,6 +966,9 @@ pub(crate) fn sparse_mempool_fee_rate(
             return None;
         }
         let rate = modified_fee_sats.div_ceil(vsize).max(1);
+        if rate > MAX_BACKEND_FEE_RATE_SAT_VB {
+            return None;
+        }
         lowest_rate = Some(lowest_rate.map_or(rate, |current: u64| current.min(rate)));
     }
     lowest_rate.map(|rate| rate as f64)

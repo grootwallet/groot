@@ -85,6 +85,8 @@ describe('restart-bound Bitcoin network switching', () => {
     expect(adapter).toContain("command<void>('bitcoin_network_switch'");
     expect(native).toContain('build_network::save_selection_at(&root, selected)');
     expect(native).toContain('app.request_restart()');
+    expect(native).toContain('window.unminimize()?');
+    expect(native).toContain('window.set_focus()?');
     expect(native.indexOf('initialize_network(app.handle())')).toBeLessThan(
       native.indexOf('ProcessLock::acquire_for_app(app.handle())')
     );

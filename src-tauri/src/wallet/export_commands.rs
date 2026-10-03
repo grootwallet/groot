@@ -1,5 +1,6 @@
 use super::{
-    api_error, diagnostics, internal, proposal_api_error, selected_profile, ApiResult, AppState,
+    api_error, diagnostics, internal, proposal_api_error, require_unlocked, selected_profile,
+    ApiResult, AppState,
 };
 use crate::proposal::decode_psbt;
 use serde::Serialize;
@@ -481,6 +482,7 @@ pub async fn public_backup_pdf_prepare(
     state: State<'_, AppState>,
     suggested_filename: String,
 ) -> ApiResult<PendingPdfExportDto> {
+    require_unlocked(&app, &state)?;
     let filename = validate_public_backup_pdf_filename(&suggested_filename)?.to_owned();
     let selected_path = tauri::async_runtime::spawn_blocking(move || {
         let selected = app
@@ -530,6 +532,7 @@ pub async fn public_backup_pdf_save(
     save_token: String,
     markup: String,
 ) -> ApiResult<SavedFileDto> {
+    require_unlocked(&app, &state)?;
     let pending = state
         .pending_pdf_exports
         .lock()
@@ -556,9 +559,12 @@ pub async fn public_backup_pdf_save(
 
 #[cfg(not(target_os = "macos"))]
 pub fn public_backup_pdf_prepare(
+    app: AppHandle,
+    state: State<'_, AppState>,
     window: WebviewWindow,
     _suggested_filename: String,
 ) -> ApiResult<PendingPdfExportDto> {
+    require_unlocked(&app, &state)?;
     window.print().map_err(internal)?;
     Ok(PendingPdfExportDto {
         prepared: false,
@@ -567,7 +573,13 @@ pub fn public_backup_pdf_prepare(
 }
 
 #[cfg(not(target_os = "macos"))]
-pub fn public_backup_pdf_save(_save_token: String, _markup: String) -> ApiResult<SavedFileDto> {
+pub fn public_backup_pdf_save(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    _save_token: String,
+    _markup: String,
+) -> ApiResult<SavedFileDto> {
+    require_unlocked(&app, &state)?;
     Err(api_error(
         "backup_export_failed",
         "Native PDF saving is not available on this platform.",

@@ -59,10 +59,13 @@ fn initialize_network(app: &tauri::AppHandle) -> Result<(), build_network::Netwo
     {
         return Ok(());
     }
-    let root = app
-        .path()
-        .app_data_dir()
-        .map_err(|_| build_network::NetworkSelectionError::Io)?;
+    let root = match build_network::multi_network_app_data_override()? {
+        Some(path) => path,
+        None => app
+            .path()
+            .app_data_dir()
+            .map_err(|_| build_network::NetworkSelectionError::Io)?,
+    };
     build_network::activate_selection(&root)
 }
 
@@ -83,10 +86,15 @@ fn bitcoin_network_switch(
     if selected == build_network::network() {
         return Ok(());
     }
-    let root = app
-        .path()
-        .app_data_dir()
-        .map_err(|_| network_selection_api_error(build_network::NetworkSelectionError::Io))?;
+    let root = match build_network::multi_network_app_data_override()
+        .map_err(network_selection_api_error)?
+    {
+        Some(path) => path,
+        None => app
+            .path()
+            .app_data_dir()
+            .map_err(|_| network_selection_api_error(build_network::NetworkSelectionError::Io))?,
+    };
     build_network::save_selection_at(&root, selected).map_err(network_selection_api_error)?;
     app.request_restart();
     Ok(())
@@ -125,6 +133,12 @@ pub fn run() {
             initialize_network(app.handle())?;
             let lock = process_lock::ProcessLock::acquire_for_app(app.handle())?;
             app.manage(lock);
+            #[cfg(desktop)]
+            if let Some(window) = app.get_webview_window("main") {
+                window.show()?;
+                window.unminimize()?;
+                window.set_focus()?;
+            }
             let state = app.state::<wallet::AppState>();
             wallet::diagnostics::record(
                 app.handle(),

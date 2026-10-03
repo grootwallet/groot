@@ -24,6 +24,9 @@ describe('amount denomination', () => {
     expect(parseAmountInput('0.00143182', 'btc')).toBe(143_182);
     expect(parseAmountInput('0.000000001', 'btc')).toBeNaN();
     expect(parseAmountInput('143,182', 'sats')).toBe(143_182);
+    expect(parseAmountInput('1e5', 'sats')).toBeNaN();
+    expect(parseAmountInput('0x10', 'sats')).toBeNaN();
+    expect(parseAmountInput('1,00', 'sats')).toBeNaN();
   });
 
   it('converts valid send inputs exactly and refuses to reinterpret invalid values', () => {

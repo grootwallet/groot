@@ -30,3 +30,9 @@ test('internal multi-network RC uses the HWI-sealed multi configuration', () => 
   assert.equal(multiConfig.build.beforeBuildCommand, 'pnpm build:multi');
   assert.equal(multiConfig.bundle.resources['.release-stage/hwi'], 'hwi');
 });
+
+test('internal RC creates the same branded drag-to-Applications DMG used by production', () => {
+  assert.match(source, /scripts\/release\/create-macos-dmg\.mjs/);
+  assert.match(source, /outputDmg/);
+  assert.match(source, /outputDmg,[\s\S]*'Groot'/);
+});

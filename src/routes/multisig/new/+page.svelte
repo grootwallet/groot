@@ -27,6 +27,7 @@
   import { defaultConfig, networkName } from '$lib/config';
   import FieldCounter from '$lib/components/FieldCounter.svelte';
   import HardwareActionPrompt from '$lib/components/HardwareActionPrompt.svelte';
+  import HardwareDeviceList from '$lib/components/HardwareDeviceList.svelte';
   import InsightTip from '$lib/components/InsightTip.svelte';
   import DeviceDetailsModal from '$lib/components/DeviceDetailsModal.svelte';
   import DiscardMultisigSetupModal from '$lib/components/DiscardMultisigSetupModal.svelte';
@@ -39,6 +40,7 @@
   import WarningNotice from '$lib/components/WarningNotice.svelte';
   import { toast } from '$lib/stores/toasts';
   import { useWalletShellContext } from '$lib/wallet/shell-context';
+  import { hardwareDeviceStateLabel, type HardwareWalletMembership } from '$lib/hardware/discovery';
   import {
     walletService,
     WalletError,
@@ -2305,51 +2307,20 @@
         >{translate($locale, 'Scan again')}</Button
       >
     </div>
-  {:else}<div class="source-list hardware-device-list">
-      {#each hardware as device}{@const addedSigner = addedSignerForDevice(device)}<button
-          disabled={Boolean(addedSigner) || device.action === 'none'}
-          onclick={() => handleHardware(device)}
-          ><Cpu size={18} /><span
-            ><strong>{translate($locale, addedSigner?.label ?? device.label)}</strong><small
-              >{translate(
-                $locale,
-                addedSigner
-                  ? `Fingerprint ${device.fingerprint} · Already added as ${addedSigner.label}.`
-                  : device.action === 'prompt_pin'
-                    ? ''
-                    : device.fingerprint
-                      ? `Fingerprint ${device.fingerprint} · ${device.message}`
-                      : device.message
-              )}</small
-            ><em
-              class:ready={!addedSigner && device.status === 'ready'}
-              class:signed={Boolean(addedSigner)}
-              >{translate(
-                $locale,
-                addedSigner
-                  ? 'Already added'
-                  : device.action === 'prompt_pin'
-                    ? 'Locked'
-                    : device.status === 'ready' || device.status === 'detected'
-                      ? 'Ready'
-                      : device.action === 'unlock'
-                        ? 'Unlock & continue'
-                        : device.action === 'confirm_empty_passphrase'
-                          ? 'Choose wallet'
-                          : device.action === 'retry'
-                            ? 'Scan again'
-                            : 'Unavailable'
-              )}</em
-            ></span
-          >{#if !addedSigner && device.action !== 'none'}<ChevronRight size={15} />{/if}</button
-        >{/each}<button class="hardware-rescan" onclick={scanHardware}
-        ><RefreshCw size={16} /><span
-          ><strong>{translate($locale, 'Scan again')}</strong><small
-            >{translate($locale, 'Refresh connected signers.')}</small
-          ></span
-        ><ChevronRight size={15} /></button
-      >
-    </div>{/if}
+  {:else}<HardwareDeviceList
+      devices={hardware}
+      emptyMessage=""
+      onselect={handleHardware}
+      onrescan={scanHardware}
+      showRescan
+      detailedStatus
+      deviceDisplayName={(device) => addedSignerForDevice(device)?.label ?? device.label}
+      deviceDisabled={(device) => Boolean(addedSignerForDevice(device)) || device.action === 'none'}
+      deviceStateLabel={(device, membership: HardwareWalletMembership) =>
+        addedSignerForDevice(device)
+          ? 'Already added'
+          : hardwareDeviceStateLabel(device, membership)}
+    />{/if}
   {#if error && hardware.length > 0}<div class="hardware-inline-error" role="alert">
       <AlertTriangle size={18} /><span
         ><strong>{translate($locale, 'Could not read the account key')}</strong><small
