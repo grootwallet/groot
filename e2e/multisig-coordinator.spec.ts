@@ -242,7 +242,7 @@ test('keeps multisig receive verification disclosure visibly expandable', async 
   const lockedTrezor = dialog.getByRole('button', { name: /Virtual Trezor One/ });
   await expect(lockedTrezor).toBeEnabled();
   await expect(lockedTrezor).toContainText('Locked');
-  await expect(lockedTrezor).toContainText('Unlock to identify');
+  await expect(lockedTrezor).toContainText(/wallet match unknown/i);
   await expect(dialog).not.toContainText('Wallet key candidate');
   const outsider = dialog.getByRole('button', { name: /Virtual Trezor Standard/ });
   await expect(outsider).toContainText('Not part of this wallet');
@@ -1368,7 +1368,7 @@ test('explains hardware readiness before scanning', async ({ page }) => {
       .locator('.hardware-device-list')
       .evaluate((element) => element.scrollWidth <= element.clientWidth)
   ).toBe(true);
-  await expect(scan.getByRole('button', { name: /Scan again/ })).toBeVisible();
+  await expect(scan.getByRole('button', { name: /Rescan devices/ })).toBeVisible();
   const modalBody = scan.locator('.modal-body');
   expect(await modalBody.evaluate((element) => getComputedStyle(element).overflowY)).toBe('auto');
   const modalCanScroll = await modalBody.evaluate(
@@ -1541,7 +1541,7 @@ test('marks an already-added connected signer and prevents selecting it again', 
     .getByRole('dialog', { name: 'Connect hardware device' })
     .getByRole('button', { name: /Virtual Coldcard/ });
   await expect(alreadyAdded).toContainText('Already added');
-  await expect(alreadyAdded).toContainText('Already added as Virtual Coldcard');
+  await expect(alreadyAdded).toContainText('f00dbabe');
   await expect(alreadyAdded).toBeDisabled();
 });
 

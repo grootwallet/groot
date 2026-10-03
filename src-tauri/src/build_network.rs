@@ -1,6 +1,7 @@
 use bdk_wallet::bitcoin::{Network, NetworkKind};
 use serde::{Deserialize, Serialize};
 use std::{
+    ffi::OsString,
     fs::{self, File, OpenOptions},
     io::{Read, Write},
     path::{Path, PathBuf},
@@ -208,10 +209,22 @@ fn validate_multi_network_app_data_override(
 }
 
 pub fn multi_network_app_data_override() -> Result<Option<PathBuf>, NetworkSelectionError> {
-    std::env::var_os(MULTI_NETWORK_APP_DATA_OVERRIDE)
-        .map(PathBuf::from)
-        .map(|path| validate_multi_network_app_data_override(path, switching_enabled()))
-        .transpose()
+    resolve_multi_network_app_data_override(
+        std::env::var_os(MULTI_NETWORK_APP_DATA_OVERRIDE),
+        switching_enabled(),
+    )
+}
+
+fn resolve_multi_network_app_data_override(
+    configured: Option<OsString>,
+    switching: bool,
+) -> Result<Option<PathBuf>, NetworkSelectionError> {
+    match configured {
+        Some(path) => {
+            validate_multi_network_app_data_override(PathBuf::from(path), switching).map(Some)
+        }
+        None => Ok(None),
+    }
 }
 
 pub fn activate_selection(root: &Path) -> Result<(), NetworkSelectionError> {
@@ -535,7 +548,7 @@ mod tests {
         let valid = temporary_root.join(format!("groot-multi-{}", Uuid::new_v4()));
         assert_eq!(
             validate_multi_network_app_data_override(valid.clone(), true),
-            Ok(valid)
+            Ok(valid.clone())
         );
         assert_eq!(
             validate_multi_network_app_data_override(
@@ -554,6 +567,31 @@ mod tests {
         assert_eq!(
             validate_multi_network_app_data_override(PathBuf::from("groot-multi-relative"), true),
             Err(NetworkSelectionError::UnsafeTestRoot)
+        );
+        assert_eq!(
+            resolve_multi_network_app_data_override(None, true),
+            Ok(None)
+        );
+        assert_eq!(
+            resolve_multi_network_app_data_override(Some(valid.clone().into_os_string()), true),
+            Ok(Some(valid.clone()))
+        );
+        fs::write(&valid, b"not a directory").unwrap();
+        assert_eq!(
+            validate_multi_network_app_data_override(valid.clone(), true),
+            Err(NetworkSelectionError::UnsafeTestRoot)
+        );
+        fs::remove_file(valid).unwrap();
+    }
+
+    #[test]
+    fn optional_multi_network_root_uses_the_same_strict_validator() {
+        assert_eq!(
+            multi_network_app_data_override(),
+            resolve_multi_network_app_data_override(
+                std::env::var_os(MULTI_NETWORK_APP_DATA_OVERRIDE),
+                switching_enabled(),
+            )
         );
     }
 

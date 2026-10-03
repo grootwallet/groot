@@ -33,7 +33,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src-tauri/src/build_network.rs',
-    '2cef2d88cda022c23fda1dac4c448b4cae6ee497b6cf39397775a279a96afbb9'
+    'caa8b1d04204424207d41c2d67c6baaf35fadc4b42b4c7440e1aee61e264cfcc'
   ],
   [
     'src-tauri/src/process_lock.rs',
