@@ -1,6 +1,8 @@
 # Groot
 
-A minimal onchain Bitcoin wallet and descriptor multisig coordinator built with SvelteKit, Tauri v2, BDK, and Miniscript. Native builds are compile-time isolated for Regtest, Signet, or Testnet4; mainnet remains disabled. BDK owns Groot's wallet databases, while the Regtest Bitcoin Core `groot-dev` wallet is only the faucet and miner.
+A minimal, non-custodial onchain Bitcoin wallet and descriptor multisig coordinator built with SvelteKit, Tauri v2, BDK, and Miniscript. The macOS Apple-silicon v0.4.96 release offers restart-bound, isolated Regtest, Testnet4, and limited Mainnet operation with software wallets, supported hardware signers, single-sig, multisig, coin control, labels, and user-controlled Bitcoin Core connectivity. BDK owns Groot's wallet databases, while the Regtest Bitcoin Core `groot-dev` wallet is only the faucet and miner.
+
+Groot is recently developed wallet software. Use it cautiously, start with small amounts, verify addresses and transaction details on trusted devices, and keep independently tested backups. Please test across all three networks and report bugs through [GitHub Issues](https://github.com/grootwallet/groot/issues).
 
 ## Repository boundary
 
@@ -113,7 +115,7 @@ cargo clippy --all-targets --all-features -- -D warnings
 cargo test
 ```
 
-Before connecting a physical signer, run `pnpm hardware:preflight` and follow the evidence matrix in [hardware certification](docs/hardware-certification.md). Mainnet is intentionally disabled. Enabling it requires every item in the [mainnet release checklist](docs/mainnet-release-checklist.md), the [threat model](docs/mainnet-threat-model.md), and ADR 0012 to be resolved and independently reviewed.
+Before connecting a physical signer, run `pnpm hardware:preflight` and follow the evidence matrix in [hardware certification](docs/hardware-certification.md). Limited Mainnet operation is approved only for the reviewed v0.4.96 macOS scope recorded in the [mainnet release checklist](docs/mainnet-release-checklist.md), [threat model](docs/mainnet-threat-model.md), and [ADR 0069](docs/adr/0069-release-multi-network-desktop-app.md). New platforms, wallet classes, transports, hardware models, backends, or higher limits require separate evidence and approval.
 
 ## Documentation map
 

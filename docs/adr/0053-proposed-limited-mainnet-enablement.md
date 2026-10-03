@@ -1,6 +1,6 @@
 # ADR 0053: Proposed limited mainnet enablement
 
-- Status: proposed and blocked for release; transport and GA artifact shape superseded by ADR 0061 and ADR 0069
+- Status: superseded for release by ADR 0061, ADR 0069, and the bounded v0.4.96 GA decision
 - Date: 2026-09-02
 - Would supersede: ADR 0012 only after every exit condition below is met
 - Extends: ADR 0026, ADR 0037, ADR 0052

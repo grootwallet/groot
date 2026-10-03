@@ -1,6 +1,6 @@
 # ADR 0069: Release one restart-bound multi-network desktop app
 
-- Status: accepted for GA scope; distribution remains blocked by the release checklist
+- Status: accepted and exercised by the v0.4.96 macOS GA release
 - Date: 2026-09-16
 - Supersedes: ADR 0053 and ADR 0055 where they require a dedicated Mainnet-only GA artifact; ADR 0068 where it classifies the multi-network artifact as permanently internal-only
 - Extends: ADR 0027, ADR 0052, ADR 0068

@@ -105,7 +105,7 @@ Reports should describe:
 
 ### Network and webview policy
 
-- Native wallet code is compile-time pinned to exactly one of Regtest, Signet, Testnet4, or the separately configured ADR 0055 mainnet certification identity, each with isolated application storage. Only that dedicated candidate can select Bitcoin mainnet. Before it creates or opens wallet SQLite, trusted Rust requires purpose-, wallet-, configuration-, and time-bound admission of an authenticated, synchronized, loopback-only Bitcoin Core node on the exact Bitcoin genesis chain. Its trusted transaction policy permits one recipient and at most 1,000,000 satoshis; distribution remains blocked.
+- The macOS GA application is the restart-bound ADR 0069 build with isolated Regtest, Testnet4, and Mainnet namespaces. Before it opens Mainnet wallet data, trusted Rust requires purpose-, wallet-, configuration-, and time-bound admission of an authenticated, synchronized Bitcoin Core service on the exact Bitcoin genesis chain. Its trusted transaction policy permits one recipient, caps fees at 100,000 satoshis, and caps recipient value plus fees at 1,000,000 satoshis. Fixed-network builds remain rehearsal artifacts.
 - Local Bitcoin Core endpoints must be loopback. Remote endpoint policy rejects embedded credentials, cleartext non-loopback transport, forged presets, and network mismatches.
 - Tauri capabilities remain minimal: no shell, filesystem, generic HTTP, clipboard-read, or remote-origin capability is granted.
 - The Tauri CSP denies remote scripts, frames, objects, workers, and manifests. Camera media is limited to same-origin/blob capture for the explicit PSBT scanner and requires platform permission.
@@ -202,19 +202,8 @@ Production packaged-HWI verification now requires matching Developer ID teams, h
 
 The complete disposition and residual-risk record is [`docs/security-remediation-2026-09-03.md`](docs/security-remediation-2026-09-03.md). It is not independent closing review, exact-candidate evidence, or mainnet release authorization. The old notarized v0.4.91 artifact remains historical Testnet4 evidence only.
 
-## Mainnet distribution blockers
+## Mainnet distribution status
 
-The isolated ADR 0055 candidate is available only for certification. Mainnet distribution and ordinary use remain blocked. At minimum, release requires:
+Groot v0.4.96 is the first approved macOS Apple-silicon GA release with isolated Regtest, Testnet4, and Mainnet support. Its exact commit, reproducibility result, security scan, signed/notarized package checks, public-download smoke test, and independent tester result are recorded in [issue #105](https://github.com/grootwallet/groot/issues/105). The release is intentionally limited: other platforms, new wallet classes, new hardware models or transports, higher limits, and additional backends require their own evidence and release decisions.
 
-1. independent external security review and remediation;
-2. reproducible signed builds, SBOM/provenance, reviewed update delivery, and pinned/verified HWI artifacts;
-3. physical certification for every supported hardware-wallet model, firmware, host OS, address-display flow, rejection path, reconnect path, and signing flow;
-4. Android Keystore and Windows credential-vault implementation and certification, plus Apple lifecycle/accessibility evidence;
-5. verified backend chain identity and reviewed mainnet Core/remote-backend privacy and authentication;
-6. funded recovery/timelock boundary and reorg testing;
-7. signed-package second-launch, forced-termination, and cross-platform process-lock acceptance;
-8. large-history scanning, pagination, and performance validation;
-9. green, current dependency advisory checks and closure of applicable inherited dependency warnings;
-10. explicit approval of the canonical mainnet checklist.
-
-No test count, coverage percentage, internal review, or hardware simulator result overrides these blockers.
+Groot is recently developed wallet software. Users should begin with small amounts, verify addresses and transaction details on trusted displays, keep independently tested backups, and report suspected security issues through the private process above rather than a public issue.

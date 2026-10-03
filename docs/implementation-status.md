@@ -1515,3 +1515,18 @@ unsigned/ad-hoc functional regression campaign. Envelope migration testing may
 use only disposable profiles or copies because a v4 write cannot be opened by
 older Groot versions. The stable v0.4.95 prerelease, tag, assets, and evidence
 remain unchanged.
+
+# v0.4.96 GA release status
+
+On 2026-10-03 Groot v0.4.96 became the first approved macOS Apple-silicon GA
+release with restart-bound, isolated Regtest, Testnet4, and limited Mainnet
+operation. The exact release commit is
+`f7b4b9935943f0250353a6f77c3d8fca31906fff`. Exact-tip CI and security review,
+independent unsigned reproducibility, Developer ID signing and notarization,
+packaged HWI 3.2.0, SBOM/provenance/checksum verification, public-download
+network/restart/log/DMG-layout acceptance, and independent tester confirmation
+are recorded in [issue #105](https://github.com/grootwallet/groot/issues/105).
+Historical candidate sections below remain chronological records and must not be
+read as the current distribution decision. iOS, Android, Windows, new wallet
+classes, new signer models or transports, backend expansion, and higher limits
+remain separately gated.

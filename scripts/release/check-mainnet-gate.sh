@@ -94,16 +94,16 @@ contains_fixed 'hwi_chain: "main"' src-tauri/src/build_network.rs \
   || fail "the dormant mainnet HWI chain is no longer explicit"
 contains_fixed 'address_hrp: "bc"' src-tauri/src/build_network.rs \
   || fail "the dormant mainnet address family is no longer explicit"
-contains_fixed "Release decision: BLOCKED" docs/mainnet-release-checklist.md \
-  || fail "the release checklist is not explicitly blocked"
+contains_fixed "Release decision: APPROVED FOR V0.4.96 LIMITED MACOS GA" docs/mainnet-release-checklist.md \
+  || fail "the release checklist does not bind approval to the bounded v0.4.96 macOS GA scope"
 contains_fixed "Candidate scope: first mainnet release is macOS desktop on Apple silicon, includes BIP84 software single-key wallets" docs/mainnet-release-checklist.md \
   || fail "the first-release platform scope is missing from the checklist"
 contains_fixed "The first limited mainnet candidate includes:" docs/adr/0052-first-mainnet-software-and-hardware-scope.md \
   || fail "the first-release software and hardware wallet scope decision is missing"
-contains_fixed "mainnet candidate remains blocked from distribution" docs/adr/0052-first-mainnet-software-and-hardware-scope.md \
-  || fail "the software and hardware scope decision no longer preserves the distribution lock"
-contains_fixed "- [ ] User-controlled Bitcoin Core is the only first-release mainnet backend" docs/mainnet-release-checklist.md \
-  || fail "the expanded first-mainnet backend evidence is not visibly blocking"
+contains_fixed "Any expansion still requires exact, independent evidence and a separate release decision." docs/adr/0052-first-mainnet-software-and-hardware-scope.md \
+  || fail "the software and hardware scope decision no longer gates expansion"
+contains_fixed "- [x] User-controlled Bitcoin Core is the only v0.4.96 Mainnet backend" docs/mainnet-release-checklist.md \
+  || fail "the approved v0.4.96 backend scope is missing from the checklist"
 contains_fixed "Tor/onion Core remains excluded" docs/mainnet-release-checklist.md \
   || fail "the first-mainnet Tor exclusion is missing"
 contains_fixed "The first production target is a **macOS Apple-silicon desktop release with both software and approved hardware wallets" docs/roadmap.md \
@@ -120,7 +120,7 @@ contains_fixed "BitBox02 Nova" docs/mainnet-release-checklist.md \
   || fail "the Nova support decision is missing from the hardware matrix"
 contains_fixed "Blockstream Jade" docs/mainnet-release-checklist.md \
   || fail "the required Jade certification row is missing"
-contains_fixed "secure-storage and lifecycle certification for every platform included in that candidate" docs/mainnet-threat-model.md \
-  || fail "the threat model no longer scopes platform evidence to the candidate"
+contains_fixed "other platforms require their own build and acceptance evidence" docs/mainnet-threat-model.md \
+  || fail "the threat model no longer gates platform expansion"
 
-echo "Mainnet candidate gate: fixed and multi-network evidence builds enabled; distribution remains blocked."
+echo "Mainnet release gate: v0.4.96 bounded macOS GA approved; later candidates and scope expansion remain gated."
