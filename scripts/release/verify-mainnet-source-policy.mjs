@@ -15,7 +15,16 @@ const pinnedPolicySources = new Map([
   ['src-tauri/src/session.rs', '82da6d3a2643710aaa0974f69f0fb7c932172a401ecf33c186e440c8170f35e0'],
   ['.env.mainnet', '1623f3f97de588daea2bbeae1f9c56ebc896b6bc2c22ac238563b46b688ced85'],
   ['.env.multi', '33fc3d5022968d9eaa25bfe749c0b01691c0570611a65255100718d2c50df723'],
-  ['package.json', 'a97383a44d530e7a0d11a824b7d4f798b6bf016e7d195fcbf239a2ff51697827'],
+  ['package.json', '4c8c1aff8d5c670ab8d35470fc1533dcf9d234bd289ae50cc3ebdb1c878ccd09'],
+  ['src-tauri/Cargo.toml', 'dead01bffd08e89b5aad85ca506672e1e1f2f75c36ff8530b520adf8714c1a31'],
+  ['src-tauri/tauri.conf.json', 'f2628a1c0ef079561ce5525b8e176345b11c4de73b62942e10f0a1972b6dd7c9'],
+  ['LICENSE', 'c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4'],
+  ['NOTICE', 'b39c98ac4d5186a7418ee71e1a8a7a29fb574ada3a7c58184c00125dda8d511d'],
+  ['THIRD_PARTY_NOTICES.md', 'a181753f36eb3e475cddf31a69d2e75f01a86a79c70de252abb1e73a059407db'],
+  [
+    'docs/mainnet-release-authorization.json',
+    '8ab4f0fb0e75fe593437409c56b9f81b41b864c45b9d5ba04bddfc8fbd4ef603'
+  ],
   ['src-tauri/src/lib.rs', 'f91975ed53e93d004eb46818fb7d73fb8aa5a710eb2d9494c8d563c02e00a705'],
   [
     'src-tauri/src/managed_gateway.rs',
@@ -148,7 +157,19 @@ const pinnedPolicySources = new Map([
   ],
   [
     'scripts/release/package-macos-ga.mjs',
-    'a2ff35133c2fc5a106fe266b974b5144de41127af487f17032d7cba5b2c52de7'
+    'c96830ac09ffb08e309753324d068cb13dffadcde412dfa3592bc46a3f75901a'
+  ],
+  [
+    'scripts/release/assert-public-release-authorized.mjs',
+    '8e0adfd619976a8f0cc0c0465425a1fc5dc0cee9f7889f2acc929d42ebd7204e'
+  ],
+  [
+    'scripts/release/check-mainnet-gate.sh',
+    '849e10f1aa22041117168a14e0147e6a499d9ccba2672f573e137e13edc6d7a1'
+  ],
+  [
+    'scripts/release/generate-sbom.mjs',
+    '906d23f8b2e5b151d60fd00ba2abebe19d35b4c3d66540b8e79fafd48487f32c'
   ],
   [
     'scripts/release/create-macos-dmg.mjs',

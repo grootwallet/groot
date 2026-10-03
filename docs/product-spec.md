@@ -28,6 +28,12 @@ the confirmed-original notice may simply offer an Overview exit.
 
 Status: canonical for the current prototype and first live integration build.
 
+The base wallet application is Apache-2.0 under ADR 0080. That license does not
+cover the Groot marks beyond customary attribution and does not automatically
+cover future hosted, family, business, enterprise, or separately self-hosted
+services. The free wallet must remain independently recoverable and spendable
+without any such service.
+
 ## Product
 
 Receive discard confirmation shows every assigned label and the compact target

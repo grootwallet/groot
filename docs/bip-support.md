@@ -1,5 +1,10 @@
 # Bitcoin Improvement Proposal support
 
+The 2026-10-03 Apache-2.0 adoption and public-release authorization guard have
+no BIP, descriptor, derivation, transaction, PSBT, signing, recovery,
+interoperability, or persisted-format impact. They change licensing,
+attribution, documentation, and production packaging authorization only.
+
 The 2026-10-02 v0.4.96 hardening changes encrypted-envelope KDF metadata and
 migration, trusted-boundary validation, and macOS packaging presentation. It
 does not change BIP39 passphrase semantics, derivation, descriptors, PSBT

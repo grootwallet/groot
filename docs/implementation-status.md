@@ -1515,3 +1515,30 @@ unsigned/ad-hoc functional regression campaign. Envelope migration testing may
 use only disposable profiles or copies because a v4 write cannot be opened by
 older Groot versions. The stable v0.4.95 prerelease, tag, assets, and evidence
 remain unchanged.
+
+## 2026-10-03 licensing and public-release governance correction
+
+The base wallet now declares Apache-2.0 consistently in the root license and
+notice, Node/Rust manifests, contribution policy, generated application SBOM,
+provenance, and packaged legal resources. Third-party HWI, vendored code,
+dependencies, and fonts retain their own terms. Git history supports Thibaud
+Marechal and the same-email `thib` alias as the current contributor identity;
+the repository contains no company assignment or CLA, so any undisclosed prior
+assignment remains an ownership question rather than an invented corporate
+claim. ADR 0080 records the boundary and no-trademark grant.
+
+The public `v0.4.96` release at `f7b4b993` distributed and advertised the
+multi-network app with Mainnet while the exact tagged checklist remained
+`BLOCKED`, ADR 0053 remained proposed, and ADR 0012 remained in force. The
+public `v0.4.95` tag also moved from the locally retained `f486d923` target to
+`c3002279`. ADR 0079 treats these as release-governance failures, not implicit
+authorization. No published release or tag is modified by this change.
+
+The production macOS packager now refuses to proceed before build, signing, or
+notarization unless a machine-readable record names the exact commit, a unique
+accepted ADR explicitly authorizes that commit, the checklist is approved, and
+no checklist item remains open. The current record is deliberately blocked.
+Internal unsigned/ad-hoc certification builds remain available with their
+existing warnings. No wallet, profile, database, registry, proposal, backup,
+credential-envelope, descriptor, network-selector, or protocol format changes;
+no migration is required and BIP support is unchanged.

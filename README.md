@@ -1,12 +1,26 @@
 # Groot
 
-A minimal onchain Bitcoin wallet and descriptor multisig coordinator built with SvelteKit, Tauri v2, BDK, and Miniscript. Native builds are compile-time isolated for Regtest, Signet, or Testnet4; mainnet remains disabled. BDK owns Groot's wallet databases, while the Regtest Bitcoin Core `groot-dev` wallet is only the faucet and miner.
+A minimal onchain Bitcoin wallet and descriptor multisig coordinator built with SvelteKit, Tauri v2, BDK, and Miniscript. The desktop application has isolated Regtest, Testnet4, and Mainnet namespaces, but public Mainnet distribution remains blocked by the canonical release gate. BDK owns Groot's wallet databases, while the Regtest Bitcoin Core `groot-dev` wallet is only the faucet and miner.
+
+The public `v0.4.96` package advertised Mainnet before that gate was authorized.
+[ADR 0079](docs/adr/0079-record-unauthorized-mainnet-release-and-fail-closed-public-packaging.md)
+records the discrepancy; the package must not be treated as Mainnet approval or
+certification.
 
 ## Repository boundary
 
 This repository, [`grootwallet/groot`](https://github.com/grootwallet/groot), is the wallet application: native desktop/mobile through Tauri plus the browser-based wallet prototype. It does not contain the marketing website.
 
 The public marketing website lives only in [`thibistaken/groot-site`](https://github.com/thibistaken/groot-site). That repository is canonical for marketing code, copy, screenshots, SEO metadata, and Vercel deployment. Product behavior and security evidence remain canonical here.
+
+## License
+
+The Groot base wallet is licensed under [Apache-2.0](LICENSE). See [NOTICE](NOTICE),
+[third-party notices](THIRD_PARTY_NOTICES.md), and [contribution guidance](CONTRIBUTING.md).
+Apache-2.0 does not grant rights to the Groot name, logo, or product identity
+beyond customary attribution. Proposed hosted/family/business/enterprise
+services are outside this repository and license boundary unless their own
+source and license explicitly say otherwise.
 
 ## Run the functional regtest wallet
 
@@ -18,7 +32,7 @@ bash scripts/dev/tauri-regtest.sh
 
 Create a wallet in the native window and keep the 24 words and passphrase / PIN. Generate a labeled receive address, then fund it from Bitcoin Core using the amount in BTC:
 
-Generated recovery words appear in a compact platform-native backup sheet attached to Groot. On macOS they use an 8×3 monospaced grid and never enter the Svelte webview. Wallet secrets use the portable version-3 envelope described in [ADR 0037](docs/adr/0037-portable-credential-encrypted-secret-envelopes.md): AES-256-GCM encrypts the payload, and an Argon2id key derived from the wallet credential wraps its random data key. Version-2 envelopes migrate atomically after a correct unlock; wrong credentials or corrupt data leave the original file unchanged. Normal wallet operation does not depend on Apple Keychain or another platform keystore.
+Generated recovery words appear in a compact platform-native backup sheet attached to Groot. On macOS they use an 8×3 monospaced grid and never enter the Svelte webview. New wallet secrets use the portable version-4 envelope described in [ADR 0077](docs/adr/0077-close-mainnet-credential-and-backend-blockers.md): AES-256-GCM encrypts the payload, and a versioned Argon2id key derived from the wallet credential wraps its random data key. Authenticated version-2/version-3 envelopes migrate atomically after a correct unlock; wrong credentials or corrupt data leave the original file unchanged. Normal wallet operation does not depend on Apple Keychain or another platform keystore.
 
 ```sh
 pnpm regtest:send -- bcrt1q... 1.25 --mine
@@ -113,7 +127,7 @@ cargo clippy --all-targets --all-features -- -D warnings
 cargo test
 ```
 
-Before connecting a physical signer, run `pnpm hardware:preflight` and follow the evidence matrix in [hardware certification](docs/hardware-certification.md). Mainnet is intentionally disabled. Enabling it requires every item in the [mainnet release checklist](docs/mainnet-release-checklist.md), the [threat model](docs/mainnet-threat-model.md), and ADR 0012 to be resolved and independently reviewed.
+Before connecting a physical signer, run `pnpm hardware:preflight` and follow the evidence matrix in [hardware certification](docs/hardware-certification.md). Mainnet code is reachable in controlled candidate builds, but public distribution is not authorized. Authorization requires every item in the [mainnet release checklist](docs/mainnet-release-checklist.md), the [threat model](docs/mainnet-threat-model.md), and ADR 0012 to be resolved and independently reviewed, plus an exact-commit accepted release ADR and authorization record.
 
 ## Documentation map
 

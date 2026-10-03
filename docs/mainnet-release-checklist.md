@@ -2,9 +2,18 @@
 
 Release decision: BLOCKED
 
+Public-release incident: `v0.4.96` was published from `f7b4b993` with Mainnet
+claims while this checklist and ADR 0053 remained blocked. It is not release
+authorization or checklist evidence. ADR 0079 requires release-owner correction
+of that public claim and records that the `v0.4.95` tag also moved after its
+initial target. Production packaging now reads
+`docs/mainnet-release-authorization.json`, which remains `blocked`; a future
+approval must bind a fully closed checklist and accepted release ADR to the exact
+candidate commit.
+
 No checkbox may be marked complete without a linked test artifact, review record, or reproducible command output. Never commit mnemonics, credentials, xpubs, PSBTs, addresses, device paths, RPC secrets, or complete device fingerprints.
 
-Candidate scope: first mainnet release is macOS desktop on Apple silicon, includes BIP84 software single-key wallets, approved BIP84 hardware wallets, and standard BIP48 hardware multisig, is amount-capped, and is backed exclusively by a user-controlled Bitcoin Core node over admitted loopback HTTP or direct HTTPS. Under [ADR 0069](adr/0069-release-multi-network-desktop-app.md), that Mainnet scope ships in one restart-bound GA application offering isolated Regtest, Testnet4, and Mainnet namespaces. Hardware admission is exact-model except for the two explicitly accepted Coldcard and Jade HWI family records in [ADR 0054](adr/0054-approve-coldcard-and-jade-family-identities.md); certification evidence remains model-specific. Guided delayed/recovery Miniscript policies, iOS, Android, Windows, public Esplora as a backend, Tor/onion Core, compact-filter sync, Payjoin, batch spending, and mobile mainnet require separate release decisions; evidence for one wallet class, device, transport, selected network, or platform never certifies another. Remote HTTPS Core is in candidate scope under [ADR 0061](adr/0061-admit-mainnet-remote-core-over-https.md), but its exact-endpoint and network-observation evidence remains blocking.
+Candidate scope: first mainnet release is macOS desktop on Apple silicon, includes BIP84 software single-key wallets, approved BIP84 hardware wallets, and standard BIP48 hardware multisig, and is amount-capped. Under [ADR 0069](adr/0069-release-multi-network-desktop-app.md), that Mainnet scope ships in one restart-bound GA application offering isolated Regtest, Testnet4, and Mainnet namespaces. Under ADR 0078, Groot managed is the default node experience while admitted local and direct-HTTPS custom Core remain alternatives; every backend retains exact-chain, capability, response-bound, credential-protection, and no-silent-fallback checks. Hardware admission is exact-model except for the two explicitly accepted Coldcard and Jade HWI family records in [ADR 0054](adr/0054-approve-coldcard-and-jade-family-identities.md); certification evidence remains model-specific. Guided delayed/recovery Miniscript policies, iOS, Android, Windows, public Esplora as a direct app backend, Tor/onion Core, compact-filter sync, Payjoin, batch spending, and mobile Mainnet require separate release decisions; evidence for one wallet class, device, transport, selected network, or platform never certifies another. Remote HTTPS Core is in candidate scope under [ADR 0061](adr/0061-admit-mainnet-remote-core-over-https.md), but its exact-endpoint and network-observation evidence remains blocking.
 
 Signet is not a GA-selectable network under ADR 0069 and is not a Mainnet GA
 release gate. Its fixed rehearsal build and public campaign remain optional,

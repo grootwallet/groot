@@ -9,6 +9,7 @@ import { validateSignedHwiSignatureMetadata } from './verify-signed-hwi.mjs';
 
 const read = (path) => readFileSync(new URL(path, import.meta.url), 'utf8');
 const packageJson = JSON.parse(read('../../package.json'));
+const tauriConfig = JSON.parse(read('../../src-tauri/tauri.conf.json'));
 
 const validSignature = `
 Authority=Developer ID Application: Groot Wallet (6Z85HGDUU7)
@@ -84,9 +85,10 @@ test('multi-network evidence builder is release-bound and uses signed HWI proven
 
 test('production package binds the exact reproduced payload before signing', () => {
   const source = read('./package-macos-ga.mjs');
+  const authorization = source.indexOf('verifyPublicReleaseAuthorization({ repoRoot, commit })');
   const comparison = source.indexOf("digest(builtExecutable) !== digest(join(evidence, 'Groot'))");
   const appSigning = source.indexOf("run('codesign', ['--force', '--sign', identity");
-  assert.ok(comparison >= 0 && appSigning > comparison);
+  assert.ok(authorization >= 0 && comparison > authorization && appSigning > comparison);
   assert.doesNotMatch(
     source,
     /normalize-macho-uuid\.mjs', builtExecutable|--verify', '--strict', builtExecutable/
@@ -110,6 +112,13 @@ test('production package binds the exact reproduced payload before signing', () 
     packageJson.scripts['release:package:macos:ga'],
     'node scripts/release/package-macos-ga.mjs'
   );
+});
+
+test('packaged app carries the base license and attribution resources', () => {
+  assert.equal(packageJson.license, 'Apache-2.0');
+  assert.equal(tauriConfig.bundle.resources['../LICENSE'], 'LICENSE.txt');
+  assert.equal(tauriConfig.bundle.resources['../NOTICE'], 'NOTICE.txt');
+  assert.equal(tauriConfig.bundle.resources['../THIRD_PARTY_NOTICES.md'], 'THIRD_PARTY_NOTICES.md');
 });
 
 test('macOS DMG presents a compact branded drag-to-Applications layout', () => {

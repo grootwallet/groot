@@ -34,6 +34,12 @@ contains_fixed "export const SUPPORTED_NETWORKS = ['signet', 'testnet4', 'regtes
 contains_fixed '"regtest" | "signet" | "testnet4" | "mainnet" | "multi" => {}' src-tauri/build.rs \
   || fail "the native compile-time network allowlist changed"
 node scripts/release/verify-mainnet-source-policy.mjs
+contains_fixed '"status": "blocked"' docs/mainnet-release-authorization.json \
+  || fail "the source-controlled public-release authorization is no longer blocked"
+contains_fixed '"authorizedCommit": null' docs/mainnet-release-authorization.json \
+  || fail "the blocked authorization record unexpectedly names a commit"
+contains_fixed "verifyPublicReleaseAuthorization({ repoRoot, commit });" scripts/release/package-macos-ga.mjs \
+  || fail "the production packager no longer enforces exact-commit release authorization"
 contains_fixed "default_rpc_url, is_regtest, name as network_name, network, parameters," src-tauri/src/wallet.rs \
   || fail "the wallet no longer consumes the process-lifetime network identity"
 contains_fixed "backend.validate().is_err()" src-tauri/src/release_policy.rs \

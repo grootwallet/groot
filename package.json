@@ -2,6 +2,12 @@
   "name": "groot-wallet",
   "private": true,
   "version": "0.4.96",
+  "license": "Apache-2.0",
+  "author": "Thibaud Marechal <t@thibm.net>",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/grootwallet/groot.git"
+  },
   "packageManager": "pnpm@11.13.1",
   "engines": {
     "node": "24.19.0",
@@ -40,7 +46,7 @@
     "test:acceptance": "playwright test",
     "test:integration:regtest": "bash scripts/regtest/test.sh",
     "test:regtest": "pnpm test:integration:regtest",
-    "test:release-gate": "node --test scripts/release/verify-mainnet-source-policy.test.mjs scripts/release/sbom-order.test.mjs scripts/release/production-macos-release.test.mjs && bash scripts/release/check-mainnet-gate.sh",
+    "test:release-gate": "node --test scripts/release/assert-public-release-authorized.test.mjs scripts/release/verify-mainnet-source-policy.test.mjs scripts/release/sbom-order.test.mjs scripts/release/production-macos-release.test.mjs && bash scripts/release/check-mainnet-gate.sh",
     "test:boundaries": "bash scripts/quality/check-boundaries.sh",
     "test:secret-surfaces": "node --test scripts/quality/check-secret-surfaces.test.mjs && node scripts/quality/check-secret-surfaces.mjs",
     "test:supply-chain": "node scripts/quality/check-supply-chain.mjs",

@@ -19,6 +19,7 @@ import { isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { verifyPackagedHwi } from './verify-packaged-hwi.mjs';
 import { verifySignedHwiArtifact } from './verify-signed-hwi.mjs';
+import { verifyPublicReleaseAuthorization } from './assert-public-release-authorized.mjs';
 
 const repoRoot = resolve(fileURLToPath(new URL('../../', import.meta.url)));
 const packageMetadata = JSON.parse(readFileSync(join(repoRoot, 'package.json'), 'utf8'));
@@ -126,6 +127,7 @@ ${digest(join(evidence, 'groot.cdx.json'))}  groot.cdx.json\n`;
 if (recordedSums !== expectedSums) fail('evidence checksum manifest is invalid');
 
 const commit = run('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+verifyPublicReleaseAuthorization({ repoRoot, commit });
 const remoteMainResult = run('git', ['ls-remote', '--exit-code', 'origin', 'refs/heads/main'], {
   encoding: 'utf8'
 }).trim();
@@ -247,6 +249,7 @@ try {
     schemaVersion: 1,
     product: 'Groot',
     version: packageMetadata.version,
+    license: packageMetadata.license,
     commit,
     networkIdentity: 'multi',
     bundleIdentifier: 'app.groot.wallet',

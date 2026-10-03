@@ -1,14 +1,20 @@
 # Groot wallet and coordinator threat model
 
-Status: living pre-release security model. Mainnet is blocked until every release-gated item has independent evidence and explicit approval.
+Status: living pre-release security model. Mainnet is blocked until every release-gated item has independent evidence and exact-commit explicit approval. Public v0.4.96 distribution did not satisfy or waive that gate; see ADR 0079.
 
-Last reviewed: 2026-09-16
+Last reviewed: 2026-10-03
 
 ## Scope
 
 This model covers Groot's software single-key wallet, public-only external-signer wallet, multisig coordinator, native/webview boundary, local persistence, restart-bound Regtest/Testnet4/Mainnet selection, Bitcoin Core connection, optional compact-filter P2P discovery, Payjoin V2 URI parsing, HWI process and USB boundary, PSBT/BSMS/UR/file interchange, build pipeline, and recovery lifecycle. It covers confidentiality, signing authorization, transaction integrity, recoverability, privacy, and availability from entropy generation through deletion.
 
 Browser fixtures, virtual signers, regtest automation, and the static web demo are test surfaces, not production custody systems. Lightning, cloud backup, arbitrary Miniscript editing, Payjoin protocol transport/sessions, other collaborative transaction protocols, hosted multi-tenant storage, and background push while terminated are outside the current product. Payjoin V2 URI parsing alone is in scope under ADR 0031 and sends no traffic.
+
+The two supplied v0.4.96 reports were deduplicated and checked statically in
+[`security-report-triage-2026-10-03.md`](security-report-triage-2026-10-03.md).
+Report-proposed functional changes remain unimplemented pending explicit
+product-owner approval. Confirmed candidates therefore remain residual/risk
+review inputs rather than silently changed product behavior.
 
 ## Security objectives
 
@@ -30,7 +36,7 @@ Browser fixtures, virtual signers, regtest automation, and the static web demo a
 ## Trust boundaries and assumptions
 
 - Rust/Tauri is the trusted computing base for entropy, keys, credentials, descriptors, policy, PSBTs, persistence, sync, and broadcast. Svelte is an untrusted presentation/orchestration surface for security decisions.
-- The operating-system kernel CSPRNG, private application-data permissions, and atomic filesystem operations are trusted to meet their documented security contracts. Groot does not require a platform secret store for version-3 envelopes and cannot independently prove the physical entropy sources, firmware, hypervisor, CPU implementation, or privileged-host integrity beneath those operating-system boundaries.
+- The operating-system kernel CSPRNG, private application-data permissions, and atomic filesystem operations are trusted to meet their documented security contracts. Groot does not require a platform secret store for version-4 envelopes and cannot independently prove the physical entropy sources, firmware, hypervisor, CPU implementation, or privileged-host integrity beneath those operating-system boundaries.
 - Bitcoin cryptography, BIP39, BDK, Miniscript, secp256k1, AEAD, Argon2id, and pinned dependencies are assumed correct within their reviewed use. Supply-chain compromise remains an explicit threat.
 - Bitcoin Core, remote services, the network, filesystem contents, clipboard, camera, QR/file/UR/BSMS/PSBT inputs, HWI output, and USB devices may be malicious.
 - Hardware wallets protect their own keys only to the extent of their firmware, hardware, backup, passphrase practice, and on-device verification. The host can deny service or lie about coordinator UI.

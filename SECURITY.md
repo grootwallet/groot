@@ -1,8 +1,15 @@
 # Groot security
 
-Last review integration: 2026-09-03
+Last review integration: 2026-10-03
 
-Groot is security-sensitive wallet software under active development. The native implementation supports disposable Regtest testing, compile-time-isolated Signet/Testnet4 rehearsal builds, and the separately isolated ADR 0055 mainnet certification candidate. That candidate is authorized only for controlled certification and, after its preceding gates pass, a minimal-value owner-operated rehearsal. It is not authorized for distribution, ordinary use, or meaningful mainnet funds.
+Groot is security-sensitive wallet software under active development. The native implementation supports disposable Regtest testing, fixed Signet/Testnet4 rehearsal builds, and an internal restart-bound multi-network certification candidate. Mainnet is authorized only for controlled certification and, after its preceding gates pass, a minimal-value owner-operated rehearsal. It is not authorized for public distribution, ordinary use, or meaningful Mainnet funds.
+
+The public `v0.4.96` release advertised and packaged Mainnet while the exact tagged
+checklist and release ADRs remained blocked. ADR 0079 records this as an
+unauthorized release-governance event, not a retroactive approval. Do not treat
+`v0.4.96` as Mainnet-certified. The source-controlled production packager now
+requires an exact-commit authorization record, an accepted release ADR, and a
+fully closed checklist before it can sign or notarize another public package.
 
 This document summarizes the security posture and the hardening work present in this repository. Canonical controls are in [`docs/security-model.md`](docs/security-model.md); the attacker model and attack-vector register are in [`docs/mainnet-threat-model.md`](docs/mainnet-threat-model.md). Release authorization remains controlled by [`docs/mainnet-release-checklist.md`](docs/mainnet-release-checklist.md) and ADR 0012.
 
@@ -46,7 +53,7 @@ Reports should describe:
 - Every credential-bearing Svelte route clears its field after an attempt and on component teardown.
 - Credential-bearing Settings dialogs also clear passphrases, RPC passwords, destructive confirmation text, and related error state on every dismissal path and before reopening.
 - Version-3 secret envelopes use authenticated encryption with an Argon2id credential-derived key wrapping a separately generated AES-256 data key. They are portable across supported systems and do not depend on a platform Keychain or device key. Decrypted material is zeroized on every return path. A copied encrypted profile therefore permits offline credential guessing; strong wallet credentials, reviewed Argon2id calibration, full-disk encryption, and host security remain required defense in depth.
-- Authenticated version-2 device-bound envelopes are accepted only as a compatibility input. After the credential successfully authenticates and decrypts the envelope, Groot rewrites its metadata as a portable version-3 envelope without the obsolete device-wrapping fields.
+- Authenticated version-2/version-3 envelopes are accepted only as compatibility inputs. After the credential successfully authenticates and decrypts the envelope, Groot rewrites its metadata as a portable version-4 envelope with the reviewed Argon2id profile and without obsolete device-wrapping fields.
 
 ### Authentication and wallet isolation
 
@@ -105,7 +112,7 @@ Reports should describe:
 
 ### Network and webview policy
 
-- Native wallet code is compile-time pinned to exactly one of Regtest, Signet, Testnet4, or the separately configured ADR 0055 mainnet certification identity, each with isolated application storage. Only that dedicated candidate can select Bitcoin mainnet. Before it creates or opens wallet SQLite, trusted Rust requires purpose-, wallet-, configuration-, and time-bound admission of an authenticated, synchronized, loopback-only Bitcoin Core node on the exact Bitcoin genesis chain. Its trusted transaction policy permits one recipient and at most 1,000,000 satoshis; distribution remains blocked.
+- Native wallet code is compile-time pinned to a fixed network or the ADR 0069 restart-bound multi-network identity, with isolated application storage for every selectable network. Before Mainnet creates or opens wallet SQLite, trusted Rust requires admitted authenticated exact-chain node configuration. Its trusted transaction policy permits one recipient and caps total debit; public distribution remains blocked independently of runtime reachability.
 - Local Bitcoin Core endpoints must be loopback. Remote endpoint policy rejects embedded credentials, cleartext non-loopback transport, forged presets, and network mismatches.
 - Tauri capabilities remain minimal: no shell, filesystem, generic HTTP, clipboard-read, or remote-origin capability is granted.
 - The Tauri CSP denies remote scripts, frames, objects, workers, and manifests. Camera media is limited to same-origin/blob capture for the explicit PSBT scanner and requires platform permission.
