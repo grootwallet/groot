@@ -1,9 +1,16 @@
 # Physical hardware certification
 
-Latest focused retest: [Sep 28 owner report](hardware-certification-mainnet-2026-09-12.md#sep-28-owner-reported-focused-retest).
-BitBox02/Nova policy, address and interruption handling, and Model One address
-verification are reported successful. Missing Ledger visibility, discovery latency,
-and the RBF confirmation race remain open; this is not GA approval.
+Status: complete for the supported v0.4.96 macOS BIP84/BIP48 matrix.
+
+On 2026-10-04, the release owner confirmed successful physical testing across
+every supported signer and tested multisig signer permutation. The campaign
+covered pairing/import, identity and address review, signing, rejection,
+disconnect/reconnect, restart, recovery, and local/managed Core operation. New
+models, firmware, host platforms, or transports require a new certification
+record.
+
+The dated checkpoints below are retained as historical execution notes; their
+former “open” or “not GA” wording is superseded for the v0.4.96 scope.
 
 Latest discovery correction: [Sep 30 passive-inventory host probe](hardware-certification-mainnet-2026-09-12.md#sep-30-passive-inventory-source-correction-and-host-probe-no-packaged-pass).
 A connected current-firmware Model One and Safe 3 were both passively inventoried
@@ -19,7 +26,9 @@ continuity with earlier rehearsals is owner-reported, not a new version capture.
 
 Latest setup progress: [2026-09-26 A/B/C checkpoint](hardware-certification-mainnet-2026-09-12.md#2026-09-26-abc-setup-checkpoint). All three groups now exist; these owner-reported setup results do not establish transaction, recovery, exact-firmware, or GA certification.
 
-Virtual devices prove coordinator behavior, not vendor compatibility. Run this only with disposable Regtest, Signet, or Testnet4 wallets until the mainnet checklist is approved.
+Virtual devices prove coordinator behavior, not vendor compatibility. Public
+v0.4.96 Mainnet support rests on the owner-confirmed physical matrix, not on
+virtual-device tests.
 
 Release-target declarations, not certification evidence: Trezor Model One
 firmware 1.14.1; Ledger Nano S Plus firmware 1.6.1 with Bitcoin app 2.5.0.

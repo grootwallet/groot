@@ -57,7 +57,10 @@ Dependencies point inward. Routes never select adapters. Rust commands translate
 - Advisory scanners are one signal. A green scan does not replace provenance, license review, feature review, maintainer-risk review, reproducible builds, SBOMs, signed artifacts, or independent review.
 - `pnpm test:sbom` must deterministically regenerate a target-specific CycloneDX inventory from the locked, installed Node graph and Cargo metadata. Registry components require their lockfile integrity/checksum and every dependency requires declared license metadata. Metadata binds the inventory to the exact Git commit, both lockfile digests, and, for a package/release build, the built executable digest. Generated SBOMs are build evidence and are never committed; the gate rejects tracked CycloneDX or SPDX output so a stale repository copy cannot become authoritative. A Cargo `license-file` declaration is embedded as bounded license evidence rather than guessed into an SPDX expression. The application component must report the manifest-declared Apache-2.0 license from ADR 0080; tooling must not infer or overwrite third-party terms.
 - `pnpm test:supply-chain` enforces exact direct Node/Rust and toolchain versions, disabled lifecycle scripts, store-integrity settings, immutable GitHub Action SHAs, read-only CI permissions, and non-persisted checkout credentials.
-- Do not run a wallet release from an unreviewed CI artifact. Mainnet release provenance and signing remain blocked by the canonical checklist.
+- Do not run a wallet release from an unreviewed CI artifact. v0.4.96 is the
+  currently authorized Mainnet release; every later release requires a completed
+  checklist, accepted exact-commit ADR, provenance, signing, and authorization
+  record.
 
 ## Test pyramid
 

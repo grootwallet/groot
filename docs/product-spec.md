@@ -26,7 +26,7 @@ confirmed payment is untouched. Reopening must preserve this read-only state,
 and discarding must not regenerate a payment draft. Without a saved proposal,
 the confirmed-original notice may simply offer an Overview exit.
 
-Status: canonical for the current prototype and first live integration build.
+Status: canonical for public v0.4.96, including the approved macOS Mainnet scope.
 
 The base wallet application is Apache-2.0 under ADR 0080. That license does not
 cover the Groot marks beyond customary attribution and does not automatically
@@ -453,7 +453,7 @@ and successful-sync timestamp. After the selected profile loads, the locked rout
 focuses its credential input.
 
 - English, French, and Spanish are selected in the global **App appearance** section of Settings. The preference is stored locally, survives app relaunches, is applied before first paint, and is never synchronized over the network.
-- In the multi-network desktop app, **Settings → Network services → Bitcoin network** offers Regtest, Testnet4, and Mainnet. Confirming a different network stores the non-secret choice natively and restarts Groot. The old network remains untouched and switching back restores only its isolated wallets and node settings. A Mainnet confirmation explicitly warns that it uses real bitcoin. ADR 0069 makes this the intended GA product shape; distribution remains blocked until its expanded release evidence passes.
+- In the multi-network desktop app, **Settings → Network services → Bitcoin network** offers Regtest, Testnet4, and Mainnet. Confirming a different network stores the non-secret choice natively and restarts Groot. The old network remains untouched and switching back restores only its isolated wallets and node settings. A Mainnet confirmation explicitly warns that it uses real bitcoin. ADR 0069 defines the approved v0.4.96 GA product shape.
 - Every network presents the configured Core service as one **Bitcoin Core connection** setting. Regtest and Testnet4 show a separate **Wallet activity sync** row only while compact filters are selected, because activity discovery is then genuinely independent from Core fees and broadcast. Mainnet requires Core for all three and never shows the extra row.
 - The unlocked desktop shell provides keyboard shortcuts: Command/Ctrl+1, +2, +3, and +4 open Overview, Activity, Coins, and Settings; Command/Ctrl+Shift+R or +S opens the selected wallet's Receive or Send flow; and Command/Ctrl+L immediately locks only the selected wallet. Settings presents the platform-correct keys. Shortcuts are inert during startup, onboarding, lock, text entry, and dialogs. Lock is the only shortcut that mutates wallet session state; it prevents a concurrent wallet selection, cancels coordinated hardware and sync work, and invokes the existing native lock command before showing the unlock route. It never submits, signs, broadcasts, or discards transaction data. The lock shortcut is neither shown nor active in browser prototypes and mobile builds.
 - On native launch, Groot renders the canonical SVG lockup on a neutral branded startup surface only while Rust confirms the selected wallet's session state. The lockup reveals once from left to right; reduced-motion users receive the same brief gate with a static mark. Wallet balances, activity, actions, and other authenticated routes must never appear—even briefly—before the selected wallet is confirmed unlocked. A locked or expired session routes to the wallet lock screen before authenticated content mounts.

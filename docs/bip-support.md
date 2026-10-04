@@ -785,6 +785,12 @@ case-exact derivation-path presentation have no BIP support or interoperability
 impact. Clipboard payloads, derivation data, descriptors, addresses, transactions,
 PSBTs, signing, recovery, and persisted formats are unchanged.
 
+The 2026-10-04 Mainnet documentation reconciliation changes evidence status, not
+protocol behavior. The owner confirms the supported BIP84 single-key and BIP48
+multisig hardware matrix, signer permutations, recovery, local/managed Core,
+network switching, and two-machine release reproduction passed for v0.4.96.
+No derivation, descriptor, address, PSBT, signing, or persisted format changed.
+
 If a change has no BIP impact, its pull request records that explicit assessment.
 Upstream status changes alone may update this document without changing Groot's
 implementation status.

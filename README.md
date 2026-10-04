@@ -1,11 +1,10 @@
 # Groot
 
-A minimal onchain Bitcoin wallet and descriptor multisig coordinator built with SvelteKit, Tauri v2, BDK, and Miniscript. The desktop application has isolated Regtest, Testnet4, and Mainnet namespaces, but public Mainnet distribution remains blocked by the canonical release gate. BDK owns Groot's wallet databases, while the Regtest Bitcoin Core `groot-dev` wallet is only the faucet and miner.
+A minimal onchain Bitcoin wallet and descriptor multisig coordinator built with SvelteKit, Tauri v2, BDK, and Miniscript. The v0.4.96 macOS desktop application is approved for Mainnet and provides restart-bound, isolated Regtest, Testnet4, and Mainnet namespaces. BDK owns Groot's wallet databases, while the Regtest Bitcoin Core `groot-dev` wallet is only the faucet and miner.
 
-The public `v0.4.96` package advertised Mainnet before that gate was authorized.
-[ADR 0079](docs/adr/0079-record-unauthorized-mainnet-release-and-fail-closed-public-packaging.md)
-records the discrepancy; the package must not be treated as Mainnet approval or
-certification.
+The owner-certified release evidence is summarized in the
+[Mainnet checklist](docs/mainnet-release-checklist.md), and exact commit
+`f7b4b993` is authorized by [ADR 0053](docs/adr/0053-proposed-limited-mainnet-enablement.md).
 
 ## Repository boundary
 
@@ -127,7 +126,7 @@ cargo clippy --all-targets --all-features -- -D warnings
 cargo test
 ```
 
-Before connecting a physical signer, run `pnpm hardware:preflight` and follow the evidence matrix in [hardware certification](docs/hardware-certification.md). Mainnet code is reachable in controlled candidate builds, but public distribution is not authorized. Authorization requires every item in the [mainnet release checklist](docs/mainnet-release-checklist.md), the [threat model](docs/mainnet-threat-model.md), and ADR 0012 to be resolved and independently reviewed, plus an exact-commit accepted release ADR and authorization record.
+Before connecting a physical signer, run `pnpm hardware:preflight` and follow the supported-device guidance in [hardware certification](docs/hardware-certification.md). Public Mainnet authorization is exact-commit scoped; later releases must repeat the applicable [Mainnet checklist](docs/mainnet-release-checklist.md) and record a new release authorization.
 
 ## Documentation map
 
@@ -135,7 +134,8 @@ Before connecting a physical signer, run `pnpm hardware:preflight` and follow th
 - [Architecture and trust boundaries](docs/architecture.md)
 - [Flow state machines](docs/flows.md)
 - [Design system](docs/design-system.md)
-- [Security model and release blockers](docs/security-model.md)
+- [Security model](docs/security-model.md)
+- [Unapproved security hardening decisions](docs/security-hardening-decision-queue-2026-10-04.md)
 - [Implementation status](docs/implementation-status.md)
 - [BIP implementation and candidate matrix](docs/bip-support.md)
 - [V1 and V2 roadmap](docs/roadmap.md)

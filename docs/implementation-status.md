@@ -1,5 +1,15 @@
 # Implementation status
 
+## Current release status — 2026-10-04
+
+Public v0.4.96 (`f7b4b993`) is Mainnet-ready and authorized for the macOS
+Apple-silicon multi-network scope. The release owner confirms the complete
+BIP84/BIP48 physical-signer matrix and signer permutations, local pruned and
+Groot-managed remote Core full/birthday scans, backend and network switching,
+and two-machine reproduction. ADR 0053 and the completed Mainnet checklist are
+canonical. Older “blocked,” “candidate,” or “pending” entries below are dated
+historical snapshots, not the current release state.
+
 Sep 30 release-candidate picker follow-up applies the saved-wallet eligibility
 copy consistently to BIP84 signing, BIP48 signing, and receive verification. A
 fingerprint-less device from a family absent from the wallet is now a disabled

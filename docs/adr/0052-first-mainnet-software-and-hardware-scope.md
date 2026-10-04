@@ -1,6 +1,6 @@
 # ADR 0052: First mainnet software and hardware wallet scope
 
-- Status: accepted as a release-scope constraint; remote-Core exclusion superseded by ADR 0061; distribution remains blocked
+- Status: accepted and released in v0.4.96; remote-Core exclusion superseded by ADR 0061
 - Date: 2026-09-02
 - Extends: ADR 0012, ADR 0026, ADR 0037
 
@@ -56,7 +56,7 @@ wallet classes consistently in Rust, UI, packaging, tests, and release notes.
 A reviewer must assess host-key custody and offline credential guessing, not
 only external-signer isolation.
 
-ADR 0055 permits this scope in one isolated certification build. The mainnet candidate remains blocked from distribution under ADR 0012 until every applicable checklist row has exact, independent evidence and ADR 0053 is accepted.
+ADR 0055 permitted this scope in one isolated certification build. ADR 0053 now authorizes the certified scope in public v0.4.96.
 
 ## Implementation clarification — 2026-09-03
 

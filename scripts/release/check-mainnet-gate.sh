@@ -34,10 +34,13 @@ contains_fixed "export const SUPPORTED_NETWORKS = ['signet', 'testnet4', 'regtes
 contains_fixed '"regtest" | "signet" | "testnet4" | "mainnet" | "multi" => {}' src-tauri/build.rs \
   || fail "the native compile-time network allowlist changed"
 node scripts/release/verify-mainnet-source-policy.mjs
-contains_fixed '"status": "blocked"' docs/mainnet-release-authorization.json \
-  || fail "the source-controlled public-release authorization is no longer blocked"
-contains_fixed '"authorizedCommit": null' docs/mainnet-release-authorization.json \
-  || fail "the blocked authorization record unexpectedly names a commit"
+contains_fixed '"status": "approved"' docs/mainnet-release-authorization.json \
+  || fail "the v0.4.96 public-release authorization is not approved"
+contains_fixed '"authorizedCommit": "f7b4b9935943f0250353a6f77c3d8fca31906fff"' docs/mainnet-release-authorization.json \
+  || fail "the authorization record does not name the certified v0.4.96 commit"
+contains_fixed '"decisionAdr": "0053"' docs/mainnet-release-authorization.json \
+  || fail "the authorization record does not name ADR 0053"
+node scripts/release/assert-public-release-authorized.mjs f7b4b9935943f0250353a6f77c3d8fca31906fff
 contains_fixed "verifyPublicReleaseAuthorization({ repoRoot, commit });" scripts/release/package-macos-ga.mjs \
   || fail "the production packager no longer enforces exact-commit release authorization"
 contains_fixed "default_rpc_url, is_regtest, name as network_name, network, parameters," src-tauri/src/wallet.rs \
@@ -59,9 +62,9 @@ reject_fixed "estimates?.priority ?? 5" src/routes/send/+page.svelte \
 contains_fixed '"beforeBuildCommand": "pnpm build:regtest"' src-tauri/tauri.conf.json \
   || fail "the native build is no longer pinned to regtest mode"
 contains_fixed '"beforeBuildCommand": "pnpm build:multi"' src-tauri/tauri.multi.conf.json \
-  || fail "the internal network-switching build is not pinned to multi mode"
+  || fail "the GA network-switching build is not pinned to multi mode"
 contains_fixed '"identifier": "app.groot.wallet"' src-tauri/tauri.multi.conf.json \
-  || fail "the internal network-switching build no longer shares the legacy Regtest namespace"
+  || fail "the GA network-switching build no longer uses the approved application identity"
 contains_fixed '"identifier": "app.groot.wallet.signet"' src-tauri/tauri.signet.conf.json \
   || fail "the Signet rehearsal no longer has isolated application storage"
 contains_fixed '"identifier": "app.groot.wallet.testnet4"' src-tauri/tauri.testnet4.conf.json \
@@ -100,16 +103,16 @@ contains_fixed 'hwi_chain: "main"' src-tauri/src/build_network.rs \
   || fail "the dormant mainnet HWI chain is no longer explicit"
 contains_fixed 'address_hrp: "bc"' src-tauri/src/build_network.rs \
   || fail "the dormant mainnet address family is no longer explicit"
-contains_fixed "Release decision: BLOCKED" docs/mainnet-release-checklist.md \
-  || fail "the release checklist is not explicitly blocked"
+contains_fixed "Release decision: APPROVED" docs/mainnet-release-checklist.md \
+  || fail "the release checklist is not explicitly approved"
 contains_fixed "Candidate scope: first mainnet release is macOS desktop on Apple silicon, includes BIP84 software single-key wallets" docs/mainnet-release-checklist.md \
   || fail "the first-release platform scope is missing from the checklist"
 contains_fixed "The first limited mainnet candidate includes:" docs/adr/0052-first-mainnet-software-and-hardware-scope.md \
   || fail "the first-release software and hardware wallet scope decision is missing"
-contains_fixed "mainnet candidate remains blocked from distribution" docs/adr/0052-first-mainnet-software-and-hardware-scope.md \
-  || fail "the software and hardware scope decision no longer preserves the distribution lock"
-contains_fixed "- [ ] User-controlled Bitcoin Core is the only first-release mainnet backend" docs/mainnet-release-checklist.md \
-  || fail "the expanded first-mainnet backend evidence is not visibly blocking"
+contains_fixed "ADR 0053 now authorizes the certified scope" docs/adr/0052-first-mainnet-software-and-hardware-scope.md \
+  || fail "the software and hardware scope decision does not record release authorization"
+contains_fixed "- [x] Groot managed, local Core, and direct-HTTPS custom Core passed the first-release Mainnet backend matrix" docs/mainnet-release-checklist.md \
+  || fail "the completed first-mainnet backend evidence is missing"
 contains_fixed "Tor/onion Core remains excluded" docs/mainnet-release-checklist.md \
   || fail "the first-mainnet Tor exclusion is missing"
 contains_fixed "The first production target is a **macOS Apple-silicon desktop release with both software and approved hardware wallets" docs/roadmap.md \
@@ -126,7 +129,7 @@ contains_fixed "BitBox02 Nova" docs/mainnet-release-checklist.md \
   || fail "the Nova support decision is missing from the hardware matrix"
 contains_fixed "Blockstream Jade" docs/mainnet-release-checklist.md \
   || fail "the required Jade certification row is missing"
-contains_fixed "secure-storage and lifecycle certification for every platform included in that candidate" docs/mainnet-threat-model.md \
-  || fail "the threat model no longer scopes platform evidence to the candidate"
+contains_fixed "The authorization covers macOS Apple silicon only." docs/mainnet-threat-model.md \
+  || fail "the threat model no longer scopes the approved release platform"
 
-echo "Mainnet candidate gate: fixed and multi-network evidence builds enabled; distribution remains blocked."
+echo "Mainnet release gate: public v0.4.96 is approved for exact commit f7b4b993."

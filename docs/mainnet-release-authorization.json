@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "status": "blocked",
-  "authorizedCommit": null,
-  "decisionAdr": null
+  "status": "approved",
+  "authorizedCommit": "f7b4b9935943f0250353a6f77c3d8fca31906fff",
+  "decisionAdr": "0053"
 }

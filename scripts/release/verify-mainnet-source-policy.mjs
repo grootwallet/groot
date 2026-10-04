@@ -23,7 +23,7 @@ const pinnedPolicySources = new Map([
   ['THIRD_PARTY_NOTICES.md', 'a181753f36eb3e475cddf31a69d2e75f01a86a79c70de252abb1e73a059407db'],
   [
     'docs/mainnet-release-authorization.json',
-    '8ab4f0fb0e75fe593437409c56b9f81b41b864c45b9d5ba04bddfc8fbd4ef603'
+    '60b94435d4f4d87fb8a49d83ac3034d3402b2babec8a8e4b6dd396732d9e7a08'
   ],
   ['src-tauri/src/lib.rs', 'f91975ed53e93d004eb46818fb7d73fb8aa5a710eb2d9494c8d563c02e00a705'],
   [
@@ -165,7 +165,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'scripts/release/check-mainnet-gate.sh',
-    '849e10f1aa22041117168a14e0147e6a499d9ccba2672f573e137e13edc6d7a1'
+    '783e35f363ebe6faefabe1f2fbb5182fbbd8a24e82a89fe74718d09f1455bfbd'
   ],
   [
     'scripts/release/generate-sbom.mjs',
@@ -599,7 +599,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
       (path) => readFileSync(resolve(repoRoot, path))
     );
     console.log(
-      'Mainnet source policy: activation is confined to fixed builds and the restart-bound internal multi-network identity.'
+      'Mainnet source policy: activation is confined to fixed builds and the approved restart-bound multi-network identity.'
     );
   } catch (error) {
     console.error(

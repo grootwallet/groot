@@ -21,7 +21,7 @@ function fixture({ status = 'blocked', authorizedCommit = null, decisionAdr = nu
   return root;
 }
 
-test('current blocked authorization cannot be used for public packaging', () => {
+test('a blocked authorization cannot be used for public packaging', () => {
   const root = fixture();
   try {
     assert.throws(
@@ -31,6 +31,14 @@ test('current blocked authorization cannot be used for public packaging', () => 
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test('the repository authorizes the exact certified v0.4.96 commit', () => {
+  assert.doesNotThrow(() =>
+    verifyPublicReleaseAuthorization({
+      commit: 'f7b4b9935943f0250353a6f77c3d8fca31906fff'
+    })
+  );
 });
 
 test('approval must bind the exact commit, accepted ADR, and closed checklist', () => {

@@ -1,8 +1,14 @@
 # ADR 0079: Record unauthorized Mainnet release and fail closed public packaging
 
-- Status: accepted
+- Status: superseded by ADR 0053's 2026-10-04 acceptance record
 - Date: 2026-10-03
 - Extends: ADR 0012, ADR 0053, ADR 0055, ADR 0069, and ADR 0078
+
+Reconciliation (2026-10-04): the release owner confirmed that the complete
+v0.4.96 certification campaign had passed but had not been fully copied into
+the repository. ADR 0053 now authorizes exact commit `f7b4b993`; this ADR remains
+the historical record of the documentation/release sequencing failure and of
+the v0.4.95 tag movement. It no longer classifies v0.4.96 as unapproved.
 
 ## Context
 
