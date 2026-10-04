@@ -114,9 +114,9 @@
     translate(
       $locale,
       selectedProfile?.kind === 'multisig'
-        ? 'Policy and signer backups'
+        ? 'Policy and signer recovery'
         : selectedProfile?.kind === 'watch_only'
-          ? 'Hardware signer backup'
+          ? 'Hardware signer recovery'
           : 'Recovery words + wallet passphrase'
     )
   );
@@ -124,9 +124,9 @@
     translate(
       $locale,
       selectedProfile?.kind === 'multisig'
-        ? 'Keep the public descriptor and enough signer backups to restore access.'
+        ? 'Signer backups should have been completed when each device was initialized. Export the public descriptor below.'
         : selectedProfile?.kind === 'watch_only'
-          ? 'Recovery words remain on the signer. The app PIN only protects local Groot data.'
+          ? 'The recovery backup should have been completed when the signer was initialized. Groot cannot create or verify it.'
           : 'Keep both together. Recovery words can be re-presented only in the authenticated native backup flow; the wallet passphrase cannot be displayed or reset.'
     )
   );
@@ -823,7 +823,10 @@
   async function renameWallet() {
     renaming = true;
     renameError = '';
+    let automaticSyncPaused = false;
     try {
+      await walletShell.pauseAutomaticSync();
+      automaticSyncPaused = true;
       const renamed = await walletService.renameWallet(renameDraft);
       profiles = profiles.map((profile) => (profile.id === renamed.id ? renamed : profile));
       renameDraft = '';
@@ -839,6 +842,7 @@
       renameError = localizedError(cause, $locale, 'Could not rename this wallet.');
     } finally {
       renaming = false;
+      if (automaticSyncPaused) walletShell.resumeAutomaticSync();
     }
   }
   function openSignerRename() {
@@ -1339,7 +1343,10 @@
                 )}</small
               ></span
             ><span class="info-badge attention">{translate($locale, 'Verify now')}</span></button
-          >{:else}<div class="setting-row wallet-context-row">
+          >{:else}<div
+            class="setting-row wallet-context-row"
+            class:backup-information-row={!isSoftwareWallet}
+          >
             <span class="setting-icon"
               >{#if selectedProfile?.kind === 'multisig'}<ShieldCheck
                   size={18}
@@ -1348,7 +1355,7 @@
                 />{/if}</span
             ><span><strong>{backupTitle}</strong><small>{backupDescription}</small></span><span
               class="info-badge"
-              >{translate($locale, isSoftwareWallet ? 'Verified' : 'Backup required')}</span
+              >{translate($locale, isSoftwareWallet ? 'Verified' : 'Outside Groot')}</span
             >
           </div>{/if}
         <button onclick={openFullRescan}

@@ -243,6 +243,8 @@ fn hwi_cli(app: &AppHandle) -> ApiResult<HwiCli> {
 #[serde(rename_all = "camelCase")]
 pub struct ApiErrorDetails {
     #[serde(skip_serializing_if = "Option::is_none")]
+    retry_after_seconds: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     requested_birthday_block: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     required_block: Option<u32>,
@@ -2946,6 +2948,7 @@ fn ensure_recovery_scan_history_available(
                 minimum_birthday_block: prune_height
                     .and_then(|height| u32::try_from(height).ok())
                     .and_then(|height| height.checked_add(1)),
+                ..Default::default()
             },
         ));
     }
@@ -4507,9 +4510,13 @@ fn check_auth_throttle(app: &AppHandle, state: &State<'_, AppState>) -> ApiResul
     if let Some(retry_at) = runtime.get(&selected).copied() {
         if monotonic_now < retry_at {
             let remaining = retry_at.duration_since(monotonic_now).as_secs().max(1);
-            return Err(api_error(
+            return Err(api_error_with_details(
                 "rate_limited",
                 format!("Too many incorrect attempts. Try again in {remaining} seconds."),
+                ApiErrorDetails {
+                    retry_after_seconds: Some(remaining),
+                    ..Default::default()
+                },
             ));
         }
         runtime.remove(&selected);
@@ -4518,12 +4525,14 @@ fn check_auth_throttle(app: &AppHandle, state: &State<'_, AppState>) -> ApiResul
     let db = open_auth_db(app)?;
     let throttle = load_auth_throttle(&db)?;
     if let Err(remaining) = throttle.check(now()) {
-        return Err(api_error(
+        let remaining = remaining.as_secs().max(1);
+        return Err(api_error_with_details(
             "rate_limited",
-            format!(
-                "Too many incorrect attempts. Try again in {} seconds.",
-                remaining.as_secs()
-            ),
+            format!("Too many incorrect attempts. Try again in {remaining} seconds."),
+            ApiErrorDetails {
+                retry_after_seconds: Some(remaining),
+                ..Default::default()
+            },
         ));
     }
     Ok(())

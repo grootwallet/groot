@@ -3191,11 +3191,11 @@ code {
   padding-right: 100px;
 }
 .fee-rate-input input {
-  padding-right: 76px;
+  padding-right: 66px;
   font-size: 13px;
 }
 .fee-rate-input b {
-  right: 14px;
+  right: 10px;
 }
 .amount-input b,
 .amount-input .amount-unit-toggle {
@@ -4186,6 +4186,14 @@ code {
 .wallet-context-row .setting-icon {
   color: var(--fr-red);
   background: color-mix(in srgb, var(--fr-red) 7%, var(--surface-icon));
+}
+.backup-information-row {
+  background: var(--surface-inset) !important;
+}
+.backup-information-row .info-badge {
+  color: var(--muted);
+  background: var(--surface-control);
+  outline: 1px solid var(--border);
 }
 .info-badge {
   padding: 4px 8px;

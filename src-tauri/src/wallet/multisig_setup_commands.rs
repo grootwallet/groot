@@ -1342,11 +1342,12 @@ pub async fn multisig_sync(
 }
 
 #[tauri::command]
-pub fn multisig_address_create(
+pub async fn multisig_address_create(
     app: AppHandle,
-    state: State<'_, AppState>,
     labels: Vec<String>,
 ) -> ApiResult<ReceiveAddressDto> {
+    tauri::async_runtime::spawn_blocking(move || {
+    let state = app.state::<AppState>();
     let _operation = operation_guard(&state)?;
     let wallet_id = require_unlocked(&app, &state)?;
     let labels = normalize_labels(labels)?;
@@ -1409,6 +1410,9 @@ pub fn multisig_address_create(
         None,
     );
     Ok(response)
+    })
+    .await
+    .map_err(internal)?
 }
 
 pub(crate) fn claim_observed_receive_output(

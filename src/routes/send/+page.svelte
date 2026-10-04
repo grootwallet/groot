@@ -759,18 +759,12 @@
     if (!request || !customFeeValid) return;
     preparing = true;
     try {
-      if (request.method === 'rbf') {
-        rbfQuote = await walletService.quoteRbf(request.txid, asFeeRate(Number(customFee)));
-        customFee = String(rbfQuote.targetFeeRate);
-      } else {
-        cpfpQuote = await walletService.quoteCpfp(request.txid, asFeeRate(Number(customFee)));
-        customFee = String(cpfpQuote.targetFeeRate);
-      }
+      const selectedFeeRate = asFeeRate(Number(customFee));
       accelerationQuoteFailed = false;
       proposal = await walletService.prepareAcceleration(
         request.txid,
         request.method,
-        asFeeRate(Number(rbfQuote?.targetFeeRate ?? cpfpQuote?.targetFeeRate ?? customFee))
+        selectedFeeRate
       );
       address = proposal.recipient;
       selectedLabels = proposal.labels ?? [proposal.label];

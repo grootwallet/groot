@@ -255,6 +255,7 @@ export const settingsCopy = {
   },
   Verified: { fr: 'Vérifiée', es: 'Verificada' },
   'Backup required': { fr: 'Sauvegarde requise', es: 'Copia requerida' },
+  'Outside Groot': { fr: 'Hors de Groot', es: 'Fuera de Groot' },
   'Bitcoin Core RPC · confirmed and mempool activity': {
     fr: 'RPC Bitcoin Core · activité confirmée et mempool',
     es: 'RPC de Bitcoin Core · actividad confirmada y de mempool'
@@ -292,6 +293,14 @@ export const settingsCopy = {
     fr: 'Sauvegarde du signataire matériel',
     es: 'Copia del firmante físico'
   },
+  'Policy and signer recovery': {
+    fr: 'Récupération de la politique et des signataires',
+    es: 'Recuperación de la política y los firmantes'
+  },
+  'Hardware signer recovery': {
+    fr: 'Récupération du signataire matériel',
+    es: 'Recuperación del firmante físico'
+  },
   'Recovery words + wallet passphrase': {
     fr: 'Mots de récupération + phrase secrète du portefeuille',
     es: 'Palabras de recuperación + frase de contraseña de la cartera'
@@ -304,6 +313,16 @@ export const settingsCopy = {
     fr: 'Les mots de récupération restent sur le signataire. Le code PIN de l’application protège uniquement les données locales de Groot.',
     es: 'Las palabras de recuperación permanecen en el firmante. El PIN de la aplicación solo protege los datos locales de Groot.'
   },
+  'Signer backups should have been completed when each device was initialized. Export the public descriptor below.':
+    {
+      fr: 'Les sauvegardes des signataires doivent avoir été effectuées lors de l’initialisation de chaque appareil. Exportez le descripteur public ci-dessous.',
+      es: 'Las copias de los firmantes deben haberse realizado al inicializar cada dispositivo. Exporta el descriptor público a continuación.'
+    },
+  'The recovery backup should have been completed when the signer was initialized. Groot cannot create or verify it.':
+    {
+      fr: 'La sauvegarde de récupération doit avoir été effectuée lors de l’initialisation du signataire. Groot ne peut ni la créer ni la vérifier.',
+      es: 'La copia de recuperación debe haberse realizado al inicializar el firmante. Groot no puede crearla ni verificarla.'
+    },
   'Keep both together. Recovery words can be re-presented only in the authenticated native backup flow; the wallet passphrase cannot be displayed or reset.':
     {
       fr: 'Conservez-les ensemble. Les mots de récupération ne peuvent être réaffichés que dans le flux de sauvegarde natif authentifié ; la phrase secrète du portefeuille ne peut être ni affichée ni réinitialisée.',

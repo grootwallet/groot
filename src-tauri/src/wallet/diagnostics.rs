@@ -604,6 +604,7 @@ mod tests {
     #[test]
     fn allowlisted_scan_errors_keep_safe_block_details() {
         let details = ApiErrorDetails {
+            retry_after_seconds: None,
             requested_birthday_block: Some(96_600),
             required_block: Some(96_599),
             earliest_retained_block: Some(960_062),
@@ -677,6 +678,7 @@ mod tests {
             error_code: Some("node_history_unavailable".to_owned()),
             error_message: Some(safe_error_message("node_history_unavailable").to_owned()),
             error_details: Some(ApiErrorDetails {
+                retry_after_seconds: None,
                 requested_birthday_block: Some(96_600),
                 required_block: Some(96_599),
                 earliest_retained_block: Some(960_062),

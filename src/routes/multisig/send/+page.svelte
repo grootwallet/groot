@@ -2904,6 +2904,12 @@
       eligibleDeviceTypes={(wallet?.cosigners ?? [])
         .map((signer) => signer.deviceType)
         .filter((deviceType): deviceType is string => Boolean(deviceType))}
+      membershipOverrides={Object.fromEntries(
+        devices.filter(deviceHasSigned).map((device) => [device.id, 'candidate' as const])
+      )}
+      deviceSecondaryLabel={(device) =>
+        device.fingerprint ??
+        (deviceHasSigned(device) ? (savedSignerForDevice(device)?.fingerprint ?? '') : '')}
       deviceDisabled={(device, membership) =>
         membership === 'unrelated' ||
         deviceHasSigned(device) ||
@@ -2912,8 +2918,8 @@
       deviceStateLabel={(device, membership: HardwareWalletMembership) => {
         const policyRequired = requiresPolicySetup(device);
         const policyVerified = devicePolicyVerification(device);
-        if (membership !== 'candidate') return hardwareDeviceStateLabel(device, membership);
         if (deviceHasSigned(device)) return 'Already signed';
+        if (membership !== 'candidate') return hardwareDeviceStateLabel(device, membership);
         if (
           policyRegistrationProfile(device).registration === 'unsupported' ||
           (policyRequired && !policyVerified)

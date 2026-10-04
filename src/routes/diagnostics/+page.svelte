@@ -939,7 +939,7 @@
   code {
     font-size: 12px;
   }
-  @media (max-width: 900px) {
+  @media (max-width: 1180px) {
     .log-controls {
       grid-template-columns: 1fr 1fr;
     }
@@ -952,6 +952,12 @@
     .log-view button {
       flex: 1;
       min-height: 30px;
+    }
+    .log-sort,
+    .event-filter,
+    .event-filter > summary {
+      width: 100%;
+      min-width: 0;
     }
   }
   @media (max-width: 640px) {

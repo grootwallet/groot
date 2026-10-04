@@ -799,6 +799,11 @@ multisig hardware matrix, signer permutations, recovery, local/managed Core,
 network switching, and two-machine release reproduction passed for v0.4.96.
 No derivation, descriptor, address, PSBT, signing, or persisted format changed.
 
+The post-certification responsiveness and presentation fixes have no BIP impact.
+They move existing address and rename work off the UI thread, coordinate it with
+sync, avoid a duplicate acceleration quote, clarify signer state and backup copy,
+and correct responsive controls. Wallet formats and protocol behavior are unchanged.
+
 If a change has no BIP impact, its pull request records that explicit assessment.
 Upstream status changes alone may update this document without changing Groot's
 implementation status.

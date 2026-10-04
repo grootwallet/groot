@@ -133,6 +133,7 @@ export const WALLET_ERROR_CODES = [
 export type WalletErrorCode = (typeof WALLET_ERROR_CODES)[number];
 
 export type WalletErrorDetails = {
+  retryAfterSeconds?: number;
   requestedBirthdayBlock?: number;
   requiredBlock?: number;
   earliestRetainedBlock?: number;
