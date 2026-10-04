@@ -148,7 +148,7 @@
   let discardingDraft = $state(false);
   let discardDraftError = $state('');
   let suppressDraftSave = false;
-  let proposal = $state<PaymentProposal | null>(null);
+  let proposal = $state<PaymentProposal | MultisigProposal | null>(null);
   let maxSpendQuote = $state<MaxSpendQuote | null>(null);
   let maxSpendActive = $state(false);
   let maxSpendRequestRevision = 0;
@@ -816,13 +816,22 @@
     credentialError = '';
     broadcasting = true;
     try {
-      const result = externalSigner
-        ? await walletService.broadcastExternalSignerProposal(
-            proposal.proposalId,
-            externalProposal?.psbt ?? '',
-            passphrase
-          )
-        : await walletService.signAndBroadcast(proposal.proposalId, passphrase);
+      let result;
+      if (externalSigner) {
+        result = await walletService.broadcastExternalSignerProposal(
+          proposal.proposalId,
+          externalProposal?.psbt ?? '',
+          passphrase
+        );
+      } else {
+        if (!('reviewBinding' in proposal))
+          throw new WalletError('proposal_mismatch', 'The payment changed after review.');
+        result = await walletService.signAndBroadcast(
+          proposal.proposalId,
+          proposal.reviewBinding,
+          passphrase
+        );
+      }
       txid = result.txid;
       sentAmount = Number(proposal.amount);
       balanceSyncPending = result.syncPending;

@@ -99,6 +99,12 @@ fn validate_payment_draft(
                 "The saved payment recipient belongs to a different Bitcoin network.",
             )
         })?;
+    validate_supported_payment_destination(&address).map_err(|_| {
+        api_error(
+            "wallet_corrupt",
+            "The saved payment recipient uses an unsupported address type.",
+        )
+    })?;
     draft.address = address.to_string();
     draft.labels = normalize_labels(draft.labels)?;
     if !matches!(draft.stage, 1 | 2) || !valid_amount_input(&draft.amount) {

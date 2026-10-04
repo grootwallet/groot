@@ -360,7 +360,8 @@ fn parse_records(bytes: &[u8]) -> ApiResult<(Vec<Bip329Record>, usize)> {
             ignored += 1;
             continue;
         };
-        if label.trim().is_empty() || label.chars().count() > 48 || label.contains(['\n', '\r']) {
+        validate_label_formatting(label)?;
+        if label.trim().is_empty() || label.chars().count() > 48 {
             return Err(api_error(
                 "invalid_label",
                 "Imported labels must contain 1 to 48 single-line characters.",
@@ -800,6 +801,16 @@ mod tests {
             .code,
             "private_material_rejected"
         );
+        for label in ["line\nbreak", "zero\u{200b}width", "bidi\u{202e}override"] {
+            let input = format!(
+                "{{\"type\":\"addr\",\"ref\":\"tb1qfixture\",\"label\":{}}}\n",
+                serde_json::to_string(label).unwrap()
+            );
+            assert_eq!(
+                parse_records(input.as_bytes()).unwrap_err().code,
+                "invalid_label"
+            );
+        }
     }
 
     #[test]

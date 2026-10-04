@@ -2571,6 +2571,7 @@ pub fn external_signer_create(
             &dir.join("secret.json"),
             marker.as_bytes(),
             credential.as_str(),
+            id,
         )?;
         profile_commands::persist_mainnet_node_admission_for_new_profile(
             &app,
@@ -2628,6 +2629,7 @@ pub async fn external_signer_wallet(app: AppHandle) -> ApiResult<ExternalSignerW
 }
 
 pub(crate) fn normalize_external_signer_label(value: &str) -> ApiResult<String> {
+    validate_label_formatting(value)?;
     let normalized = normalize_label_text(value);
     if normalized.is_empty() || normalized.chars().count() > 48 {
         return Err(api_error(
@@ -2860,6 +2862,7 @@ fn import_external_proposal_in_db(
     if progress.can_finalize {
         let mut validation = original.clone();
         let wallet = load_wallet(db)?;
+        bind_psbt_inputs_to_wallet(&wallet, &mut validation)?;
         if !wallet
             .finalize_psbt(&mut validation, SignOptions::default())
             .map_err(internal)?
@@ -3081,6 +3084,7 @@ pub async fn external_signer_proposal_broadcast(
         }
         let mut psbt = decode_psbt(&proposal.psbt).map_err(proposal_api_error)?;
         let wallet = load_wallet(&mut db)?;
+        bind_psbt_inputs_to_wallet(&wallet, &mut psbt)?;
         let acceleration = proposal_acceleration_method(&db, &proposal_id)?;
         if matches!(acceleration, Some(AccelerationMethod::Rbf)) {
             validate_rbf_original_intent(

@@ -17,8 +17,8 @@ use bdk_wallet::{
         constants::genesis_block,
         hashes::{sha256, Hash as _, HashEngine},
         secp256k1::Secp256k1,
-        Address, Amount, BlockHash, FeeRate, Network, OutPoint, Psbt, Transaction, TxIn, Txid,
-        Weight,
+        Address, AddressType, Amount, BlockHash, FeeRate, Network, OutPoint, Psbt, Transaction,
+        TxIn, Txid, Weight,
     },
     chain::{BlockId, ChainPosition, CheckPoint, ConfirmationBlockTime},
     descriptor::{policy::SatisfiableItem, Descriptor, DescriptorPublicKey},
@@ -1239,6 +1239,7 @@ pub struct RecoveryScanStatusDto {
 #[serde(rename_all = "camelCase")]
 pub struct PaymentProposalDto {
     proposal_id: String,
+    review_binding: String,
     recipient: String,
     recipient_testnet_alias: Option<String>,
     recipient_is_wallet_owned: bool,
@@ -1947,6 +1948,14 @@ fn db_path(app: &AppHandle) -> ApiResult<PathBuf> {
 
 fn secret_path(app: &AppHandle) -> ApiResult<PathBuf> {
     Ok(wallet_dir(app)?.join("secret.json"))
+}
+
+fn wallet_secret_context(wallet_id: Uuid) -> secure_store::SecureStoreContext {
+    secure_store::SecureStoreContext::new(wallet_id, secure_store::SecureStorePurpose::WalletSecret)
+}
+
+fn node_auth_context(wallet_id: Uuid) -> secure_store::SecureStoreContext {
+    secure_store::SecureStoreContext::new(wallet_id, secure_store::SecureStorePurpose::NodeAuth)
 }
 
 fn external_signer_metadata_path(app: &AppHandle) -> ApiResult<PathBuf> {
@@ -2696,7 +2705,8 @@ fn load_node_auth_session(
                 .remove(&profile.id);
             return Ok(());
         }
-        let plaintext = secure_store::load(&path, credential).map_err(secure_store_error)?;
+        let plaintext = secure_store::load(&path, credential, node_auth_context(profile.id))
+            .map_err(secure_store_error)?;
         let Some(mut protected) = decode_protected_node_auth(&plaintext, &config)? else {
             state
                 .node_auth
@@ -4146,11 +4156,60 @@ fn now() -> u64 {
         .as_secs()
 }
 
+pub(crate) fn validate_supported_payment_destination(address: &Address) -> ApiResult<()> {
+    if matches!(
+        address.address_type(),
+        Some(
+            AddressType::P2pkh
+                | AddressType::P2sh
+                | AddressType::P2wpkh
+                | AddressType::P2wsh
+                | AddressType::P2tr
+        )
+    ) {
+        Ok(())
+    } else {
+        Err(api_error(
+            "invalid_address",
+            "Groot supports legacy, P2SH, SegWit v0, and Taproot payment destinations.",
+        ))
+    }
+}
+
 fn normalize_label_text(label: &str) -> String {
     label.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
+pub(crate) fn label_has_unsafe_formatting(label: &str) -> bool {
+    label.chars().any(|character| {
+        character.is_control()
+            || matches!(
+                character,
+                '\u{00ad}'
+                    | '\u{034f}'
+                    | '\u{061c}'
+                    | '\u{180e}'
+                    | '\u{200b}'..='\u{200f}'
+                    | '\u{202a}'..='\u{202e}'
+                    | '\u{2060}'..='\u{2069}'
+                    | '\u{feff}'
+                    | '\u{fff9}'..='\u{fffb}'
+            )
+    })
+}
+
+pub(crate) fn validate_label_formatting(label: &str) -> ApiResult<()> {
+    if label_has_unsafe_formatting(label) {
+        return Err(api_error(
+            "invalid_label",
+            "Permanent labels cannot contain invisible or directional formatting characters.",
+        ));
+    }
+    Ok(())
+}
+
 fn normalize_label(label: &str) -> ApiResult<String> {
+    validate_label_formatting(label)?;
     let label = normalize_label_text(label);
     if label.is_empty() {
         return Err(api_error("invalid_label", "A permanent label is required."));
@@ -4852,6 +4911,7 @@ fn decrypt_payload(secret: EncryptedSecret, credential: &str) -> ApiResult<Zeroi
 
 fn decrypt_mnemonic(app: &AppHandle, credential: &str) -> ApiResult<Mnemonic> {
     validate_credential(credential)?;
+    let profile = selected_profile_of_kind(app, WalletKind::SingleKey)?;
     let path = secret_path(app)?;
     let encoded = read_private_text(&path).map_err(|_| {
         api_error(
@@ -4862,14 +4922,15 @@ fn decrypt_mnemonic(app: &AppHandle, credential: &str) -> ApiResult<Mnemonic> {
     let version = serde_json::from_str::<serde_json::Value>(&encoded)
         .ok()
         .and_then(|value| value.get("version").and_then(|version| version.as_u64()));
-    if matches!(version, Some(2..=4)) {
-        let plaintext = secure_store::load(&path, credential).map_err(secure_store_error)?;
+    if matches!(version, Some(2..=5)) {
+        let plaintext = secure_store::load(&path, credential, wallet_secret_context(profile.id))
+            .map_err(secure_store_error)?;
         return parse_mnemonic_bytes(plaintext);
     }
     let secret: EncryptedSecret = serde_json::from_str(&encoded).map_err(internal)?;
     let mnemonic = decrypt_encrypted_mnemonic(secret, credential)?;
     let words = Zeroizing::new(mnemonic.to_string());
-    persist_secret_material(&path, words.as_bytes(), credential)?;
+    persist_secret_material(&path, words.as_bytes(), credential, profile.id)?;
     Ok(mnemonic)
 }
 
@@ -4954,8 +5015,13 @@ fn read_external_signer_metadata(app: &AppHandle) -> ApiResult<ExternalSignerWal
 fn verify_external_signer_credential(app: &AppHandle, credential: &str) -> ApiResult<()> {
     validate_credential(credential)?;
     let metadata = read_external_signer_metadata(app)?;
-    let mut plaintext =
-        secure_store::load(&secret_path(app)?, credential).map_err(secure_store_error)?;
+    let profile = selected_profile_of_kind(app, WalletKind::WatchOnly)?;
+    let mut plaintext = secure_store::load(
+        &secret_path(app)?,
+        credential,
+        wallet_secret_context(profile.id),
+    )
+    .map_err(secure_store_error)?;
     let expected = format!("groot-external-signer:{}", metadata.external_descriptor);
     let matches = plaintext.as_slice() == expected.as_bytes();
     plaintext.zeroize();
@@ -5316,6 +5382,7 @@ fn add_multisig_global_xpubs(psbt: &mut Psbt, metadata: &MultisigWalletDto) -> A
 
 fn verify_multisig_credential(app: &AppHandle, credential: &str) -> ApiResult<()> {
     validate_credential(credential)?;
+    let profile = selected_profile_of_kind(app, WalletKind::Multisig)?;
     let path = multisig_secret_path(app)?;
     let encoded = read_private_text(&path).map_err(|_| {
         api_error(
@@ -5326,12 +5393,13 @@ fn verify_multisig_credential(app: &AppHandle, credential: &str) -> ApiResult<()
     let version = serde_json::from_str::<serde_json::Value>(&encoded)
         .ok()
         .and_then(|value| value.get("version").and_then(|version| version.as_u64()));
-    let mut plaintext = if matches!(version, Some(2..=4)) {
-        secure_store::load(&path, credential).map_err(secure_store_error)?
+    let context = wallet_secret_context(profile.id);
+    let mut plaintext = if matches!(version, Some(2..=5)) {
+        secure_store::load(&path, credential, context).map_err(secure_store_error)?
     } else {
         let secret: EncryptedSecret = serde_json::from_str(&encoded).map_err(internal)?;
         let plaintext = decrypt_payload(secret, credential)?;
-        secure_store::store(&path, &plaintext, credential).map_err(secure_store_error)?;
+        secure_store::store(&path, &plaintext, credential, context).map_err(secure_store_error)?;
         plaintext
     };
     let metadata = read_multisig_metadata(app)?;
@@ -6124,6 +6192,7 @@ fn load_payment_proposal_dto(
         .map(|label| label.text)
         .collect();
     Ok(PaymentProposalDto {
+        review_binding: payment_review_binding(&proposal_id, &encoded),
         proposal_id: proposal_id.clone(),
         recipient,
         recipient_testnet_alias,
@@ -6206,8 +6275,14 @@ fn write_private_json(path: &Path, value: &impl Serialize) -> ApiResult<()> {
     result
 }
 
-fn persist_secret_material(path: &Path, material: &[u8], credential: &str) -> ApiResult<()> {
-    secure_store::store(path, material, credential).map_err(secure_store_error)
+fn persist_secret_material(
+    path: &Path,
+    material: &[u8],
+    credential: &str,
+    wallet_id: Uuid,
+) -> ApiResult<()> {
+    secure_store::store(path, material, credential, wallet_secret_context(wallet_id))
+        .map_err(secure_store_error)
 }
 
 fn cleanup_failed_profile(dir: &Path) -> ApiResult<()> {
@@ -6280,7 +6355,7 @@ fn create_from_mnemonic(
             .create_wallet(&mut db)
             .map_err(internal)?;
         let words = Zeroizing::new(mnemonic.to_string());
-        persist_secret_material(&dir.join("secret.json"), words.as_bytes(), credential)?;
+        persist_secret_material(&dir.join("secret.json"), words.as_bytes(), credential, id)?;
         let network_setup = profile_commands::copy_network_setup_before_profile_commit(
             app,
             state,

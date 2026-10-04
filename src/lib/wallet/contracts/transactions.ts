@@ -75,6 +75,7 @@ export type CoinSelectionPreview = {
 
 export type PaymentProposal = {
   proposalId: string;
+  reviewBinding: string;
   recipient: string;
   recipientTestnetAlias: string | null;
   recipientIsWalletOwned?: boolean;

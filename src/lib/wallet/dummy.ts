@@ -911,8 +911,10 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
       (outpoint) => ({ outpoint, amount: sats(available), sequence: 0xfffffffd })
     );
     const walletRecipient = this._addresses.find((address) => address.address === recipient);
+    const proposalId = crypto.randomUUID();
     const proposal: PaymentProposal = {
-      proposalId: crypto.randomUUID(),
+      proposalId,
+      reviewBinding: `fixture-review-${proposalId}`,
       recipient,
       recipientTestnetAlias: null,
       recipientIsWalletOwned: Boolean(walletRecipient),
@@ -1140,10 +1142,12 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     return { importedCount: 2, unchangedCount: 1, ignoredCount: 1, spendabilityChangeCount: 0 };
   }
 
-  async signAndBroadcast(proposalId: string, credential: string) {
+  async signAndBroadcast(proposalId: string, reviewBinding: string, credential: string) {
     const proposal = this._proposals.get(proposalId);
     if (!proposal)
       throw new WalletError('wallet_not_found', 'Payment proposal was not found or expired.');
+    if (reviewBinding !== proposal.reviewBinding)
+      throw new WalletError('proposal_mismatch', 'The payment changed after review.');
     if (!this._selectedWalletId || credential !== this._credentials.get(this._selectedWalletId))
       throw new WalletError('invalid_credential', 'Incorrect passphrase / PIN.');
     const txid = this._accelerations.has(proposalId)
@@ -2504,7 +2508,11 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     return structuredClone(proposal);
   }
 
-  #recordFixtureBroadcast(proposalId: string, proposal: PaymentProposal, txid: string) {
+  #recordFixtureBroadcast(
+    proposalId: string,
+    proposal: PaymentProposal | MultisigProposal,
+    txid: string
+  ) {
     const acceleration = this._accelerations.get(proposalId);
     const original = acceleration
       ? this._transactions.find((transaction) => transaction.id === acceleration.originalTxid)

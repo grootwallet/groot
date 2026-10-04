@@ -54,6 +54,16 @@ pub(super) fn validate_release_spend(
     amount: u64,
     acceleration: Option<AccelerationMethod>,
 ) -> ApiResult<()> {
+    let recipient_address = Address::from_str(recipient)
+        .map_err(|_| api_error("proposal_mismatch", "The stored recipient is invalid."))?
+        .require_network(network())
+        .map_err(|_| {
+            api_error(
+                "proposal_mismatch",
+                "The stored recipient is on the wrong network.",
+            )
+        })?;
+    validate_supported_payment_destination(&recipient_address)?;
     proposal_change_details(wallet, psbt, recipient, amount)?;
     let fee = proposal_fee_amount(psbt)?;
     let policy = if matches!(acceleration, Some(AccelerationMethod::Cpfp)) {
@@ -474,6 +484,29 @@ pub(super) fn require_reviewed_psbt_unchanged(
     Ok(())
 }
 
+pub(super) fn payment_review_binding(proposal_id: &str, encoded_psbt: &str) -> String {
+    let mut engine = sha256::Hash::engine();
+    engine.input(b"groot/payment-review/v1\0");
+    engine.input(proposal_id.as_bytes());
+    engine.input(b"\0");
+    engine.input(encoded_psbt.as_bytes());
+    sha256::Hash::from_engine(engine).to_string()
+}
+
+pub(super) fn require_payment_review_binding(
+    proposal_id: &str,
+    encoded_psbt: &str,
+    reviewed_binding: &str,
+) -> ApiResult<()> {
+    if payment_review_binding(proposal_id, encoded_psbt) != reviewed_binding {
+        return Err(api_error(
+            "proposal_mismatch",
+            "The payment changed after review. Reload it before signing.",
+        ));
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -488,6 +521,24 @@ mod tests {
         let error = require_reviewed_psbt_unchanged("changed", "reviewed", "mismatch").unwrap_err();
         assert_eq!(error.code, "proposal_mismatch");
         assert_eq!(error.message, "mismatch");
+    }
+
+    #[test]
+    fn payment_review_binding_covers_proposal_identity_and_exact_psbt_bytes() {
+        let binding = payment_review_binding("proposal-a", "psbt-a");
+        assert!(require_payment_review_binding("proposal-a", "psbt-a", &binding).is_ok());
+        assert_eq!(
+            require_payment_review_binding("proposal-a", "psbt-b", &binding)
+                .unwrap_err()
+                .code,
+            "proposal_mismatch"
+        );
+        assert_eq!(
+            require_payment_review_binding("proposal-b", "psbt-a", &binding)
+                .unwrap_err()
+                .code,
+            "proposal_mismatch"
+        );
     }
 
     #[test]

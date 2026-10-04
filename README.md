@@ -31,7 +31,7 @@ bash scripts/dev/tauri-regtest.sh
 
 Create a wallet in the native window and keep the 24 words and passphrase / PIN. Generate a labeled receive address, then fund it from Bitcoin Core using the amount in BTC:
 
-Generated recovery words appear in a compact platform-native backup sheet attached to Groot. On macOS they use an 8×3 monospaced grid and never enter the Svelte webview. New wallet secrets use the portable version-4 envelope described in [ADR 0077](docs/adr/0077-close-mainnet-credential-and-backend-blockers.md): AES-256-GCM encrypts the payload, and a versioned Argon2id key derived from the wallet credential wraps its random data key. Authenticated version-2/version-3 envelopes migrate atomically after a correct unlock; wrong credentials or corrupt data leave the original file unchanged. Normal wallet operation does not depend on Apple Keychain or another platform keystore.
+Generated recovery words appear in a compact platform-native backup sheet attached to Groot. On macOS they use an 8×3 monospaced grid and never enter the Svelte webview. New wallet secrets use the portable version-5 envelope described in [ADR 0081](docs/adr/0081-bind-security-critical-state-to-its-final-context.md): AES-256-GCM encrypts the payload, a versioned Argon2id key wraps its random data key, and authenticated AAD binds both layers to the wallet UUID and secret purpose. Authenticated version-2/version-3/version-4 envelopes migrate atomically after a correct unlock; wrong credentials, corrupt data, or write failure leave the original file unchanged. A migrated profile cannot be reopened by v0.4.96 or older. Normal wallet operation does not depend on Apple Keychain or another platform keystore.
 
 ```sh
 pnpm regtest:send -- bcrt1q... 1.25 --mine

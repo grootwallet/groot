@@ -133,7 +133,11 @@ describe('wallet-scoped durable notification delivery', () => {
     if (method === 'snapshot' || method === 'multisigSnapshot')
       await expect(wallet[method]()).resolves.toEqual(snapshot);
     else if (method === 'signAndBroadcast')
-      await expect(wallet.signAndBroadcast('id', 'synthetic')).resolves.toMatchObject({ snapshot });
+      await expect(
+        wallet.signAndBroadcast('id', 'synthetic-review', 'synthetic')
+      ).resolves.toMatchObject({
+        snapshot
+      });
     else
       await expect(wallet[method]('id', 'synthetic-psbt', 'synthetic')).resolves.toMatchObject({
         snapshot

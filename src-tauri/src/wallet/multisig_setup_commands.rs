@@ -282,6 +282,7 @@ fn rename_cosigner_label(
     signer_id: &str,
     label: &str,
 ) -> ApiResult<()> {
+    validate_label_formatting(label)?;
     let normalized = normalize_label_text(label);
     if normalized.is_empty() || normalized.chars().count() > 48 {
         return Err(api_error(
@@ -1014,6 +1015,7 @@ pub fn multisig_recover_bsms(
             &dir.join("secret.json"),
             marker.as_bytes(),
             credential.as_str(),
+            wallet_secret_context(id),
         )
         .map_err(secure_store_error)?;
         write_private_json(&dir.join("wallet.json"), &wallet)?;
@@ -1152,6 +1154,7 @@ pub fn multisig_recover(
             &dir.join("secret.json"),
             marker.as_bytes(),
             credential.as_str(),
+            wallet_secret_context(id),
         )
         .map_err(secure_store_error)?;
         write_private_json(&dir.join("wallet.json"), &backup.wallet)?;

@@ -1,5 +1,13 @@
 # Bitcoin Improvement Proposal support
 
+The 2026-10-04 ADR 0081 hardening allows outgoing payments to legacy P2PKH,
+P2SH (including BIP49-compatible nested SegWit), SegWit v0 P2WPKH/P2WSH, and
+BIP350 SegWit-v1 Taproot destinations. P2A and witness v2-v16 are rejected.
+This is destination-script support only: Groot still does not generate Taproot
+receive addresses or claim BIP86/340/341/342/371/386/387 wallet support. The
+same change strengthens BIP174 finalization checks without changing PSBT wire
+encoding, and secure-store v5 has no BIP/interchange impact.
+
 The 2026-10-03 Apache-2.0 adoption and public-release authorization guard have
 no BIP, descriptor, derivation, transaction, PSBT, signing, recovery,
 interoperability, or persisted-format impact. They change licensing,

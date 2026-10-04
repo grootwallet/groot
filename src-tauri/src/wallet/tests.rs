@@ -2046,8 +2046,14 @@ fn saved_file_reveal_tokens_are_bounded_expiring_and_single_use() {
 #[test]
 fn external_signer_labels_are_normalized_and_bounded() {
     assert_eq!(
-        normalize_external_signer_label("  Travel   signing\tkey  ").unwrap(),
+        normalize_external_signer_label("  Travel   signing key  ").unwrap(),
         "Travel signing key"
+    );
+    assert_eq!(
+        normalize_external_signer_label("Travel\tsigning key")
+            .unwrap_err()
+            .code,
+        "invalid_label"
     );
     assert_eq!(
         normalize_external_signer_label("").unwrap_err().code,
@@ -4140,6 +4146,15 @@ fn labels_are_mandatory_and_bounded() {
         normalize_label(&"🌱".repeat(49)).unwrap_err().code,
         "invalid_label"
     );
+    for label in [
+        "invoice\nreplacement",
+        "invoice\u{200b}replacement",
+        "invoice\u{202e}replacement",
+        "invoice\u{2066}replacement",
+        "invoice\u{feff}replacement",
+    ] {
+        assert_eq!(normalize_label(label).unwrap_err().code, "invalid_label");
+    }
 }
 
 #[test]
@@ -5336,6 +5351,7 @@ fn restart_restores_proposals_frozen_coins_and_acknowledged_notifications() {
         persist_proposal(
             &db,
             &PaymentProposalDto {
+                review_binding: "fixture-review-binding".to_owned(),
                 proposal_id: proposal_id.clone(),
                 recipient: "bcrt1qrestartfixture".into(),
                 recipient_testnet_alias: None,
@@ -5598,6 +5614,7 @@ fn prepared_wallet_proposal_and_acceleration_roll_back_as_one_unit() {
     })
     .unwrap();
     let proposal = PaymentProposalDto {
+        review_binding: "fixture-review-binding".to_owned(),
         proposal_id: "atomic-proposal".into(),
         recipient: "bcrt1qatomicfixture".into(),
         recipient_testnet_alias: None,

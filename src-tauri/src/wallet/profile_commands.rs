@@ -1259,6 +1259,7 @@ fn persist_mainnet_node_admission(
         &node_secret_path_for(app, destination)?,
         protected.as_slice(),
         credential,
+        node_auth_context(destination),
     )
     .map_err(secure_store_error)?;
     write_private_json(&node_config_path_for(app, destination)?, &pending.config)?;
@@ -1709,6 +1710,7 @@ pub async fn node_config_save(
             &candidate_rpc_client(&config, password.as_str())?,
             config.clone(),
         )?;
+        let wallet_id = selected_profile(&app)?.id;
         if config.auth == RpcAuthMode::UserPass {
             let protected = Zeroizing::new(
                 serde_json::to_vec(&ProtectedNodeAuthRef {
@@ -1722,6 +1724,7 @@ pub async fn node_config_save(
                 &node_secret_path(&app)?,
                 protected.as_slice(),
                 credential.as_str(),
+                node_auth_context(wallet_id),
             )
             .map_err(secure_store_error)?;
         } else {
@@ -1845,6 +1848,7 @@ pub async fn network_setup_adopt(
                 &node_secret_path_for(&app, destination)?,
                 protected.as_slice(),
                 credential.as_str(),
+                node_auth_context(destination),
             )
             .map_err(secure_store_error)?;
         } else {
@@ -1948,6 +1952,7 @@ pub(super) fn adopt_network_setup_for_new_profile(
             &node_secret_path_for(app, destination)?,
             protected.as_slice(),
             credential,
+            node_auth_context(destination),
         )
         .map_err(secure_store_error)?;
     }

@@ -93,6 +93,8 @@ describe('native command scheduling', () => {
     ['multisig_sync', multisigCommands],
     ['tx_proposals', transactionCommands],
     ['tx_prepare', transactionCommands],
+    ['tx_acceleration_prepare', transactionCommands],
+    ['multisig_acceleration_prepare', transactionCommands],
     ['tx_max_spend', transactionCommands],
     ['coin_selection_preview', walletCore],
     ['multisig_coin_selection_preview', walletCore],

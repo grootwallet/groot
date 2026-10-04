@@ -1537,18 +1537,32 @@ the repository contains no company assignment or CLA, so any undisclosed prior
 assignment remains an ownership question rather than an invented corporate
 claim. ADR 0080 records the boundary and no-trademark grant.
 
-The public `v0.4.96` release at `f7b4b993` distributed and advertised the
-multi-network app with Mainnet while the exact tagged checklist remained
-`BLOCKED`, ADR 0053 remained proposed, and ADR 0012 remained in force. The
-public `v0.4.95` tag also moved from the locally retained `f486d923` target to
-`c3002279`. ADR 0079 treats these as release-governance failures, not implicit
-authorization. No published release or tag is modified by this change.
+The public `v0.4.96` release at `f7b4b993` initially shipped before its completed
+certification record was reconciled into the repository. On 2026-10-04 the owner
+supplied the missing BIP84/BIP48 hardware, local/remote Core, network-switching,
+scan, and two-machine multi-network reproducibility results. ADR 0053 and the
+release checklist now authorize that exact commit. The public `v0.4.95` tag also
+moved from the locally retained `f486d923` target to `c3002279`; ADR 0079 remains
+the historical governance record.
 
 The production macOS packager now refuses to proceed before build, signing, or
 notarization unless a machine-readable record names the exact commit, a unique
 accepted ADR explicitly authorizes that commit, the checklist is approved, and
-no checklist item remains open. The current record is deliberately blocked.
-Internal unsigned/ad-hoc certification builds remain available with their
-existing warnings. No wallet, profile, database, registry, proposal, backup,
-credential-envelope, descriptor, network-selector, or protocol format changes;
-no migration is required and BIP support is unchanged.
+no checklist item remains open. Exact commit `f7b4b993` satisfies that gate;
+later commits require fresh exact-commit approval. Internal unsigned/ad-hoc
+certification builds remain available with their existing warnings.
+
+## 2026-10-04 approved security hardening
+
+ADR 0081 implements decision-queue items 2, 3, 5, 6, 13, and 15: canonical
+prevout binding on every final external/multisig path, exact reviewed-PSBT
+binding for software signing, invisible-format label rejection, blocking-pool
+acceleration preparation, a closed payment-destination set through Taproot v1,
+and wallet/purpose-bound secure-store v5. Authenticated v2/v3/v4 records migrate
+automatically and failure-atomically; migrated protected records cannot be read
+by v0.4.96 or older. Item 12 and every other report proposal remain deferred.
+
+Public v0.4.96 commit `f7b4b993` remains the currently authorized Mainnet
+release. This follow-up branch is a new candidate and is not authorized for
+merge or release until its exact commit passes validation, candidate migration,
+network, and hardware tests, and a new exact-commit approval.

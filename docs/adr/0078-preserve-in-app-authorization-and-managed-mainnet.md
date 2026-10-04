@@ -39,7 +39,8 @@ The managed operator can observe connection metadata and wallet-history queries
 and can affect availability, but cannot obtain recovery words, private keys, app
 PINs, labels, or signing material. Users retain local and custom Core choices.
 
-Portable envelope v4, authenticated v2/v3 migration, fee and amount caps,
+ADR 0081 supersedes portable envelope v4 with wallet/purpose-bound v5 and
+authenticated v2/v3/v4 migration. Fee and amount caps,
 canonical PSBT binding, stale-input rejection, multisig quorum intersection, and
 strong active-chain broadcast evidence are unchanged. This decision changes no
 descriptor, derivation, transaction, wallet database, backup, or proposal format.

@@ -14,9 +14,10 @@ use std::{
 use uuid::Uuid;
 use zeroize::Zeroizing;
 
-const VERSION: u8 = 4;
+const VERSION: u8 = 5;
 const DEVICE_BOUND_VERSION: u8 = 2;
 const LEGACY_PORTABLE_VERSION: u8 = 3;
+const LEGACY_AAD_VERSION: u8 = 4;
 const MAX_METADATA_BYTES: u64 = 256 * 1024;
 const KEY_BYTES: usize = 32;
 const NONCE_BYTES: usize = 12;
@@ -25,8 +26,45 @@ const LEGACY_ARGON2_ITERATIONS: u32 = 2;
 const ARGON2_MEMORY_KIB: u32 = 65_536;
 const ARGON2_ITERATIONS: u32 = 3;
 const ARGON2_PARALLELISM: u32 = 1;
-const PAYLOAD_AAD: &[u8] = b"groot/secure-store/v4/payload";
-const CREDENTIAL_WRAP_AAD: &[u8] = b"groot/secure-store/v4/credential-wrap";
+const LEGACY_PAYLOAD_AAD: &[u8] = b"groot/secure-store/v4/payload";
+const LEGACY_CREDENTIAL_WRAP_AAD: &[u8] = b"groot/secure-store/v4/credential-wrap";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SecureStorePurpose {
+    WalletSecret,
+    NodeAuth,
+}
+
+impl SecureStorePurpose {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::WalletSecret => "wallet-secret",
+            Self::NodeAuth => "node-auth",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SecureStoreContext {
+    wallet_id: Uuid,
+    purpose: SecureStorePurpose,
+}
+
+impl SecureStoreContext {
+    pub fn new(wallet_id: Uuid, purpose: SecureStorePurpose) -> Self {
+        Self { wallet_id, purpose }
+    }
+
+    fn aad(self, layer: &str) -> Vec<u8> {
+        format!(
+            "groot/secure-store/v5/{}/{}/{}",
+            self.wallet_id,
+            self.purpose.as_str(),
+            layer
+        )
+        .into_bytes()
+    }
+}
 
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
 pub enum SecureStoreError {
@@ -224,7 +262,7 @@ fn read_metadata(path: &Path) -> Result<Metadata, SecureStoreError> {
         serde_json::from_str(&encoded).map_err(|_| SecureStoreError::Corrupt)?;
     if !matches!(
         metadata.version,
-        DEVICE_BOUND_VERSION | LEGACY_PORTABLE_VERSION | VERSION
+        DEVICE_BOUND_VERSION | LEGACY_PORTABLE_VERSION | LEGACY_AAD_VERSION | VERSION
     ) {
         return Err(SecureStoreError::Corrupt);
     }
@@ -233,13 +271,15 @@ fn read_metadata(path: &Path) -> Result<Metadata, SecureStoreError> {
     {
         return Err(SecureStoreError::Corrupt);
     }
-    if matches!(metadata.version, LEGACY_PORTABLE_VERSION | VERSION)
-        && (metadata.device_nonce.is_some() || metadata.device_wrapped_key.is_some())
+    if matches!(
+        metadata.version,
+        LEGACY_PORTABLE_VERSION | LEGACY_AAD_VERSION | VERSION
+    ) && (metadata.device_nonce.is_some() || metadata.device_wrapped_key.is_some())
     {
         return Err(SecureStoreError::Corrupt);
     }
     match metadata.version {
-        VERSION if metadata.kdf.as_ref() != Some(&current_kdf_metadata()) => {
+        LEGACY_AAD_VERSION | VERSION if metadata.kdf.as_ref() != Some(&current_kdf_metadata()) => {
             Err(SecureStoreError::Corrupt)
         }
         DEVICE_BOUND_VERSION | LEGACY_PORTABLE_VERSION if metadata.kdf.is_some() => {
@@ -257,22 +297,29 @@ fn store_portable(
     metadata_path: &Path,
     secret: &[u8],
     credential: &str,
+    context: SecureStoreContext,
 ) -> Result<(), SecureStoreError> {
     write_owner_only(
         metadata_path,
-        &encode_metadata(&new_metadata(secret, credential)?)?,
+        &encode_metadata(&new_metadata(secret, credential, context)?)?,
     )
 }
 
-fn new_metadata(secret: &[u8], credential: &str) -> Result<Metadata, SecureStoreError> {
+fn new_metadata(
+    secret: &[u8],
+    credential: &str,
+    context: SecureStoreContext,
+) -> Result<Metadata, SecureStoreError> {
     let mut salt = Zeroizing::new(vec![0_u8; 16]);
     let mut data_key = Zeroizing::new(vec![0_u8; KEY_BYTES]);
     fill_os_random(&mut salt)?;
     fill_os_random(&mut data_key)?;
     let credential_key = derive_current_credential_key(credential, &salt)?;
-    let (payload_nonce, payload) = encrypt_with_aad(&data_key, secret, PAYLOAD_AAD)?;
+    let payload_aad = context.aad("payload");
+    let credential_wrap_aad = context.aad("credential-wrap");
+    let (payload_nonce, payload) = encrypt_with_aad(&data_key, secret, &payload_aad)?;
     let (credential_nonce, credential_wrapped_key) =
-        encrypt_with_aad(&credential_key, &data_key, CREDENTIAL_WRAP_AAD)?;
+        encrypt_with_aad(&credential_key, &data_key, &credential_wrap_aad)?;
     Ok(Metadata {
         version: VERSION,
         salt: BASE64.encode(&salt),
@@ -289,6 +336,7 @@ fn new_metadata(secret: &[u8], credential: &str) -> Result<Metadata, SecureStore
 fn load_portable_with_writer(
     metadata_path: &Path,
     credential: &str,
+    context: SecureStoreContext,
     write_metadata: impl FnOnce(&Path, &[u8]) -> Result<(), SecureStoreError>,
 ) -> Result<Zeroizing<Vec<u8>>, SecureStoreError> {
     let metadata = read_metadata(metadata_path)?;
@@ -296,17 +344,28 @@ fn load_portable_with_writer(
     if salt.len() != 16 {
         return Err(SecureStoreError::Corrupt);
     }
-    let legacy = metadata.version != VERSION;
-    let credential_key = if legacy {
+    let uses_legacy_kdf = matches!(
+        metadata.version,
+        DEVICE_BOUND_VERSION | LEGACY_PORTABLE_VERSION
+    );
+    let credential_key = if uses_legacy_kdf {
         derive_legacy_credential_key(credential, &salt)?
     } else {
         derive_current_credential_key(credential, &salt)?
+    };
+    let payload_aad = context.aad("payload");
+    let credential_wrap_aad = context.aad("credential-wrap");
+    let (payload_aad, credential_wrap_aad) = match metadata.version {
+        VERSION => (payload_aad.as_slice(), credential_wrap_aad.as_slice()),
+        LEGACY_AAD_VERSION => (LEGACY_PAYLOAD_AAD, LEGACY_CREDENTIAL_WRAP_AAD),
+        DEVICE_BOUND_VERSION | LEGACY_PORTABLE_VERSION => (&[][..], &[][..]),
+        _ => return Err(SecureStoreError::Corrupt),
     };
     let credential_data_key = decrypt_with_aad(
         &credential_key,
         &decode(&metadata.credential_nonce)?,
         &decode(&metadata.credential_wrapped_key)?,
-        if legacy { &[] } else { CREDENTIAL_WRAP_AAD },
+        credential_wrap_aad,
     )?;
     if credential_data_key.len() != KEY_BYTES {
         return Err(SecureStoreError::Corrupt);
@@ -315,12 +374,12 @@ fn load_portable_with_writer(
         &credential_data_key,
         &decode(&metadata.payload_nonce)?,
         &decode(&metadata.payload)?,
-        if legacy { &[] } else { PAYLOAD_AAD },
+        payload_aad,
     )
     .map_err(|_| SecureStoreError::Corrupt)?;
 
-    if legacy {
-        let migrated = new_metadata(&plaintext, credential)?;
+    if metadata.version != VERSION {
+        let migrated = new_metadata(&plaintext, credential, context)?;
         write_metadata(metadata_path, &encode_metadata(&migrated)?)?;
     }
 
@@ -330,23 +389,26 @@ fn load_portable_with_writer(
 fn load_portable(
     metadata_path: &Path,
     credential: &str,
+    context: SecureStoreContext,
 ) -> Result<Zeroizing<Vec<u8>>, SecureStoreError> {
-    load_portable_with_writer(metadata_path, credential, write_owner_only)
+    load_portable_with_writer(metadata_path, credential, context, write_owner_only)
 }
 
 pub fn store(
     metadata_path: &Path,
     secret: &[u8],
     credential: &str,
+    context: SecureStoreContext,
 ) -> Result<(), SecureStoreError> {
-    store_portable(metadata_path, secret, credential)
+    store_portable(metadata_path, secret, credential, context)
 }
 
 pub fn load(
     metadata_path: &Path,
     credential: &str,
+    context: SecureStoreContext,
 ) -> Result<Zeroizing<Vec<u8>>, SecureStoreError> {
-    load_portable(metadata_path, credential)
+    load_portable(metadata_path, credential, context)
 }
 
 #[cfg(test)]
@@ -357,6 +419,10 @@ mod tests {
 
     fn directory() -> std::path::PathBuf {
         std::env::temp_dir().join(format!("groot-secure-store-{}", Uuid::new_v4()))
+    }
+
+    fn wallet_context(wallet_id: Uuid) -> SecureStoreContext {
+        SecureStoreContext::new(wallet_id, SecureStorePurpose::WalletSecret)
     }
 
     fn write_v2_fixture(path: &Path, secret: &[u8], credential: &str) {
@@ -406,6 +472,25 @@ mod tests {
         write_owner_only(path, &encode_metadata(&metadata).unwrap()).unwrap();
     }
 
+    fn write_v4_fixture(path: &Path, secret: &[u8], credential: &str) {
+        let mut metadata =
+            new_metadata(secret, credential, wallet_context(Uuid::from_u128(1))).unwrap();
+        metadata.version = LEGACY_AAD_VERSION;
+        let salt = Zeroizing::new(decode(&metadata.salt).unwrap());
+        let mut data_key = Zeroizing::new(vec![0_u8; KEY_BYTES]);
+        fill_os_random(&mut data_key).unwrap();
+        let credential_key = derive_current_credential_key(credential, &salt).unwrap();
+        let (payload_nonce, payload) =
+            encrypt_with_aad(&data_key, secret, LEGACY_PAYLOAD_AAD).unwrap();
+        let (credential_nonce, credential_wrapped_key) =
+            encrypt_with_aad(&credential_key, &data_key, LEGACY_CREDENTIAL_WRAP_AAD).unwrap();
+        metadata.payload_nonce = BASE64.encode(payload_nonce);
+        metadata.payload = BASE64.encode(payload);
+        metadata.credential_nonce = BASE64.encode(credential_nonce);
+        metadata.credential_wrapped_key = BASE64.encode(credential_wrapped_key);
+        write_owner_only(path, &encode_metadata(&metadata).unwrap()).unwrap();
+    }
+
     #[test]
     #[ignore = "release evidence benchmark; run explicitly with --release --ignored --nocapture"]
     fn credential_kdf_calibration() {
@@ -435,19 +520,33 @@ mod tests {
     }
 
     #[test]
-    fn portable_v4_round_trip_requires_the_credential() {
+    fn wallet_bound_v5_round_trip_requires_the_credential_and_context() {
         let directory = directory();
         let metadata = directory.join("secret.json");
-        store(&metadata, b"never leave rust", "correct").unwrap();
-        let plaintext = load(&metadata, "correct").unwrap();
+        let wallet_id = Uuid::new_v4();
+        let context = wallet_context(wallet_id);
+        store(&metadata, b"never leave rust", "correct", context).unwrap();
+        let plaintext = load(&metadata, "correct", context).unwrap();
         let _: &Zeroizing<Vec<u8>> = &plaintext;
         assert_eq!(plaintext.as_slice(), b"never leave rust");
         assert_eq!(
-            load(&metadata, "wrong"),
+            load(&metadata, "wrong", context),
+            Err(SecureStoreError::InvalidCredential)
+        );
+        assert_eq!(
+            load(&metadata, "correct", wallet_context(Uuid::new_v4())),
+            Err(SecureStoreError::InvalidCredential)
+        );
+        assert_eq!(
+            load(
+                &metadata,
+                "correct",
+                SecureStoreContext::new(wallet_id, SecureStorePurpose::NodeAuth)
+            ),
             Err(SecureStoreError::InvalidCredential)
         );
         let encoded = fs::read_to_string(&metadata).unwrap();
-        assert!(encoded.contains("\"version\":4"));
+        assert!(encoded.contains("\"version\":5"));
         assert!(encoded.contains("\"memoryKib\":65536"));
         assert!(!encoded.contains("deviceNonce"));
         assert!(!encoded.contains("deviceWrappedKey"));
@@ -455,21 +554,22 @@ mod tests {
     }
 
     #[test]
-    fn portable_v4_file_can_be_relocated() {
+    fn portable_v5_profile_can_be_relocated_with_the_same_wallet_identity() {
         let original_directory = directory();
         let restored_directory = directory();
         let original = original_directory.join("wallet-a").join("secret.json");
         let restored = restored_directory.join("wallet-b").join("secret.json");
-        store(&original, b"portable secret", "correct").unwrap();
+        let context = wallet_context(Uuid::new_v4());
+        store(&original, b"portable secret", "correct", context).unwrap();
         fs::create_dir_all(restored.parent().unwrap()).unwrap();
         fs::copy(&original, &restored).unwrap();
 
         assert_eq!(
-            load(&restored, "correct").unwrap().as_slice(),
+            load(&restored, "correct", context).unwrap().as_slice(),
             b"portable secret"
         );
         assert_eq!(
-            load(&restored, "wrong"),
+            load(&restored, "wrong", context),
             Err(SecureStoreError::InvalidCredential)
         );
         fs::remove_dir_all(original_directory).unwrap();
@@ -482,7 +582,9 @@ mod tests {
         let metadata = directory.join("secret.json");
         write_v2_fixture(&metadata, b"migration secret", "correct");
         assert_eq!(
-            load(&metadata, "correct").unwrap().as_slice(),
+            load(&metadata, "correct", wallet_context(Uuid::new_v4()))
+                .unwrap()
+                .as_slice(),
             b"migration secret"
         );
         let migrated = read_metadata(&metadata).unwrap();
@@ -499,7 +601,9 @@ mod tests {
         write_v3_fixture(&metadata, b"portable migration secret", "correct");
 
         assert_eq!(
-            load(&metadata, "correct").unwrap().as_slice(),
+            load(&metadata, "correct", wallet_context(Uuid::new_v4()))
+                .unwrap()
+                .as_slice(),
             b"portable migration secret"
         );
         let migrated = read_metadata(&metadata).unwrap();
@@ -509,16 +613,39 @@ mod tests {
     }
 
     #[test]
-    fn v4_rejects_modified_kdf_parameters_without_allocating_them() {
+    fn authenticated_v4_load_migrates_to_wallet_bound_v5() {
         let directory = directory();
         let metadata = directory.join("secret.json");
-        store(&metadata, b"secret", "correct").unwrap();
+        write_v4_fixture(&metadata, b"portable migration secret", "correct");
+        let context = wallet_context(Uuid::new_v4());
+
+        assert_eq!(
+            load(&metadata, "correct", context).unwrap().as_slice(),
+            b"portable migration secret"
+        );
+        assert_eq!(read_metadata(&metadata).unwrap().version, VERSION);
+        assert_eq!(
+            load(&metadata, "correct", wallet_context(Uuid::new_v4())),
+            Err(SecureStoreError::InvalidCredential)
+        );
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn v5_rejects_modified_kdf_parameters_without_allocating_them() {
+        let directory = directory();
+        let metadata = directory.join("secret.json");
+        let context = wallet_context(Uuid::new_v4());
+        store(&metadata, b"secret", "correct", context).unwrap();
         let mut value: serde_json::Value =
             serde_json::from_slice(&fs::read(&metadata).unwrap()).unwrap();
         value["kdf"]["memoryKib"] = serde_json::Value::from(1_048_576_u64);
         write_owner_only(&metadata, &serde_json::to_vec(&value).unwrap()).unwrap();
 
-        assert_eq!(load(&metadata, "correct"), Err(SecureStoreError::Corrupt));
+        assert_eq!(
+            load(&metadata, "correct", context),
+            Err(SecureStoreError::Corrupt)
+        );
         fs::remove_dir_all(directory).unwrap();
     }
 
@@ -530,15 +657,42 @@ mod tests {
         let before = fs::read(&metadata).unwrap();
 
         assert_eq!(
-            load_portable_with_writer(&metadata, "correct", |_path, _encoded| {
-                Err(SecureStoreError::Unavailable)
-            }),
+            load_portable_with_writer(
+                &metadata,
+                "correct",
+                wallet_context(Uuid::new_v4()),
+                |_path, _encoded| { Err(SecureStoreError::Unavailable) },
+            ),
             Err(SecureStoreError::Unavailable)
         );
         assert_eq!(fs::read(&metadata).unwrap(), before);
         assert_eq!(
             read_metadata(&metadata).unwrap().version,
             DEVICE_BOUND_VERSION
+        );
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn authenticated_v4_migration_prewrite_failure_keeps_ciphertext_and_fails_closed() {
+        let directory = directory();
+        let metadata = directory.join("secret.json");
+        write_v4_fixture(&metadata, b"migration secret", "correct");
+        let before = fs::read(&metadata).unwrap();
+
+        assert_eq!(
+            load_portable_with_writer(
+                &metadata,
+                "correct",
+                wallet_context(Uuid::new_v4()),
+                |_path, _encoded| { Err(SecureStoreError::Unavailable) },
+            ),
+            Err(SecureStoreError::Unavailable)
+        );
+        assert_eq!(fs::read(&metadata).unwrap(), before);
+        assert_eq!(
+            read_metadata(&metadata).unwrap().version,
+            LEGACY_AAD_VERSION
         );
         fs::remove_dir_all(directory).unwrap();
     }
@@ -551,7 +705,7 @@ mod tests {
         let before = fs::read(&metadata).unwrap();
 
         assert_eq!(
-            load(&metadata, "wrong"),
+            load(&metadata, "wrong", wallet_context(Uuid::new_v4())),
             Err(SecureStoreError::InvalidCredential)
         );
         assert_eq!(fs::read(&metadata).unwrap(), before);
@@ -559,6 +713,45 @@ mod tests {
             read_metadata(&metadata).unwrap().version,
             DEVICE_BOUND_VERSION
         );
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn wrong_credential_does_not_migrate_v4() {
+        let directory = directory();
+        let metadata = directory.join("secret.json");
+        write_v4_fixture(&metadata, b"migration secret", "correct");
+        let before = fs::read(&metadata).unwrap();
+
+        assert_eq!(
+            load(&metadata, "wrong", wallet_context(Uuid::new_v4())),
+            Err(SecureStoreError::InvalidCredential)
+        );
+        assert_eq!(fs::read(&metadata).unwrap(), before);
+        assert_eq!(
+            read_metadata(&metadata).unwrap().version,
+            LEGACY_AAD_VERSION
+        );
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn unknown_future_version_is_rejected_without_rewrite() {
+        let directory = directory();
+        let metadata = directory.join("secret.json");
+        let context = wallet_context(Uuid::new_v4());
+        store(&metadata, b"future secret", "correct", context).unwrap();
+        let mut value: serde_json::Value =
+            serde_json::from_slice(&fs::read(&metadata).unwrap()).unwrap();
+        value["version"] = serde_json::Value::from(VERSION + 1);
+        write_owner_only(&metadata, &serde_json::to_vec(&value).unwrap()).unwrap();
+        let before = fs::read(&metadata).unwrap();
+
+        assert_eq!(
+            load(&metadata, "correct", context),
+            Err(SecureStoreError::Corrupt)
+        );
+        assert_eq!(fs::read(&metadata).unwrap(), before);
         fs::remove_dir_all(directory).unwrap();
     }
 
@@ -573,7 +766,10 @@ mod tests {
         write_owner_only(&metadata, &serde_json::to_vec(&value).unwrap()).unwrap();
         let before = fs::read(&metadata).unwrap();
 
-        assert_eq!(load(&metadata, "correct"), Err(SecureStoreError::Corrupt));
+        assert_eq!(
+            load(&metadata, "correct", wallet_context(Uuid::new_v4())),
+            Err(SecureStoreError::Corrupt)
+        );
         assert_eq!(fs::read(&metadata).unwrap(), before);
         assert_eq!(
             read_metadata(&metadata).unwrap().version,
@@ -588,9 +784,16 @@ mod tests {
         fs::create_dir_all(&directory).unwrap();
         let metadata = directory.join("secret.json");
         fs::write(&metadata, b"not json").unwrap();
-        assert_eq!(load(&metadata, "x"), Err(SecureStoreError::Corrupt));
+        let context = wallet_context(Uuid::new_v4());
+        assert_eq!(
+            load(&metadata, "x", context),
+            Err(SecureStoreError::Corrupt)
+        );
         fs::write(&metadata, vec![b'x'; MAX_METADATA_BYTES as usize + 1]).unwrap();
-        assert_eq!(load(&metadata, "x"), Err(SecureStoreError::Corrupt));
+        assert_eq!(
+            load(&metadata, "x", context),
+            Err(SecureStoreError::Corrupt)
+        );
         fs::remove_dir_all(directory).unwrap();
     }
 
