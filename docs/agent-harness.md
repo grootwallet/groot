@@ -104,6 +104,11 @@ and packaged HWI policy, and emits signed SBOM/provenance/checksum evidence. It
 never creates, imports, or prints signing credentials; the Developer ID identity
 and notarization profile must already exist in Keychain.
 
+Public packaging also requires the tracked release version/tag authorization.
+The packager freshly queries the remote and proceeds only when local `HEAD`,
+`origin/main`, and the peeled annotated release tag resolve to the same commit.
+Lightweight, missing, moved, or mismatched tags fail closed.
+
 The macOS DMG helper copies the reviewed deterministic Finder metadata asset into
 the image before `hdiutil` runs. It requires the exact `Groot` volume name and
 does not ask Finder to generate `.DS_Store`, so user Finder preferences cannot

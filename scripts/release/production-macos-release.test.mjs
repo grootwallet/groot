@@ -85,7 +85,9 @@ test('multi-network evidence builder is release-bound and uses signed HWI proven
 
 test('production package binds the exact reproduced payload before signing', () => {
   const source = read('./package-macos-ga.mjs');
-  const authorization = source.indexOf('verifyPublicReleaseAuthorization({ repoRoot, commit })');
+  const authorization = source.indexOf(
+    'const authorization = verifyPublicReleaseAuthorization({ repoRoot, commit })'
+  );
   const comparison = source.indexOf("digest(builtExecutable) !== digest(join(evidence, 'Groot'))");
   const appSigning = source.indexOf("run('codesign', ['--force', '--sign', identity");
   assert.ok(authorization >= 0 && comparison > authorization && appSigning > comparison);
@@ -99,6 +101,9 @@ test('production package binds the exact reproduced payload before signing', () 
   assert.match(source, /GROOT_BUILD_NETWORK: 'multi'/);
   assert.match(source, /GROOT_HWI_SHA256: hwiVerification\.manifest\.artifact\.sha256/);
   assert.match(source, /'ls-remote', '--exit-code', 'origin', 'refs\/heads\/main'/);
+  assert.match(source, /const tagRef = `refs\/tags\/\$\{authorization\.tag\}`/);
+  assert.match(source, /const peeledTagRef = `\$\{tagRef\}\^\{\}`/);
+  assert.match(source, /remoteTagEntries\.get\(peeledTagRef\) !== commit/);
   assert.match(source, /'notarytool',[\s\S]{0,40}'submit'/);
   assert.match(source, /'stapler', 'staple'/);
   assert.match(source, /verifyPackagedHwi\(outputApp/);

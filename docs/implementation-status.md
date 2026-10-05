@@ -2,12 +2,12 @@
 
 ## v0.5.0 release preparation — 2026-10-05
 
-The tested feature branch now reports v0.5.0 across the frontend, Tauri, Cargo,
-and diagnostic build identity. This version-only step changes no wallet behavior
-or persisted format. Production signing remains fail-closed until the exact
-release source is authorized on `origin/main`, independently reproduced from a
-valid frozen signed-HWI input, and packaged with the configured Developer ID and
-notarization credentials.
+The tested source now reports v0.5.0 across the frontend, Tauri, Cargo, and
+diagnostic build identity. ADR 0082 authorizes the version through annotated tag
+`v0.5.0`; production packaging remains fail-closed until the peeled remote tag,
+`origin/main`, and local `HEAD` match, the executable is reproduced from the
+frozen signed-HWI input, and Developer ID signing and Apple notarization pass.
+This release-governance change alters no wallet behavior or persisted format.
 
 ## Current release status — 2026-10-04
 
@@ -1554,12 +1554,12 @@ release checklist now authorize that exact commit. The public `v0.4.95` tag also
 moved from the locally retained `f486d923` target to `c3002279`; ADR 0079 remains
 the historical governance record.
 
-The production macOS packager now refuses to proceed before build, signing, or
-notarization unless a machine-readable record names the exact commit, a unique
-accepted ADR explicitly authorizes that commit, the checklist is approved, and
-no checklist item remains open. Exact commit `f7b4b993` satisfies that gate;
-later commits require fresh exact-commit approval. Internal unsigned/ad-hoc
-certification builds remain available with their existing warnings.
+The production macOS packager refuses to proceed before build, signing, or
+notarization unless the machine-readable record names the package version and
+annotated release tag, a unique accepted ADR authorizes them, the checklist is
+approved with no open item, and the peeled remote tag, `origin/main`, and local
+`HEAD` match. Internal unsigned/ad-hoc certification builds remain available
+with their existing warnings.
 
 ## 2026-10-04 approved security hardening
 
@@ -1571,7 +1571,7 @@ and wallet/purpose-bound secure-store v5. Authenticated v2/v3/v4 records migrate
 automatically and failure-atomically; migrated protected records cannot be read
 by v0.4.96 or older. Item 12 and every other report proposal remain deferred.
 
-Public v0.4.96 commit `f7b4b993` remains the currently authorized Mainnet
-release. This follow-up branch is a new candidate and is not authorized for
-merge or release until its exact commit passes validation, candidate migration,
-network, and hardware tests, and a new exact-commit approval.
+Public v0.4.96 commit `f7b4b993` remains the latest published Mainnet release.
+ADR 0082 authorizes v0.5.0 once its annotated remote tag and `origin/main` bind
+the same validated commit; signing, notarization, stapling, and final package
+verification remain required before publication.
