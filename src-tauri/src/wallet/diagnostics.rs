@@ -547,7 +547,7 @@ mod tests {
             error_code: None,
             error_message: None,
             error_details: None,
-            app_version: "0.4.96".to_owned(),
+            app_version: "0.5.0".to_owned(),
             build_commit: "test".to_owned(),
             compiled_network: network.to_owned(),
             platform: "macos".to_owned(),

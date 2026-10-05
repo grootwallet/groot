@@ -15,9 +15,9 @@ const pinnedPolicySources = new Map([
   ['src-tauri/src/session.rs', '82da6d3a2643710aaa0974f69f0fb7c932172a401ecf33c186e440c8170f35e0'],
   ['.env.mainnet', '1623f3f97de588daea2bbeae1f9c56ebc896b6bc2c22ac238563b46b688ced85'],
   ['.env.multi', '33fc3d5022968d9eaa25bfe749c0b01691c0570611a65255100718d2c50df723'],
-  ['package.json', '4c8c1aff8d5c670ab8d35470fc1533dcf9d234bd289ae50cc3ebdb1c878ccd09'],
-  ['src-tauri/Cargo.toml', 'dead01bffd08e89b5aad85ca506672e1e1f2f75c36ff8530b520adf8714c1a31'],
-  ['src-tauri/tauri.conf.json', 'f2628a1c0ef079561ce5525b8e176345b11c4de73b62942e10f0a1972b6dd7c9'],
+  ['package.json', 'a56d945f9492d816b62ca21d6122e5acf2a459fba803bf12397138795caf74f6'],
+  ['src-tauri/Cargo.toml', '3ac85270c95ddd07d5a765e109ee0c42fc28e0b700f3d96cd8952a0e4d1238ac'],
+  ['src-tauri/tauri.conf.json', '5cdd4363213702bd4849bd6e202f47fa211132320a29d103640f98d552f764e5'],
   ['LICENSE', 'c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4'],
   ['NOTICE', 'b39c98ac4d5186a7418ee71e1a8a7a29fb574ada3a7c58184c00125dda8d511d'],
   ['THIRD_PARTY_NOTICES.md', 'a181753f36eb3e475cddf31a69d2e75f01a86a79c70de252abb1e73a059407db'],
@@ -34,7 +34,7 @@ const pinnedPolicySources = new Map([
     'scripts/network/check-native-builds.sh',
     '3a984ab7ef5f0d7c29d689d2ab39e114d61f1db0efd29a632cea980d7284bef4'
   ],
-  ['src/lib/config.ts', '8b6d65ce63fc89423564072ceebf3509dc0ec2c48dac03ee14cb1172ad2045f7'],
+  ['src/lib/config.ts', 'eee048d90a64372c4053600b76cf2ec1ab7a000117ff4f4cb6b3d78d54121a70'],
   ['src-tauri/build.rs', 'ed1866cf57502e61199d75df9ff407b5ed0be54043ad94525ef6579ad98dfcb7'],
   [
     'src-tauri/src/release_policy.rs',
@@ -73,7 +73,7 @@ const pinnedPolicySources = new Map([
   ['src-tauri/src/wallet.rs', '72b53e5b7e6936ba105d613ae32703938c49700e002751894973eda3f56cd06a'],
   [
     'src-tauri/src/wallet/diagnostics.rs',
-    '2e1c4c774343d466d9a3804d0534a77282e9c390c74b6f18f2e156a31b84afca'
+    'e531480fd53ffa5db664d7a80c1bdf806351e648c0f09727cdde32fc0d24158a'
   ],
   [
     'src-tauri/src/wallet/error_translation.rs',

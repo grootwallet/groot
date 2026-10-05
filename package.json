@@ -1,7 +1,7 @@
 {
   "name": "groot-wallet",
   "private": true,
-  "version": "0.4.96",
+  "version": "0.5.0",
   "license": "Apache-2.0",
   "author": "Thibaud Marechal <t@thibm.net>",
   "repository": {

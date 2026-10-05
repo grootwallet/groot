@@ -1,5 +1,14 @@
 # Implementation status
 
+## v0.5.0 release preparation — 2026-10-05
+
+The tested feature branch now reports v0.5.0 across the frontend, Tauri, Cargo,
+and diagnostic build identity. This version-only step changes no wallet behavior
+or persisted format. Production signing remains fail-closed until the exact
+release source is authorized on `origin/main`, independently reproduced from a
+valid frozen signed-HWI input, and packaged with the configured Developer ID and
+notarization credentials.
+
 ## Current release status — 2026-10-04
 
 Public v0.4.96 (`f7b4b993`) is Mainnet-ready and authorized for the macOS

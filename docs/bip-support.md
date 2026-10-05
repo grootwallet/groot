@@ -1,5 +1,9 @@
 # Bitcoin Improvement Proposal support
 
+The 2026-10-05 v0.5.0 release-version preparation changes build metadata only.
+It does not change supported BIPs, descriptors, derivation, transaction policy,
+signing, recovery, sync, or interoperability behavior.
+
 The 2026-10-04 ADR 0081 hardening allows outgoing payments to legacy P2PKH,
 P2SH (including BIP49-compatible nested SegWit), SegWit v0 P2WPKH/P2WSH, and
 BIP350 SegWit-v1 Taproot destinations. P2A and witness v2-v16 are rejected.
