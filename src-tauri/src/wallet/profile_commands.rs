@@ -143,8 +143,8 @@ pub fn network_setup_sources(
 pub async fn wallet_rename(app: AppHandle, name: String) -> ApiResult<WalletProfile> {
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<AppState>();
-        let _operation = operation_guard(&state)?;
-        require_unlocked(&app, &state)?;
+        let wallet_id = require_unlocked(&app, &state)?;
+        let _operation = metadata_operation_guard(&state, wallet_id)?;
         let mut registry = load_registry(&app)?;
         let renamed = registry
             .rename_selected(&name)

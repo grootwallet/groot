@@ -41,7 +41,7 @@ use std::{
     str::FromStr,
     sync::{
         atomic::{AtomicBool, AtomicU64, Ordering},
-        Arc, Mutex, MutexGuard, RwLock, RwLockReadGuard, RwLockWriteGuard,
+        Arc, Mutex, MutexGuard, RwLock, RwLockReadGuard, RwLockWriteGuard, TryLockError,
     },
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
@@ -314,8 +314,34 @@ fn internal(error: impl ToString) -> ApiError {
     api_error("internal_error", error)
 }
 
-fn operation_guard<'a>(state: &'a State<'_, AppState>) -> ApiResult<MutexGuard<'a, ()>> {
+fn operation_guard(state: &AppState) -> ApiResult<MutexGuard<'_, ()>> {
     state.operations.lock().map_err(internal)
+}
+
+// Display-only profile and signer metadata live outside the wallet database.
+// Let those tiny operations proceed while a foreground sync owns the database
+// lock; every other competing operation continues to serialize normally.
+fn metadata_operation_guard<'a>(
+    state: &'a AppState,
+    wallet_id: Uuid,
+) -> ApiResult<Option<MutexGuard<'a, ()>>> {
+    match state.operations.try_lock() {
+        Ok(guard) => Ok(Some(guard)),
+        Err(TryLockError::Poisoned(error)) => Err(internal(error)),
+        Err(TryLockError::WouldBlock) => {
+            let syncing_selected_wallet = state
+                .foreground_sync
+                .lock()
+                .map_err(internal)?
+                .as_ref()
+                .is_some_and(|sync| sync.wallet_id == wallet_id);
+            if syncing_selected_wallet {
+                Ok(None)
+            } else {
+                operation_guard(state).map(Some)
+            }
+        }
+    }
 }
 
 // A Core refresh stages its BDK update in memory until one SQLite commit. A

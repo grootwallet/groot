@@ -372,6 +372,7 @@
     liveSync?.stop();
     ++profileReadGeneration;
     try {
+      await walletService.cancelSync().catch(() => undefined);
       await walletService.cancelHardwareOperations();
       const selection = await walletService.selectWallet(walletId);
       // Change the routed wallet context only after Rust has atomically selected

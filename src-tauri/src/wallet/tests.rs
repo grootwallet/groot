@@ -1139,6 +1139,34 @@ fn foreground_sync_read_gate_closes_before_the_writer_commits() {
 }
 
 #[test]
+fn metadata_operations_do_not_wait_for_the_selected_wallet_sync() {
+    let state = AppState::default();
+    let wallet_id = Uuid::new_v4();
+    state
+        .foreground_sync
+        .lock()
+        .unwrap()
+        .replace(ActiveForegroundSync {
+            wallet_id,
+            cancel: Arc::new(AtomicBool::new(false)),
+            persisted_reads_safe: Arc::new(AtomicBool::new(true)),
+        });
+    let _sync_operation = state.operations.lock().unwrap();
+
+    assert!(metadata_operation_guard(&state, wallet_id)
+        .unwrap()
+        .is_none());
+}
+
+#[test]
+fn metadata_operations_serialize_when_the_wallet_is_idle() {
+    let state = AppState::default();
+    assert!(metadata_operation_guard(&state, Uuid::new_v4())
+        .unwrap()
+        .is_some());
+}
+
+#[test]
 fn mainnet_core_admission_rejects_initial_block_download() {
     let error = ensure_mainnet_core_ready_for_admission(true).unwrap_err();
     assert_eq!(error.code, "node_syncing");

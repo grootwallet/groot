@@ -133,6 +133,8 @@
   let customFee = $state('');
   let passphrase = $state('');
   let credentialError = $state('');
+  let retryAfterSeconds = $state(0);
+  let retryTimer: ReturnType<typeof setInterval> | undefined;
   let broadcasting = $state(false);
   let savingPsbt = $state(false);
   let preparing = $state(false);
@@ -168,6 +170,8 @@
   let accelerationConfirmed = $state(false);
   let accelerationQuoteRevision = 0;
   let accelerationQuoteTimer: ReturnType<typeof setTimeout> | undefined;
+  let accelerationSyncPaused = false;
+  let sendDestroyed = false;
   const broadcastExplorerUrl = $derived(
     txid ? transactionExplorerUrl(defaultConfig.network, txid) : null
   );
@@ -318,7 +322,18 @@
   let walletLoading = $state(true);
   let walletLoadGeneration = 0;
   onMount(() => {
-    void loadWallet();
+    if (initialAcceleration) {
+      void walletShell.pauseAutomaticSync().then(() => {
+        if (sendDestroyed) {
+          walletShell.resumeAutomaticSync();
+          return;
+        }
+        accelerationSyncPaused = true;
+        void loadWallet();
+      });
+    } else {
+      void loadWallet();
+    }
     return walletService.subscribe((event) => {
       if (
         event.type !== 'wallet_updated' ||
@@ -535,6 +550,7 @@
   }
 
   onDestroy(() => {
+    sendDestroyed = true;
     ++walletLoadGeneration;
     accelerationQuoteRevision += 1;
     if (accelerationQuoteTimer) clearTimeout(accelerationQuoteTimer);
@@ -543,7 +559,25 @@
     passphrase = '';
     pinPositions = '';
     pinChallenge = '';
+    if (retryTimer) clearInterval(retryTimer);
+    if (accelerationSyncPaused) walletShell.resumeAutomaticSync();
   });
+
+  function startRetryCountdown(seconds: number) {
+    retryAfterSeconds = Math.max(1, Math.ceil(seconds));
+    credentialError = `Too many incorrect attempts. Try again in ${retryAfterSeconds} seconds.`;
+    if (retryTimer) clearInterval(retryTimer);
+    retryTimer = setInterval(() => {
+      retryAfterSeconds = Math.max(0, retryAfterSeconds - 1);
+      if (retryAfterSeconds > 0) {
+        credentialError = `Too many incorrect attempts. Try again in ${retryAfterSeconds} seconds.`;
+        return;
+      }
+      if (retryTimer) clearInterval(retryTimer);
+      retryTimer = undefined;
+      credentialError = '';
+    }, 1_000);
+  }
 
   async function saveCurrentDraft() {
     if (
@@ -805,7 +839,7 @@
   }
 
   async function broadcast() {
-    if (accelerationConfirmed) return;
+    if (accelerationConfirmed || retryAfterSeconds > 0) return;
     if (!passphrase || !proposal) return;
     credentialError = '';
     broadcasting = true;
@@ -833,7 +867,12 @@
       passphrase = '';
       step = 4;
     } catch (cause) {
-      credentialError = localizedError(cause, $locale, 'Could not sign or broadcast.');
+      if (cause instanceof WalletError && cause.code === 'rate_limited') {
+        const messageSeconds = Number(cause.message.match(/(\d+)\s+seconds?/)?.[1] ?? 0);
+        startRetryCountdown(cause.details?.retryAfterSeconds ?? messageSeconds ?? 1);
+      } else {
+        credentialError = localizedError(cause, $locale, 'Could not sign or broadcast.');
+      }
       passphrase = '';
     } finally {
       broadcasting = false;
@@ -2067,7 +2106,9 @@
             <PasswordField
               label={translate($locale, 'Wallet passphrase')}
               bind:value={passphrase}
-              oninput={() => (credentialError = '')}
+              oninput={() => {
+                if (retryAfterSeconds === 0) credentialError = '';
+              }}
               placeholder={translate($locale, 'Enter wallet passphrase')}
               autocomplete="current-password"
               error={credentialError}
@@ -2080,7 +2121,7 @@
               type="submit"
               size="large"
               class="full"
-              disabled={!passphrase}
+              disabled={!passphrase || retryAfterSeconds > 0}
               loading={broadcasting}
               loadingLabel={translate($locale, 'Signing & broadcasting…')}
               >{translate($locale, 'Sign & broadcast')}

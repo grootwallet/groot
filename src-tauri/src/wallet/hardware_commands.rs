@@ -1917,9 +1917,21 @@ pub async fn hardware_health_checks(
 ) -> ApiResult<Vec<HardwareHealthCheckRecordDto>> {
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<AppState>();
-        let _operation = operation_guard(&state)?;
-        require_unlocked(&app, &state)?;
-        read_hardware_health_checks(&open_hardware_health_db(&app)?)
+        let wallet_id = require_unlocked(&app, &state)?;
+        let _persisted_guard = foreground_persisted_read_guard(&state, wallet_id)?;
+        let persisted_read = _persisted_guard.is_some();
+        let _operation = if persisted_read {
+            None
+        } else {
+            Some(operation_guard(&state)?)
+        };
+        let profile = selected_profile(&app)?;
+        let db = if persisted_read {
+            open_selected_db_for_persisted_read(&app, profile.kind == WalletKind::Multisig)?
+        } else {
+            open_hardware_health_db(&app)?
+        };
+        read_hardware_health_checks(&db)
     })
     .await
     .map_err(internal)?
@@ -2620,8 +2632,8 @@ pub fn external_signer_create(
 pub async fn external_signer_wallet(app: AppHandle) -> ApiResult<ExternalSignerWallet> {
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<AppState>();
-        let _operation = operation_guard(&state)?;
-        require_unlocked(&app, &state)?;
+        let wallet_id = require_unlocked(&app, &state)?;
+        let _operation = metadata_operation_guard(&state, wallet_id)?;
         read_external_signer_metadata(&app)
     })
     .await
@@ -2641,21 +2653,25 @@ pub(crate) fn normalize_external_signer_label(value: &str) -> ApiResult<String> 
 }
 
 #[tauri::command]
-pub fn external_signer_rename(
+pub async fn external_signer_rename(
     app: AppHandle,
-    state: State<'_, AppState>,
     label: String,
 ) -> ApiResult<ExternalSignerWallet> {
-    let _operation = operation_guard(&state)?;
-    require_unlocked(&app, &state)?;
-    let mut metadata = read_external_signer_metadata(&app)?;
-    metadata.signer.label = normalize_external_signer_label(&label)?;
-    metadata
-        .signer
-        .validate()
-        .map_err(external_signer_api_error)?;
-    write_private_json(&external_signer_metadata_path(&app)?, &metadata)?;
-    Ok(metadata)
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let wallet_id = require_unlocked(&app, &state)?;
+        let _operation = metadata_operation_guard(&state, wallet_id)?;
+        let mut metadata = read_external_signer_metadata(&app)?;
+        metadata.signer.label = normalize_external_signer_label(&label)?;
+        metadata
+            .signer
+            .validate()
+            .map_err(external_signer_api_error)?;
+        write_private_json(&external_signer_metadata_path(&app)?, &metadata)?;
+        Ok(metadata)
+    })
+    .await
+    .map_err(internal)?
 }
 
 pub(crate) fn external_signer_backup(descriptor: String) -> ApiResult<ExternalSignerBackupDto> {

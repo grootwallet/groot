@@ -293,6 +293,20 @@ export const settingsCopy = {
     fr: 'Sauvegarde du signataire matériel',
     es: 'Copia del firmante físico'
   },
+  'Signer backup': { fr: 'Sauvegarde du signataire', es: 'Copia del firmante' },
+  'Signer backups': { fr: 'Sauvegardes des signataires', es: 'Copias de los firmantes' },
+  'Completed when the signer was initialized.': {
+    fr: 'Effectuée lors de l’initialisation du signataire.',
+    es: 'Completada al inicializar el firmante.'
+  },
+  'Completed when each signer was initialized.': {
+    fr: 'Effectuées lors de l’initialisation de chaque signataire.',
+    es: 'Completadas al inicializar cada firmante.'
+  },
+  'Available after sync': {
+    fr: 'Disponible après la synchronisation',
+    es: 'Disponible después de sincronizar'
+  },
   'Policy and signer recovery': {
     fr: 'Récupération de la politique et des signataires',
     es: 'Recuperación de la política y los firmantes'

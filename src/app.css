@@ -3208,6 +3208,9 @@ code {
 .amount-input b {
   top: 14px;
 }
+.amount-input.fee-rate-input b {
+  right: 14px;
+}
 .amount-input .amount-unit-toggle {
   top: 9px;
   min-width: 40px;
@@ -4188,12 +4191,21 @@ code {
   background: color-mix(in srgb, var(--fr-red) 7%, var(--surface-icon));
 }
 .backup-information-row {
-  background: var(--surface-inset) !important;
+  cursor: default;
 }
 .backup-information-row .info-badge {
   color: var(--muted);
   background: var(--surface-control);
   outline: 1px solid var(--border);
+}
+.settings-sync-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: var(--font-size-meta);
+  font-weight: 600;
 }
 .info-badge {
   padding: 4px 8px;
