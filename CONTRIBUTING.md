@@ -4,6 +4,23 @@ Thank you for helping improve Groot. Read `AGENTS.md`, the canonical product and
 architecture documents, the relevant ADRs, and the engineering/test harness
 before changing the wallet.
 
+## Track the work
+
+Open or confirm a GitHub issue before starting a non-trivial bug fix, feature,
+security hardening change, maintenance task, or release campaign. The issue owns
+the scope and acceptance criteria.
+
+- Reference the issue from commits with `Refs #N` or an equivalent trailer.
+- Link it from the pull request. Use `Closes #N` only when the pull request
+  completes the issue; partial work uses `Refs #N` and leaves it open.
+- Close completed or explicitly rejected work with a concise reference to the
+  merged PR, exact commit, release, or accepted ADR.
+- Do not disclose an unpatched vulnerability in a public issue. Use a draft
+  security advisory or another owner-approved private tracker.
+
+A purely editorial typo may omit an issue only when it changes no behavior,
+policy, release claim, dependency, or security statement.
+
 ## Contribution license
 
 The base wallet application in this repository is licensed under Apache-2.0.

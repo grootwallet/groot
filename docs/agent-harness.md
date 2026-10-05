@@ -17,8 +17,10 @@ Before changing files:
 3. Treat GitHub as live external state. Verify an issue with `gh issue view` or
    `gh issue list` before stating that it is open or closed. Documentation owns
    product truth; an issue state does not prove implementation, physical
-   certification, or release readiness. Never create, edit, close, or reopen an
-   issue without the user's authorization.
+   certification, or release readiness. Confirm the relevant issue before
+   non-trivial work, branch from the current default branch, use `Refs #N` in
+   commits and the pull request, and reserve `Closes #N` for complete acceptance.
+   Never create, edit, close, or reopen an issue without the user's authorization.
 4. Identify who owns any running native app, Vite server, Bitcoin Core process,
    or certification profile. Do not start a second server against the same port
    or stop a process you did not start.
@@ -375,6 +377,11 @@ and BitBox02 Nova USB #34 are open. Recheck before repeating these states.
 
 ## Clean implementation and handoff
 
+- Keep the live issue authoritative for scope and status. If a change delivers
+  only part of its acceptance criteria, update the issue and leave it open.
+  After merge, close completed or ADR-rejected work with an exact PR, commit,
+  release, or ADR reference. Security-sensitive work uses an owner-approved
+  private tracker or draft security advisory rather than a public issue.
 - Make the smallest coherent change at the owning layer. Remove obsolete or
   duplicated code encountered in that scope; do not perform unrelated rewrites.
 - New feature UI composes existing reusable components. If a verified gap

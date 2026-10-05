@@ -8,15 +8,35 @@ Dependencies point inward. Routes never select adapters. Rust commands translate
 
 ## Change shape
 
-1. State the invariant and acceptance criteria.
-2. Change the smallest owning layer.
-3. Add pure unit tests first, then adapter/command integration, then the minimum E2E proof.
-4. Update product, architecture, flow, implementation-status, testing, and ADR documents that own the changed claim.
+1. Confirm the live tracking issue and state the invariant and acceptance criteria.
+2. Branch from the current default branch and reference the issue from commits and the pull request.
+3. Change the smallest owning layer.
+4. Add pure unit tests first, then adapter/command integration, then the minimum E2E proof.
+5. Update product, architecture, flow, implementation-status, testing, and ADR documents that own the changed claim.
    Update [`bip-support.md`](bip-support.md) whenever the change adds, removes,
    expands, narrows, or changes evidence for a BIP; record an explicit no-impact
    assessment when no BIP is affected.
-5. Run `pnpm format` after editing supported frontend, configuration, or documentation files.
-6. Run `pnpm validate`; add Rust and visual checks when applicable.
+6. Run `pnpm format` after editing supported frontend, configuration, or documentation files.
+7. Run `pnpm validate`; add Rust and visual checks when applicable.
+
+## Issue-linked work
+
+- Use a GitHub issue as the durable tracker for every non-trivial bug, feature,
+  security hardening item, maintenance task, or release campaign. Verify its live
+  state and acceptance criteria before implementation.
+- Commits use `Refs #N` or an equivalent issue trailer. Pull requests link the
+  issue and use `Closes #N` only when the complete acceptance criteria are met.
+  Partial delivery uses `Refs #N`, records what remains, and leaves the issue open.
+- Close an issue only after the implementing change is merged and its result is
+  read back, or when an accepted ADR explicitly rejects or supersedes the work.
+  Leave a concise close reason with the commit, pull request, release, or ADR.
+- Do not put an unpatched vulnerability or exploit detail in a public issue.
+  Track sensitive work in a draft security advisory or other owner-approved
+  private tracker and use only a sanitized reference in public commits and PRs.
+- A purely editorial typo may omit an issue when it changes no behavior, policy,
+  release claim, dependency, or security statement. An emergency fix may begin
+  before issue triage only when delay would increase risk; create or update its
+  tracker as soon as disclosure and incident constraints permit.
 
 ## Persisted-format compatibility
 
