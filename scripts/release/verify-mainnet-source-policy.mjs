@@ -201,7 +201,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src/lib/components/AppShell.svelte',
-    '605b0594f877a8f3be6442442402e10b19c581ea584855164ef0b3ada696821f'
+    '189d2685397973da0fa763036ff43449841da90ae0b4c4fb95e8bd3960b0f3a4'
   ],
   [
     'src/lib/wallet/live-sync.ts',
@@ -247,7 +247,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src/routes/settings/+page.svelte',
-    'fd5f70464d661f90710213915693771486260cdf621a39ba7c9d9fe358b1bf51'
+    '93ca9da3a672fed3a2d07ebc355885ebc8e13fba1bafb3fab518144110b4d7e5'
   ],
   [
     'services/core-gateway/gateway.py',

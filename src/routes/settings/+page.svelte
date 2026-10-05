@@ -1213,15 +1213,15 @@
             })
           : translate($locale, 'Settings')}
       </h1>
-      {#if settingsSyncActive}<p class="settings-sync-indicator" aria-live="polite">
-          <RefreshCw class="spin" size={15} />
-          {#if syncStatus?.progressPercent !== null && syncStatus?.progressPercent !== undefined}
-            {translate($locale, 'Syncing · {percent}%', {
-              percent: formatInteger(syncStatus.progressPercent, $locale)
-            })}
-          {:else}{translate($locale, 'Syncing…')}{/if}
-        </p>{/if}
     </div>
+    {#if settingsSyncActive}<p class="settings-sync-indicator" aria-live="polite">
+        <RefreshCw class="spin" size={15} />
+        {#if syncStatus?.progressPercent !== null && syncStatus?.progressPercent !== undefined}
+          {translate($locale, 'Syncing · {percent}%', {
+            percent: formatInteger(syncStatus.progressPercent, $locale)
+          })}
+        {:else}{translate($locale, 'Syncing…')}{/if}
+      </p>{/if}
   </header>
   {#if walletUnlocked}<section class="settings-group wallet-details">
       <h2>{translate($locale, 'Wallet details')}</h2>

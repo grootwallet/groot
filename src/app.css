@@ -4202,10 +4202,11 @@ code {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  margin: 8px 0 0;
+  margin: 8px 0 0 auto;
   color: var(--muted);
   font-size: var(--font-size-meta);
   font-weight: 600;
+  white-space: nowrap;
 }
 .info-badge {
   padding: 4px 8px;

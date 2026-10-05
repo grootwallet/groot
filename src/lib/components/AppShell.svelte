@@ -345,7 +345,10 @@
       // Unlock is an explicit foreground wake-up. Start the selected wallet's
       // first or routine sync even when the user returns to Settings instead
       // of waiting for Overview to mount or for the steady-state interval.
-      if (previousPath === '/unlock') void liveSync.runNow();
+      // A genuine credential unlock should refresh immediately. Wallet selection
+      // can also leave /unlock when the target wallet already has a live session;
+      // in that case let its cached Overview paint before the normal sync timer.
+      if (previousPath === '/unlock' && !walletSelectionTask) void liveSync.runNow();
     }
   });
 

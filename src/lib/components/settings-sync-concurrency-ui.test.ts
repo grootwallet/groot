@@ -21,6 +21,11 @@ describe('foreground wallet actions during sync', () => {
     expect(settings).toContain('disabled={settingsSyncActive}');
     expect(settings).toContain("'Available after sync'");
     expect(settings).toContain('class="settings-sync-indicator"');
+    const header = settings.slice(
+      settings.indexOf('<header class="page-header">'),
+      settings.indexOf('</header>', settings.indexOf('<header class="page-header">'))
+    );
+    expect(header.indexOf('</div>')).toBeLessThan(header.indexOf('settings-sync-indicator'));
   });
 
   it('renames display metadata without draining automatic sync first', () => {
