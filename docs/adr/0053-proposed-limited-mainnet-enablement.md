@@ -1,9 +1,22 @@
-# ADR 0053: Proposed limited mainnet enablement
+# ADR 0053: Limited mainnet enablement
 
-- Status: proposed and blocked for release; transport and GA artifact shape superseded by ADR 0061 and ADR 0069
+- Status: accepted
 - Date: 2026-09-02
-- Would supersede: ADR 0012 only after every exit condition below is met
+- Accepted: 2026-10-04
+- Supersedes: ADR 0012; dedicated-artifact and transport details are superseded by ADR 0069, ADR 0073, and ADR 0078
 - Extends: ADR 0026, ADR 0037, ADR 0052
+
+Authorizes: public Mainnet distribution for commit f7b4b9935943f0250353a6f77c3d8fca31906fff
+
+## Acceptance record
+
+The release owner confirms that every canonical checklist row completed for
+v0.4.96. In particular, the supported BIP84/BIP48 hardware matrix and signer
+permutations passed; local pruned Core and Groot-managed remote Core passed full
+and birthday scans; backend and Regtest/Testnet4/Mainnet switching passed; and
+two independent machines reproduced the multi-network artifact. The owner
+accepts the documented residual risks and authorizes the exact commit above.
+Future releases require a new exact-commit authorization.
 
 ## Context
 
@@ -14,14 +27,13 @@ BIP84 hardware wallets, and standard BIP48 hardware multisig. ADR 0054 accepts
 HWI's exact family records for Coldcard and Jade while keeping their evidence
 model-specific.
 
-This proposal defines the eventual release decision. ADR 0055 now authorizes one
-isolated, non-distributable mainnet certification build so the exit conditions can
-be tested; it neither accepts residual risk nor authorizes distribution.
+This ADR began as the release proposal. ADR 0055 authorized the isolated
+certification build; the 2026-10-04 acceptance record above closes the exit
+conditions and authorizes exact v0.4.96.
 
-## Proposed decision
+## Decision
 
-After every exit condition is satisfied in one frozen commit, a later accepted
-revision of this ADR may authorize the ADR 0069 multi-network GA build with:
+The authorized ADR 0069 multi-network GA build has:
 
 - one general product identity, an owner-only restart-bound selector, and isolated
   Regtest, Testnet4, and Mainnet application-data namespaces;
@@ -72,7 +84,7 @@ model reporting the same family identity can pass admission. User assertion, USB
 path, label text, and firmware declarations are not substitutes for trusted
 model identity.
 
-## Exit conditions before acceptance
+## Exit conditions
 
 1. The independent security review of the frozen baseline is complete and all
    release-blocking findings are resolved.
@@ -104,10 +116,7 @@ invokes the published incident-response procedure.
 
 ## Consequences
 
-ADR 0012 remains authoritative for distribution. Mainnet is available only in
-the dedicated certification identity or after the reviewed native selector has
-chosen Mainnet in ADR 0069's multi-network identity. This proposal may be edited
-during review, but it cannot be marked accepted until the checklist links exact
-evidence for every exit condition, including multi-network isolation and restart
-teardown. Accepting it later does not certify any unlisted platform, model,
-firmware, transport, backend, selected network, or wallet policy.
+ADR 0012 is superseded for the exact authorized release. Mainnet is selected
+through ADR 0069's restart-bound multi-network identity. This acceptance does
+not certify an unlisted platform, model, firmware, transport, backend, selected
+network, wallet policy, or later commit.

@@ -69,7 +69,10 @@ impl ExternalSignerError {
 
 impl ExternalSignerInput {
     pub fn validate(&self) -> Result<(), ExternalSignerError> {
-        if self.label.trim().is_empty() || self.label.chars().count() > 48 {
+        if self.label.trim().is_empty()
+            || self.label.chars().count() > 48
+            || crate::wallet::label_has_unsafe_formatting(&self.label)
+        {
             return Err(ExternalSignerError::InvalidLabel);
         }
         Fingerprint::from_str(self.fingerprint.trim())
@@ -379,6 +382,12 @@ mod tests {
         };
         let mut candidate = valid.clone();
         candidate.label.clear();
+        assert_eq!(candidate.validate(), Err(ExternalSignerError::InvalidLabel));
+        candidate = valid.clone();
+        candidate.label = "Ledger\u{202e}evil".into();
+        assert_eq!(candidate.validate(), Err(ExternalSignerError::InvalidLabel));
+        candidate = valid.clone();
+        candidate.label = "line\nbreak".into();
         assert_eq!(candidate.validate(), Err(ExternalSignerError::InvalidLabel));
         candidate = valid.clone();
         candidate.fingerprint = "nope".into();

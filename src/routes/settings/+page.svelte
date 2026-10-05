@@ -51,6 +51,7 @@
   import { page } from '$app/state';
   import { onDestroy, onMount } from 'svelte';
   import { useWalletShellContext } from '$lib/wallet/shell-context';
+  import { isWalletSyncActive } from '$lib/wallet/live-sync';
   import type {
     CoreNodeConfig,
     CosignerHealthCheck,
@@ -62,7 +63,8 @@
     RuntimePlatform,
     WalletErrorDetails,
     WalletProfile,
-    WalletSyncSource
+    WalletSyncSource,
+    WalletSyncStatus
   } from '$lib/wallet/contracts';
   import type { CosignerDraft } from '$lib/multisig/policy';
   import { matchingDeviceForHealthCheck } from '$lib/hardware/health-check';
@@ -99,6 +101,9 @@
   let profiles = $state<WalletProfile[]>([]);
   let selectedWalletId = $state<string | null>(null);
   let walletUnlocked = $state(false);
+  let syncStatus = $state<WalletSyncStatus | null>(null);
+  let syncStatusPoll: ReturnType<typeof setTimeout> | undefined;
+  let settingsSyncActive = $derived(isWalletSyncActive(syncStatus));
   let profileReadGeneration = 0;
   let inactivityTimeoutMinutes = $state(5);
   let savingInactivityTimeout = $state(false);
@@ -114,9 +119,9 @@
     translate(
       $locale,
       selectedProfile?.kind === 'multisig'
-        ? 'Policy and signer backups'
+        ? 'Signer backups'
         : selectedProfile?.kind === 'watch_only'
-          ? 'Hardware signer backup'
+          ? 'Signer backup'
           : 'Recovery words + wallet passphrase'
     )
   );
@@ -124,9 +129,9 @@
     translate(
       $locale,
       selectedProfile?.kind === 'multisig'
-        ? 'Keep the public descriptor and enough signer backups to restore access.'
+        ? 'Completed when each signer was initialized.'
         : selectedProfile?.kind === 'watch_only'
-          ? 'Recovery words remain on the signer. The app PIN only protects local Groot data.'
+          ? 'Completed when the signer was initialized.'
           : 'Keep both together. Recovery words can be re-presented only in the authenticated native backup flow; the wallet passphrase cannot be displayed or reset.'
     )
   );
@@ -313,6 +318,17 @@
     labelInterchangeBusy = $state(false),
     labelInterchangeResult = $state(''),
     labelInterchangeError = $state('');
+
+  async function pollSyncStatus() {
+    if (destroyed || !walletUnlocked) return;
+    try {
+      syncStatus = await walletService.syncStatus();
+    } catch {
+      syncStatus = null;
+    }
+    if (!destroyed) syncStatusPoll = setTimeout(pollSyncStatus, settingsSyncActive ? 500 : 2_000);
+  }
+
   onMount(async () => {
     commandModifier = usesCommandModifier(navigator.platform);
     desktopPlatform = isDesktopPlatform(
@@ -333,17 +349,14 @@
     const session = registry.selectedWalletId ? await walletService.session() : null;
     if (generation !== profileReadGeneration) return;
     walletUnlocked = session?.unlocked ?? false;
+    if (walletUnlocked) void pollSyncStatus();
     inactivityTimeoutMinutes = registry.inactivityTimeoutMinutes;
     const activeProfile = registry.wallets.find(
       (wallet) => wallet.id === registry.selectedWalletId
     );
     if (walletUnlocked && activeProfile?.kind === 'watch_only') {
-      const [nextHardwareSignerWallet, nextHealthChecks] = await Promise.all([
-        walletService.externalSignerWallet(),
-        walletService.hardwareHealthChecks()
-      ]);
-      hardwareSignerWallet = nextHardwareSignerWallet;
-      setHardwareHealthChecks(nextHealthChecks);
+      hardwareSignerWallet = await walletService.externalSignerWallet();
+      setHardwareHealthChecks(await walletService.hardwareHealthChecks());
     } else {
       setHardwareHealthChecks([]);
     }
@@ -482,6 +495,7 @@
     hardwareBackup = '';
     hardwareBackupContent = '';
     signerRenameDraft = '';
+    if (syncStatusPoll) clearTimeout(syncStatusPoll);
     if (scanPoll) clearTimeout(scanPoll);
   });
   onMount(() => {
@@ -1200,6 +1214,14 @@
           : translate($locale, 'Settings')}
       </h1>
     </div>
+    {#if settingsSyncActive}<p class="settings-sync-indicator" aria-live="polite">
+        <RefreshCw class="spin" size={15} />
+        {#if syncStatus?.progressPercent !== null && syncStatus?.progressPercent !== undefined}
+          {translate($locale, 'Syncing · {percent}%', {
+            percent: formatInteger(syncStatus.progressPercent, $locale)
+          })}
+        {:else}{translate($locale, 'Syncing…')}{/if}
+      </p>{/if}
   </header>
   {#if walletUnlocked}<section class="settings-group wallet-details">
       <h2>{translate($locale, 'Wallet details')}</h2>
@@ -1235,12 +1257,16 @@
             aria-label={translate($locale, 'Inspect {signer} identity and health', {
               signer: hardwareSignerWallet.signer.label
             })}
+            disabled={settingsSyncActive}
             onclick={() => (signerDetailsOpen = true)}
           >
             <span class="setting-icon"><HeartPulse size={18} /></span>
             <span
               ><strong>{translate($locale, 'Hardware signer identity & health')}</strong><small
-                >{#if signerHealth}{translate($locale, 'Last checked')}
+                >{#if settingsSyncActive}{translate(
+                    $locale,
+                    'Available after sync'
+                  )}{:else if signerHealth}{translate($locale, 'Last checked')}
                   <LocalTimestamp value={signerHealth.checkedAt} />{:else}{translate(
                     $locale,
                     'Inspect identity or run a health check'
@@ -1339,7 +1365,10 @@
                 )}</small
               ></span
             ><span class="info-badge attention">{translate($locale, 'Verify now')}</span></button
-          >{:else}<div class="setting-row wallet-context-row">
+          >{:else}<div
+            class="setting-row wallet-context-row"
+            class:backup-information-row={!isSoftwareWallet}
+          >
             <span class="setting-icon"
               >{#if selectedProfile?.kind === 'multisig'}<ShieldCheck
                   size={18}
@@ -1348,7 +1377,7 @@
                 />{/if}</span
             ><span><strong>{backupTitle}</strong><small>{backupDescription}</small></span><span
               class="info-badge"
-              >{translate($locale, isSoftwareWallet ? 'Verified' : 'Backup required')}</span
+              >{translate($locale, isSoftwareWallet ? 'Verified' : 'Outside Groot')}</span
             >
           </div>{/if}
         <button onclick={openFullRescan}

@@ -481,11 +481,12 @@ export class TauriWalletAdapter implements WalletPort {
       feeRate: feeRate == null ? null : String(feeRate)
     });
   }
-  async signAndBroadcast(proposalId: string, credential: string) {
+  async signAndBroadcast(proposalId: string, reviewBinding: string, credential: string) {
     const generation = this.#generation;
     const walletId = this.#selectedWalletId;
     const result = await command<BroadcastResult>('tx_sign_and_broadcast', {
       proposalId,
+      reviewBinding,
       credential
     });
     result.snapshot = normalizeSnapshot(result.snapshot);

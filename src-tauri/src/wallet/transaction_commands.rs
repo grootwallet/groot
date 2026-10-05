@@ -110,6 +110,7 @@ fn tx_prepare_blocking(
                 format!("The address is not for {}.", network_name()),
             )
         })?;
+        validate_supported_payment_destination(&address)?;
         let (_applied_fee_rate, rate) = validate_fee_rate(&fee_rate)?;
         let mut db = open_db(&app)?;
         let mut transaction = db.transaction().map_err(internal)?;
@@ -217,6 +218,7 @@ fn tx_prepare_blocking(
             fee_difference_vs_private,
         )?;
         let proposal = PaymentProposalDto {
+            review_binding: payment_review_binding(&proposal_id, &encode_psbt(&psbt)),
             proposal_id: proposal_id.clone(),
             recipient,
             recipient_testnet_alias,
@@ -303,6 +305,7 @@ fn tx_max_spend_blocking(
                 format!("The address is not for {}.", network_name()),
             )
         })?;
+    validate_supported_payment_destination(&address)?;
     let (_applied, rate) = validate_fee_rate(&fee_rate)?;
     let mut db = open_db(&app)?;
     let mut transaction = db.transaction().map_err(internal)?;
@@ -844,8 +847,10 @@ pub(crate) fn summarize_payment_psbt(
     let change_derivation_paths = proposal_change_derivation_paths(psbt, &change_addresses)?;
     let (inputs, actual_fee_rate, locktime, rbf) = proposal_transaction_details(wallet, psbt, fee)?;
     let selection_impact = selection_impact(db, wallet, psbt, "acceleration", None)?;
+    let proposal_id = Uuid::new_v4().to_string();
     Ok(PaymentProposalDto {
-        proposal_id: Uuid::new_v4().to_string(),
+        review_binding: payment_review_binding(&proposal_id, &encode_psbt(psbt)),
+        proposal_id,
         recipient,
         recipient_testnet_alias,
         recipient_is_wallet_owned,
@@ -1243,13 +1248,26 @@ pub(crate) fn prepare_persisted_multisig_acceleration(
     load_multisig_proposal(db, metadata, &proposal.proposal_id)
 }
 #[tauri::command]
-pub fn tx_acceleration_prepare(
+pub async fn tx_acceleration_prepare(
     app: AppHandle,
-    state: State<'_, AppState>,
     txid: String,
     method: AccelerationMethod,
     fee_rate: String,
 ) -> ApiResult<PaymentProposalDto> {
+    tauri::async_runtime::spawn_blocking(move || {
+        tx_acceleration_prepare_blocking(app, txid, method, fee_rate)
+    })
+    .await
+    .map_err(internal)?
+}
+
+fn tx_acceleration_prepare_blocking(
+    app: AppHandle,
+    txid: String,
+    method: AccelerationMethod,
+    fee_rate: String,
+) -> ApiResult<PaymentProposalDto> {
+    let state = app.state::<AppState>();
     let _operation = operation_guard(&state)?;
     require_unlocked(&app, &state)?;
     let txid = Txid::from_str(&txid)
@@ -1357,13 +1375,26 @@ pub fn tx_acceleration_prepare(
 }
 
 #[tauri::command]
-pub fn multisig_acceleration_prepare(
+pub async fn multisig_acceleration_prepare(
     app: AppHandle,
-    state: State<'_, AppState>,
     txid: String,
     method: AccelerationMethod,
     fee_rate: String,
 ) -> ApiResult<MultisigProposalDto> {
+    tauri::async_runtime::spawn_blocking(move || {
+        multisig_acceleration_prepare_blocking(app, txid, method, fee_rate)
+    })
+    .await
+    .map_err(internal)?
+}
+
+fn multisig_acceleration_prepare_blocking(
+    app: AppHandle,
+    txid: String,
+    method: AccelerationMethod,
+    fee_rate: String,
+) -> ApiResult<MultisigProposalDto> {
+    let state = app.state::<AppState>();
     let _operation = operation_guard(&state)?;
     require_unlocked(&app, &state)?;
     let txid = Txid::from_str(&txid)
@@ -1404,6 +1435,7 @@ pub fn multisig_acceleration_prepare(
 pub async fn tx_sign_and_broadcast(
     app: AppHandle,
     proposal_id: String,
+    review_binding: String,
     credential: String,
 ) -> ApiResult<BroadcastResultDto> {
     let credential = Zeroizing::new(credential);
@@ -1444,6 +1476,25 @@ pub async fn tx_sign_and_broadcast(
             .remove(&proposal_id)
             .map(Ok)
             .unwrap_or_else(|| load_single_proposal(&db, &proposal_id))?;
+        let encoded_psbt = encode_psbt(&proposal.psbt);
+        require_payment_review_binding(&proposal_id, &encoded_psbt, &review_binding)?;
+        let persisted_psbt = db
+            .query_row(
+                "SELECT psbt FROM groot_proposals WHERE proposal_id = ?1 AND status IN ('collecting', 'ready')",
+                params![proposal_id],
+                |row| row.get::<_, String>(0),
+            )
+            .map_err(|_| {
+                api_error(
+                    "proposal_not_found",
+                    "Payment proposal was not found or is no longer active.",
+                )
+            })?;
+        require_reviewed_psbt_unchanged(
+            &persisted_psbt,
+            &encoded_psbt,
+            "The payment changed after review. Reload it before signing.",
+        )?;
         let wallet = load_wallet(&mut db)?;
         let profile = selected_profile_of_kind(&app, WalletKind::SingleKey)?;
         let loaded_external = wallet.public_descriptor(KeychainKind::External).to_string();

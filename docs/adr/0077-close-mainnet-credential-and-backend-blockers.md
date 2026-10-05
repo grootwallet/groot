@@ -1,9 +1,9 @@
 # ADR 0077: Close Mainnet credential and backend blockers
 
-- Status: partially superseded by ADR 0078
+- Status: partially superseded by ADRs 0078 and 0081
 - Date: 2026-10-02
 - Supersedes: ADR 0037's version-3 write format
-- Superseded by: ADR 0078 for native final authorization and managed-backend policy
+- Superseded by: ADR 0078 for native final authorization and managed-backend policy; ADR 0081 for the version-5 write format
 
 ## Context
 

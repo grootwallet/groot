@@ -162,7 +162,11 @@ export interface WalletTransactionsPort {
     txid: string,
     feeRate?: FeeRate
   ): Promise<import('./transactions').CpfpAccelerationQuote>;
-  signAndBroadcast(proposalId: string, credential: string): Promise<BroadcastResult>;
+  signAndBroadcast(
+    proposalId: string,
+    reviewBinding: string,
+    credential: string
+  ): Promise<BroadcastResult>;
 }
 
 export interface WalletHardwarePort {

@@ -1,5 +1,12 @@
 # Mainnet hardware checkpoint — 2026-09-12
 
+Final status (2026-10-04): complete for the supported v0.4.96 macOS BIP84/BIP48
+matrix. The release owner confirmed all supported physical signers and tested
+multisig signer permutations passed pairing, review, signing, rejection,
+reconnect, restart, recovery, and backend/network-switching coverage. Earlier
+checkpoint language below is historical and does not describe the final release
+status.
+
 ## Sep 30 passive-inventory source correction and host probe; no packaged pass
 
 The Mainnet source-policy tripwire is refreshed for the final reviewed sources;

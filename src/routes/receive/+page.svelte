@@ -178,7 +178,10 @@
   const generate = async () => {
     if (!submissionLabels.length) return;
     busy = true;
+    let automaticSyncPaused = false;
     try {
+      await walletShell.pauseAutomaticSync();
+      automaticSyncPaused = true;
       current = await walletService.createAddress(submissionLabels);
       addresses = [current, ...addresses];
       try {
@@ -217,6 +220,7 @@
       });
     } finally {
       busy = false;
+      if (automaticSyncPaused) walletShell.resumeAutomaticSync();
     }
   };
   const copy = async () => {

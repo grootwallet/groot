@@ -43,7 +43,9 @@ describe('foreground wallet navigation', () => {
     expect(appShell).toContain('automaticSyncPauseCount === 0');
     expect(appShell).toContain('liveSync = createLiveSync(');
     expect(appShell).toContain('() => selectedProfile?.kind ?? null');
-    expect(appShell).toContain("if (previousPath === '/unlock') void liveSync.runNow();");
+    expect(appShell).toContain(
+      "if (previousPath === '/unlock' && !walletSelectionTask) void liveSync.runNow();"
+    );
     expect(appShell).toContain(
       "if (previousPath === '/welcome' || previousPath === '/hardware/new')"
     );
@@ -306,6 +308,16 @@ describe('foreground wallet navigation', () => {
     expect(selection.indexOf('liveSync?.stop()')).toBeGreaterThan(-1);
     expect(selection.indexOf('liveSync?.stop()')).toBeLessThan(
       selection.indexOf('await walletService.selectWallet(walletId)')
+    );
+  });
+
+  it('does not race cached Overview loading when selecting an unlocked wallet from unlock', () => {
+    const afterNavigation = appShell.slice(
+      appShell.indexOf('afterNavigate(({ from }) =>'),
+      appShell.indexOf('async function selectWallet')
+    );
+    expect(afterNavigation).toContain(
+      "if (previousPath === '/unlock' && !walletSelectionTask) void liveSync.runNow();"
     );
   });
 });

@@ -79,7 +79,9 @@ describe('native command scheduling', () => {
 
   it.each([
     ['wallet_lock', profileCommands],
+    ['wallet_rename', profileCommands],
     ['wallet_select', profileCommands],
+    ['address_create', profileCommands],
     ['wallet_sync', profileCommands],
     ['recovery_scan_status', profileCommands],
     ['recovery_scan_settings', profileCommands],
@@ -91,8 +93,11 @@ describe('native command scheduling', () => {
     ['wallet_notifications', profileCommands],
     ['wallet_notifications_ack', profileCommands],
     ['multisig_sync', multisigCommands],
+    ['multisig_address_create', multisigCommands],
     ['tx_proposals', transactionCommands],
     ['tx_prepare', transactionCommands],
+    ['tx_acceleration_prepare', transactionCommands],
+    ['multisig_acceleration_prepare', transactionCommands],
     ['tx_max_spend', transactionCommands],
     ['coin_selection_preview', walletCore],
     ['multisig_coin_selection_preview', walletCore],

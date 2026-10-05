@@ -1917,9 +1917,21 @@ pub async fn hardware_health_checks(
 ) -> ApiResult<Vec<HardwareHealthCheckRecordDto>> {
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<AppState>();
-        let _operation = operation_guard(&state)?;
-        require_unlocked(&app, &state)?;
-        read_hardware_health_checks(&open_hardware_health_db(&app)?)
+        let wallet_id = require_unlocked(&app, &state)?;
+        let _persisted_guard = foreground_persisted_read_guard(&state, wallet_id)?;
+        let persisted_read = _persisted_guard.is_some();
+        let _operation = if persisted_read {
+            None
+        } else {
+            Some(operation_guard(&state)?)
+        };
+        let profile = selected_profile(&app)?;
+        let db = if persisted_read {
+            open_selected_db_for_persisted_read(&app, profile.kind == WalletKind::Multisig)?
+        } else {
+            open_hardware_health_db(&app)?
+        };
+        read_hardware_health_checks(&db)
     })
     .await
     .map_err(internal)?
@@ -2571,6 +2583,7 @@ pub fn external_signer_create(
             &dir.join("secret.json"),
             marker.as_bytes(),
             credential.as_str(),
+            id,
         )?;
         profile_commands::persist_mainnet_node_admission_for_new_profile(
             &app,
@@ -2619,8 +2632,8 @@ pub fn external_signer_create(
 pub async fn external_signer_wallet(app: AppHandle) -> ApiResult<ExternalSignerWallet> {
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<AppState>();
-        let _operation = operation_guard(&state)?;
-        require_unlocked(&app, &state)?;
+        let wallet_id = require_unlocked(&app, &state)?;
+        let _operation = metadata_operation_guard(&state, wallet_id)?;
         read_external_signer_metadata(&app)
     })
     .await
@@ -2628,6 +2641,7 @@ pub async fn external_signer_wallet(app: AppHandle) -> ApiResult<ExternalSignerW
 }
 
 pub(crate) fn normalize_external_signer_label(value: &str) -> ApiResult<String> {
+    validate_label_formatting(value)?;
     let normalized = normalize_label_text(value);
     if normalized.is_empty() || normalized.chars().count() > 48 {
         return Err(api_error(
@@ -2639,21 +2653,25 @@ pub(crate) fn normalize_external_signer_label(value: &str) -> ApiResult<String> 
 }
 
 #[tauri::command]
-pub fn external_signer_rename(
+pub async fn external_signer_rename(
     app: AppHandle,
-    state: State<'_, AppState>,
     label: String,
 ) -> ApiResult<ExternalSignerWallet> {
-    let _operation = operation_guard(&state)?;
-    require_unlocked(&app, &state)?;
-    let mut metadata = read_external_signer_metadata(&app)?;
-    metadata.signer.label = normalize_external_signer_label(&label)?;
-    metadata
-        .signer
-        .validate()
-        .map_err(external_signer_api_error)?;
-    write_private_json(&external_signer_metadata_path(&app)?, &metadata)?;
-    Ok(metadata)
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let wallet_id = require_unlocked(&app, &state)?;
+        let _operation = metadata_operation_guard(&state, wallet_id)?;
+        let mut metadata = read_external_signer_metadata(&app)?;
+        metadata.signer.label = normalize_external_signer_label(&label)?;
+        metadata
+            .signer
+            .validate()
+            .map_err(external_signer_api_error)?;
+        write_private_json(&external_signer_metadata_path(&app)?, &metadata)?;
+        Ok(metadata)
+    })
+    .await
+    .map_err(internal)?
 }
 
 pub(crate) fn external_signer_backup(descriptor: String) -> ApiResult<ExternalSignerBackupDto> {
@@ -2860,6 +2878,7 @@ fn import_external_proposal_in_db(
     if progress.can_finalize {
         let mut validation = original.clone();
         let wallet = load_wallet(db)?;
+        bind_psbt_inputs_to_wallet(&wallet, &mut validation)?;
         if !wallet
             .finalize_psbt(&mut validation, SignOptions::default())
             .map_err(internal)?
@@ -3081,6 +3100,7 @@ pub async fn external_signer_proposal_broadcast(
         }
         let mut psbt = decode_psbt(&proposal.psbt).map_err(proposal_api_error)?;
         let wallet = load_wallet(&mut db)?;
+        bind_psbt_inputs_to_wallet(&wallet, &mut psbt)?;
         let acceleration = proposal_acceleration_method(&db, &proposal_id)?;
         if matches!(acceleration, Some(AccelerationMethod::Rbf)) {
             validate_rbf_original_intent(

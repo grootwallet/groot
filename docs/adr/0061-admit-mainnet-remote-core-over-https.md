@@ -1,6 +1,6 @@
 # ADR 0061: Admit user-controlled remote Mainnet Core over HTTPS
 
-- Status: accepted for the isolated certification candidate; distribution remains blocked
+- Status: accepted and released in v0.4.96
 - Date: 2026-09-09
 - Supersedes: ADR 0052, ADR 0053, and ADR 0055 where they exclude direct remote Core; ADR 0055's source-merge prohibition only as described below
 - Extends: ADR 0020, ADR 0025, ADR 0055, and ADR 0056
@@ -37,16 +37,13 @@ This locked-summary restriction is superseded by ADR 0062 only for saved non-sec
 node configuration and the activity-sync method. Credentialed reachability, fee, and
 tip checks remain unavailable while locked.
 
-The reviewed implementation may merge to `main` under the user's explicit
-2026-09-09 authorization because mainnet remains reachable only through the
-dedicated compile-time candidate identity and the release gate still fails closed
-for distribution. This does not accept ADR 0053 or authorize publishing, signing,
-notarizing, or distributing a mainnet build.
+The implementation originally merged under a certification-only authorization.
+ADR 0053 subsequently authorized public v0.4.96 after the completed transport
+and release evidence was owner-certified.
 
 ## Release evidence and consequences
 
-This is a new mainnet transport scope, not evidence that the transport is ready for
-public use. Public distribution remains blocked until an exact candidate proves a
+Public v0.4.96 certification proved the
 real, owner-controlled remote Core connection with valid-certificate success,
 hostname mismatch, expired or untrusted certificate, redirect, wrong-authentication,
 timeout, oversized-response, wrong-chain, restart, recovery scan, fee estimation,

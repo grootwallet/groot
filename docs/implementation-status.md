@@ -1,5 +1,24 @@
 # Implementation status
 
+## v0.5.0 release preparation — 2026-10-05
+
+The tested feature branch now reports v0.5.0 across the frontend, Tauri, Cargo,
+and diagnostic build identity. This version-only step changes no wallet behavior
+or persisted format. Production signing remains fail-closed until the exact
+release source is authorized on `origin/main`, independently reproduced from a
+valid frozen signed-HWI input, and packaged with the configured Developer ID and
+notarization credentials.
+
+## Current release status — 2026-10-04
+
+Public v0.4.96 (`f7b4b993`) is Mainnet-ready and authorized for the macOS
+Apple-silicon multi-network scope. The release owner confirms the complete
+BIP84/BIP48 physical-signer matrix and signer permutations, local pruned and
+Groot-managed remote Core full/birthday scans, backend and network switching,
+and two-machine reproduction. ADR 0053 and the completed Mainnet checklist are
+canonical. Older “blocked,” “candidate,” or “pending” entries below are dated
+historical snapshots, not the current release state.
+
 Sep 30 release-candidate picker follow-up applies the saved-wallet eligibility
 copy consistently to BIP84 signing, BIP48 signing, and receive verification. A
 fingerprint-less device from a family absent from the wallet is now a disabled
@@ -1515,3 +1534,44 @@ unsigned/ad-hoc functional regression campaign. Envelope migration testing may
 use only disposable profiles or copies because a v4 write cannot be opened by
 older Groot versions. The stable v0.4.95 prerelease, tag, assets, and evidence
 remain unchanged.
+
+## 2026-10-03 licensing and public-release governance correction
+
+The base wallet now declares Apache-2.0 consistently in the root license and
+notice, Node/Rust manifests, contribution policy, generated application SBOM,
+provenance, and packaged legal resources. Third-party HWI, vendored code,
+dependencies, and fonts retain their own terms. Git history supports Thibaud
+Marechal and the same-email `thib` alias as the current contributor identity;
+the repository contains no company assignment or CLA, so any undisclosed prior
+assignment remains an ownership question rather than an invented corporate
+claim. ADR 0080 records the boundary and no-trademark grant.
+
+The public `v0.4.96` release at `f7b4b993` initially shipped before its completed
+certification record was reconciled into the repository. On 2026-10-04 the owner
+supplied the missing BIP84/BIP48 hardware, local/remote Core, network-switching,
+scan, and two-machine multi-network reproducibility results. ADR 0053 and the
+release checklist now authorize that exact commit. The public `v0.4.95` tag also
+moved from the locally retained `f486d923` target to `c3002279`; ADR 0079 remains
+the historical governance record.
+
+The production macOS packager now refuses to proceed before build, signing, or
+notarization unless a machine-readable record names the exact commit, a unique
+accepted ADR explicitly authorizes that commit, the checklist is approved, and
+no checklist item remains open. Exact commit `f7b4b993` satisfies that gate;
+later commits require fresh exact-commit approval. Internal unsigned/ad-hoc
+certification builds remain available with their existing warnings.
+
+## 2026-10-04 approved security hardening
+
+ADR 0081 implements decision-queue items 2, 3, 5, 6, 13, and 15: canonical
+prevout binding on every final external/multisig path, exact reviewed-PSBT
+binding for software signing, invisible-format label rejection, blocking-pool
+acceleration preparation, a closed payment-destination set through Taproot v1,
+and wallet/purpose-bound secure-store v5. Authenticated v2/v3/v4 records migrate
+automatically and failure-atomically; migrated protected records cannot be read
+by v0.4.96 or older. Item 12 and every other report proposal remain deferred.
+
+Public v0.4.96 commit `f7b4b993` remains the currently authorized Mainnet
+release. This follow-up branch is a new candidate and is not authorized for
+merge or release until its exact commit passes validation, candidate migration,
+network, and hardware tests, and a new exact-commit approval.

@@ -133,6 +133,7 @@ fn multisig_tx_prepare_blocking(
                 format!("The address is not for {}.", network_name()),
             )
         })?;
+        validate_supported_payment_destination(&address)?;
         let (applied_fee_rate, rate) = validate_fee_rate(&fee_rate)?;
         let metadata = read_multisig_metadata(&app)?;
         let uses_delayed_policy = delayed_policy_context(&metadata)?.is_some();
@@ -399,6 +400,7 @@ pub fn multisig_delayed_spend_prepare(
                 format!("The address is not for {}.", network_name()),
             )
         })?;
+    validate_supported_payment_destination(&destination)?;
     let (applied_fee_rate, rate) = validate_fee_rate(&fee_rate)?;
     let selected = OutPoint::from_str(outpoint.trim()).map_err(|_| {
         api_error(
@@ -530,6 +532,7 @@ fn multisig_tx_max_spend_blocking(
                 format!("The address is not for {}.", network_name()),
             )
         })?;
+    validate_supported_payment_destination(&address)?;
     let (_applied, rate) = validate_fee_rate(&fee_rate)?;
     let uses_delayed_policy = selected_delayed_policy_context(&app)?.is_some();
     let mut db = open_multisig_db(&app)?;
@@ -675,6 +678,7 @@ pub(crate) fn import_multisig_proposal_in_db(
     if progress.can_finalize {
         let wallet = load_wallet(db)?;
         let mut validation = original.clone();
+        bind_psbt_inputs_to_wallet(&wallet, &mut validation)?;
         if !wallet
             .finalize_psbt(&mut validation, SignOptions::default())
             .map_err(internal)?
@@ -724,6 +728,7 @@ pub(crate) fn finalized_multisig_proposal_transaction(
     }
     let mut psbt = decode_psbt(&proposal.psbt).map_err(proposal_api_error)?;
     let wallet = load_wallet(db)?;
+    bind_psbt_inputs_to_wallet(&wallet, &mut psbt)?;
     let acceleration = proposal_acceleration_method(db, proposal_id)?;
     if matches!(acceleration, Some(AccelerationMethod::Rbf)) {
         validate_rbf_original_intent(
@@ -1237,6 +1242,7 @@ pub async fn multisig_create(
                 &dir.join("secret.json"),
                 marker.as_bytes(),
                 credential.as_str(),
+                wallet_secret_context(id),
             )
             .map_err(secure_store_error)?;
             let wallet = MultisigWalletDto {
@@ -1349,11 +1355,12 @@ pub async fn multisig_recovery_create(
             .create_wallet(&mut db)
             .map_err(internal)?;
             let marker = format!("groot-multisig:{}", analysis.external_descriptor);
-            secure_store::store(
-                &dir.join("secret.json"),
-                marker.as_bytes(),
-                credential.as_str(),
-            )
+        secure_store::store(
+            &dir.join("secret.json"),
+            marker.as_bytes(),
+            credential.as_str(),
+            wallet_secret_context(id),
+        )
             .map_err(secure_store_error)?;
             let wallet = MultisigWalletDto {
                 kind: "multisig".to_owned(),

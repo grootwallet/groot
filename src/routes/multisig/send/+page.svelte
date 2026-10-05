@@ -204,6 +204,7 @@
   let accelerationQuoteFailed = $state(false);
   let accelerationQuoteRevision = 0;
   let accelerationQuoteTimer: ReturnType<typeof setTimeout> | undefined;
+  let accelerationSyncPaused = false;
   const broadcastExplorerUrl = $derived(
     txid ? transactionExplorerUrl(defaultConfig.network, txid) : null
   );
@@ -437,9 +438,21 @@
     imported = '';
     pinPositions = '';
     pinChallenge = '';
+    if (accelerationSyncPaused) walletShell.resumeAutomaticSync();
   });
   onMount(() => {
-    void loadWallet();
+    if (initialAcceleration) {
+      void walletShell.pauseAutomaticSync().then(() => {
+        if (!walletLoadActive) {
+          walletShell.resumeAutomaticSync();
+          return;
+        }
+        accelerationSyncPaused = true;
+        void loadWallet();
+      });
+    } else {
+      void loadWallet();
+    }
     return walletService.subscribe((event) => {
       if (
         event.type !== 'wallet_updated' ||
@@ -2904,6 +2917,12 @@
       eligibleDeviceTypes={(wallet?.cosigners ?? [])
         .map((signer) => signer.deviceType)
         .filter((deviceType): deviceType is string => Boolean(deviceType))}
+      membershipOverrides={Object.fromEntries(
+        devices.filter(deviceHasSigned).map((device) => [device.id, 'candidate' as const])
+      )}
+      deviceSecondaryLabel={(device) =>
+        device.fingerprint ??
+        (deviceHasSigned(device) ? (savedSignerForDevice(device)?.fingerprint ?? '') : '')}
       deviceDisabled={(device, membership) =>
         membership === 'unrelated' ||
         deviceHasSigned(device) ||
@@ -2912,8 +2931,8 @@
       deviceStateLabel={(device, membership: HardwareWalletMembership) => {
         const policyRequired = requiresPolicySetup(device);
         const policyVerified = devicePolicyVerification(device);
-        if (membership !== 'candidate') return hardwareDeviceStateLabel(device, membership);
         if (deviceHasSigned(device)) return 'Already signed';
+        if (membership !== 'candidate') return hardwareDeviceStateLabel(device, membership);
         if (
           policyRegistrationProfile(device).registration === 'unsupported' ||
           (policyRequired && !policyVerified)

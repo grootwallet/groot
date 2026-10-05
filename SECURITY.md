@@ -1,10 +1,19 @@
 # Groot security
 
-Last review integration: 2026-09-03
+Last review integration: 2026-10-04
 
-Groot is security-sensitive wallet software under active development. The native implementation supports disposable Regtest testing, compile-time-isolated Signet/Testnet4 rehearsal builds, and the separately isolated ADR 0055 mainnet certification candidate. That candidate is authorized only for controlled certification and, after its preceding gates pass, a minimal-value owner-operated rehearsal. It is not authorized for distribution, ordinary use, or meaningful mainnet funds.
+Groot is security-sensitive wallet software under active development. Public
+v0.4.96 on macOS Apple silicon is approved for Mainnet at exact commit
+`f7b4b9935943f0250353a6f77c3d8fca31906fff`. Its restart-bound multi-network
+identity isolates Regtest, Testnet4, and Mainnet state.
 
-This document summarizes the security posture and the hardening work present in this repository. Canonical controls are in [`docs/security-model.md`](docs/security-model.md); the attacker model and attack-vector register are in [`docs/mainnet-threat-model.md`](docs/mainnet-threat-model.md). Release authorization remains controlled by [`docs/mainnet-release-checklist.md`](docs/mainnet-release-checklist.md) and ADR 0012.
+The release owner confirmed the completed hardware, backend, network-switching,
+recovery, and two-machine reproduction campaign on 2026-10-04. ADR 0053 and the
+canonical checklist record that authorization. ADR 0079 remains the historical
+record that this evidence was documented after publication. Later releases are
+blocked until separately authorized for their exact commit.
+
+This document summarizes the security posture and the hardening work present in this repository. Canonical controls are in [`docs/security-model.md`](docs/security-model.md); the attacker model and attack-vector register are in [`docs/mainnet-threat-model.md`](docs/mainnet-threat-model.md). Release authorization is recorded in [`docs/mainnet-release-checklist.md`](docs/mainnet-release-checklist.md), ADR 0053, and the exact-commit authorization record. Dated audit sections below are historical snapshots; their former release-blocked wording does not override the current authorization.
 
 ## Reporting a vulnerability
 
@@ -45,8 +54,8 @@ Reports should describe:
 - Credential IPC inputs and native recovery-mnemonic input have explicit byte limits. File, backup, descriptor, PSBT, HWI argument, and HWI output boundaries are also bounded.
 - Every credential-bearing Svelte route clears its field after an attempt and on component teardown.
 - Credential-bearing Settings dialogs also clear passphrases, RPC passwords, destructive confirmation text, and related error state on every dismissal path and before reopening.
-- Version-3 secret envelopes use authenticated encryption with an Argon2id credential-derived key wrapping a separately generated AES-256 data key. They are portable across supported systems and do not depend on a platform Keychain or device key. Decrypted material is zeroized on every return path. A copied encrypted profile therefore permits offline credential guessing; strong wallet credentials, reviewed Argon2id calibration, full-disk encryption, and host security remain required defense in depth.
-- Authenticated version-2 device-bound envelopes are accepted only as a compatibility input. After the credential successfully authenticates and decrypts the envelope, Groot rewrites its metadata as a portable version-3 envelope without the obsolete device-wrapping fields.
+- Version-5 secret envelopes use authenticated encryption with an Argon2id credential-derived key wrapping a separately generated AES-256 data key. Associated data binds both layers to the wallet UUID and purpose. They are portable across supported systems and do not depend on a platform Keychain or device key. Decrypted material is zeroized on every return path. A copied encrypted profile therefore permits offline credential guessing; strong wallet credentials, reviewed Argon2id calibration, full-disk encryption, and host security remain required defense in depth.
+- Authenticated version-2/version-3/version-4 envelopes are compatibility inputs. After successful authenticated decryption, Groot atomically rewrites them as v5. Wrong credentials, corruption, unsupported versions, or write failure leave the original bytes unchanged. Migrated records cannot be reopened by v0.4.96 or older.
 
 ### Authentication and wallet isolation
 
@@ -101,11 +110,13 @@ Reports should describe:
 - Software-wallet database opens are bound to both BIP84 descriptors re-derived from the decrypted mnemonic at unlock; the authenticated pair is removed on lock and idle expiry.
 - External-signer and multisig receive screens distinguish unverified Groot derivation from durable, address-specific on-device verification evidence. Verification uses a validated discovery hint, proves the saved signer identity and account key, derives the exact descriptor index in Rust, and invokes the trusted display under one exclusive lease. Rust revalidates the wallet, policy, and address context immediately before appending an immutable timestamped event; the same lease remains active through that final append so cancellation linearizes before or after persistence, never during it. Text must match exactly by default. On Regtest, Ledger Bitcoin Test, Trezor, and BitBox02 may return the testnet `tb1` encoding; Groot accepts that cross-prefix representation only when Rust proves it and the canonical `bcrt1` address decode to identical scriptPubKeys. Testnet4 devices, including Coldcard, must return the canonical `tb1` address exactly; a Regtest encoding fails closed rather than being normalized. Coldcard address display returns automatically without an approve/reject decision, so Groot's evidence proves exact returned-address equality while the trusted screen remains available for independent human comparison.
 - User rejection, timeout, unavailable/busy hardware, missing xpubs, identity mismatch, malformed responses, and oversized output map to stable safe errors.
-- USB hardware support is integration-ready, not physically certified. Vendor/model/firmware/host combinations must complete [`docs/hardware-certification.md`](docs/hardware-certification.md).
+- Supported BIP84/BIP48 hardware combinations are physically certified for the
+  v0.4.96 macOS scope. New model, firmware, host, or transport combinations must
+  complete [`docs/hardware-certification.md`](docs/hardware-certification.md).
 
 ### Network and webview policy
 
-- Native wallet code is compile-time pinned to exactly one of Regtest, Signet, Testnet4, or the separately configured ADR 0055 mainnet certification identity, each with isolated application storage. Only that dedicated candidate can select Bitcoin mainnet. Before it creates or opens wallet SQLite, trusted Rust requires purpose-, wallet-, configuration-, and time-bound admission of an authenticated, synchronized, loopback-only Bitcoin Core node on the exact Bitcoin genesis chain. Its trusted transaction policy permits one recipient and at most 1,000,000 satoshis; distribution remains blocked.
+- Native wallet code is compile-time pinned to a fixed network or the ADR 0069 restart-bound multi-network identity, with isolated application storage for every selectable network. Before Mainnet creates or opens wallet SQLite, trusted Rust requires admitted authenticated exact-chain node configuration. Its trusted transaction policy permits one recipient and caps total debit. Public v0.4.96 is authorized; later commits require a new authorization.
 - Local Bitcoin Core endpoints must be loopback. Remote endpoint policy rejects embedded credentials, cleartext non-loopback transport, forged presets, and network mismatches.
 - Tauri capabilities remain minimal: no shell, filesystem, generic HTTP, clipboard-read, or remote-origin capability is granted.
 - The Tauri CSP denies remote scripts, frames, objects, workers, and manifests. Camera media is limited to same-origin/blob capture for the explicit PSBT scanner and requires platform permission.
@@ -202,19 +213,12 @@ Production packaged-HWI verification now requires matching Developer ID teams, h
 
 The complete disposition and residual-risk record is [`docs/security-remediation-2026-09-03.md`](docs/security-remediation-2026-09-03.md). It is not independent closing review, exact-candidate evidence, or mainnet release authorization. The old notarized v0.4.91 artifact remains historical Testnet4 evidence only.
 
-## Mainnet distribution blockers
+## Mainnet release status
 
-The isolated ADR 0055 candidate is available only for certification. Mainnet distribution and ordinary use remain blocked. At minimum, release requires:
-
-1. independent external security review and remediation;
-2. reproducible signed builds, SBOM/provenance, reviewed update delivery, and pinned/verified HWI artifacts;
-3. physical certification for every supported hardware-wallet model, firmware, host OS, address-display flow, rejection path, reconnect path, and signing flow;
-4. Android Keystore and Windows credential-vault implementation and certification, plus Apple lifecycle/accessibility evidence;
-5. verified backend chain identity and reviewed mainnet Core/remote-backend privacy and authentication;
-6. funded recovery/timelock boundary and reorg testing;
-7. signed-package second-launch, forced-termination, and cross-platform process-lock acceptance;
-8. large-history scanning, pagination, and performance validation;
-9. green, current dependency advisory checks and closure of applicable inherited dependency warnings;
-10. explicit approval of the canonical mainnet checklist.
-
-No test count, coverage percentage, internal review, or hardware simulator result overrides these blockers.
+Public v0.4.96 is approved for the macOS Apple-silicon scope in ADR 0053. The
+completed checklist covers supported hardware, backend identity, recovery,
+network switching, reproduction, packaging, and release acceptance. Open
+hardening proposals from later security reports are tracked separately and do
+not silently change the accepted product behavior. Any later commit, platform,
+device/firmware tuple, backend class, or expanded wallet policy requires its own
+review and exact release authorization.

@@ -1,6 +1,6 @@
 # Groot commercial product strategy
 
-Status: product and licensing proposal. It does not describe implemented paid services or change the current test-network release gate.
+Status: product strategy with the base-wallet license accepted by ADR 0080. It does not describe implemented paid services or change the Mainnet release gate.
 
 ## Product promise
 
@@ -41,16 +41,16 @@ The local wallet needs no Groot account. A future hosted service should default 
 
 Teams may require billing or regulated customer information, but those records must remain separated from wallet coordination identities. Insurance and regulated distribution may require identity; that is a distinct, opt-in relationship with explicit disclosures.
 
-## Licensing proposal
+## Licensing architecture
 
 Keep the legal architecture legible:
 
-1. License the consumer wallet application and protocol/reference libraries under **Apache-2.0**. It is permissive and supplies an explicit patent grant. A release-owner decision, copyright inventory, dependency review, and legal review are required before adding the license.
-2. License a Groot-operated, self-hostable coordination relay under **AGPL-3.0-or-later** so deployed modifications remain available to their users. Keep the relay unable to sign, decrypt proposals, derive addresses, or become a recovery dependency.
-3. Keep genuinely enterprise-only administration, compliance integrations, support tooling, and managed-service operations in a separate service or repository under a commercial license. Do not link a closed module into the core wallet or make it necessary for standard wallet operation.
+1. The consumer/base wallet application and repository-authored documentation are licensed under **Apache-2.0**. It is permissive and supplies an explicit patent grant. Third-party materials retain their own licenses, and the Groot marks are not licensed beyond customary attribution.
+2. A future Groot-operated, self-hostable coordination relay may use **AGPL-3.0-or-later** only after a separate explicit repository and licensing decision. Keep any relay unable to sign, decrypt proposals, derive addresses, or become a recovery dependency.
+3. Keep genuinely enterprise-only administration, compliance integrations, support tooling, hosted family/business services, and managed-service operations in a separate service or repository under their own terms, which may be proprietary. Do not link a closed module into the core wallet or make it necessary for standard wallet operation.
 4. Publish protocol specifications and interoperable client behavior even when a hosted implementation is paid.
 
-This is a recommendation, not legal advice or a completed licensing decision. Avoid a custom source-available license for the consumer wallet: it creates ambiguity and makes ecosystem adoption harder. If a commercial source-available license is considered for enterprise code, select a standard form with counsel and clearly state when or whether it converts to an open-source license.
+ADR 0080 records the completed base-wallet decision and the current ownership qualification: Git history names Thibaud Marechal and the same-email `thib` alias, while no corporate assignment or CLA appears in the repository. Any undisclosed employment, contractor, or assignment claim still requires owner/legal confirmation. This is not legal advice. Avoid a custom source-available license for the consumer wallet; if commercial source-available terms are considered for separate enterprise code, select a standard form with counsel and state when or whether it converts to an open-source license.
 
 ## Revenue model
 

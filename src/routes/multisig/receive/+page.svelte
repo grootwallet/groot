@@ -191,7 +191,10 @@
     busy = true;
     generateError = '';
     policyVerificationNeeded = false;
+    let automaticSyncPaused = false;
     try {
+      await walletShell.pauseAutomaticSync();
+      automaticSyncPaused = true;
       current = await walletService.createMultisigAddress(submissionLabels);
       addresses = [current, ...addresses];
       try {
@@ -216,6 +219,7 @@
       toast({ title: 'Could not generate address', description: generateError, tone: 'danger' });
     } finally {
       busy = false;
+      if (automaticSyncPaused) walletShell.resumeAutomaticSync();
     }
   }
   async function copy() {

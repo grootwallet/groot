@@ -425,9 +425,13 @@ describe('hardware receive verification UI', () => {
       "'BitBox may request its password again for this new secure connection. Enter it only on BitBox.'"
     );
     expect(hardwareDeviceList).toContain('hardwareDeviceStateLabel(device, membership');
-    expect(hardwareDeviceList).toMatch(
-      /\{#if device\.fingerprint\}<small\s*>\{device\.fingerprint\}<\/small\s*>\{\/if\}/
+    expect(hardwareDeviceList).toContain(
+      "deviceSecondaryLabel = (device) => device.fingerprint ?? ''"
     );
+    expect(hardwareDeviceList).toMatch(
+      /\{#if secondaryLabel\}<small\s*>\{secondaryLabel\}<\/small\s*>\{\/if\}/
+    );
+    expect(multisigSend).toContain("if (deviceHasSigned(device)) return 'Already signed'");
     expect(hardwareDeviceList).not.toContain('device.message');
   });
 

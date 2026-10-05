@@ -13,7 +13,11 @@
   import { isPrototypeWallet, walletService } from '$lib/wallet';
   import { page } from '$app/state';
   import { useWalletShellContext } from '$lib/wallet/shell-context';
-  import type { WalletProfile, WalletProfileCompatibility } from '$lib/wallet/contracts';
+  import {
+    WalletError,
+    type WalletProfile,
+    type WalletProfileCompatibility
+  } from '$lib/wallet/contracts';
   const walletShell = useWalletShellContext();
 
   let credential = $state('');
@@ -26,6 +30,8 @@
   let selectedWalletId = $state<string | null>(null);
   let compatibility = $state<WalletProfileCompatibility | null>(null);
   let credentialForm = $state<HTMLFormElement | null>(null);
+  let retryAfterSeconds = $state(0);
+  let retryTimer: ReturnType<typeof setInterval> | null = null;
   let selectedProfile = $derived(profiles.find((wallet) => wallet.id === selectedWalletId));
   let isSoftwareWallet = $derived(selectedProfile?.kind === 'single_key');
   let credentialLabel = $derived(
@@ -45,6 +51,9 @@
       error = '';
       resetConfirmation = '';
       showReset = false;
+      if (retryTimer) clearInterval(retryTimer);
+      retryTimer = null;
+      retryAfterSeconds = 0;
     }
     compatibility = selectedWalletId ? await walletService.profileCompatibility() : null;
     await tick();
@@ -65,10 +74,28 @@
   onDestroy(() => {
     credential = '';
     resetConfirmation = '';
+    if (retryTimer) clearInterval(retryTimer);
   });
 
+  function startRetryCountdown(seconds: number) {
+    retryAfterSeconds = Math.max(1, Math.ceil(seconds));
+    error = `Too many incorrect attempts. Try again in ${retryAfterSeconds} seconds.`;
+    if (retryTimer) clearInterval(retryTimer);
+    retryTimer = setInterval(() => {
+      retryAfterSeconds = Math.max(0, retryAfterSeconds - 1);
+      if (retryAfterSeconds > 0) {
+        error = `Too many incorrect attempts. Try again in ${retryAfterSeconds} seconds.`;
+        return;
+      }
+      if (retryTimer) clearInterval(retryTimer);
+      retryTimer = null;
+      error = '';
+      void tick().then(() => credentialForm?.querySelector<HTMLInputElement>('input')?.focus());
+    }, 1_000);
+  }
+
   async function unlock() {
-    if (busy || !credential) return;
+    if (busy || retryAfterSeconds > 0 || !credential) return;
     busy = true;
     error = '';
     try {
@@ -82,7 +109,12 @@
       if (next === '/' && selectedWalletId) walletShell.requestUnlockSync(selectedWalletId);
       await goto(next);
     } catch (cause) {
-      error = localizedError(cause, $locale, 'Could not unlock wallet.');
+      if (cause instanceof WalletError && cause.code === 'rate_limited') {
+        const messageSeconds = Number(cause.message.match(/(\d+)\s+seconds?/)?.[1] ?? 0);
+        startRetryCountdown(cause.details?.retryAfterSeconds ?? messageSeconds ?? 1);
+      } else {
+        error = localizedError(cause, $locale, 'Could not unlock wallet.');
+      }
       credential = '';
     } finally {
       busy = false;
@@ -174,14 +206,16 @@
             placeholder={credentialPlaceholder}
             autocomplete="current-password"
             {error}
-            oninput={() => (error = '')}
+            oninput={() => {
+              if (retryAfterSeconds === 0) error = '';
+            }}
             onkeydown={submitCredentialOnEnter}
           />
           <Button
             type="submit"
             size="large"
             class="full"
-            disabled={!credential}
+            disabled={!credential || retryAfterSeconds > 0}
             loading={busy}
             loadingLabel={translate($locale, 'Unlocking wallet…')}
             >{translate($locale, 'Unlock wallet')}</Button

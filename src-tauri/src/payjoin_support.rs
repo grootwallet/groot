@@ -26,6 +26,8 @@ pub enum PaymentRequestError {
     Invalid,
     #[error("the payment request address is for a different Bitcoin network")]
     WrongNetwork,
+    #[error("the payment request uses an unsupported Bitcoin address type")]
+    UnsupportedDestination,
 }
 
 #[derive(Debug, Serialize)]
@@ -64,6 +66,8 @@ pub fn inspect_payment_request(
             .map_err(|_| PaymentRequestError::Invalid)?
             .require_network(network)
             .map_err(|_| PaymentRequestError::WrongNetwork)?;
+        crate::wallet::validate_supported_payment_destination(&address)
+            .map_err(|_| PaymentRequestError::UnsupportedDestination)?;
         return Ok(PaymentRequestInspection {
             address: address.to_string(),
             amount_sats: None,
@@ -86,6 +90,8 @@ pub fn inspect_payment_request(
     let uri = uri
         .require_network(network)
         .map_err(|_| PaymentRequestError::WrongNetwork)?;
+    crate::wallet::validate_supported_payment_destination(uri.address())
+        .map_err(|_| PaymentRequestError::UnsupportedDestination)?;
     Ok(PaymentRequestInspection {
         address: uri.address().to_string(),
         amount_sats: uri.amount().map(|amount| amount.to_sat().to_string()),
@@ -100,7 +106,9 @@ mod tests {
     use super::*;
     use bdk_wallet::bitcoin::key::Secp256k1;
     use bdk_wallet::bitcoin::secp256k1::PublicKey;
-    use bdk_wallet::bitcoin::{Address, CompressedPublicKey};
+    use bdk_wallet::bitcoin::{
+        Address, CompressedPublicKey, ScriptBuf, WitnessProgram, WitnessVersion,
+    };
 
     // PDK 1.0's BIP77-inspired test vector. Expiration affects starting a
     // session, not structural URI inspection.
@@ -118,6 +126,7 @@ mod tests {
             Address::p2pkh(compressed, Network::Bitcoin).to_string(),
             Address::p2shwpkh(&compressed, Network::Bitcoin).to_string(),
             Address::p2wpkh(&compressed, Network::Bitcoin).to_string(),
+            Address::p2wsh(&ScriptBuf::new(), Network::Bitcoin).to_string(),
             Address::p2tr(&secp, x_only, None, Network::Bitcoin).to_string(),
         ]
     }
@@ -169,6 +178,24 @@ mod tests {
                 Network::Bitcoin
             ),
             Err(PaymentRequestError::Invalid)
+        ));
+    }
+
+    #[test]
+    fn payment_requests_reject_future_witness_and_anchor_destinations() {
+        let future = Address::from_witness_program(
+            WitnessProgram::new(WitnessVersion::V2, &[42_u8; 32]).unwrap(),
+            Network::Bitcoin,
+        );
+        assert!(matches!(
+            inspect_payment_request(&future.to_string(), Network::Bitcoin),
+            Err(PaymentRequestError::UnsupportedDestination)
+        ));
+
+        let anchor = Address::from_script(&ScriptBuf::new_p2a(), Network::Bitcoin).unwrap();
+        assert!(matches!(
+            inspect_payment_request(&anchor.to_string(), Network::Bitcoin),
+            Err(PaymentRequestError::UnsupportedDestination)
         ));
     }
 

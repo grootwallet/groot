@@ -26,6 +26,7 @@
     membershipOverrides = {},
     policyUnverified = () => false,
     deviceDisplayName = (device) => hardwareDeviceDisplayName(device, savedSigners),
+    deviceSecondaryLabel = (device) => device.fingerprint ?? '',
     deviceStateLabel = (device, membership) =>
       hardwareDeviceStateLabel(device, membership, policyUnverified(device)),
     deviceDisabled = (_device, membership) => savedSigners.length > 0 && membership === 'unrelated'
@@ -43,6 +44,7 @@
     membershipOverrides?: Readonly<Record<string, HardwareWalletMembership>>;
     policyUnverified?: (device: HardwareDevice) => boolean;
     deviceDisplayName?: (device: HardwareDevice) => string;
+    deviceSecondaryLabel?: (device: HardwareDevice) => string;
     deviceStateLabel?: (device: HardwareDevice, membership: HardwareWalletMembership) => string;
     deviceDisabled?: (device: HardwareDevice, membership: HardwareWalletMembership) => boolean;
   } = $props();
@@ -61,6 +63,7 @@
       devices.some((device) => device.action === 'prompt_pin')}
   >
     {#each devices as device (device.id)}
+      {@const secondaryLabel = deviceSecondaryLabel(device)}
       {@const membership =
         membershipOverrides[device.id] ??
         (eligibleFingerprints.length || eligibleDeviceTypes.length || savedSigners.length
@@ -83,8 +86,8 @@
       >
         <Cpu size={18} />
         <span
-          ><strong>{deviceDisplayName(device)}</strong>{#if device.fingerprint}<small
-              >{device.fingerprint}</small
+          ><strong>{deviceDisplayName(device)}</strong>{#if secondaryLabel}<small
+              >{secondaryLabel}</small
             >{/if}<em
             class:ready={membership === 'candidate' &&
               (device.status === 'ready' || device.status === 'detected')}

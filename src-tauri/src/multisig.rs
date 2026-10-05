@@ -43,6 +43,7 @@ impl CosignerInput {
             || self.id.len() > 128
             || self.label.trim().is_empty()
             || self.label.chars().count() > 48
+            || crate::wallet::label_has_unsafe_formatting(&self.label)
             || Fingerprint::from_str(self.fingerprint.trim()).is_err()
             || account_xpub.network != parameters().extended_key_network
         {
@@ -210,10 +211,11 @@ impl MultisigPolicy {
         if threshold < 2 || threshold > cosigners.len() {
             return Err(PolicyError::UnsafeThreshold);
         }
-        if cosigners
-            .iter()
-            .any(|cosigner| cosigner.label.trim().is_empty() || cosigner.label.chars().count() > 48)
-        {
+        if cosigners.iter().any(|cosigner| {
+            cosigner.label.trim().is_empty()
+                || cosigner.label.chars().count() > 48
+                || crate::wallet::label_has_unsafe_formatting(&cosigner.label)
+        }) {
             return Err(PolicyError::InvalidName);
         }
         let ids = cosigners
@@ -416,6 +418,10 @@ mod tests {
                 ..valid.clone()
             },
             CosignerInput {
+                label: "Signer\u{200b}hidden".to_owned(),
+                ..valid.clone()
+            },
+            CosignerInput {
                 fingerprint: "bad".to_owned(),
                 ..valid.clone()
             },
@@ -462,6 +468,12 @@ mod tests {
         blank[0].label = " ".into();
         assert_eq!(
             MultisigPolicy::new("Vault".into(), 2, blank).unwrap_err(),
+            PolicyError::InvalidName
+        );
+        let mut directional = keys.clone();
+        directional[0].label = "Signer\u{202e}evil".into();
+        assert_eq!(
+            MultisigPolicy::new("Vault".into(), 2, directional).unwrap_err(),
             PolicyError::InvalidName
         );
 

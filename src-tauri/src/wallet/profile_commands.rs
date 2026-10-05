@@ -140,19 +140,20 @@ pub fn network_setup_sources(
 }
 
 #[tauri::command]
-pub fn wallet_rename(
-    app: AppHandle,
-    state: State<'_, AppState>,
-    name: String,
-) -> ApiResult<WalletProfile> {
-    let _operation = operation_guard(&state)?;
-    require_unlocked(&app, &state)?;
-    let mut registry = load_registry(&app)?;
-    let renamed = registry
-        .rename_selected(&name)
-        .map_err(registry_api_error)?;
-    save_registry(&app, &registry)?;
-    Ok(renamed)
+pub async fn wallet_rename(app: AppHandle, name: String) -> ApiResult<WalletProfile> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let wallet_id = require_unlocked(&app, &state)?;
+        let _operation = metadata_operation_guard(&state, wallet_id)?;
+        let mut registry = load_registry(&app)?;
+        let renamed = registry
+            .rename_selected(&name)
+            .map_err(registry_api_error)?;
+        save_registry(&app, &registry)?;
+        Ok(renamed)
+    })
+    .await
+    .map_err(internal)?
 }
 
 #[tauri::command]
@@ -724,68 +725,69 @@ pub(crate) fn validate_notification_acknowledgements(ids: &[String]) -> ApiResul
 }
 
 #[tauri::command]
-pub fn address_create(
-    app: AppHandle,
-    state: State<'_, AppState>,
-    labels: Vec<String>,
-) -> ApiResult<ReceiveAddressDto> {
-    let _operation = operation_guard(&state)?;
-    let wallet_id = require_unlocked(&app, &state)?;
-    let labels = normalize_labels(labels)?;
-    let label = labels[0].clone();
-    let mut db = open_db(&app)?;
-    let mut transaction = db.transaction().map_err(internal)?;
-    let mut wallet = Wallet::load()
-        .check_network(network())
-        .load_wallet(&mut transaction)
-        .map_err(internal)?
-        .ok_or_else(|| api_error("wallet_not_found", "Wallet database is empty."))?;
-    let info = wallet.reveal_next_address(KeychainKind::External);
-    enforce_recovery_gap(&transaction, info.index)?;
-    let created = now();
-    transaction
-        .execute(
-            "INSERT INTO groot_addresses (idx, address, label, created_at, state) VALUES (?1, ?2, ?3, ?4, 'awaiting')",
-            params![info.index, info.address.to_string(), label, created],
+pub async fn address_create(app: AppHandle, labels: Vec<String>) -> ApiResult<ReceiveAddressDto> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let _operation = operation_guard(&state)?;
+        let wallet_id = require_unlocked(&app, &state)?;
+        let labels = normalize_labels(labels)?;
+        let label = labels[0].clone();
+        let mut db = open_db(&app)?;
+        let mut transaction = db.transaction().map_err(internal)?;
+        let mut wallet = Wallet::load()
+            .check_network(network())
+            .load_wallet(&mut transaction)
+            .map_err(internal)?
+            .ok_or_else(|| api_error("wallet_not_found", "Wallet database is empty."))?;
+        let info = wallet.reveal_next_address(KeychainKind::External);
+        enforce_recovery_gap(&transaction, info.index)?;
+        let created = now();
+        transaction
+            .execute(
+                "INSERT INTO groot_addresses (idx, address, label, created_at, state) VALUES (?1, ?2, ?3, ?4, 'awaiting')",
+                params![info.index, info.address.to_string(), label, created],
+            )
+            .map_err(internal)?;
+        label_provenance::assign_labels(
+            &transaction,
+            &labels,
+            LabelOrigin::Receive,
+            "address",
+            &info.index.to_string(),
+            created,
         )
         .map_err(internal)?;
-    label_provenance::assign_labels(
-        &transaction,
-        &labels,
-        LabelOrigin::Receive,
-        "address",
-        &info.index.to_string(),
-        created,
-    )
-    .map_err(internal)?;
-    wallet.persist(&mut transaction).map_err(internal)?;
-    transaction.commit().map_err(internal)?;
-    forget_core_mempool_snapshot(&state, wallet_id);
-    let response = ReceiveAddressDto {
-        id: info.index,
-        testnet_alias: regtest_testnet_address_alias(&info.address.to_string()),
-        address: info.address.to_string(),
-        label,
-        labels,
-        created: created.to_string(),
-        status: "awaiting".to_owned(),
-        derivation_path: format!("{}/0/{}", singlesig_account_path(), info.index),
-        hardware_verified_at: None,
-        hardware_verified_by: None,
-    };
-    diagnostics::record(
-        &app,
-        &state,
-        diagnostics::DiagnosticEventKind::ReceiveAddressGenerated,
-        diagnostics::DiagnosticOutcome::Succeeded,
-        diagnostics::DiagnosticContext {
-            wallet_kind: Some(diagnostics::wallet_kind(selected_profile(&app)?.kind)),
-            item_count: u32::try_from(response.labels.len()).ok(),
-            ..Default::default()
-        },
-        None,
-    );
-    Ok(response)
+        wallet.persist(&mut transaction).map_err(internal)?;
+        transaction.commit().map_err(internal)?;
+        forget_core_mempool_snapshot(&state, wallet_id);
+        let response = ReceiveAddressDto {
+            id: info.index,
+            testnet_alias: regtest_testnet_address_alias(&info.address.to_string()),
+            address: info.address.to_string(),
+            label,
+            labels,
+            created: created.to_string(),
+            status: "awaiting".to_owned(),
+            derivation_path: format!("{}/0/{}", singlesig_account_path(), info.index),
+            hardware_verified_at: None,
+            hardware_verified_by: None,
+        };
+        diagnostics::record(
+            &app,
+            &state,
+            diagnostics::DiagnosticEventKind::ReceiveAddressGenerated,
+            diagnostics::DiagnosticOutcome::Succeeded,
+            diagnostics::DiagnosticContext {
+                wallet_kind: Some(diagnostics::wallet_kind(selected_profile(&app)?.kind)),
+                item_count: u32::try_from(response.labels.len()).ok(),
+                ..Default::default()
+            },
+            None,
+        );
+        Ok(response)
+    })
+    .await
+    .map_err(internal)?
 }
 
 #[tauri::command]
@@ -1259,6 +1261,7 @@ fn persist_mainnet_node_admission(
         &node_secret_path_for(app, destination)?,
         protected.as_slice(),
         credential,
+        node_auth_context(destination),
     )
     .map_err(secure_store_error)?;
     write_private_json(&node_config_path_for(app, destination)?, &pending.config)?;
@@ -1709,6 +1712,7 @@ pub async fn node_config_save(
             &candidate_rpc_client(&config, password.as_str())?,
             config.clone(),
         )?;
+        let wallet_id = selected_profile(&app)?.id;
         if config.auth == RpcAuthMode::UserPass {
             let protected = Zeroizing::new(
                 serde_json::to_vec(&ProtectedNodeAuthRef {
@@ -1722,6 +1726,7 @@ pub async fn node_config_save(
                 &node_secret_path(&app)?,
                 protected.as_slice(),
                 credential.as_str(),
+                node_auth_context(wallet_id),
             )
             .map_err(secure_store_error)?;
         } else {
@@ -1845,6 +1850,7 @@ pub async fn network_setup_adopt(
                 &node_secret_path_for(&app, destination)?,
                 protected.as_slice(),
                 credential.as_str(),
+                node_auth_context(destination),
             )
             .map_err(secure_store_error)?;
         } else {
@@ -1948,6 +1954,7 @@ pub(super) fn adopt_network_setup_for_new_profile(
             &node_secret_path_for(app, destination)?,
             protected.as_slice(),
             credential,
+            node_auth_context(destination),
         )
         .map_err(secure_store_error)?;
     }

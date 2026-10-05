@@ -133,6 +133,8 @@
   let customFee = $state('');
   let passphrase = $state('');
   let credentialError = $state('');
+  let retryAfterSeconds = $state(0);
+  let retryTimer: ReturnType<typeof setInterval> | undefined;
   let broadcasting = $state(false);
   let savingPsbt = $state(false);
   let preparing = $state(false);
@@ -148,7 +150,7 @@
   let discardingDraft = $state(false);
   let discardDraftError = $state('');
   let suppressDraftSave = false;
-  let proposal = $state<PaymentProposal | null>(null);
+  let proposal = $state<PaymentProposal | MultisigProposal | null>(null);
   let maxSpendQuote = $state<MaxSpendQuote | null>(null);
   let maxSpendActive = $state(false);
   let maxSpendRequestRevision = 0;
@@ -168,6 +170,8 @@
   let accelerationConfirmed = $state(false);
   let accelerationQuoteRevision = 0;
   let accelerationQuoteTimer: ReturnType<typeof setTimeout> | undefined;
+  let accelerationSyncPaused = false;
+  let sendDestroyed = false;
   const broadcastExplorerUrl = $derived(
     txid ? transactionExplorerUrl(defaultConfig.network, txid) : null
   );
@@ -318,7 +322,18 @@
   let walletLoading = $state(true);
   let walletLoadGeneration = 0;
   onMount(() => {
-    void loadWallet();
+    if (initialAcceleration) {
+      void walletShell.pauseAutomaticSync().then(() => {
+        if (sendDestroyed) {
+          walletShell.resumeAutomaticSync();
+          return;
+        }
+        accelerationSyncPaused = true;
+        void loadWallet();
+      });
+    } else {
+      void loadWallet();
+    }
     return walletService.subscribe((event) => {
       if (
         event.type !== 'wallet_updated' ||
@@ -535,6 +550,7 @@
   }
 
   onDestroy(() => {
+    sendDestroyed = true;
     ++walletLoadGeneration;
     accelerationQuoteRevision += 1;
     if (accelerationQuoteTimer) clearTimeout(accelerationQuoteTimer);
@@ -543,7 +559,25 @@
     passphrase = '';
     pinPositions = '';
     pinChallenge = '';
+    if (retryTimer) clearInterval(retryTimer);
+    if (accelerationSyncPaused) walletShell.resumeAutomaticSync();
   });
+
+  function startRetryCountdown(seconds: number) {
+    retryAfterSeconds = Math.max(1, Math.ceil(seconds));
+    credentialError = `Too many incorrect attempts. Try again in ${retryAfterSeconds} seconds.`;
+    if (retryTimer) clearInterval(retryTimer);
+    retryTimer = setInterval(() => {
+      retryAfterSeconds = Math.max(0, retryAfterSeconds - 1);
+      if (retryAfterSeconds > 0) {
+        credentialError = `Too many incorrect attempts. Try again in ${retryAfterSeconds} seconds.`;
+        return;
+      }
+      if (retryTimer) clearInterval(retryTimer);
+      retryTimer = undefined;
+      credentialError = '';
+    }, 1_000);
+  }
 
   async function saveCurrentDraft() {
     if (
@@ -759,18 +793,12 @@
     if (!request || !customFeeValid) return;
     preparing = true;
     try {
-      if (request.method === 'rbf') {
-        rbfQuote = await walletService.quoteRbf(request.txid, asFeeRate(Number(customFee)));
-        customFee = String(rbfQuote.targetFeeRate);
-      } else {
-        cpfpQuote = await walletService.quoteCpfp(request.txid, asFeeRate(Number(customFee)));
-        customFee = String(cpfpQuote.targetFeeRate);
-      }
+      const selectedFeeRate = asFeeRate(Number(customFee));
       accelerationQuoteFailed = false;
       proposal = await walletService.prepareAcceleration(
         request.txid,
         request.method,
-        asFeeRate(Number(rbfQuote?.targetFeeRate ?? cpfpQuote?.targetFeeRate ?? customFee))
+        selectedFeeRate
       );
       address = proposal.recipient;
       selectedLabels = proposal.labels ?? [proposal.label];
@@ -811,18 +839,27 @@
   }
 
   async function broadcast() {
-    if (accelerationConfirmed) return;
+    if (accelerationConfirmed || retryAfterSeconds > 0) return;
     if (!passphrase || !proposal) return;
     credentialError = '';
     broadcasting = true;
     try {
-      const result = externalSigner
-        ? await walletService.broadcastExternalSignerProposal(
-            proposal.proposalId,
-            externalProposal?.psbt ?? '',
-            passphrase
-          )
-        : await walletService.signAndBroadcast(proposal.proposalId, passphrase);
+      let result;
+      if (externalSigner) {
+        result = await walletService.broadcastExternalSignerProposal(
+          proposal.proposalId,
+          externalProposal?.psbt ?? '',
+          passphrase
+        );
+      } else {
+        if (!('reviewBinding' in proposal))
+          throw new WalletError('proposal_mismatch', 'The payment changed after review.');
+        result = await walletService.signAndBroadcast(
+          proposal.proposalId,
+          proposal.reviewBinding,
+          passphrase
+        );
+      }
       txid = result.txid;
       sentAmount = Number(proposal.amount);
       balanceSyncPending = result.syncPending;
@@ -830,7 +867,12 @@
       passphrase = '';
       step = 4;
     } catch (cause) {
-      credentialError = localizedError(cause, $locale, 'Could not sign or broadcast.');
+      if (cause instanceof WalletError && cause.code === 'rate_limited') {
+        const messageSeconds = Number(cause.message.match(/(\d+)\s+seconds?/)?.[1] ?? 0);
+        startRetryCountdown(cause.details?.retryAfterSeconds ?? messageSeconds ?? 1);
+      } else {
+        credentialError = localizedError(cause, $locale, 'Could not sign or broadcast.');
+      }
       passphrase = '';
     } finally {
       broadcasting = false;
@@ -2064,7 +2106,9 @@
             <PasswordField
               label={translate($locale, 'Wallet passphrase')}
               bind:value={passphrase}
-              oninput={() => (credentialError = '')}
+              oninput={() => {
+                if (retryAfterSeconds === 0) credentialError = '';
+              }}
               placeholder={translate($locale, 'Enter wallet passphrase')}
               autocomplete="current-password"
               error={credentialError}
@@ -2077,7 +2121,7 @@
               type="submit"
               size="large"
               class="full"
-              disabled={!passphrase}
+              disabled={!passphrase || retryAfterSeconds > 0}
               loading={broadcasting}
               loadingLabel={translate($locale, 'Signing & broadcasting…')}
               >{translate($locale, 'Sign & broadcast')}

@@ -1,6 +1,6 @@
 # ADR 0055: Authorize an isolated mainnet certification candidate
 
-- Status: accepted for certification only; distribution remains blocked; unlock presentation, remote-Core exclusion, and the source-merge prohibition are partly superseded by ADR 0056 and ADR 0061
+- Status: superseded by ADR 0053's v0.4.96 release authorization; historical certification record
 - Date: 2026-09-03
 - Extends: ADR 0012, ADR 0026, ADR 0052, ADR 0053, ADR 0054
 

@@ -1,5 +1,22 @@
 # Bitcoin Improvement Proposal support
 
+The 2026-10-05 v0.5.0 release-version preparation changes build metadata only.
+It does not change supported BIPs, descriptors, derivation, transaction policy,
+signing, recovery, sync, or interoperability behavior.
+
+The 2026-10-04 ADR 0081 hardening allows outgoing payments to legacy P2PKH,
+P2SH (including BIP49-compatible nested SegWit), SegWit v0 P2WPKH/P2WSH, and
+BIP350 SegWit-v1 Taproot destinations. P2A and witness v2-v16 are rejected.
+This is destination-script support only: Groot still does not generate Taproot
+receive addresses or claim BIP86/340/341/342/371/386/387 wallet support. The
+same change strengthens BIP174 finalization checks without changing PSBT wire
+encoding, and secure-store v5 has no BIP/interchange impact.
+
+The 2026-10-03 Apache-2.0 adoption and public-release authorization guard have
+no BIP, descriptor, derivation, transaction, PSBT, signing, recovery,
+interoperability, or persisted-format impact. They change licensing,
+attribution, documentation, and production packaging authorization only.
+
 The 2026-10-02 v0.4.96 hardening changes encrypted-envelope KDF metadata and
 migration, trusted-boundary validation, and macOS packaging presentation. It
 does not change BIP39 passphrase semantics, derivation, descriptors, PSBT
@@ -779,6 +796,17 @@ The copy-confirmation glyph, discard-address disclosure divider removal, and
 case-exact derivation-path presentation have no BIP support or interoperability
 impact. Clipboard payloads, derivation data, descriptors, addresses, transactions,
 PSBTs, signing, recovery, and persisted formats are unchanged.
+
+The 2026-10-04 Mainnet documentation reconciliation changes evidence status, not
+protocol behavior. The owner confirms the supported BIP84 single-key and BIP48
+multisig hardware matrix, signer permutations, recovery, local/managed Core,
+network switching, and two-machine release reproduction passed for v0.4.96.
+No derivation, descriptor, address, PSBT, signing, or persisted format changed.
+
+The post-certification responsiveness and presentation fixes have no BIP impact.
+They move existing address and rename work off the UI thread, coordinate it with
+sync, avoid a duplicate acceleration quote, clarify signer state and backup copy,
+and correct responsive controls. Wallet formats and protocol behavior are unchanged.
 
 If a change has no BIP impact, its pull request records that explicit assessment.
 Upstream status changes alone may update this document without changing Groot's
