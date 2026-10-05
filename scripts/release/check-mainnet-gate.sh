@@ -35,14 +35,20 @@ contains_fixed '"regtest" | "signet" | "testnet4" | "mainnet" | "multi" => {}' s
   || fail "the native compile-time network allowlist changed"
 node scripts/release/verify-mainnet-source-policy.mjs
 contains_fixed '"status": "approved"' docs/mainnet-release-authorization.json \
-  || fail "the v0.4.96 public-release authorization is not approved"
-contains_fixed '"authorizedCommit": "f7b4b9935943f0250353a6f77c3d8fca31906fff"' docs/mainnet-release-authorization.json \
-  || fail "the authorization record does not name the certified v0.4.96 commit"
-contains_fixed '"decisionAdr": "0053"' docs/mainnet-release-authorization.json \
-  || fail "the authorization record does not name ADR 0053"
-node scripts/release/assert-public-release-authorized.mjs f7b4b9935943f0250353a6f77c3d8fca31906fff
-contains_fixed "verifyPublicReleaseAuthorization({ repoRoot, commit });" scripts/release/package-macos-ga.mjs \
-  || fail "the production packager no longer enforces exact-commit release authorization"
+  || fail "the v0.5.0 public-release authorization is not approved"
+contains_fixed '"schemaVersion": 2' docs/mainnet-release-authorization.json \
+  || fail "the authorization record does not use the version/tag schema"
+contains_fixed '"authorizedVersion": "0.5.0"' docs/mainnet-release-authorization.json \
+  || fail "the authorization record does not name v0.5.0"
+contains_fixed '"authorizedTag": "v0.5.0"' docs/mainnet-release-authorization.json \
+  || fail "the authorization record does not name the v0.5.0 tag"
+contains_fixed '"decisionAdr": "0082"' docs/mainnet-release-authorization.json \
+  || fail "the authorization record does not name ADR 0082"
+node scripts/release/assert-public-release-authorized.mjs "$(git rev-parse HEAD)"
+contains_fixed "const authorization = verifyPublicReleaseAuthorization({ repoRoot, commit });" scripts/release/package-macos-ga.mjs \
+  || fail "the production packager no longer enforces version/tag release authorization"
+contains_fixed "remoteTagEntries.get(peeledTagRef) !== commit" scripts/release/package-macos-ga.mjs \
+  || fail "the production packager no longer binds the peeled remote tag to HEAD"
 contains_fixed "default_rpc_url, is_regtest, name as network_name, network, parameters," src-tauri/src/wallet.rs \
   || fail "the wallet no longer consumes the process-lifetime network identity"
 contains_fixed "backend.validate().is_err()" src-tauri/src/release_policy.rs \
@@ -132,4 +138,4 @@ contains_fixed "Blockstream Jade" docs/mainnet-release-checklist.md \
 contains_fixed "The authorization covers macOS Apple silicon only." docs/mainnet-threat-model.md \
   || fail "the threat model no longer scopes the approved release platform"
 
-echo "Mainnet release gate: public v0.4.96 is approved for exact commit f7b4b993."
+echo "Mainnet release gate: v0.5.0 is approved for the exact annotated remote tag."

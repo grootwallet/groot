@@ -7,12 +7,22 @@ import { verifyPublicReleaseAuthorization } from './assert-public-release-author
 
 const commit = '0123456789abcdef0123456789abcdef01234567';
 
-function fixture({ status = 'blocked', authorizedCommit = null, decisionAdr = null } = {}) {
+function fixture({
+  status = 'blocked',
+  authorizedVersion = '0.5.0',
+  authorizedTag = 'v0.5.0',
+  decisionAdr = null
+} = {}) {
   const root = mkdtempSync(join(tmpdir(), 'groot-release-authorization-'));
   mkdirSync(join(root, 'docs/adr'), { recursive: true });
+  writeFileSync(join(root, 'package.json'), '{"version":"0.5.0"}\n');
   writeFileSync(
     join(root, 'docs/mainnet-release-authorization.json'),
-    `${JSON.stringify({ schemaVersion: 1, status, authorizedCommit, decisionAdr }, null, 2)}\n`
+    `${JSON.stringify(
+      { schemaVersion: 2, status, authorizedVersion, authorizedTag, decisionAdr },
+      null,
+      2
+    )}\n`
   );
   writeFileSync(
     join(root, 'docs/mainnet-release-checklist.md'),
@@ -33,33 +43,51 @@ test('a blocked authorization cannot be used for public packaging', () => {
   }
 });
 
-test('the repository authorizes the exact certified v0.4.96 commit', () => {
+test('the repository authorizes the v0.5.0 release tag', () => {
   assert.doesNotThrow(() =>
     verifyPublicReleaseAuthorization({
-      commit: 'f7b4b9935943f0250353a6f77c3d8fca31906fff'
+      commit
     })
   );
 });
 
-test('approval must bind the exact commit, accepted ADR, and closed checklist', () => {
-  const root = fixture({ status: 'approved', authorizedCommit: commit, decisionAdr: '0081' });
+test('approval must bind the package version, release tag, accepted ADR, and closed checklist', () => {
+  const root = fixture({ status: 'approved', decisionAdr: '0082' });
   try {
     writeFileSync(
       join(root, 'docs/mainnet-release-checklist.md'),
       '# Mainnet release checklist\n\nRelease decision: APPROVED\n\n- [x] Evidence complete.\n'
     );
     writeFileSync(
-      join(root, 'docs/adr/0081-authorize-mainnet.md'),
-      `# ADR 0081\n\n- Status: accepted\n\nAuthorizes: public Mainnet distribution for commit ${commit}\n`
+      join(root, 'docs/adr/0082-authorize-mainnet.md'),
+      '# ADR 0082\n\n- Status: accepted\n\nAuthorizes: public Mainnet distribution for version 0.5.0 when annotated tag v0.5.0 and origin/main resolve to the same commit\n'
     );
     assert.doesNotThrow(() => verifyPublicReleaseAuthorization({ repoRoot: root, commit }));
     assert.throws(
-      () =>
-        verifyPublicReleaseAuthorization({
-          repoRoot: root,
-          commit: 'ffffffffffffffffffffffffffffffffffffffff'
-        }),
-      /exact candidate commit/
+      () => verifyPublicReleaseAuthorization({ repoRoot: root, commit: 'bad' }),
+      /invalid/
+    );
+
+    writeFileSync(join(root, 'package.json'), '{"version":"0.5.1"}\n');
+    assert.throws(
+      () => verifyPublicReleaseAuthorization({ repoRoot: root, commit }),
+      /does not name the package version/
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('authorization rejects a tag that does not exactly match the package version', () => {
+  const root = fixture({ status: 'approved', authorizedTag: 'v0.5.0-rc1', decisionAdr: '0082' });
+  try {
+    writeFileSync(
+      join(root, 'docs/mainnet-release-checklist.md'),
+      '# Mainnet release checklist\n\nRelease decision: APPROVED\n\n- [x] Evidence complete.\n'
+    );
+    assert.throws(
+      () => verifyPublicReleaseAuthorization({ repoRoot: root, commit }),
+      /does not name the release tag/
     );
   } finally {
     rmSync(root, { recursive: true, force: true });

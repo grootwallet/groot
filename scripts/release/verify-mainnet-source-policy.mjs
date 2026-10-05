@@ -23,7 +23,7 @@ const pinnedPolicySources = new Map([
   ['THIRD_PARTY_NOTICES.md', 'a181753f36eb3e475cddf31a69d2e75f01a86a79c70de252abb1e73a059407db'],
   [
     'docs/mainnet-release-authorization.json',
-    '60b94435d4f4d87fb8a49d83ac3034d3402b2babec8a8e4b6dd396732d9e7a08'
+    '474359c7a90ccc0fdc1f297ed9cdd4f7116207863b7de377bd62dbd1cc3e0703'
   ],
   ['src-tauri/src/lib.rs', 'f91975ed53e93d004eb46818fb7d73fb8aa5a710eb2d9494c8d563c02e00a705'],
   [
@@ -157,15 +157,15 @@ const pinnedPolicySources = new Map([
   ],
   [
     'scripts/release/package-macos-ga.mjs',
-    'c96830ac09ffb08e309753324d068cb13dffadcde412dfa3592bc46a3f75901a'
+    '3fd43a61e515ace8eaf29b292187f52cd0fdfaa40c3ac013e8f0a671bfca238d'
   ],
   [
     'scripts/release/assert-public-release-authorized.mjs',
-    '8e0adfd619976a8f0cc0c0465425a1fc5dc0cee9f7889f2acc929d42ebd7204e'
+    '4394809d263a540f2d13dbfa56f7e7c48738531153e80e0217a29f46db720c11'
   ],
   [
     'scripts/release/check-mainnet-gate.sh',
-    '783e35f363ebe6faefabe1f2fbb5182fbbd8a24e82a89fe74718d09f1455bfbd'
+    '1d1d51706f435610e123f202d82cfdb17630caada608157ce98dab9adbfb051a'
   ],
   [
     'scripts/release/generate-sbom.mjs',

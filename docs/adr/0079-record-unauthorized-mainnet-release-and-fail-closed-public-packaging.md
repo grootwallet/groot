@@ -10,6 +10,11 @@ the repository. ADR 0053 now authorizes exact commit `f7b4b993`; this ADR remain
 the historical record of the documentation/release sequencing failure and of
 the v0.4.95 tag movement. It no longer classifies v0.4.96 as unapproved.
 
+Reconciliation (2026-10-05): ADR 0082 replaces the self-referential tracked
+commit field for v0.5.0 with a tracked version plus an exact annotated remote
+tag. The packager still fails closed unless the peeled tag, `origin/main`, and
+local `HEAD` are the same commit.
+
 ## Context
 
 The public `v0.4.96` GitHub release, published from commit `f7b4b993`, distributes

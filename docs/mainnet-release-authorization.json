@@ -1,6 +1,7 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "status": "approved",
-  "authorizedCommit": "f7b4b9935943f0250353a6f77c3d8fca31906fff",
-  "decisionAdr": "0053"
+  "authorizedVersion": "0.5.0",
+  "authorizedTag": "v0.5.0",
+  "decisionAdr": "0082"
 }

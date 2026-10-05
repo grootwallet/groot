@@ -127,13 +127,29 @@ ${digest(join(evidence, 'groot.cdx.json'))}  groot.cdx.json\n`;
 if (recordedSums !== expectedSums) fail('evidence checksum manifest is invalid');
 
 const commit = run('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
-verifyPublicReleaseAuthorization({ repoRoot, commit });
+const authorization = verifyPublicReleaseAuthorization({ repoRoot, commit });
 const remoteMainResult = run('git', ['ls-remote', '--exit-code', 'origin', 'refs/heads/main'], {
   encoding: 'utf8'
 }).trim();
 const remoteMainMatch = remoteMainResult.match(/^([0-9a-f]{40})\s+refs\/heads\/main$/);
-if (!remoteMainMatch || commit !== remoteMainMatch[1]) {
-  fail('HEAD and the freshly queried origin main tip must match');
+const tagRef = `refs/tags/${authorization.tag}`;
+const peeledTagRef = `${tagRef}^{}`;
+const remoteTagResult = run('git', ['ls-remote', '--exit-code', 'origin', tagRef, peeledTagRef], {
+  encoding: 'utf8'
+}).trim();
+const remoteTagEntries = new Map(
+  remoteTagResult.split('\n').map((line) => {
+    const match = line.match(/^([0-9a-f]{40})\s+(refs\/tags\/\S+)$/);
+    return match ? [match[2], match[1]] : ['', ''];
+  })
+);
+if (
+  !remoteMainMatch ||
+  commit !== remoteMainMatch[1] ||
+  !remoteTagEntries.has(tagRef) ||
+  remoteTagEntries.get(peeledTagRef) !== commit
+) {
+  fail('HEAD, the freshly queried origin main tip, and the peeled authorized tag must match');
 }
 const status = run('git', ['status', '--porcelain=v1', '--untracked-files=all'], {
   encoding: 'utf8'

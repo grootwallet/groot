@@ -11,7 +11,8 @@ scans; backend and Regtest/Testnet4/Mainnet switching; and two-machine
 reproduction of the multi-network artifact. The remaining completed rows are
 accepted on the owner's explicit certification that the checklist is complete.
 ADR 0053 records the exact-commit authorization. Later releases require fresh
-evidence and authorization.
+evidence and authorization. ADR 0082 authorizes v0.5.0 only when its annotated
+remote tag, `origin/main`, and the packaged `HEAD` resolve to the same commit.
 
 The detailed notes below are the historical evidence ledger. Earlier statements
 that work “remains,” “is pending,” or “is blocked” describe the state when that
