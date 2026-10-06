@@ -25,7 +25,7 @@ const pinnedPolicySources = new Map([
     'docs/mainnet-release-authorization.json',
     '474359c7a90ccc0fdc1f297ed9cdd4f7116207863b7de377bd62dbd1cc3e0703'
   ],
-  ['src-tauri/src/lib.rs', 'f91975ed53e93d004eb46818fb7d73fb8aa5a710eb2d9494c8d563c02e00a705'],
+  ['src-tauri/src/lib.rs', '5ee2d0c8142762c19be99a80ca4b4b12b334e13eee44c1d4de40314384c65dc2'],
   [
     'src-tauri/src/managed_gateway.rs',
     '7e5bf0ab7c25346448e4423bab2e748de96684612230c38b797a075fef5866d0'
@@ -46,7 +46,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src-tauri/src/process_lock.rs',
-    'ae80da370512f4b7027a6c05cf0f538437edc93e5b3a414b2fe0d7ed6e51d511'
+    '9343fd11d26d51ccdc0fb1aece9d23bc96f8bfc3f533b2016be8f2ed1e9c8b0a'
   ],
   [
     'src-tauri/src/external_signer.rs',

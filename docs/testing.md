@@ -50,6 +50,13 @@ characters, line/paragraph separators, invisible fillers, and variation
 selectors on direct entry and BIP329 import while retaining ordinary Unicode
 labels and leaving existing persisted label history untouched.
 
+The v0.5.1 process-lock regression retains the real child-process exclusion and
+forced-termination recovery test, and pins the actionable already-running copy.
+Packaged macOS acceptance launches a second Groot build against the occupied
+application-data root and requires a native **Groot is already open** warning,
+no visible second wallet window, a normal second-process exit after
+acknowledgement, and the original process remaining open and usable.
+
 Post-audit parser corpora exercise malformed, truncated, oversized, private-key,
 unsupported-required-parameter, precision, and encoding cases across PSBT,
 BIP21/payment requests, and public descriptors. BIP21 inspection is deliberately
@@ -78,7 +85,7 @@ Real native lifecycle acceptance uses `GROOT_REGTEST_APP_DATA_DIR` with a fresh 
 
 Multi-network packaged acceptance uses `GROOT_MULTI_NETWORK_APP_DATA_DIR` with a fresh `groot-multi-*` directory under that same canonical system temporary root. Unlike the Regtest-only override, this override preserves restart-bound switching among Regtest, Testnet4, and Mainnet while isolating every wallet registry, wallet directory, node setting, and saved network selection from the normal application profile. Rust accepts it only in a compiled multi-network build and rejects a relative path, another prefix, a symlink, or a non-directory. Never point it at an existing profile.
 
-`pnpm release:test:macos-lifecycle /absolute/path/to/Groot.app` uses a separate fresh `groot-regtest-packaged-lifecycle.*` profile. It proves the packaged process acquires the profile lock, a second packaged process fails with a stable understandable error, forced termination releases the OS lock without deleting the persistent lock file, and a new packaged process immediately reacquires it. This is reproducible unsigned-package evidence; Finder-visible presentation and the complete sleep/wake, clipboard, accessibility, capture, and crash-artifact review remain signed-candidate acceptance.
+`pnpm release:test:macos-lifecycle /absolute/path/to/Groot.app` uses a separate fresh `groot-regtest-packaged-lifecycle.*` profile. It proves the packaged process acquires the profile lock, a second packaged process remains alive awaiting acknowledgement instead of panicking, the original process remains alive, forced termination releases the OS lock without deleting the persistent lock file, and a new packaged process immediately reacquires it. This non-interactive harness terminates the warning process after observing that state; packaged UI acceptance separately verifies the native warning copy, hidden second wallet window, and normal exit after pressing **OK**. This is reproducible unsigned-package evidence; Finder-visible presentation and the complete sleep/wake, clipboard, accessibility, capture, and crash-artifact review remain signed-candidate acceptance.
 
 Secret-envelope units prove portable version-3 round trips, wrong-credential rejection, corrupt and oversized metadata rejection, and omission of device-key fields. Version-2 fixtures prove that credential and payload authentication precede an atomic migration, while wrong credentials and corrupt payloads leave the original bytes untouched. Node-auth units distinguish an untouched default configuration from a saved username/password configuration: only the latter requires a matching encrypted node-secret file. Browser E2E keeps a protected-storage denial locked, clears the submitted credential, and proves the field remains editable for an explicit retry. Platform adapters compile with the native app and are exercised in platform acceptance without returning test secrets to the webview.
 

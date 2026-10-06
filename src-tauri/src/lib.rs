@@ -1,5 +1,7 @@
 use serde::Serialize;
 use tauri::Manager as _;
+#[cfg(desktop)]
+use tauri_plugin_dialog::{DialogExt as _, MessageDialogButtons, MessageDialogKind};
 
 mod auth;
 pub mod bsms;
@@ -123,6 +125,17 @@ fn runtime_platform() -> RuntimePlatformDto {
     }
 }
 
+#[cfg(desktop)]
+fn present_already_running_dialog(app: &tauri::AppHandle) {
+    let handle = app.clone();
+    app.dialog()
+        .message("Close the currently running Groot window, then open this version again.")
+        .title("Groot is already open")
+        .kind(MessageDialogKind::Warning)
+        .buttons(MessageDialogButtons::OkCustom("OK".to_owned()))
+        .show(move |_| handle.exit(0));
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -130,8 +143,24 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
+            #[cfg(desktop)]
+            if let Some(window) = app.get_webview_window("main") {
+                window.hide()?;
+            }
             initialize_network(app.handle())?;
-            let lock = process_lock::ProcessLock::acquire_for_app(app.handle())?;
+            let lock = match process_lock::ProcessLock::acquire_for_app(app.handle()) {
+                Ok(lock) => lock,
+                Err(process_lock::ProcessLockError::AlreadyRunning) => {
+                    #[cfg(desktop)]
+                    {
+                        present_already_running_dialog(app.handle());
+                        return Ok(());
+                    }
+                    #[cfg(not(desktop))]
+                    return Err(process_lock::ProcessLockError::AlreadyRunning.into());
+                }
+                Err(error) => return Err(error.into()),
+            };
             app.manage(lock);
             #[cfg(desktop)]
             if let Some(window) = app.get_webview_window("main") {

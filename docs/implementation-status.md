@@ -9,6 +9,18 @@ diagnostic build identity. ADR 0082 authorizes the version through annotated tag
 frozen signed-HWI input, and Developer ID signing and Apple notarization pass.
 This release-governance change alters no wallet behavior or persisted format.
 
+The v0.5.1 startup follow-up preserves the application-root process lock while
+correcting second-launch presentation. Desktop startup keeps the new window
+hidden until lock acquisition succeeds. If another Groot process already owns
+the same wallet-data root, the second process now presents a native **Groot is
+already open** message instructing the user to close the running version and try
+again, then exits normally after acknowledgement. It no longer propagates the
+expected lock conflict into the Rust runtime panic that macOS presented as an
+unexpected quit. Groot does not terminate the existing process or weaken the
+lock. No wallet, profile, registry, proposal, backup, secret-envelope, database,
+or network-selection format changes; no migration is required, and BIP behavior
+is unchanged.
+
 ## Current release status — 2026-10-04
 
 Public v0.4.96 (`f7b4b993`) is Mainnet-ready and authorized for the macOS

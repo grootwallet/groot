@@ -281,6 +281,14 @@ mod tests {
     }
 
     #[test]
+    fn already_running_error_tells_the_user_how_to_recover() {
+        assert_eq!(
+            ProcessLockError::AlreadyRunning.to_string(),
+            "Groot is already open for this wallet data directory. Quit the other Groot process and try again."
+        );
+    }
+
+    #[test]
     fn rejects_non_directory_app_data_path() {
         let path = temporary_directory();
         File::create(&path).unwrap();
