@@ -434,23 +434,25 @@
       )}
     />
   {:else if devices.length}
-    <HardwareDeviceList
-      {devices}
-      emptyMessage=""
-      onselect={chooseDevice}
-      onrescan={scan}
-      showRescan
-      detailedStatus
-      {savedSigners}
-      {eligibleFingerprints}
-      {eligibleDeviceTypes}
-      {membershipOverrides}
-      policyUnverified={(device) =>
-        isMultisig &&
-        requiresPolicySetup(device) &&
-        !!device.fingerprint &&
-        !matchingPolicyVerification({ fingerprint: device.fingerprint }, policyVerifications)}
-    />
+    <div class="verification-device-list" class:with-error={Boolean(verifyError)}>
+      <HardwareDeviceList
+        {devices}
+        emptyMessage=""
+        onselect={chooseDevice}
+        onrescan={scan}
+        showRescan
+        detailedStatus
+        {savedSigners}
+        {eligibleFingerprints}
+        {eligibleDeviceTypes}
+        {membershipOverrides}
+        policyUnverified={(device) =>
+          isMultisig &&
+          requiresPolicySetup(device) &&
+          !!device.fingerprint &&
+          !matchingPolicyVerification({ fingerprint: device.fingerprint }, policyVerifications)}
+      />
+    </div>
   {:else}
     <HardwareDeviceEmptyState
       title={translate(
@@ -524,3 +526,9 @@
   }}
   onclose={closePin}
 />
+
+<style>
+  .verification-device-list.with-error {
+    margin-bottom: 10px;
+  }
+</style>

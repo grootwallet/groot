@@ -112,6 +112,9 @@ pub fn parse_import(
         return Err(ExternalSignerError::TooLarge);
     }
     reject_private_material(encoded)?;
+    if crate::wallet::validate_label_formatting(label).is_err() {
+        return Err(ExternalSignerError::InvalidLabel);
+    }
     let trimmed = encoded.trim();
     let (fingerprint, xpub, path) = if trimmed.starts_with('{') {
         let value: Value =
@@ -298,6 +301,11 @@ mod tests {
             Err(ExternalSignerError::PrivateMaterial)
         );
         let xpub = test_xpub();
+        let descriptor = format!("wpkh([d34db33f/84'/1'/0']{xpub}/<0;1>/*)");
+        assert_eq!(
+            parse_import(&descriptor, "Signer\u{e0020}hidden", SignerSource::File),
+            Err(ExternalSignerError::InvalidLabel)
+        );
         let bad = serde_json::json!({"fingerprint":"d34db33f","xpub":xpub,"path":"m/44'/1'/0'"});
         assert_eq!(
             parse_import(&bad.to_string(), "x", SignerSource::File),

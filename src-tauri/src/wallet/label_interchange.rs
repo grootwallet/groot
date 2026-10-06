@@ -801,7 +801,15 @@ mod tests {
             .code,
             "private_material_rejected"
         );
-        for label in ["line\nbreak", "zero\u{200b}width", "bidi\u{202e}override"] {
+        for label in [
+            "line\nbreak",
+            "zero\u{200b}width",
+            "bidi\u{202e}override",
+            "tag\u{e0020}hidden",
+            "separator\u{2029}hidden",
+            "filler\u{3164}hidden",
+            "variant\u{fe0f}hidden",
+        ] {
             let input = format!(
                 "{{\"type\":\"addr\",\"ref\":\"tb1qfixture\",\"label\":{}}}\n",
                 serde_json::to_string(label).unwrap()

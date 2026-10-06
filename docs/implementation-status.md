@@ -23,13 +23,14 @@ Sep 30 release-candidate picker follow-up applies the saved-wallet eligibility
 copy consistently to BIP84 signing, BIP48 signing, and receive verification. A
 fingerprint-less device from a family absent from the wallet is now a disabled
 **Not part of this wallet** row and cannot be selected to trigger unlock. An
-eligible same-family device remains **Unlock to identify** until the existing
-native exact fingerprint, derivation, and account-xpub proof succeeds; this is
-intentionally conservative for multiple devices and for BitBox02-family records,
-whose persisted public signer record names the HWI family rather than a hardware
-submodel. Hardware cancellation guidance is shortened to **Reject the request on
-the device.** No wallet, profile, registry, proposal, backup, descriptor, PSBT,
-transaction, or database format changes; no migration is required.
+eligible same-family device remains **Select to identify**, or **Unlock to
+identify** when a PIN step is known, until the existing native exact fingerprint,
+derivation, and account-xpub proof succeeds; this is intentionally conservative
+for multiple devices and for BitBox02-family records, whose persisted public
+signer record names the HWI family rather than a hardware submodel. Hardware
+cancellation guidance is shortened to **Reject the request on the device.** No
+wallet, profile, registry, proposal, backup, descriptor, PSBT, transaction, or
+database format changes; no migration is required.
 
 Sep 30 Model One crash correction addresses the two owner-observed process
 terminations in internal candidate `0881a194`. Both macOS crash reports end on a
@@ -1570,6 +1571,38 @@ acceleration preparation, a closed payment-destination set through Taproot v1,
 and wallet/purpose-bound secure-store v5. Authenticated v2/v3/v4 records migrate
 automatically and failure-atomically; migrated protected records cannot be read
 by v0.4.96 or older. Item 12 and every other report proposal remain deferred.
+
+The 2026-10-05 v0.5.0 reassessment found that the approved invisible-format
+label rule omitted Unicode TAG characters, format controls outside the original
+fixed list, line/paragraph separators, Hangul fillers, and variation selectors.
+New and imported permanent-payment and signer labels now reject those remaining
+classes at the Rust boundary. Existing persisted labels remain byte-for-byte
+unchanged and readable. This changes no descriptor, transaction, recovery,
+backup, or BIP support.
+
+Follow-up evidence on 2026-10-06 adds deterministic hostile corpora for PSBT,
+BIP21/payment-request, and public descriptor parsing. The corpora remain bounded
+and fail closed. BIP21 inspection intentionally preserves a syntactically valid
+amount above the Mainnet release ceiling; authoritative transaction preparation
+still rejects it through the existing integer-satoshi release policy, so no URI
+parser restriction was added. The same evidence found that two same-wallet
+metadata writes could bypass the operation lock during foreground sync and let a
+stale registry snapshot reintroduce a deleted registry entry. A dedicated
+metadata-mutation lock now serializes that fast path with every ordinary wallet
+operation while foreground sync retains its operations-only lock. Regression
+tests cover fast-path serialization and the rename/delete lifecycle boundary.
+This changes no UI, persisted format, transaction behavior, recovery behavior,
+or BIP support, and no migration is required.
+
+A disposable-key release-evidence verifier now proves a detached signature can
+bind the exact version, tag, commit, `SHA256SUMS`, and `PROVENANCE.json`, rejecting
+the wrong key, wrong version, and changed evidence. It introduces no production
+signing key or release-signing requirement. The multi-network temporary-root
+review also confirmed that the process lock restricts an existing same-owner
+directory to mode `0700` before wallet storage opens; a foreign-owned directory
+cannot be chmodded by the process and setup fails. These evidence additions do
+not change wallet behavior, persisted formats, transactions, recovery, or BIP
+support.
 
 Public v0.4.96 commit `f7b4b993` remains the latest published Mainnet release.
 ADR 0082 authorizes v0.5.0 once its annotated remote tag and `origin/main` bind

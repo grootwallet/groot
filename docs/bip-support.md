@@ -1,5 +1,11 @@
 # Bitcoin Improvement Proposal support
 
+The 2026-10-06 hardware-picker copy and spacing correction does not change BIP32
+identity proof, BIP48 descriptors, address derivation, PSBT handling, signing,
+recovery, interoperability, or persisted formats. It makes the existing passive
+discovery boundary explicit: an eligible fingerprint-less device must be selected
+before Rust can prove its saved account identity.
+
 The 2026-10-05 v0.5.0 release-version preparation changes build metadata only.
 It does not change supported BIPs, descriptors, derivation, transaction policy,
 signing, recovery, sync, or interoperability behavior.

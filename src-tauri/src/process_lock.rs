@@ -357,4 +357,23 @@ mod tests {
         drop(lock);
         fs::remove_dir_all(directory).unwrap();
     }
+
+    #[cfg(unix)]
+    #[test]
+    fn existing_app_data_directory_is_restricted_before_lock_use() {
+        use std::os::unix::fs::PermissionsExt as _;
+
+        let directory = temporary_directory();
+        fs::create_dir(&directory).unwrap();
+        fs::set_permissions(&directory, fs::Permissions::from_mode(0o777)).unwrap();
+
+        let lock = ProcessLock::acquire(&directory).unwrap();
+        assert_eq!(
+            fs::metadata(&directory).unwrap().permissions().mode() & 0o777,
+            0o700
+        );
+
+        drop(lock);
+        fs::remove_dir_all(directory).unwrap();
+    }
 }

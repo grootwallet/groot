@@ -2547,6 +2547,7 @@ pub fn external_signer_create(
             "Wallet names must contain 1 to 48 characters.",
         ));
     }
+    validate_label_formatting(&signer.label)?;
     validate_credential(credential.as_str())?;
     signer.validate().map_err(external_signer_api_error)?;
     require_mainnet_hardware_admission(

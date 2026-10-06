@@ -241,8 +241,7 @@ test('keeps multisig receive verification disclosure visibly expandable', async 
   await expect(details).not.toHaveAttribute('open', '');
   const lockedTrezor = dialog.getByRole('button', { name: /Virtual Trezor One/ });
   await expect(lockedTrezor).toBeEnabled();
-  await expect(lockedTrezor).toContainText('Locked');
-  await expect(lockedTrezor).toContainText(/wallet match unknown/i);
+  await expect(lockedTrezor).toContainText('Unlock to identify');
   await expect(dialog).not.toContainText('Wallet key candidate');
   const outsider = dialog.getByRole('button', { name: /Virtual Trezor Standard/ });
   await expect(outsider).toContainText('Not part of this wallet');

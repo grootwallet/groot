@@ -363,6 +363,8 @@ describe('hardware receive verification UI', () => {
     expect(verificationFlow).toContain('<WarningNotice');
     expect(verificationFlow).toContain('title={translate($locale, verifyErrorTitle)}');
     expect(verificationFlow).toContain("verifyErrorTitle = 'Signer is not part of this wallet'");
+    expect(verificationFlow).toContain('class:with-error={Boolean(verifyError)}');
+    expect(verificationFlow).toContain('.verification-device-list.with-error');
     expect(verificationFlow).not.toContain('<p class="form-error" role="alert">{verifyError}</p>');
     expect(verificationFlow).toContain('onclick={retryVerificationDevice}');
     expect(verificationFlow).toContain("translate($locale, 'Try this signer again')");

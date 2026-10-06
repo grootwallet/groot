@@ -1155,6 +1155,7 @@ fn metadata_operations_do_not_wait_for_the_selected_wallet_sync() {
 
     assert!(metadata_operation_guard(&state, wallet_id)
         .unwrap()
+        ._operation
         .is_none());
 }
 
@@ -1163,7 +1164,69 @@ fn metadata_operations_serialize_when_the_wallet_is_idle() {
     let state = AppState::default();
     assert!(metadata_operation_guard(&state, Uuid::new_v4())
         .unwrap()
+        ._operation
         .is_some());
+}
+
+#[test]
+fn metadata_fast_path_serializes_selected_wallet_mutations() {
+    use std::{sync::mpsc, time::Duration};
+
+    let state = AppState::default();
+    let wallet_id = Uuid::new_v4();
+    state
+        .foreground_sync
+        .lock()
+        .unwrap()
+        .replace(ActiveForegroundSync {
+            wallet_id,
+            cancel: Arc::new(AtomicBool::new(false)),
+            persisted_reads_safe: Arc::new(AtomicBool::new(true)),
+        });
+    let _sync_operation = state.operations.lock().unwrap();
+    let first = metadata_operation_guard(&state, wallet_id).unwrap();
+    let (sender, receiver) = mpsc::channel();
+
+    thread::scope(|scope| {
+        scope.spawn(|| {
+            let guard = metadata_operation_guard(&state, wallet_id).unwrap();
+            sender.send(guard._operation.is_none()).unwrap();
+        });
+        assert!(receiver.recv_timeout(Duration::from_millis(100)).is_err());
+        drop(first);
+        assert!(receiver.recv_timeout(Duration::from_secs(1)).unwrap());
+    });
+}
+
+#[test]
+fn ordinary_operations_wait_for_in_flight_metadata_mutations() {
+    use std::{sync::mpsc, time::Duration};
+
+    let state = AppState::default();
+    let wallet_id = Uuid::new_v4();
+    state
+        .foreground_sync
+        .lock()
+        .unwrap()
+        .replace(ActiveForegroundSync {
+            wallet_id,
+            cancel: Arc::new(AtomicBool::new(false)),
+            persisted_reads_safe: Arc::new(AtomicBool::new(true)),
+        });
+    let sync_operation = state.operations.lock().unwrap();
+    let metadata = metadata_operation_guard(&state, wallet_id).unwrap();
+    let (sender, receiver) = mpsc::channel();
+
+    thread::scope(|scope| {
+        scope.spawn(|| {
+            let _operation = operation_guard(&state).unwrap();
+            sender.send(()).unwrap();
+        });
+        drop(sync_operation);
+        assert!(receiver.recv_timeout(Duration::from_millis(100)).is_err());
+        drop(metadata);
+        receiver.recv_timeout(Duration::from_secs(1)).unwrap();
+    });
 }
 
 #[test]
@@ -4180,6 +4243,15 @@ fn labels_are_mandatory_and_bounded() {
         "invoice\u{202e}replacement",
         "invoice\u{2066}replacement",
         "invoice\u{feff}replacement",
+        "invoice\u{0600}replacement",
+        "invoice\u{2028}replacement",
+        "invoice\u{115f}replacement",
+        "invoice\u{3164}replacement",
+        "invoice\u{fe0f}replacement",
+        "invoice\u{e0001}replacement",
+        "invoice\u{e007f}replacement",
+        "invoice\u{e0100}replacement",
+        "invoice\u{e01ef}replacement",
     ] {
         assert_eq!(normalize_label(label).unwrap_err().code, "invalid_label");
     }
@@ -4484,6 +4556,18 @@ fn descriptor_backup_round_trips_and_reconstructs_a_stable_address() {
     assert_eq!(
         first_multisig_address(&validated.wallet).unwrap(),
         first_multisig_address(&backup.wallet).unwrap()
+    );
+}
+
+#[test]
+fn descriptor_backup_rejects_new_invisible_signer_labels() {
+    let mut backup = descriptor_backup();
+    backup.wallet.cosigners[0].label = "Signer\u{e0020}hidden".to_owned();
+    assert_eq!(
+        validate_multisig_backup(&serde_json::to_string(&backup).unwrap())
+            .unwrap_err()
+            .code,
+        "invalid_label"
     );
 }
 

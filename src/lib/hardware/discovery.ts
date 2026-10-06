@@ -82,7 +82,7 @@ export function hardwareWalletMembershipLabel(
     : membership === 'compatible'
       ? 'Select to confirm wallet'
       : membership === 'unknown'
-        ? 'Wallet match unknown'
+        ? 'Select to identify'
         : policyUnverified
           ? 'Policy unverified'
           : '';
@@ -96,9 +96,7 @@ export function hardwareDeviceStateLabel(
   if (membership === 'unrelated') return 'Not part of this wallet';
   if (membership === 'compatible') return 'Select to confirm wallet';
   if (membership === 'unknown') {
-    return device.action === 'prompt_pin'
-      ? 'Locked · wallet match unknown'
-      : 'Wallet match unknown';
+    return device.action === 'prompt_pin' ? 'Unlock to identify' : 'Select to identify';
   }
   if (policyUnverified) return 'Policy unverified';
   if (device.action === 'prompt_pin') return 'Locked';

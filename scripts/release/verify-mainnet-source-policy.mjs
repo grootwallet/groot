@@ -15,7 +15,7 @@ const pinnedPolicySources = new Map([
   ['src-tauri/src/session.rs', '82da6d3a2643710aaa0974f69f0fb7c932172a401ecf33c186e440c8170f35e0'],
   ['.env.mainnet', '1623f3f97de588daea2bbeae1f9c56ebc896b6bc2c22ac238563b46b688ced85'],
   ['.env.multi', '33fc3d5022968d9eaa25bfe749c0b01691c0570611a65255100718d2c50df723'],
-  ['package.json', 'a56d945f9492d816b62ca21d6122e5acf2a459fba803bf12397138795caf74f6'],
+  ['package.json', 'a99c2f13ea714048b36db818b1bb668fa07af50354ec276a9058b75151aa7903'],
   ['src-tauri/Cargo.toml', '3ac85270c95ddd07d5a765e109ee0c42fc28e0b700f3d96cd8952a0e4d1238ac'],
   ['src-tauri/tauri.conf.json', '5cdd4363213702bd4849bd6e202f47fa211132320a29d103640f98d552f764e5'],
   ['LICENSE', 'c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4'],
@@ -46,17 +46,17 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src-tauri/src/process_lock.rs',
-    '1efd78e068a904156422ffcb80c8fdc4ffe9bbe33eba510205e247065af26c60'
+    'ae80da370512f4b7027a6c05cf0f538437edc93e5b3a414b2fe0d7ed6e51d511'
   ],
   [
     'src-tauri/src/external_signer.rs',
-    '6d8bf6f37da304f302d84728a2775f85a825f34f8146f2ba590b26cd53fb56b4'
+    '5d280e028554b943f1d3c9e9addd0fe552ef30a80aaf1693f3728d0c8619a369'
   ],
   ['src-tauri/src/hardware.rs', '9557af47b7a5cbb0571b34e3721983bd5a4dd94d38c1866f9597cfd9435eab9a'],
   ['src-tauri/src/multisig.rs', 'f28d3422dff868c3afc458259ffd5a6e36f56b67b2924ce11e84098c0cba9e8d'],
   [
     'src-tauri/src/payjoin_support.rs',
-    '58e6d8d9dadc9a51174bbf4be8846c4fcd8535ce6007e8f89a03dd04356e0437'
+    '7bbd7fcca836ed2cee535c5cafe7281344ce66174346f88cac1d325a104789dc'
   ],
   ['src-tauri/src/recovery.rs', '96eba2aaea0461d8ed067513c044f85f8845837dbf584eb3f93e6969ec5670dc'],
   ['src-tauri/src/network.rs', 'dcf011fb789a0b690b1832a9245df5fc0199318f03a820d10f9a3b1c90f5d76b'],
@@ -69,8 +69,8 @@ const pinnedPolicySources = new Map([
     'src-tauri/src/native_backup/macos.rs',
     'bd019caa540dcf49428c3665c3ceb1e6c6699b2d53e33f4a6a51899194bb69ed'
   ],
-  ['src-tauri/src/proposal.rs', '9d90a4910b2c0cf91320c59e49f9a8e97e59fca4e4612edcc7dbee6fbaef63ba'],
-  ['src-tauri/src/wallet.rs', '72b53e5b7e6936ba105d613ae32703938c49700e002751894973eda3f56cd06a'],
+  ['src-tauri/src/proposal.rs', 'b450b07613edad8922bb54756d0152f551d714937a66065611124bcd80ecdc86'],
+  ['src-tauri/src/wallet.rs', '75891a98be0d02611c57a8add750b3590a4b147a6e0b0d18dbe52b1350930932'],
   [
     'src-tauri/src/wallet/diagnostics.rs',
     'e531480fd53ffa5db664d7a80c1bdf806351e648c0f09727cdde32fc0d24158a'
@@ -89,19 +89,19 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src-tauri/src/wallet/hardware_commands.rs',
-    '469fcbd64184a2ce11e8281705820bb2f12eb84bcdb0f978f9fefb3610c1b0fb'
+    '0c013a71d531d444ed0f5fe133ceb082b5445db7bb43fd57f035c03fe88771c5'
   ],
   [
     'src-tauri/src/wallet/label_interchange.rs',
-    '35283ce2685b0e8668a8ae7aeff07810369dabdce0805f8cc5a13053f1a85ce9'
+    '104ec552d91c45caacdfe97ef73bf3479793d1973aa93783d77593822d8d76c5'
   ],
   [
     'src-tauri/src/wallet/multisig_setup_commands.rs',
-    'aad571c2124db22a89e74709bb094fed3ede15d16816362a57e141658700f827'
+    'bd324a59434f11f8c448c8358d8a4a7dde280d27b4b137a9d246ae823c239076'
   ],
   [
     'src-tauri/src/wallet/multisig_proposal_commands.rs',
-    'f56e309dca709855fa7c8bc9f750dd6be291c8550a659d9778cb8af5c9cef3bb'
+    '6ea2d8b6a0e9cb690f418322ae66d0583630eb74215a7edea28c735e92ad332b'
   ],
   [
     'src-tauri/src/wallet/profile_commands.rs',

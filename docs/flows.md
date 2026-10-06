@@ -28,8 +28,9 @@ In existing-wallet hardware selection, scan results retain known non-wallet
 devices as disabled rows labelled **Not part of this wallet**. A locked or
 otherwise fingerprint-less device from a family absent from the saved wallet is
 likewise labelled and disabled without starting unlock. An unidentified device
-from an eligible family says **Unlock to identify** because multiple devices of
-that family cannot be distinguished until Rust reads the public identity.
+from an eligible family says **Select to identify** (or **Unlock to identify**
+when a PIN step is known) because devices of that family cannot be distinguished
+until Rust reads the public identity.
 Matching candidates have no explanatory
 subtitle; receive shows **Policy unverified** only when required policy evidence
 is absent. The receive picker retains every discovered family, including those
