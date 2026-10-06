@@ -53,6 +53,7 @@
     type AccelerationQuote,
     type CpfpAccelerationQuote,
     type HardwareDevice,
+    type HardwareIdentity,
     type MultisigProposal,
     type MultisigWallet,
     type PolicyVerificationAddress,
@@ -208,7 +209,9 @@
   const broadcastExplorerUrl = $derived(
     txid ? transactionExplorerUrl(defaultConfig.network, txid) : null
   );
-  let hardwareAction = $state<'scan' | 'sign'>('scan');
+  let hardwareAction = $state<'scan' | 'identify' | 'sign'>('scan');
+  let identifiedDevices = $state<Record<string, HardwareIdentity>>({});
+  let unrelatedDeviceIds = $state<string[]>([]);
   let hardwareAttentionSignal = $state(0),
     hardwareCancelRequested = $state(false);
   let hardwareScanGeneration = 0;
@@ -299,6 +302,15 @@
       })
     ),
     estimatedFee = $derived(quotedMaxFee ?? Math.ceil(selectedRateNumber * 220)),
+    amountFeedback = $derived(
+      !amount.trim()
+        ? ''
+        : !Number.isSafeInteger(amountSats) || amountSats <= 0
+          ? 'Enter an amount greater than zero in the selected unit.'
+          : amountSats + estimatedFee > available
+            ? 'Amount plus the estimated network fee exceeds your available balance. Check whether you entered BTC or sats.'
+            : ''
+    ),
     addressValid = $derived(hasAddressPrefixForNetwork(address, defaultConfig.network)),
     valid = $derived(
       addressValid &&
@@ -965,6 +977,10 @@
         accelerationRequest.method !== request.method
       )
         return;
+      if (cause instanceof WalletError && cause.code === 'transaction_confirmed') {
+        markAccelerationConfirmed();
+        return;
+      }
       accelerationQuoteFailed = true;
       feeEstimateError = accelerationUnavailableDescription(request.method, cause, $locale);
     }
@@ -1003,6 +1019,10 @@
       );
       accelerationRequest = null;
     } catch (cause) {
+      if (cause instanceof WalletError && cause.code === 'transaction_confirmed') {
+        markAccelerationConfirmed();
+        return;
+      }
       accelerationQuoteFailed = true;
       feeEstimateError = accelerationUnavailableDescription(request.method, cause, $locale);
       toast({
@@ -1033,8 +1053,7 @@
     updateAvailable();
   }
   function deviceHasSigned(device: HardwareDevice) {
-    const signer = savedSignerForDevice(device);
-    const fingerprint = device.fingerprint ?? signer?.fingerprint;
+    const fingerprint = identifiedDevices[device.id]?.fingerprint;
     return Boolean(
       fingerprint &&
       proposal?.signedFingerprints.some(
@@ -1044,7 +1063,7 @@
   }
   function savedSignerForDevice(device: HardwareDevice) {
     const candidates = savedSignerCandidatesForDevice(
-      device,
+      { ...device, fingerprint: identifiedDevices[device.id]?.fingerprint ?? device.fingerprint },
       wallet?.cosigners ?? [],
       proposal?.eligibleSignerFingerprints ?? []
     );
@@ -1086,6 +1105,8 @@
     if (accelerationConfirmed) return;
     const releaseHardwareReview = walletShell.beginHardwareReview();
     const generation = ++hardwareScanGeneration;
+    identifiedDevices = {};
+    unrelatedDeviceIds = [];
     deviceOpen = true;
     activeHardwareDevice = null;
     hardwareAction = 'scan';
@@ -1119,6 +1140,8 @@
     hardwareScanGeneration += 1;
     busy = false;
     deviceOpen = false;
+    identifiedDevices = {};
+    unrelatedDeviceIds = [];
     void walletService.cancelHardwareOperations(true).catch((cause) => {
       const description = localizedError(cause, $locale, 'Could not stop the hardware scan.');
       deviceError = description;
@@ -1140,13 +1163,15 @@
     deviceOpen = true;
   }
   async function handleHardware(device: HardwareDevice, pinResolved = false) {
+    if (unrelatedDeviceIds.includes(device.id)) return;
     if (
       hardwareWalletMembership(
         device,
         (wallet?.cosigners ?? []).map((signer) => signer.fingerprint),
         (wallet?.cosigners ?? [])
           .map((signer) => signer.deviceType)
-          .filter((deviceType): deviceType is string => Boolean(deviceType))
+          .filter((deviceType): deviceType is string => Boolean(deviceType)),
+        wallet?.cosigners ?? []
       ) === 'unrelated'
     )
       return;
@@ -1159,17 +1184,21 @@
       deviceError = device.message;
       return;
     }
+    if (!identifiedDevices[device.id]) {
+      await identifyHardware(device);
+      return;
+    }
     const signer = savedSignerForDevice(device);
     const signerCandidates = savedSignerCandidatesForDevice(
       device,
       wallet?.cosigners ?? [],
       proposal?.eligibleSignerFingerprints ?? []
     );
-    if (!device.fingerprint && !signer && requiresInteractivePolicyVerification(device)) {
+    if (!signer && requiresInteractivePolicyVerification(device)) {
       deviceError =
         signerCandidates.length > 1
-          ? 'More than one saved signer uses this device family. Unlock the intended device and rescan so Groot can bind its exact fingerprint.'
-          : 'Unlock this device and rescan so Groot can bind it to an eligible saved signer.';
+          ? 'More than one saved signer uses this device family. Select the intended signer to identify it.'
+          : 'This device did not match an eligible signer for this payment.';
       return;
     }
     if (
@@ -1213,6 +1242,36 @@
       return;
     }
     await sign(device);
+  }
+  async function identifyHardware(device: HardwareDevice) {
+    if (busy) return;
+    const releaseHardwareReview = walletShell.beginHardwareReview();
+    const generation = hardwareScanGeneration;
+    hardwareAction = 'identify';
+    busy = true;
+    deviceError = '';
+    try {
+      const identity = await walletService.identifySavedHardwareDevice(device.id);
+      if (generation !== hardwareScanGeneration || !deviceOpen) return;
+      identifiedDevices = { ...identifiedDevices, [device.id]: identity };
+      toast({
+        title: 'Signer identified',
+        description: translate($locale, '{signer} is ready.', { signer: identity.label }),
+        tone: 'success'
+      });
+    } catch (cause) {
+      if (generation !== hardwareScanGeneration) return;
+      if (await redirectExpiredHardwareSession(cause)) return;
+      if (cause instanceof WalletError && cause.code === 'unknown_signer') {
+        unrelatedDeviceIds = [...unrelatedDeviceIds, device.id];
+        deviceError = 'This signer is not part of this wallet.';
+      } else {
+        deviceError = localizedError(cause, $locale, 'Could not identify this signer.');
+      }
+    } finally {
+      releaseHardwareReview();
+      busy = false;
+    }
   }
   async function startHardwarePin(device: HardwareDevice) {
     const releaseHardwareReview = walletShell.beginHardwareReview();
@@ -2349,6 +2408,9 @@
                   >{/if}</small
               ></label
             >
+            {#if amountFeedback}<p class="send-amount-error" role="alert">
+                {translate($locale, amountFeedback)}
+              </p>{/if}
             {#if maxSpendActive}<p class="max-spend-guidance" role="status">
                 {translate(
                   $locale,
@@ -2788,180 +2850,212 @@
   onclose={closeHardwareScan}
   attentionSignal={hardwareAttentionSignal}
   upper
+  wide
 >
-  {#if proposal}
-    <section
-      class="hardware-review"
-      aria-label={translate($locale, 'Authoritative transaction details')}
-    >
-      {#if busy && policyReviewDevice && requiresInteractivePolicyVerification(policyReviewDevice)}<p
-          class="hardware-review-step"
+  <div class="single-hardware-signing-layout">
+    <div class="single-hardware-review-pane">
+      {#if proposal}
+        <section
+          class="hardware-review"
+          aria-label={translate($locale, 'Authoritative transaction details')}
         >
-          {translate($locale, 'Step 2 of 2 · Transaction review')}
-        </p>{/if}
-      <div class="hardware-review-amount">
-        <span>{translate($locale, 'You send')}</span><Amount
-          value={Number(proposal.amount)}
-          interactive
-        />
-      </div>
-      <dl class="details-list hardware-review-primary">
-        <div>
-          <dt>{translate($locale, 'To')}</dt>
-          <dd>
-            <button
-              type="button"
-              class="compact-address-button"
-              onclick={() => (hardwareAddressOpen = true)}
-              >{compactAddress(hardwareRecipient)}</button
+          {#if busy && policyReviewDevice && requiresInteractivePolicyVerification(policyReviewDevice)}<p
+              class="hardware-review-step"
             >
-          </dd>
-        </div>
-        <div class="label-details-row">
-          <dt>{translate($locale, 'Label')}</dt>
-          <dd><PermanentLabelTags labels={proposal.labels ?? [proposal.label]} prominent /></dd>
-        </div>
-        <div>
-          <dt>{translate($locale, 'Network')}</dt>
-          <dd>{proposal.network}</dd>
-        </div>
-        <div>
-          <dt>{translate($locale, 'Network fee')}</dt>
-          <dd><Amount value={Number(proposal.fee)} interactive /></dd>
-        </div>
-        <div class="total">
-          <dt>{translate($locale, 'Total')}</dt>
-          <dd><Amount value={Number(proposal.total)} interactive /></dd>
-        </div>
-      </dl>
-      {#if hardwareTestnetAddressDevice}<p class="verification-network-note">
-          {hardwareTestnetAddressDevice}
-          {translate($locale, 'shows the Regtest output with a')}
-          <code>{translate($locale, 'tb1')}</code>
-          {translate(
+              {translate($locale, 'Step 2 of 2 · Transaction review')}
+            </p>{/if}
+          <div class="hardware-review-amount">
+            <span>{translate($locale, 'You send')}</span><Amount
+              value={Number(proposal.amount)}
+              interactive
+            />
+          </div>
+          <dl class="details-list hardware-review-primary">
+            <div>
+              <dt>{translate($locale, 'To')}</dt>
+              <dd>
+                <button
+                  type="button"
+                  class="compact-address-button"
+                  onclick={() => (hardwareAddressOpen = true)}
+                  >{compactAddress(hardwareRecipient)}</button
+                >
+              </dd>
+            </div>
+            <div class="label-details-row">
+              <dt>{translate($locale, 'Label')}</dt>
+              <dd><PermanentLabelTags labels={proposal.labels ?? [proposal.label]} prominent /></dd>
+            </div>
+            <div>
+              <dt>{translate($locale, 'Network')}</dt>
+              <dd>{proposal.network}</dd>
+            </div>
+            <div>
+              <dt>{translate($locale, 'Network fee')}</dt>
+              <dd><Amount value={Number(proposal.fee)} interactive /></dd>
+            </div>
+            <div class="total">
+              <dt>{translate($locale, 'Total')}</dt>
+              <dd><Amount value={Number(proposal.total)} interactive /></dd>
+            </div>
+          </dl>
+          {#if hardwareTestnetAddressDevice}<p class="verification-network-note">
+              {hardwareTestnetAddressDevice}
+              {translate($locale, 'shows the Regtest output with a')}
+              <code>{translate($locale, 'tb1')}</code>
+              {translate(
+                $locale,
+                'prefix. Rust\n          supplied this alias only after proving it decodes to the identical Bitcoin output script.'
+              )}
+            </p>{/if}
+          <TransactionReviewDetails
+            {proposal}
+            compact
+            interactiveAmounts
+            policy={proposal.spendPath === 'delayed'
+              ? `${delayedSpendKeyName} only`
+              : wallet?.recoveryTemplate?.type === 'recovery'
+                ? '2 of 3 primary keys'
+                : `${wallet?.threshold} of ${wallet?.cosigners.length}`}
+            changeAddressOverride={hardwareChangeAddress}
+            onChangeAddress={() => (hardwareChangeAddressOpen = true)}
+          />
+        </section>
+      {/if}
+    </div>
+    <div class="single-hardware-device-pane">
+      {#if busy}
+        {#if policyReviewDevice && requiresInteractivePolicyVerification(policyReviewDevice)}<div
+            class="hardware-phase-reference"
+          >
+            <span
+              ><strong>{translate($locale, 'Device still showing the wallet policy?')}</strong
+              ><small
+                >{translate(
+                  $locale,
+                  'Return to the saved policy reference without interrupting this signing request.'
+                )}</small
+              ></span
+            ><Button variant="secondary" size="small" onclick={showPolicyDuringSigning}
+              >{translate($locale, 'View policy reference')}</Button
+            >
+          </div>{/if}
+        <HardwareActionPrompt
+          title={translate(
             $locale,
-            'prefix. Rust\n          supplied this alias only after proving it decodes to the identical Bitcoin output script.'
+            hardwareCancelRequested
+              ? 'Cancel on your hardware device'
+              : hardwareAction === 'identify'
+                ? 'Identifying signer'
+                : hardwareAction === 'sign'
+                  ? 'Check your hardware device'
+                  : 'Looking for hardware devices'
           )}
-        </p>{/if}
-      <TransactionReviewDetails
-        {proposal}
-        compact
-        interactiveAmounts
-        policy={proposal.spendPath === 'delayed'
-          ? `${delayedSpendKeyName} only`
-          : wallet?.recoveryTemplate?.type === 'recovery'
-            ? '2 of 3 primary keys'
-            : `${wallet?.threshold} of ${wallet?.cosigners.length}`}
-        changeAddressOverride={hardwareChangeAddress}
-        onChangeAddress={() => (hardwareChangeAddressOpen = true)}
-      />
-    </section>
-  {/if}
-  {#if busy}
-    {#if policyReviewDevice && requiresInteractivePolicyVerification(policyReviewDevice)}<div
-        class="hardware-phase-reference"
-      >
-        <span
-          ><strong>{translate($locale, 'Device still showing the wallet policy?')}</strong><small
+          detail={translate(
+            $locale,
+            hardwareCancelRequested
+              ? 'Reject the request on the device.'
+              : hardwareAction === 'identify'
+                ? 'Unlock or approve the public-key request on the selected device.'
+                : hardwareAction === 'sign'
+                  ? 'Review and approve on the device.'
+                  : 'Keep each signer connected and follow its prompts.'
+          )}
+          label={translate(
+            $locale,
+            hardwareCancelRequested
+              ? 'Waiting for hardware cancellation'
+              : hardwareAction === 'identify'
+                ? 'Waiting for signer identity'
+                : hardwareAction === 'sign'
+                  ? 'Waiting for hardware signature'
+                  : 'Hardware device scan in progress'
+          )}
+        />
+      {:else if devices.length === 0}
+        <div class="device-scan">
+          <strong>{translate($locale, 'No device found')}</strong><span
             >{translate(
               $locale,
-              'Return to the saved policy reference without interrupting this signing request.'
-            )}</small
-          ></span
-        ><Button variant="secondary" size="small" onclick={showPolicyDuringSigning}
-          >{translate($locale, 'View policy reference')}</Button
-        >
-      </div>{/if}
-    <HardwareActionPrompt
-      title={translate(
-        $locale,
-        hardwareCancelRequested
-          ? 'Cancel on your hardware device'
-          : hardwareAction === 'sign'
-            ? 'Check your hardware device'
-            : 'Looking for hardware devices'
-      )}
-      detail={translate(
-        $locale,
-        hardwareCancelRequested
-          ? 'Reject the request on the device.'
-          : hardwareAction === 'sign'
-            ? 'Review and approve on the device.'
-            : 'Keep each signer connected and follow its prompts.'
-      )}
-      label={translate(
-        $locale,
-        hardwareCancelRequested
-          ? 'Waiting for hardware cancellation'
-          : hardwareAction === 'sign'
-            ? 'Waiting for hardware signature'
-            : 'Hardware device scan in progress'
-      )}
-    />
-  {:else if devices.length === 0}
-    <div class="device-scan">
-      <strong>{translate($locale, 'No device found')}</strong><span
-        >{translate($locale, 'Connect an HWI-compatible device, or use signed PSBT import.')}</span
-      ><Button variant="secondary" onclick={scan}>{translate($locale, 'Scan again')}</Button>
+              'Connect an HWI-compatible device, or use signed PSBT import.'
+            )}</span
+          ><Button variant="secondary" onclick={scan}>{translate($locale, 'Scan again')}</Button>
+        </div>
+      {:else}
+        <HardwareDeviceList
+          {devices}
+          emptyMessage=""
+          onselect={handleHardware}
+          onrescan={scan}
+          showRescan
+          detailedStatus
+          savedSigners={wallet?.cosigners ?? []}
+          eligibleFingerprints={(wallet?.cosigners ?? []).map((signer) => signer.fingerprint)}
+          eligibleDeviceTypes={(wallet?.cosigners ?? [])
+            .map((signer) => signer.deviceType)
+            .filter((deviceType): deviceType is string => Boolean(deviceType))}
+          membershipOverrides={Object.fromEntries(
+            devices
+              .filter(
+                (device) => identifiedDevices[device.id] || unrelatedDeviceIds.includes(device.id)
+              )
+              .map((device) => [
+                device.id,
+                unrelatedDeviceIds.includes(device.id)
+                  ? ('unrelated' as const)
+                  : ('candidate' as const)
+              ])
+          )}
+          deviceDisplayName={(device) => identifiedDevices[device.id]?.label ?? device.label}
+          deviceSecondaryLabel={(device) => identifiedDevices[device.id]?.fingerprint ?? ''}
+          deviceDisabled={(device, membership) =>
+            membership === 'unrelated' ||
+            unrelatedDeviceIds.includes(device.id) ||
+            deviceHasSigned(device) ||
+            device.action === 'none' ||
+            policyRegistrationProfile(device).registration === 'unsupported'}
+          deviceStateLabel={(device, membership: HardwareWalletMembership) => {
+            const policyRequired = requiresPolicySetup(device);
+            const policyVerified = devicePolicyVerification(device);
+            if (deviceHasSigned(device)) return 'Already signed';
+            if (membership !== 'candidate') return hardwareDeviceStateLabel(device, membership);
+            if (identifiedDevices[device.id] && (!policyRequired || policyVerified)) return 'Ready';
+            if (
+              policyRegistrationProfile(device).registration === 'unsupported' ||
+              (policyRequired && !policyVerified)
+            ) {
+              return policyReadinessLabel(device, policyVerified);
+            }
+            return hardwareDeviceStateLabel(device, membership);
+          }}
+        />
+      {/if}
+      {#if !busy && showColdcardPolicyHelp}<div class="hardware-policy-help">
+          <strong>{translate($locale, 'Coldcard must know this wallet policy')}</strong><span
+            >{translate(
+              $locale,
+              'If it reports an unknown multisig wallet, import this public descriptor from Settings →\n        Multisig Wallets → Import.'
+            )}</span
+          ><Button variant="secondary" size="small" onclick={saveColdcardPolicy}
+            ><Download size={14} />{translate($locale, 'Save wallet policy')}</Button
+          >
+        </div>{/if}
+      {#if deviceError}<div class="hardware-inline-error" role="alert">
+          <AlertTriangle size={18} /><span
+            ><strong
+              >{translate(
+                $locale,
+                hardwareAction === 'identify'
+                  ? 'Signer identification failed'
+                  : 'This device could not sign'
+              )}</strong
+            ><small>{deviceError}</small></span
+          ><Button variant="secondary" size="small" onclick={scan}
+            >{translate($locale, 'Rescan')}</Button
+          >
+        </div>{/if}
     </div>
-  {:else}
-    <HardwareDeviceList
-      {devices}
-      emptyMessage=""
-      onselect={handleHardware}
-      onrescan={scan}
-      showRescan
-      detailedStatus
-      savedSigners={wallet?.cosigners ?? []}
-      eligibleFingerprints={(wallet?.cosigners ?? []).map((signer) => signer.fingerprint)}
-      eligibleDeviceTypes={(wallet?.cosigners ?? [])
-        .map((signer) => signer.deviceType)
-        .filter((deviceType): deviceType is string => Boolean(deviceType))}
-      membershipOverrides={Object.fromEntries(
-        devices.filter(deviceHasSigned).map((device) => [device.id, 'candidate' as const])
-      )}
-      deviceSecondaryLabel={(device) =>
-        device.fingerprint ??
-        (deviceHasSigned(device) ? (savedSignerForDevice(device)?.fingerprint ?? '') : '')}
-      deviceDisabled={(device, membership) =>
-        membership === 'unrelated' ||
-        deviceHasSigned(device) ||
-        device.action === 'none' ||
-        policyRegistrationProfile(device).registration === 'unsupported'}
-      deviceStateLabel={(device, membership: HardwareWalletMembership) => {
-        const policyRequired = requiresPolicySetup(device);
-        const policyVerified = devicePolicyVerification(device);
-        if (deviceHasSigned(device)) return 'Already signed';
-        if (membership !== 'candidate') return hardwareDeviceStateLabel(device, membership);
-        if (
-          policyRegistrationProfile(device).registration === 'unsupported' ||
-          (policyRequired && !policyVerified)
-        ) {
-          return policyReadinessLabel(device, policyVerified);
-        }
-        return hardwareDeviceStateLabel(device, membership);
-      }}
-    />
-  {/if}
-  {#if !busy && showColdcardPolicyHelp}<div class="hardware-policy-help">
-      <strong>{translate($locale, 'Coldcard must know this wallet policy')}</strong><span
-        >{translate(
-          $locale,
-          'If it reports an unknown multisig wallet, import this public descriptor from Settings →\n        Multisig Wallets → Import.'
-        )}</span
-      ><Button variant="secondary" size="small" onclick={saveColdcardPolicy}
-        ><Download size={14} />{translate($locale, 'Save wallet policy')}</Button
-      >
-    </div>{/if}
-  {#if deviceError}<div class="hardware-inline-error" role="alert">
-      <AlertTriangle size={18} /><span
-        ><strong>{translate($locale, 'This device could not sign')}</strong><small
-          >{deviceError}</small
-        ></span
-      ><Button variant="secondary" size="small" onclick={scan}
-        >{translate($locale, 'Rescan')}</Button
-      >
-    </div>{/if}
+  </div>
 </Modal>
 <Modal
   open={policyReviewOpen && !accelerationConfirmed}

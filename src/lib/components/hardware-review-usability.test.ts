@@ -190,8 +190,11 @@ describe('hardware signing review usability', () => {
   });
 
   it('unlocks a selected single-key Trezor before attempting to sign', () => {
-    expect(singleSend).toContain("if (device.action === 'prompt_pin' && !pinReady)");
+    expect(singleSend).toContain(
+      "if (device.action === 'prompt_pin' && !pinReady && !identifiedDevices[device.id])"
+    );
     expect(singleSend).toContain('await startHardwarePin(device)');
+    expect(singleSend).toContain('await identifyHardware(device)');
     expect(singleSend).toContain('walletService.promptHardwarePin(device.id)');
     expect(singleSend).toContain('if (!prompt.pinRequired)');
     expect(singleSend).toContain('await signHardware(device, true)');

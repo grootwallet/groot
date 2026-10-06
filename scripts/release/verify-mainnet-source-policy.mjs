@@ -10,7 +10,7 @@ const repoRoot = resolve(fileURLToPath(new URL('../../', import.meta.url)));
 const pinnedPolicySources = new Map([
   [
     'src-tauri/src/wallet/activity.rs',
-    '55f0b995153a10d44c58205895ccde3d53205079cdcf58bda28ca95b7d641669'
+    '03508eec340547946202d186aa38257e44084c65680f8ac84a9095815fc58705'
   ],
   ['src-tauri/src/session.rs', '82da6d3a2643710aaa0974f69f0fb7c932172a401ecf33c186e440c8170f35e0'],
   ['.env.mainnet', '1623f3f97de588daea2bbeae1f9c56ebc896b6bc2c22ac238563b46b688ced85'],
@@ -25,7 +25,7 @@ const pinnedPolicySources = new Map([
     'docs/mainnet-release-authorization.json',
     '474359c7a90ccc0fdc1f297ed9cdd4f7116207863b7de377bd62dbd1cc3e0703'
   ],
-  ['src-tauri/src/lib.rs', '5ee2d0c8142762c19be99a80ca4b4b12b334e13eee44c1d4de40314384c65dc2'],
+  ['src-tauri/src/lib.rs', '19dbeaae0dc6de6e8690f656aa78f149e109b6a2e616cc75d280dbd3cfc2e089'],
   [
     'src-tauri/src/managed_gateway.rs',
     '7e5bf0ab7c25346448e4423bab2e748de96684612230c38b797a075fef5866d0'
@@ -70,7 +70,7 @@ const pinnedPolicySources = new Map([
     'bd019caa540dcf49428c3665c3ceb1e6c6699b2d53e33f4a6a51899194bb69ed'
   ],
   ['src-tauri/src/proposal.rs', 'b450b07613edad8922bb54756d0152f551d714937a66065611124bcd80ecdc86'],
-  ['src-tauri/src/wallet.rs', '75891a98be0d02611c57a8add750b3590a4b147a6e0b0d18dbe52b1350930932'],
+  ['src-tauri/src/wallet.rs', '4132f0ae6adc0fe7736429ddc43209538a2a8974db2f413a404879984d9f793f'],
   [
     'src-tauri/src/wallet/diagnostics.rs',
     'e531480fd53ffa5db664d7a80c1bdf806351e648c0f09727cdde32fc0d24158a'
@@ -89,7 +89,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src-tauri/src/wallet/hardware_commands.rs',
-    '0c013a71d531d444ed0f5fe133ceb082b5445db7bb43fd57f035c03fe88771c5'
+    '663e152173082d4683fa3370af4046c7d623bf088ffca52f3e4e69eeb6fb60d5'
   ],
   [
     'src-tauri/src/wallet/label_interchange.rs',
@@ -121,7 +121,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src-tauri/src/wallet/transaction_commands.rs',
-    '8ea6a89b5fb7792881d17f14343cbdfb46189880e3ff316dc7909009663a6a34'
+    'aa4d20efeea380383543e3e2da62964b7cde781b885210788071f1e8be13c647'
   ],
   [
     'src-tauri/src/wallet/verification_evidence.rs',
@@ -207,14 +207,14 @@ const pinnedPolicySources = new Map([
     'src/lib/wallet/live-sync.ts',
     'a5c477820a08a6fda433fbf8c7ac9b0a2d36ede2e16593f0f0c3aebd6538a33c'
   ],
-  ['src/lib/wallet/tauri.ts', '0bb9d92cbd172624049f712f1b8d100058ded9a9615b54e886636476e4a3793b'],
+  ['src/lib/wallet/tauri.ts', '30802302cd851cda5bf4cee6967be47a48dcb30e98b1dc528c4e7ebc7ee535c0'],
   [
     'src/lib/wallet/contracts/errors.ts',
     'd5f7120ca3ea63a9f7f95c9e14b01b27dbcfb1dc52ac4974d6271963e8eff15f'
   ],
   [
     'src/lib/wallet/contracts/port.ts',
-    '4bb29c20cae8a0c10c4b03690da73a7afe79077ed39e4373b10ef125a848fe94'
+    '761dcdb5a73c91e5e61bd819b15104df2ee70287bf54940f9803bb0ca85fa73c'
   ],
   [
     'src/lib/wallet/contracts/runtime.ts',

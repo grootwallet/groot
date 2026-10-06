@@ -52,9 +52,7 @@ describe('hardware device display names', () => {
       )
     ).toBe('Unlock to identify');
     expect(hardwareDeviceStateLabel(device('safe3'), 'unrelated')).toBe('Not part of this wallet');
-    expect(hardwareDeviceStateLabel(device('model-one'), 'candidate')).toBe(
-      'Ready for this wallet'
-    );
+    expect(hardwareDeviceStateLabel(device('model-one'), 'candidate')).toBe('Select to identify');
   });
   it('never treats a locked device family as proof of wallet membership', () => {
     expect(hardwareWalletMembership(device('trezor'), ['aabbccdd'])).toBe('unknown');
@@ -75,6 +73,12 @@ describe('hardware device display names', () => {
     expect(hardwareWalletMembership(device('jade'), ['aabbccdd'], ['ledger'])).toBe('unrelated');
     expect(hardwareWalletMembership(device('trezor'), ['aabbccdd'], ['trezor'])).toBe('unknown');
     expect(hardwareWalletMembership(device('bitbox02_nova'), ['aabbccdd'], ['bitbox02'])).toBe(
+      'unknown'
+    );
+  });
+  it('keeps a fingerprintless approved device selectable when a saved public key has no device type', () => {
+    const manual = { fingerprint: 'aabbccdd', label: 'Imported signer', deviceType: null };
+    expect(hardwareWalletMembership(device('jade'), ['aabbccdd'], ['trezor'], [manual])).toBe(
       'unknown'
     );
   });

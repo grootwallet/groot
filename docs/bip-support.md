@@ -1,5 +1,15 @@
 # Bitcoin Improvement Proposal support
 
+The 2026-10-06 internal follow-up changes no BIP support, descriptor or PSBT
+encoding, derivation, recovery, or persisted wallet format. Selected hardware
+send signers receive the existing BIP32/BIP48/BIP84 saved-account proof before
+the UI shows their fingerprint and **Ready**; signature validation remains
+authoritative in Rust. Public-key imports without a saved device type can use
+the same exact-path BIP32 account proof; a model guess alone is insufficient.
+CPFP confirmation-race copy, observed-versus-block time,
+amount feedback, and modal layout are presentation or error-classification
+changes, not protocol changes.
+
 The 2026-10-06 hardware-picker copy and spacing correction does not change BIP32
 identity proof, BIP48 descriptors, address derivation, PSBT handling, signing,
 recovery, interoperability, or persisted formats. It makes the existing passive

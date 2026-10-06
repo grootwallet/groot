@@ -40,6 +40,16 @@ establishes membership by itself.
 Native saved-account proof still gates receive display, policy authorization,
 and signing. This does not change initial key enrollment, where no saved wallet
 membership exists yet.
+On the hardware send picker, selecting an eligible device performs an explicit
+exact-path account-key proof. Only a successful match reveals its saved
+fingerprint and **Ready**; a nonmatching device becomes **Not part of this wallet**.
+Passive scan alone never claims readiness. Signing still rechecks the live
+identity and reviewed proposal. The multisig cable-signing modal places its
+signer list beside the transaction review on desktop and stacks it on narrow
+screens.
+For a signer whose public key was imported without a saved USB device type,
+the selected approved device remains only a candidate until Rust matches its
+fresh exact-path account key to the saved fingerprint and complete xpub.
 
 ## App logs
 

@@ -1167,6 +1167,7 @@ pub struct TransactionDto {
     status: String,
     confirmations: u32,
     date: String,
+    block_timestamp: Option<String>,
     address: Option<String>,
     label: String,
     intent_label: Option<PermanentLabelDto>,
@@ -1483,6 +1484,13 @@ pub struct CosignerHealthDto {
     status: &'static str,
     checked_at: String,
     summary: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HardwareIdentityDto {
+    fingerprint: String,
+    label: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -6006,6 +6014,7 @@ fn apply_replacement_history(
                 status: "replaced".to_owned(),
                 confirmations: 0,
                 date: row.get::<_, u64>(11)?.to_string(),
+                block_timestamp: None,
                 address: row.get(7)?,
                 label: row.get(8)?,
                 intent_label: None,
@@ -7245,7 +7254,9 @@ fn confirmations(
         ChainPosition::Confirmed { anchor, .. } => (
             tip.saturating_sub(anchor.block_id.height).saturating_add(1),
             Some(anchor.block_id.height),
-            anchor.confirmation_time.to_string(),
+            fallback_first_seen
+                .unwrap_or(anchor.confirmation_time)
+                .to_string(),
         ),
         ChainPosition::Unconfirmed { first_seen, .. } => (
             0,

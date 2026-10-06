@@ -17,6 +17,25 @@ export type { MessageValues, Translation, CatalogSection } from './locales/types
 // translations makes reviews able to compare meaning without chasing opaque IDs.
 // User data and protocol identifiers must never be passed through this catalog.
 export const copyCatalog = {
+  'Block time': { fr: 'Heure du bloc', es: 'Hora del bloque' },
+  'Block timestamp': { fr: 'Horodatage du bloc', es: 'Marca de tiempo del bloque' },
+  'First seen': { fr: 'Première observation', es: 'Primera detección' },
+  identify: { fr: 'identifier', es: 'identificar' },
+  'Identifying signer': { fr: 'Identification du signataire', es: 'Identificando al firmante' },
+  'Signer identification failed': {
+    fr: 'Échec de l’identification du signataire',
+    es: 'No se pudo identificar al firmante'
+  },
+  'Signer identified': { fr: 'Signataire identifié', es: 'Firmante identificado' },
+  '{signer} is ready.': { fr: '{signer} est prêt.', es: '{signer} está listo.' },
+  'Unlock or approve the public-key request on the selected device.': {
+    fr: 'Déverrouillez ou approuvez la demande de clé publique sur l’appareil sélectionné.',
+    es: 'Desbloquea o aprueba la solicitud de clave pública en el dispositivo seleccionado.'
+  },
+  'Waiting for signer identity': {
+    fr: 'En attente de l’identité du signataire',
+    es: 'Esperando la identidad del firmante'
+  },
   ...settingsCopy,
   ...onboardingCopy,
   ...componentCopy,

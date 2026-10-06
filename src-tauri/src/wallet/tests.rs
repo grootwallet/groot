@@ -1267,6 +1267,25 @@ fn transaction_observation_time_is_stable_across_snapshot_refreshes() {
 }
 
 #[test]
+fn confirmed_activity_prefers_first_observation_over_future_block_time() {
+    let anchor = ConfirmationBlockTime {
+        block_id: BlockId {
+            height: 100,
+            hash: BlockHash::from_byte_array([7; 32]),
+        },
+        confirmation_time: 500,
+    };
+    let position = ChainPosition::Confirmed {
+        anchor,
+        transitively: None,
+    };
+    let (count, block, displayed_time) = confirmations(&position, 100, Some(300));
+    assert_eq!(count, 1);
+    assert_eq!(block, Some(100));
+    assert_eq!(displayed_time, "300");
+}
+
+#[test]
 fn coldcard_policy_acknowledgement_is_serialized_before_authorization() {
     let source = include_str!("../wallet.rs");
     let command = source
@@ -3050,6 +3069,38 @@ fn cpfp_uses_core_mempool_fee_when_an_incoming_parent_has_unknown_inputs() {
     })
     .unwrap_err();
     assert_eq!(unavailable.code, "acceleration_unavailable");
+}
+
+#[test]
+fn cpfp_missing_parent_distinguishes_confirmed_from_unknown() {
+    let confirmed = cpfp_parent_missing_from_mempool(true);
+    assert_eq!(confirmed.code, "transaction_confirmed");
+    assert!(!confirmed.message.contains("Bitcoin Core"));
+
+    let unknown = cpfp_parent_missing_from_mempool(false);
+    assert_eq!(unknown.code, "acceleration_unavailable");
+    assert!(unknown
+        .message
+        .contains("may have confirmed or left the mempool"));
+    assert!(!unknown.message.contains("Bitcoin Core"));
+}
+
+#[test]
+fn hardware_identity_requires_wallet_unlock_before_saved_signer_read() {
+    let source = include_str!("hardware_commands.rs");
+    let command = source
+        .split("pub async fn hardware_identify_saved_device(")
+        .nth(1)
+        .unwrap()
+        .split("#[tauri::command]")
+        .next()
+        .unwrap();
+    let unlock = command
+        .find("begin_unlocked_user_operation(&app, &state)")
+        .unwrap();
+    let metadata = command.find("read_multisig_metadata(&app)").unwrap();
+    assert!(unlock < metadata);
+    assert!(command.contains("selected.id != initiating_wallet_id"));
 }
 
 #[test]
@@ -5022,6 +5073,7 @@ fn synced_snapshots_enqueue_received_and_first_confirmation_events_once() {
         .to_owned(),
         confirmations,
         date: "1".to_owned(),
+        block_timestamp: None,
         address: Some("bcrt1qnotificationfixture".to_owned()),
         label: "Test deposit".to_owned(),
         block: (confirmations > 0).then_some(1),
@@ -5196,6 +5248,7 @@ fn transaction_dto_serializes_authoritative_detail_fields() {
         status: "pending".to_owned(),
         confirmations: 0,
         date: "1".to_owned(),
+        block_timestamp: None,
         address: None,
         label: "Self-spend".to_owned(),
         block: None,
@@ -5255,6 +5308,7 @@ fn replacement_history_collapses_a_confirmed_replacement_into_one_payment_row() 
         status: "confirmed".to_owned(),
         confirmations: 1,
         date: "2".to_owned(),
+        block_timestamp: None,
         address: Some("bcrt1qfixture".to_owned()),
         label: "Original payment".to_owned(),
         block: Some(101),
@@ -5328,6 +5382,7 @@ fn replacement_history_keeps_a_canonical_original_counted_when_it_wins_the_race(
         status: "confirmed".to_owned(),
         confirmations: 42,
         date: "3".to_owned(),
+        block_timestamp: None,
         address: Some("bcrt1qfixture".to_owned()),
         label: "Original payment".to_owned(),
         block: Some(101),
@@ -5772,6 +5827,7 @@ fn prepared_wallet_proposal_and_acceleration_roll_back_as_one_unit() {
         status: "pending".into(),
         confirmations: 0,
         date: "1".into(),
+        block_timestamp: None,
         address: Some("bcrt1qoriginalfixture".into()),
         label: "Original".into(),
         block: None,

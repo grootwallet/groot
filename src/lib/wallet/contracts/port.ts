@@ -4,6 +4,7 @@ import type { CosignerDraft, PolicyDraft } from '$lib/multisig/policy';
 import type {
   HardwareDevice,
   HardwarePinPrompt,
+  HardwareIdentity,
   ExternalSigner,
   ExternalSignerBackup,
   ExternalSignerSource,
@@ -181,6 +182,7 @@ export interface WalletHardwarePort {
   }): Promise<HardwareDevice>;
   promptHardwarePin(deviceId: string): Promise<HardwarePinPrompt>;
   sendHardwarePin(challengeId: string, pinPositions: string): Promise<void>;
+  identifySavedHardwareDevice(deviceId: string): Promise<HardwareIdentity>;
   checkHardwareCosigner(
     cosigner: CosignerDraft,
     deviceId: string,

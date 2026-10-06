@@ -776,16 +776,45 @@ pub(crate) fn cpfp_parent_fee(
     })?;
     let wallet_fee = wallet.calculate_fee(parent.tx_node.tx.as_ref()).ok();
     resolve_cpfp_parent_fee(wallet_fee, || {
-        let entry = rpc_client(app, state)?
-            .get_mempool_entry(&parent_txid)
-            .map_err(|_| {
-                api_error(
-                    "acceleration_unavailable",
-                    "Bitcoin Core could not find this unconfirmed transaction. Update the wallet and try again.",
-                )
-            })?;
+        let rpc = rpc_client(app, state)?;
+        let entry = rpc.get_mempool_entry(&parent_txid).map_err(|error| {
+            if matches!(
+                &error,
+                CoreRpcError::JsonRpc(jsonrpc::Error::Rpc(response)) if response.code == -5
+            ) {
+                let confirmed = rpc
+                    .get_raw_transaction_info(&parent_txid, None)
+                    .ok()
+                    .is_some_and(|transaction| {
+                        transaction.txid == parent_txid
+                            && transaction.confirmations.unwrap_or_default() > 0
+                            && transaction.in_active_chain == Some(true)
+                    });
+                if confirmed {
+                    cpfp_parent_missing_from_mempool(true)
+                } else {
+                    cpfp_parent_missing_from_mempool(false)
+                }
+            } else {
+                rpc_api_error(error)
+            }
+        })?;
         Ok(entry.fees.base)
     })
+}
+
+pub(crate) fn cpfp_parent_missing_from_mempool(confirmed: bool) -> ApiError {
+    if confirmed {
+        api_error(
+            "transaction_confirmed",
+            "This transaction has confirmed. CPFP is no longer needed.",
+        )
+    } else {
+        api_error(
+            "acceleration_unavailable",
+            "This transaction is no longer available for CPFP. It may have confirmed or left the mempool. Update the wallet and try again.",
+        )
+    }
 }
 
 pub(crate) fn summarize_payment_psbt(

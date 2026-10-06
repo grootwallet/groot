@@ -700,15 +700,16 @@ describe('hardware receive verification UI', () => {
     expect(signing).toContain('deviceError = hardwareCancelRequested');
   });
 
-  it('keeps locked signer matching fail-closed while allowing one eligible device family', () => {
+  it('requires selected-device identity proof before calling a signer ready', () => {
     expect(multisigSend).toContain('savedSignerCandidatesForDevice(');
     expect(multisigSend).toContain('candidates.length === 1 ? candidates[0] : null');
+    expect(multisigSend).toContain('await walletService.identifySavedHardwareDevice(device.id)');
+    expect(multisigSend).toContain("cause.code === 'unknown_signer'");
     expect(multisigSend).toContain(
-      'More than one saved signer uses this device family. Unlock the intended device and rescan'
+      'identifiedDevices[device.id] && (!policyRequired || policyVerified)'
     );
-    expect(multisigSend).toContain(
-      'Unlock this device and rescan so Groot can bind it to an eligible saved signer.'
-    );
+    expect(singleKeySend).toContain('await walletService.identifySavedHardwareDevice(device.id)');
+    expect(singleKeySend).toContain("? 'Ready'");
   });
 
   it('turns hardware-signing close requests into visible on-device cancellation guidance', () => {

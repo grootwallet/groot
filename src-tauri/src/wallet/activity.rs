@@ -15,6 +15,7 @@ mod tests {
                 status: if i < 4 { "pending" } else { "confirmed" }.into(),
                 confirmations: if i < 4 { 0 } else { 1 },
                 date: (1000 + i / 2).to_string(),
+                block_timestamp: None,
                 address: None,
                 label: if i == 119 { "Épargne" } else { "Synthetic" }.into(),
                 intent_label: None,
@@ -612,6 +613,12 @@ pub(super) fn transactions_from(
             .to_owned(),
             confirmations,
             date,
+            block_timestamp: match &tx.chain_position {
+                ChainPosition::Confirmed { anchor, .. } => {
+                    Some(anchor.confirmation_time.to_string())
+                }
+                ChainPosition::Unconfirmed { .. } => None,
+            },
             address,
             label,
             intent_label,

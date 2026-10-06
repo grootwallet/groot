@@ -220,9 +220,22 @@
     {/if}
     <dl class="details-list transaction-summary-list">
       <div>
-        <dt>{translate($locale, 'Date')}</dt>
+        <dt>
+          {translate(
+            $locale,
+            transaction.blockTimestamp && transaction.date !== transaction.blockTimestamp
+              ? 'First seen'
+              : transaction.blockTimestamp
+                ? 'Block time'
+                : 'Date'
+          )}
+        </dt>
         <dd><LocalTimestamp value={transaction.date} /></dd>
       </div>
+      {#if transaction.blockTimestamp && transaction.date !== transaction.blockTimestamp}<div>
+          <dt>{translate($locale, 'Block timestamp')}</dt>
+          <dd><LocalTimestamp value={transaction.blockTimestamp} /></dd>
+        </div>{/if}
       <div>
         <dt>{translate($locale, 'Confirmations')}</dt>
         <dd>{transaction.confirmations}</dd>

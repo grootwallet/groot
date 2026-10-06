@@ -53,6 +53,7 @@
     type ExternalSignerWallet,
     type FeeEstimates,
     type HardwareDevice,
+    type HardwareIdentity,
     type MultisigProposal,
     type PaymentProposal,
     type WalletErrorCode
@@ -87,6 +88,7 @@
     accelerationUnavailableTitle,
     coldcardDefaultFeeLimitExceededPercent
   } from '$lib/wallet/acceleration-presentation';
+  import { hardwareDeviceStateLabel, type HardwareWalletMembership } from '$lib/hardware/discovery';
   import {
     automaticStrategyMessage,
     presentedCoinSelection,
@@ -211,7 +213,9 @@
     pinErrorCode = $state<WalletErrorCode | ''>(''),
     pinDevice = $state<HardwareDevice | null>(null);
   let importError = $state('');
-  let hardwareAction = $state<'scan' | 'sign'>('scan');
+  let hardwareAction = $state<'scan' | 'identify' | 'sign'>('scan');
+  let identifiedDevices = $state<Record<string, HardwareIdentity>>({});
+  let unrelatedDeviceIds = $state<string[]>([]);
   let hardwareAttentionSignal = $state(0),
     hardwareCancelRequested = $state(false);
   const selection = $derived<CoinSelection>(
@@ -245,6 +249,15 @@
   );
   const fee = $derived(
     Number(proposal?.fee ?? quotedMaxFee ?? Math.max(0, Math.round(selectedFeeRate * 141)))
+  );
+  const amountFeedback = $derived(
+    !amount.trim()
+      ? ''
+      : !Number.isSafeInteger(amountSats) || amountSats <= 0
+        ? 'Enter an amount greater than zero in the selected unit.'
+        : amountSats + fee > available
+          ? 'Amount plus the estimated network fee exceeds your available balance. Check whether you entered BTC or sats.'
+          : ''
   );
   const addressValid = $derived(hasAddressPrefixForNetwork(address, defaultConfig.network));
   const valid = $derived(
@@ -769,6 +782,10 @@
         accelerationRequest.method !== request.method
       )
         return;
+      if (cause instanceof WalletError && cause.code === 'transaction_confirmed') {
+        markAccelerationConfirmed();
+        return;
+      }
       accelerationQuoteFailed = true;
       feeEstimateError = accelerationUnavailableDescription(request.method, cause, $locale);
     }
@@ -812,6 +829,10 @@
       accelerationRequest = null;
       step = 2;
     } catch (cause) {
+      if (cause instanceof WalletError && cause.code === 'transaction_confirmed') {
+        markAccelerationConfirmed();
+        return;
+      }
       accelerationQuoteFailed = true;
       feeEstimateError = accelerationUnavailableDescription(request.method, cause, $locale);
       toast({
@@ -957,6 +978,8 @@
     if (!(await hardwareSessionIsUnlocked())) return;
     const releaseHardwareReview = walletShell.beginHardwareReview();
     const generation = ++hardwareScanGeneration;
+    identifiedDevices = {};
+    unrelatedDeviceIds = [];
     clearSigningTransportError();
     deviceOpen = true;
     hardwareAction = 'scan';
@@ -983,6 +1006,8 @@
       return;
     }
     hardwareScanGeneration += 1;
+    identifiedDevices = {};
+    unrelatedDeviceIds = [];
     broadcasting = false;
     deviceOpen = false;
     void walletService.cancelHardwareOperations(true).catch((cause) => {
@@ -1065,8 +1090,13 @@
   async function signHardware(device: HardwareDevice, pinReady = false) {
     if (accelerationConfirmed || broadcasting) return;
     if (!proposal || !externalProposal) return;
-    if (device.action === 'prompt_pin' && !pinReady) {
+    if (unrelatedDeviceIds.includes(device.id)) return;
+    if (device.action === 'prompt_pin' && !pinReady && !identifiedDevices[device.id]) {
       await startHardwarePin(device);
+      return;
+    }
+    if (!identifiedDevices[device.id]) {
+      await identifyHardware(device);
       return;
     }
     const releaseHardwareReview = walletShell.beginHardwareReview();
@@ -1092,6 +1122,35 @@
       releaseHardwareReview();
       broadcasting = false;
       hardwareCancelRequested = false;
+    }
+  }
+  async function identifyHardware(device: HardwareDevice) {
+    const releaseHardwareReview = walletShell.beginHardwareReview();
+    const generation = hardwareScanGeneration;
+    hardwareAction = 'identify';
+    broadcasting = true;
+    deviceError = '';
+    try {
+      const identity = await walletService.identifySavedHardwareDevice(device.id);
+      if (generation !== hardwareScanGeneration || !deviceOpen) return;
+      identifiedDevices = { ...identifiedDevices, [device.id]: identity };
+      toast({
+        title: 'Signer identified',
+        description: translate($locale, '{signer} is ready.', { signer: identity.label }),
+        tone: 'success'
+      });
+    } catch (cause) {
+      if (generation !== hardwareScanGeneration) return;
+      if (await redirectExpiredHardwareSession(cause)) return;
+      if (cause instanceof WalletError && cause.code === 'unknown_signer') {
+        unrelatedDeviceIds = [...unrelatedDeviceIds, device.id];
+        deviceError = 'This signer is not part of this wallet.';
+      } else {
+        deviceError = localizedError(cause, $locale, 'Could not identify this signer.');
+      }
+    } finally {
+      releaseHardwareReview();
+      broadcasting = false;
     }
   }
   async function importSigned() {
@@ -1679,6 +1738,9 @@
                   >{/if}</small
               ></label
             >
+            {#if amountFeedback}<p class="send-amount-error" role="alert">
+                {translate($locale, amountFeedback)}
+              </p>{/if}
             {#if maxSpendActive}<p class="max-spend-guidance" role="status">
                 {translate(
                   $locale,
@@ -2320,30 +2382,58 @@
             $locale,
             hardwareCancelRequested
               ? 'Cancel on your hardware device'
-              : hardwareAction === 'sign'
-                ? 'Check your hardware device'
-                : 'Looking for hardware devices'
+              : hardwareAction === 'identify'
+                ? 'Identifying signer'
+                : hardwareAction === 'sign'
+                  ? 'Check your hardware device'
+                  : 'Looking for hardware devices'
           )}
           detail={translate(
             $locale,
             hardwareCancelRequested
               ? 'Reject the request on the device.'
-              : hardwareAction === 'sign'
-                ? 'Review and approve on the device.'
-                : 'Keep the signer connected and follow its prompts.'
+              : hardwareAction === 'identify'
+                ? 'Unlock or approve the public-key request on the selected device.'
+                : hardwareAction === 'sign'
+                  ? 'Review and approve on the device.'
+                  : 'Keep the signer connected and follow its prompts.'
           )}
           label={translate(
             $locale,
             hardwareCancelRequested
               ? 'Waiting for hardware cancellation'
-              : hardwareAction === 'sign'
-                ? 'Waiting for hardware signature'
-                : 'Hardware device scan in progress'
+              : hardwareAction === 'identify'
+                ? 'Waiting for signer identity'
+                : hardwareAction === 'sign'
+                  ? 'Waiting for hardware signature'
+                  : 'Hardware device scan in progress'
           )}
         />{:else}<HardwareDeviceList
           {devices}
           savedSigners={externalWallet ? [externalWallet.signer] : []}
           detailedStatus={Boolean(externalWallet)}
+          membershipOverrides={Object.fromEntries(
+            devices
+              .filter(
+                (device) => identifiedDevices[device.id] || unrelatedDeviceIds.includes(device.id)
+              )
+              .map((device) => [
+                device.id,
+                unrelatedDeviceIds.includes(device.id)
+                  ? ('unrelated' as const)
+                  : ('candidate' as const)
+              ])
+          )}
+          deviceDisplayName={(device) => identifiedDevices[device.id]?.label ?? device.label}
+          deviceSecondaryLabel={(device) => identifiedDevices[device.id]?.fingerprint ?? ''}
+          deviceDisabled={(device, membership) =>
+            membership === 'unrelated' ||
+            unrelatedDeviceIds.includes(device.id) ||
+            device.action === 'none'}
+          deviceStateLabel={(device, membership: HardwareWalletMembership) =>
+            identifiedDevices[device.id] && membership === 'candidate'
+              ? 'Ready'
+              : hardwareDeviceStateLabel(device, membership)}
           emptyMessage={translate(
             $locale,
             'Connect the signer and scan again. If another wallet app is open, quit it so Groot can use USB.'
@@ -2353,9 +2443,14 @@
           showRescan
         />{/if}{#if deviceError}<div class="hardware-inline-error" role="alert">
           <AlertTriangle size={18} /><span
-            ><strong>{translate($locale, 'Hardware signing failed')}</strong><small
-              >{deviceError}</small
-            ></span
+            ><strong
+              >{translate(
+                $locale,
+                hardwareAction === 'identify'
+                  ? 'Signer identification failed'
+                  : 'Hardware signing failed'
+              )}</strong
+            ><small>{deviceError}</small></span
           ><Button variant="secondary" size="small" onclick={scanHardware}
             >{translate($locale, 'Rescan')}</Button
           >

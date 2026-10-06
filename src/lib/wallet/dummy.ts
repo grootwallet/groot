@@ -1277,6 +1277,26 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     this._trezorPinUnlocked = true;
   }
   async cancelHardwareOperations(_preserveMainnetAdmission = false) {}
+  async identifySavedHardwareDevice(deviceId: string) {
+    const device = (await this.listHardwareDevices()).find(
+      (candidate) => candidate.id === deviceId
+    );
+    const fingerprint = device?.fingerprint?.toLowerCase();
+    if (!fingerprint)
+      throw new WalletError('hardware_unavailable', 'Unlock this signer, then identify it again.');
+    const kind = this._profiles.find((profile) => profile.id === this._selectedWalletId)?.kind;
+    const saved =
+      kind === 'multisig'
+        ? this._multisig?.cosigners.find(
+            (signer) => signer.fingerprint.toLowerCase() === fingerprint
+          )
+        : kind === 'watch_only' &&
+            this._externalWallet?.signer.fingerprint.toLowerCase() === fingerprint
+          ? this._externalWallet.signer
+          : null;
+    if (!saved) throw new WalletError('unknown_signer', 'This signer is not part of this wallet.');
+    return { fingerprint, label: saved.label };
+  }
   async checkHardwareCosigner(
     cosigner: PolicyDraft['cosigners'][number],
     deviceId: string,

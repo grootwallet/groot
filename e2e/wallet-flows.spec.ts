@@ -826,7 +826,7 @@ test('creates an external-signer wallet, signs by cable, and configures its isol
   await expect(addressDetails).not.toHaveAttribute('open', '');
   await expect(
     verificationDialog.getByRole('button', { name: /^Travel signing key / })
-  ).toContainText('Ready');
+  ).toContainText('Select to identify');
   await expect(
     page.locator('.address-label').getByText('Not verified', { exact: true })
   ).toBeVisible();
@@ -987,6 +987,10 @@ test('creates an external-signer wallet, signs by cable, and configures its isol
   await hardwareReview.getByText('View more details', { exact: true }).click();
   await expect(hardwareReview.getByText('Fee rate', { exact: true })).toBeVisible();
   await expect(hardwareReview.getByText('Transaction inputs', { exact: true })).toHaveCount(0);
+  await hardwareReview.getByRole('button', { name: /Virtual Coldcard/ }).click();
+  await expect(hardwareReview.getByRole('button', { name: /^Travel signing key / })).toContainText(
+    'Ready'
+  );
   await hardwareReview.getByRole('button', { name: /^Travel signing key / }).click();
   await expect(page.getByRole('status', { name: 'Waiting for hardware signature' })).toContainText(
     'Review and approve on the device.'

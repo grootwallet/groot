@@ -2537,6 +2537,12 @@ code {
   font-size: var(--font-size-meta);
   font-weight: 650;
 }
+.send-amount-error {
+  margin: -10px 0 19px;
+  color: var(--danger);
+  font-size: var(--font-size-meta);
+  font-weight: 650;
+}
 .field > em {
   font-size: var(--font-size-meta);
   color: var(--danger);
