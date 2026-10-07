@@ -111,6 +111,7 @@ export function hardwareDeviceStateLabel(
 ): string {
   if (membership === 'unrelated') return 'Not part of this wallet';
   if (membership === 'compatible' || membership === 'unknown') {
+    if (device.action === 'unlock' && device.status === 'detected') return 'Select to identify';
     if (device.action === 'prompt_pin' || device.action === 'unlock') return 'Unlock to identify';
     if (device.action === 'confirm_empty_passphrase') return 'Choose wallet';
     if (
@@ -124,7 +125,8 @@ export function hardwareDeviceStateLabel(
   }
   if (policyUnverified) return 'Policy unverified';
   if (device.action === 'prompt_pin') return 'Locked';
-  if (device.action === 'unlock') return 'Unlock required';
+  if (device.action === 'unlock')
+    return device.status === 'detected' ? 'Select to identify' : 'Unlock required';
   if (device.action === 'confirm_empty_passphrase') return 'Choose wallet';
   if (device.status === 'ready' || device.status === 'detected') return 'Select to identify';
   return 'Attention required';

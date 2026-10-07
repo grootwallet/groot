@@ -132,6 +132,10 @@ describe('hardware device display names', () => {
     };
     expect(hardwareDeviceStateLabel(locked, 'unknown')).toBe('Unlock to identify');
     expect(hardwareDeviceStateLabel(locked, 'compatible')).toBe('Unlock to identify');
+    const passivelyDetected = { ...locked, status: 'detected' as const };
+    expect(hardwareDeviceStateLabel(passivelyDetected, 'unknown')).toBe('Select to identify');
+    expect(hardwareDeviceStateLabel(passivelyDetected, 'compatible')).toBe('Select to identify');
+    expect(hardwareDeviceStateLabel(passivelyDetected, 'candidate')).toBe('Select to identify');
     const unavailable = { ...connected, action: 'none' as const, status: 'not_ready' as const };
     expect(hardwareDeviceStateLabel(unavailable, 'unknown')).toBe('Attention required');
     expect(hardwareDeviceStateLabel(unavailable, 'compatible')).toBe('Attention required');

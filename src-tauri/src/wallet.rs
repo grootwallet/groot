@@ -1802,7 +1802,7 @@ fn hardware_device_dto(device: HwiDevice) -> HardwareDeviceDto {
         )
     } else if passive_trezor_on_device_unlock {
         (
-            "needs_device_unlock",
+            "detected",
             "Detected. Select this Trezor and follow any unlock request on the device.",
             "unlock",
         )

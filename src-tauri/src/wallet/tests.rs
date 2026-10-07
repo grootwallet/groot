@@ -3770,9 +3770,28 @@ fn not_ready_hardware_remains_visible_with_safe_device_specific_actions() {
         warnings: vec![],
     });
     assert_eq!(passive_trezor.label, "Trezor");
-    assert_eq!(passive_trezor.status, "needs_device_unlock");
+    assert_eq!(passive_trezor.status, "detected");
     assert_eq!(passive_trezor.action, "unlock");
     assert!(passive_trezor.fingerprint.is_none());
+
+    let passive_safe_3 = hardware_device_dto(HwiDevice {
+        passive: true,
+        observed_unlocked: false,
+        capability: "opaque-passive-safe-3".to_owned(),
+        fingerprint: None,
+        device_type: "trezor".to_owned(),
+        model: "trezor_t3b1".to_owned(),
+        path: "webusb:007:5".to_owned(),
+        code: None,
+        error: None,
+        needs_pin_sent: false,
+        needs_passphrase_sent: false,
+        warnings: vec![],
+    });
+    assert_eq!(passive_safe_3.label, "Trezor Safe 3");
+    assert_eq!(passive_safe_3.status, "detected");
+    assert_eq!(passive_safe_3.action, "unlock");
+    assert!(passive_safe_3.fingerprint.is_none());
 
     let passive_model_one = hardware_device_dto(HwiDevice {
         passive: true,

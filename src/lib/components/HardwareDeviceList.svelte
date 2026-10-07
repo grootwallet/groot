@@ -91,9 +91,9 @@
               >{secondaryLabel}</small
             >{/if}<em
             class:ready={stateLabel === 'Ready'}
-            class:attention={(membership !== 'candidate' && membership !== 'compatible') ||
-              device.action === 'prompt_pin' ||
-              device.action === 'confirm_empty_passphrase'}>{translate($locale, stateLabel)}</em
+            class:attention={stateLabel !== 'Select to identify' &&
+              stateLabel !== 'Ready' &&
+              stateLabel !== 'Already signed'}>{translate($locale, stateLabel)}</em
           ></span
         >
       </button>

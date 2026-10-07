@@ -437,6 +437,10 @@ describe('hardware receive verification UI', () => {
       "'BitBox may request its password again for this new secure connection. Enter it only on BitBox.'"
     );
     expect(hardwareDeviceList).toContain('hardwareDeviceStateLabel(device, membership');
+    expect(hardwareDeviceList).toContain("stateLabel !== 'Select to identify'");
+    expect(hardwareDeviceList).not.toContain(
+      "membership !== 'candidate' && membership !== 'compatible'"
+    );
     expect(hardwareDeviceList).toContain(
       "deviceSecondaryLabel = (device) => device.fingerprint ?? ''"
     );

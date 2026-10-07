@@ -7,7 +7,11 @@ receive and signing: a passive model match says **Select to identify**, not
 **Select to confirm wallet**. **Ready** remains reserved for fresh saved-account
 proof. A receive address can display its previously verified fingerprint as
 historical evidence without treating a newly scanned device as the same live
-signer. Completed multisig signing moves **Save signed PSBT** under **Other
+signer. Passive Trezor Safe 3 inventory cannot determine lock state, so its
+unidentified row says **Select to identify** instead of **Unlock to identify**;
+the selected-device unlock/check path is unchanged. Unidentified selectable
+rows, including BitBox02, use neutral badges rather than warning colors.
+Completed multisig signing moves **Save signed PSBT** under **Other
 options**, leaving finalization primary. No wallet, profile, proposal, registry,
 backup, descriptor, PSBT, database, or BIP format changes; no migration is
 required. Physical retesting of all seven exact devices is still needed.

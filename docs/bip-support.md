@@ -702,6 +702,11 @@ impact. It removes duplicated presentation text and keeps the existing signer
 identity, BIP48 policy values, complete public keys, exact address, PSBT,
 trusted-display review, and signing boundaries unchanged.
 
+The passive Safe 3 and unidentified-device badge correction has no BIP support
+impact. It changes only the reported pre-identification status and its visual
+treatment; selected-device fingerprint verification, address display, PSBT,
+signing, and interoperability rules are unchanged.
+
 The one-item remote-Core batch correction has no BIP support impact. It preserves
 JSON-RPC request/response framing when an indexed match resolves to exactly one
 block; descriptor derivation, BIP158 matching, transaction interpretation,
