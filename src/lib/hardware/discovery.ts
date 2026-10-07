@@ -48,14 +48,25 @@ export function hardwareWalletMembership(
   const fingerprint = device.fingerprint?.trim().toLowerCase();
   if (!fingerprint) {
     const deviceKind = hardwareFamily(device);
+    const eligibleFingerprintSet = new Set(fingerprints.map((value) => value.trim().toLowerCase()));
+    const hasUnboundSigner = savedSigners.some(
+      (signer) =>
+        (!eligibleFingerprintSet.size ||
+          eligibleFingerprintSet.has(signer.fingerprint.trim().toLowerCase())) &&
+        !signer.deviceType
+    );
     const eligibleKinds = new Set(
       eligibleDeviceTypes.map((deviceType) => hardwareFamily({ label: deviceType, deviceType }))
     );
-    if (deviceKind !== 'unknown' && eligibleKinds.size > 0 && !eligibleKinds.has(deviceKind)) {
+    if (
+      deviceKind !== 'unknown' &&
+      eligibleKinds.size > 0 &&
+      !eligibleKinds.has(deviceKind) &&
+      !hasUnboundSigner
+    ) {
       return 'unrelated';
     }
     const deviceModel = exactHardwareModel(device);
-    const eligibleFingerprintSet = new Set(fingerprints.map((value) => value.trim().toLowerCase()));
     const sameFamilySigners = savedSigners.filter(
       (signer) =>
         (!eligibleFingerprintSet.size ||
@@ -63,7 +74,12 @@ export function hardwareWalletMembership(
         hardwareFamily(signer) === deviceKind
     );
     const eligibleModels = sameFamilySigners.map(exactHardwareModel);
-    if (deviceModel && eligibleModels.length > 0 && eligibleModels.every(Boolean)) {
+    if (
+      deviceModel &&
+      eligibleModels.length > 0 &&
+      eligibleModels.every(Boolean) &&
+      !hasUnboundSigner
+    ) {
       return eligibleModels.includes(deviceModel) ? 'compatible' : 'unrelated';
     }
     return 'unknown';
@@ -80,9 +96,9 @@ export function hardwareWalletMembershipLabel(
   return membership === 'unrelated'
     ? 'Not part of this wallet'
     : membership === 'compatible'
-      ? 'Select to confirm wallet'
+      ? 'Select to identify'
       : membership === 'unknown'
-        ? 'Wallet match unknown'
+        ? 'Select to identify'
         : policyUnverified
           ? 'Policy unverified'
           : '';
@@ -94,17 +110,25 @@ export function hardwareDeviceStateLabel(
   policyUnverified = false
 ): string {
   if (membership === 'unrelated') return 'Not part of this wallet';
-  if (membership === 'compatible') return 'Select to confirm wallet';
-  if (membership === 'unknown') {
-    return device.action === 'prompt_pin'
-      ? 'Locked · wallet match unknown'
-      : 'Wallet match unknown';
+  if (membership === 'compatible' || membership === 'unknown') {
+    if (device.action === 'unlock' && device.status === 'detected') return 'Select to identify';
+    if (device.action === 'prompt_pin' || device.action === 'unlock') return 'Unlock to identify';
+    if (device.action === 'confirm_empty_passphrase') return 'Choose wallet';
+    if (
+      device.action === 'none' ||
+      device.action === 'retry' ||
+      device.status === 'not_ready' ||
+      device.status === 'needs_companion'
+    )
+      return 'Attention required';
+    return 'Select to identify';
   }
   if (policyUnverified) return 'Policy unverified';
   if (device.action === 'prompt_pin') return 'Locked';
-  if (device.action === 'unlock') return 'Unlock required';
+  if (device.action === 'unlock')
+    return device.status === 'detected' ? 'Select to identify' : 'Unlock required';
   if (device.action === 'confirm_empty_passphrase') return 'Choose wallet';
-  if (device.status === 'ready' || device.status === 'detected') return 'Ready for this wallet';
+  if (device.status === 'ready' || device.status === 'detected') return 'Select to identify';
   return 'Attention required';
 }
 

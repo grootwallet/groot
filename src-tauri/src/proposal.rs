@@ -467,6 +467,39 @@ mod tests {
     }
 
     #[test]
+    fn hostile_psbt_text_corpus_fails_closed_without_panicking() {
+        let malformed = [
+            "",
+            "   ",
+            "A",
+            "AAAA",
+            "cHNidP8=", // PSBT magic without the required maps.
+            "cHNidP8A", // Truncated map separator.
+            "cHNidP8=trailing",
+            "cHNidP8=\nAAAA",
+            "\0cHNidP8=",
+        ];
+        for encoded in malformed {
+            assert_eq!(
+                decode_psbt(encoded),
+                Err(ProposalError::MalformedPsbt),
+                "hostile corpus input was unexpectedly accepted: {encoded:?}"
+            );
+        }
+
+        let oversized_encoded = "A".repeat(MAX_PSBT_BYTES * 2 + 1);
+        assert_eq!(
+            decode_psbt(&oversized_encoded),
+            Err(ProposalError::PsbtTooLarge)
+        );
+        let oversized_decoded = BASE64.encode(vec![0_u8; MAX_PSBT_BYTES + 1]);
+        assert_eq!(
+            decode_psbt(&oversized_decoded),
+            Err(ProposalError::PsbtTooLarge)
+        );
+    }
+
+    #[test]
     fn counts_only_signers_that_signed_every_input() {
         let (mut psbt, signers) = proposal();
         sign_all_inputs(&mut psbt, &signers[0]);

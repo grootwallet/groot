@@ -239,10 +239,13 @@ test('keeps multisig receive verification disclosure visibly expandable', async 
   await expect(dialog.getByText('Derivation', { exact: true })).toBeVisible();
   await summary.click();
   await expect(details).not.toHaveAttribute('open', '');
+  const selectableSigner = dialog.getByRole('button', {
+    name: /Trezor c0ffee01 Select to identify/
+  });
+  await expect(selectableSigner.locator('em')).not.toHaveClass(/attention/);
   const lockedTrezor = dialog.getByRole('button', { name: /Virtual Trezor One/ });
   await expect(lockedTrezor).toBeEnabled();
-  await expect(lockedTrezor).toContainText('Locked');
-  await expect(lockedTrezor).toContainText(/wallet match unknown/i);
+  await expect(lockedTrezor).toContainText('Unlock to identify');
   await expect(dialog).not.toContainText('Wallet key candidate');
   const outsider = dialog.getByRole('button', { name: /Virtual Trezor Standard/ });
   await expect(outsider).toContainText('Not part of this wallet');
@@ -269,7 +272,9 @@ test('keeps multisig receive verification disclosure visibly expandable', async 
   await pinDialog.getByRole('button', { name: 'Unlock Trezor' }).click();
   await expect(dialog).toBeVisible();
   await expect(dialog.locator('.readable-address-groups')).toHaveText(reviewedAddress ?? '');
-  await expect(dialog.getByRole('button', { name: /^Trezor / })).toContainText('Ready');
+  await expect(dialog.getByRole('button', { name: /^Trezor / })).toContainText(
+    'Select to identify'
+  );
   await dialog.getByRole('button', { name: /^Trezor / }).click();
   await expect(dialog.getByRole('status', { name: 'Waiting for hardware approval' })).toBeVisible();
   await dialog.getByRole('button', { name: 'Close' }).click();
@@ -281,13 +286,23 @@ test('keeps multisig receive verification disclosure visibly expandable', async 
   await expect(page.getByRole('button', { name: 'Verify on device' })).toBeVisible();
   await page.evaluate(() => sessionStorage.removeItem('fixture-hardware-review-rejected'));
   await page.getByRole('button', { name: 'Verify on device' }).click();
-  await expect(dialog.getByRole('button', { name: /^Trezor / })).toContainText('Ready');
+  await expect(dialog.getByRole('button', { name: /^Trezor / })).toContainText(
+    'Select to identify'
+  );
   await dialog.getByRole('button', { name: /^Trezor / }).click();
   await expect(dialog).toBeHidden();
   await expect(page.getByRole('button', { name: /Verified on hardware/ })).toBeVisible();
   await expect(
     awaitingAddresses.getByText('Hardware verified', { exact: true }).first()
   ).toBeVisible();
+  await page.getByRole('button', { name: 'Verify again' }).click();
+  await expect(dialog.getByText('Previously verified by')).toHaveCount(0);
+  await expect(dialog.getByText('Signer fingerprint')).toBeHidden();
+  await dialog.getByText('Address details').click();
+  await expect(dialog.getByText('Signer fingerprint')).toBeVisible();
+  await expect(dialog.getByText('Hardware verified')).toBeVisible();
+  await dialog.getByRole('button', { name: 'Close' }).click();
+  await expect(page.getByText('The verification time was saved with this address.')).toBeHidden();
   await page.getByRole('button', { name: 'Show address details', exact: true }).click();
   await expect(page.getByText('Native SegWit · standard multisig', { exact: true })).toBeVisible();
   await expect(page.getByText('Descriptor · Miniscript', { exact: true })).toHaveCount(0);
@@ -382,6 +397,52 @@ test('confirmed original stops fee acceleration on both wallet routes', async ({
         animations: 'disabled'
       });
     }
+  }
+});
+
+test('explains an oversized BTC amount before review on both send routes', async ({ page }) => {
+  for (const route of ['/send', '/multisig/send']) {
+    await page.goto(route);
+    await page.getByLabel('Bitcoin address').fill('bcrt1qdummy00085n8k2r7v4cx9s6jlawephgzuqf5t8ul');
+    await page.getByLabel('Payment label').fill('Amount warning test');
+    await page.getByRole('button', { name: 'Continue to amount' }).click();
+    const showBtc = page.getByRole('button', { name: 'Show transaction amount in BTC' });
+    if (await showBtc.isVisible()) await showBtc.click();
+    await page.getByLabel('Amount', { exact: true }).fill('1500');
+    await expect(page.getByRole('alert')).toContainText(
+      'Amount plus fee exceeds your available balance.'
+    );
+    await expect(page.locator('.send-amount-notice')).toContainText('Check amount');
+    await expect(page.getByRole('button', { name: 'Review payment' })).toBeDisabled();
+    await page.screenshot({
+      path: test.info().outputPath(`oversized-${route === '/send' ? 'single' : 'multi'}.png`)
+    });
+  }
+});
+
+test('send amount fields reject letters and accept exact decimal separators', async ({ page }) => {
+  for (const route of ['/send', '/multisig/send']) {
+    await page.goto(route);
+    await page.getByLabel('Bitcoin address').fill('bcrt1qdummy00085n8k2r7v4cx9s6jlawephgzuqf5t8ul');
+    await page.getByLabel('Payment label').fill('Numeric amount test');
+    await page.getByRole('button', { name: 'Continue to amount' }).click();
+    const showSats = page.getByRole('button', { name: 'Show transaction amount in sats' });
+    if (await showSats.isVisible()) await showSats.click();
+    const amount = page.getByLabel('Amount', { exact: true });
+    await amount.fill('1000');
+    await amount.pressSequentially('abc');
+    await expect(amount).toHaveValue('1000');
+    await amount.fill('1e3');
+    await expect(amount).toHaveValue('1000');
+    await page.getByRole('button', { name: 'Show transaction amount in BTC' }).click();
+    await amount.fill('0,00001000');
+    await expect(amount).toHaveValue('0,00001000');
+    await expect(page.getByRole('button', { name: 'Review payment' })).toBeEnabled();
+    await amount.fill('0x10');
+    await expect(amount).toHaveValue('0,00001000');
+    await page.screenshot({
+      path: test.info().outputPath(`numeric-amount-${route === '/send' ? 'single' : 'multi'}.png`)
+    });
   }
 });
 
@@ -590,7 +651,7 @@ test('spends end-to-end from the ready-made demo wallet', async ({ page }) => {
       }
     });
   });
-  await page.goto('/multisig');
+  await page.goto('/multisig?fixture-selected-multisig=1');
   await expect(page.getByRole('heading', { name: 'Family wallet' })).toBeVisible();
   await expect(page.locator('.vault-policy-tags .policy-pill')).toHaveText('2 of 3 keys');
   await expect(page.getByText('Ready-to-test demo wallet')).toHaveCount(0);
@@ -697,6 +758,17 @@ test('spends end-to-end from the ready-made demo wallet', async ({ page }) => {
   await unsignedQrDialog.getByRole('button', { name: 'Close' }).click();
   await page.getByRole('button', { name: 'Sign with device' }).click();
   const hardwareDialog = page.getByRole('dialog', { name: 'Sign with hardware' });
+  const reviewPane = await hardwareDialog.locator('.single-hardware-review-pane').boundingBox();
+  const devicePane = await hardwareDialog.locator('.single-hardware-device-pane').boundingBox();
+  expect(reviewPane).not.toBeNull();
+  expect(devicePane).not.toBeNull();
+  if ((page.viewportSize()?.width ?? 1180) <= 760)
+    expect(devicePane!.y).toBeGreaterThanOrEqual(reviewPane!.y + reviewPane!.height);
+  else expect(devicePane!.x).toBeGreaterThanOrEqual(reviewPane!.x + reviewPane!.width);
+  await page.screenshot({
+    path: test.info().outputPath(`multisig-cable-review-${page.viewportSize()?.width}.png`),
+    animations: 'disabled'
+  });
   await expect(
     hardwareDialog.getByRole('button', { name: /Virtual Ledger outsider/ })
   ).toBeDisabled();
@@ -720,11 +792,16 @@ test('spends end-to-end from the ready-made demo wallet', async ({ page }) => {
   await expect(pinDialog.getByLabel('2 PIN positions selected')).toBeVisible();
   await pinDialog.getByRole('button', { name: 'Unlock Trezor' }).click();
   await expect(hardwareDialog).toBeVisible();
+  await expect(hardwareDialog.getByText('This signer is not part of this wallet.')).toBeVisible();
+  await expect(hardwareDialog.getByRole('button', { name: /Virtual Trezor One/ })).toBeDisabled();
+  await hardwareDialog.getByRole('button', { name: /Virtual Trezor signer/ }).click();
   await expect(hardwareDialog.getByRole('button', { name: /^Trezor / })).toContainText('c0ffee01');
   await expect(hardwareDialog.getByRole('button', { name: /^Trezor / })).toContainText('Ready');
+  await hardwareDialog.getByRole('button', { name: /Virtual Coldcard/ }).click();
   await hardwareDialog.getByRole('button', { name: /^Coldcard / }).click();
   const coldcardSetup = page.getByRole('dialog', { name: 'Prepare Coldcard for this wallet' });
   if (await coldcardSetup.isVisible()) {
+    await expect(page.locator('.toast-region .toast')).toHaveCount(0);
     await coldcardSetup
       .getByRole('checkbox', { name: /I imported and verified this policy/ })
       .check();
@@ -733,6 +810,8 @@ test('spends end-to-end from the ready-made demo wallet', async ({ page }) => {
   await expect(signerSummary.getByText('1 of 2 collected')).toBeVisible();
   await expect(page.getByRole('button', { name: '1 more signature required' })).toBeDisabled();
   await page.getByRole('button', { name: 'Sign with device' }).click();
+  await hardwareDialog.getByRole('button', { name: /Virtual Trezor signer/ }).click();
+  await hardwareDialog.getByRole('button', { name: /Virtual Coldcard/ }).click();
   const signedColdcard = hardwareDialog.getByRole('button', { name: /^Coldcard / });
   await expect(signedColdcard).toContainText('Already signed');
   await expect(signedColdcard).toBeDisabled();
@@ -740,16 +819,20 @@ test('spends end-to-end from the ready-made demo wallet', async ({ page }) => {
   await hardwareDialog.getByRole('button', { name: /^Trezor / }).click();
   await expect(signerSummary.getByText('2 of 2 collected')).toBeVisible();
   await expect(page.getByRole('button', { name: /more signatures? required/ })).toHaveCount(0);
+  await expect(hardwareDialog).toBeHidden();
   await expect(page.getByRole('button', { name: 'Finalize & broadcast' })).toBeVisible();
   const saveSignedPsbt = page.getByRole('button', { name: 'Save signed PSBT' });
+  await expect(saveSignedPsbt).toBeHidden();
+  await page.locator('.toast-close').evaluateAll((buttons) => {
+    for (const button of buttons) (button as HTMLButtonElement).click();
+  });
+  await expect(page.locator('.toast-region .toast')).toHaveCount(0);
+  await page.locator('.signed-psbt-options').scrollIntoViewIfNeeded();
+  await page.screenshot({
+    path: test.info().outputPath(`multisig-ready-to-finalize-${page.viewportSize()?.width}.png`)
+  });
+  await page.locator('details.signed-psbt-options > summary').click();
   await expect(saveSignedPsbt).toBeVisible();
-  await expect
-    .poll(async () => {
-      const saveButton = await saveSignedPsbt.boundingBox();
-      const pinLabel = await page.locator('.password-field .field-label').boundingBox();
-      return (pinLabel?.y ?? 0) - ((saveButton?.y ?? 0) + (saveButton?.height ?? 0));
-    })
-    .toBeGreaterThanOrEqual(16);
   await expect(page.getByRole('region', { name: 'Signed transaction review' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Sign with device' })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Show unsigned QR' })).toHaveCount(0);
@@ -776,7 +859,7 @@ test('spends end-to-end from the ready-made demo wallet', async ({ page }) => {
 });
 
 test('requires explicit confirmation before discarding a multisig proposal', async ({ page }) => {
-  await page.goto('/multisig');
+  await page.goto('/multisig?fixture-selected-multisig=1');
   await page.getByRole('link', { name: 'Send', exact: true }).click();
   await page.getByLabel('Bitcoin address').fill('bcrt1qdummy00085n8k2r7v4cx9s6jlawephgzuqf5t8ul');
   await page.getByLabel('Payment label').fill('Cancel confirmation test');
@@ -785,10 +868,9 @@ test('requires explicit confirmation before discarding a multisig proposal', asy
   await page.getByRole('button', { name: 'Review payment' }).click();
   const cancellationSigners = page.getByRole('region', { name: 'Payment signers' });
   await page.getByRole('button', { name: 'Sign with device' }).click();
-  await page
-    .getByRole('dialog', { name: 'Sign with hardware' })
-    .getByRole('button', { name: /^Coldcard / })
-    .click();
+  const hardwareDialog = page.getByRole('dialog', { name: 'Sign with hardware' });
+  await hardwareDialog.getByRole('button', { name: /Virtual Coldcard/ }).click();
+  await hardwareDialog.getByRole('button', { name: /^Coldcard / }).click();
   const coldcardSetup = page.getByRole('dialog', { name: 'Prepare Coldcard for this wallet' });
   if (await coldcardSetup.isVisible()) {
     await coldcardSetup
@@ -856,10 +938,9 @@ test('surfaces partial and fully signed proposals on Overview', async ({ page })
   await page.getByRole('button', { name: 'Review payment' }).click();
 
   await page.getByRole('button', { name: 'Sign with device' }).click();
-  await page
-    .getByRole('dialog', { name: 'Sign with hardware' })
-    .getByRole('button', { name: /^Coldcard / })
-    .click();
+  const hardwareDialog = page.getByRole('dialog', { name: 'Sign with hardware' });
+  await hardwareDialog.getByRole('button', { name: /Virtual Coldcard/ }).click();
+  await hardwareDialog.getByRole('button', { name: /^Coldcard / }).click();
   const coldcardSetup = page.getByRole('dialog', { name: 'Prepare Coldcard for this wallet' });
   if (await coldcardSetup.isVisible()) {
     await coldcardSetup
@@ -898,10 +979,8 @@ test('surfaces partial and fully signed proposals on Overview', async ({ page })
   ).toBeVisible();
 
   await page.getByRole('button', { name: 'Sign with device' }).click();
-  await page
-    .getByRole('dialog', { name: 'Sign with hardware' })
-    .getByRole('button', { name: /^Trezor / })
-    .click();
+  await hardwareDialog.getByRole('button', { name: /Virtual Trezor signer/ }).click();
+  await hardwareDialog.getByRole('button', { name: /^Trezor / }).click();
   await expect(
     page.getByRole('region', { name: 'Payment signers' }).getByText('2 of 2 collected')
   ).toBeVisible();
@@ -1226,7 +1305,7 @@ test('selects and freezes multisig coins before entering the send flow', async (
   await expect(page.locator('.coin-mode')).toContainText('More private');
   await page.getByRole('button', { name: 'Max' }).click();
   await expect(page.getByLabel('Amount', { exact: true })).toHaveValue('2479707');
-  await expect(page.locator('.max-spend-guidance')).toContainText(
+  await expect(page.locator('.send-amount-notice')).toContainText(
     'Maximum spendable amount selected'
   );
   await expect(
@@ -1767,6 +1846,7 @@ test('creates and verifies a simple 2-of-3 descriptor wallet', async ({ page }) 
   await expect(paymentSigners.getByText('0 of 2 collected')).toBeVisible();
   await page.getByRole('button', { name: 'Sign with device' }).click();
   const firstSigningDialog = page.getByRole('dialog', { name: 'Sign with hardware' });
+  await firstSigningDialog.getByRole('button', { name: /Virtual Ledger outsider/ }).click();
   await firstSigningDialog.getByRole('button', { name: /^Ledger / }).click();
   const signingPolicyReview = page.getByRole('dialog', { name: 'Review wallet policy' });
   await expect(signingPolicyReview.getByText('Reject if any value differs on Ledger.')).toHaveCount(
@@ -1823,10 +1903,9 @@ test('creates and verifies a simple 2-of-3 descriptor wallet', async ({ page }) 
   await expect(signingPolicyReview).toBeHidden();
   await expect(paymentSigners.getByText('1 of 2 collected')).toBeVisible();
   await page.getByRole('button', { name: 'Sign with device' }).click();
-  await page
-    .getByRole('dialog', { name: 'Sign with hardware' })
-    .getByRole('button', { name: /^Coldcard / })
-    .click();
+  const secondSigningDialog = page.getByRole('dialog', { name: 'Sign with hardware' });
+  await secondSigningDialog.getByRole('button', { name: /Virtual Coldcard/ }).click();
+  await secondSigningDialog.getByRole('button', { name: /^Coldcard / }).click();
   await expect(page.getByRole('dialog', { name: 'Prepare Coldcard for this wallet' })).toHaveCount(
     0
   );

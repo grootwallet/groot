@@ -22,6 +22,42 @@ struct MempoolBatchFixture {
     reject_batch: bool,
 }
 
+struct MissingAccelerationOriginalFixture {
+    original_txid: Txid,
+}
+
+impl jsonrpc::client::Transport for MissingAccelerationOriginalFixture {
+    fn send_request(
+        &self,
+        request: jsonrpc::Request<'_>,
+    ) -> Result<jsonrpc::Response, jsonrpc::Error> {
+        assert!(matches!(
+            request.method,
+            "getmempoolentry" | "getrawtransaction"
+        ));
+        let params: Vec<serde_json::Value> =
+            serde_json::from_str(request.params.expect("transaction parameters").get())?;
+        assert_eq!(params[0], self.original_txid.to_string());
+        Ok(serde_json::from_value(serde_json::json!({
+            "result": null,
+            "error": { "code": -5, "message": "Transaction not found" },
+            "id": request.id,
+            "jsonrpc": "2.0"
+        }))?)
+    }
+
+    fn send_batch(
+        &self,
+        _requests: &[jsonrpc::Request<'_>],
+    ) -> Result<Vec<jsonrpc::Response>, jsonrpc::Error> {
+        Err(jsonrpc::Error::WrongBatchResponseSize)
+    }
+
+    fn fmt_target(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("missing acceleration original fixture")
+    }
+}
+
 struct BlockFilterBatchFixture {
     genesis: BlockHash,
     block_hash: BlockHash,
@@ -1155,6 +1191,7 @@ fn metadata_operations_do_not_wait_for_the_selected_wallet_sync() {
 
     assert!(metadata_operation_guard(&state, wallet_id)
         .unwrap()
+        ._operation
         .is_none());
 }
 
@@ -1163,7 +1200,69 @@ fn metadata_operations_serialize_when_the_wallet_is_idle() {
     let state = AppState::default();
     assert!(metadata_operation_guard(&state, Uuid::new_v4())
         .unwrap()
+        ._operation
         .is_some());
+}
+
+#[test]
+fn metadata_fast_path_serializes_selected_wallet_mutations() {
+    use std::{sync::mpsc, time::Duration};
+
+    let state = AppState::default();
+    let wallet_id = Uuid::new_v4();
+    state
+        .foreground_sync
+        .lock()
+        .unwrap()
+        .replace(ActiveForegroundSync {
+            wallet_id,
+            cancel: Arc::new(AtomicBool::new(false)),
+            persisted_reads_safe: Arc::new(AtomicBool::new(true)),
+        });
+    let _sync_operation = state.operations.lock().unwrap();
+    let first = metadata_operation_guard(&state, wallet_id).unwrap();
+    let (sender, receiver) = mpsc::channel();
+
+    thread::scope(|scope| {
+        scope.spawn(|| {
+            let guard = metadata_operation_guard(&state, wallet_id).unwrap();
+            sender.send(guard._operation.is_none()).unwrap();
+        });
+        assert!(receiver.recv_timeout(Duration::from_millis(100)).is_err());
+        drop(first);
+        assert!(receiver.recv_timeout(Duration::from_secs(1)).unwrap());
+    });
+}
+
+#[test]
+fn ordinary_operations_wait_for_in_flight_metadata_mutations() {
+    use std::{sync::mpsc, time::Duration};
+
+    let state = AppState::default();
+    let wallet_id = Uuid::new_v4();
+    state
+        .foreground_sync
+        .lock()
+        .unwrap()
+        .replace(ActiveForegroundSync {
+            wallet_id,
+            cancel: Arc::new(AtomicBool::new(false)),
+            persisted_reads_safe: Arc::new(AtomicBool::new(true)),
+        });
+    let sync_operation = state.operations.lock().unwrap();
+    let metadata = metadata_operation_guard(&state, wallet_id).unwrap();
+    let (sender, receiver) = mpsc::channel();
+
+    thread::scope(|scope| {
+        scope.spawn(|| {
+            let _operation = operation_guard(&state).unwrap();
+            sender.send(()).unwrap();
+        });
+        drop(sync_operation);
+        assert!(receiver.recv_timeout(Duration::from_millis(100)).is_err());
+        drop(metadata);
+        receiver.recv_timeout(Duration::from_secs(1)).unwrap();
+    });
 }
 
 #[test]
@@ -1201,6 +1300,25 @@ fn transaction_observation_time_is_stable_across_snapshot_refreshes() {
 
     assert_eq!(transaction_observed_at(&db, "funding").unwrap(), Some(42));
     assert_eq!(transaction_observed_at(&db, "funding").unwrap(), Some(42));
+}
+
+#[test]
+fn confirmed_activity_prefers_first_observation_over_future_block_time() {
+    let anchor = ConfirmationBlockTime {
+        block_id: BlockId {
+            height: 100,
+            hash: BlockHash::from_byte_array([7; 32]),
+        },
+        confirmation_time: 500,
+    };
+    let position = ChainPosition::Confirmed {
+        anchor,
+        transitively: None,
+    };
+    let (count, block, displayed_time) = confirmations(&position, 100, Some(300));
+    assert_eq!(count, 1);
+    assert_eq!(block, Some(100));
+    assert_eq!(displayed_time, "300");
 }
 
 #[test]
@@ -2990,6 +3108,80 @@ fn cpfp_uses_core_mempool_fee_when_an_incoming_parent_has_unknown_inputs() {
 }
 
 #[test]
+fn cpfp_missing_parent_distinguishes_confirmed_from_unknown() {
+    let confirmed = cpfp_parent_missing_from_mempool(true);
+    assert_eq!(confirmed.code, "transaction_confirmed");
+    assert!(!confirmed.message.contains("Bitcoin Core"));
+
+    let unknown = cpfp_parent_missing_from_mempool(false);
+    assert_eq!(unknown.code, "acceleration_unavailable");
+    assert!(unknown
+        .message
+        .contains("may have confirmed or left the mempool"));
+    assert!(!unknown.message.contains("Bitcoin Core"));
+}
+
+#[test]
+fn final_broadcast_refuses_cpfp_and_rbf_when_original_left_mempool() {
+    let original_txid = Txid::from_byte_array([37; 32]);
+    let db = Connection::open_in_memory().unwrap();
+    db.execute_batch(
+        "CREATE TABLE groot_accelerations (
+            proposal_id TEXT PRIMARY KEY, method TEXT NOT NULL, original_txid TEXT NOT NULL
+        );",
+    )
+    .unwrap();
+    let transaction = Transaction {
+        version: Version::TWO,
+        lock_time: LockTime::ZERO,
+        input: vec![],
+        output: vec![],
+    };
+    for method in [AccelerationMethod::Cpfp, AccelerationMethod::Rbf] {
+        db.execute(
+            "INSERT INTO groot_accelerations (proposal_id, method, original_txid)
+             VALUES (?1, ?2, ?3)",
+            params![method.as_str(), method.as_str(), original_txid.to_string()],
+        )
+        .unwrap();
+        let rpc = Client::from_jsonrpc(jsonrpc::client::Client::with_transport(
+            MissingAccelerationOriginalFixture { original_txid },
+        ));
+        let error =
+            broadcast_proposal_transaction_with_rpc(&rpc, &db, method.as_str(), &transaction)
+                .unwrap_err();
+        assert_eq!(error.code, "acceleration_unavailable");
+        assert!(!error.message.contains("Bitcoin Core"));
+    }
+    assert_eq!(
+        acceleration_original_missing_from_mempool(AccelerationMethod::Cpfp, true).code,
+        "transaction_confirmed"
+    );
+    assert_eq!(
+        acceleration_original_missing_from_mempool(AccelerationMethod::Rbf, true).code,
+        "transaction_confirmed"
+    );
+}
+
+#[test]
+fn hardware_identity_requires_wallet_unlock_before_saved_signer_read() {
+    let source = include_str!("hardware_commands.rs");
+    let command = source
+        .split("pub async fn hardware_identify_saved_device(")
+        .nth(1)
+        .unwrap()
+        .split("#[tauri::command]")
+        .next()
+        .unwrap();
+    let unlock = command
+        .find("begin_unlocked_user_operation(&app, &state)")
+        .unwrap();
+    let metadata = command.find("read_multisig_metadata(&app)").unwrap();
+    assert!(unlock < metadata);
+    assert!(command.contains("selected.id != initiating_wallet_id"));
+}
+
+#[test]
 fn cpfp_builds_from_an_incoming_parent_without_foreign_prevouts() {
     use bdk_wallet::bitcoin::{
         absolute::LockTime, hashes::Hash, transaction::Version, ScriptBuf, Sequence, TxIn, TxOut,
@@ -3656,9 +3848,28 @@ fn not_ready_hardware_remains_visible_with_safe_device_specific_actions() {
         warnings: vec![],
     });
     assert_eq!(passive_trezor.label, "Trezor");
-    assert_eq!(passive_trezor.status, "needs_device_unlock");
+    assert_eq!(passive_trezor.status, "detected");
     assert_eq!(passive_trezor.action, "unlock");
     assert!(passive_trezor.fingerprint.is_none());
+
+    let passive_safe_3 = hardware_device_dto(HwiDevice {
+        passive: true,
+        observed_unlocked: false,
+        capability: "opaque-passive-safe-3".to_owned(),
+        fingerprint: None,
+        device_type: "trezor".to_owned(),
+        model: "trezor_t3b1".to_owned(),
+        path: "webusb:007:5".to_owned(),
+        code: None,
+        error: None,
+        needs_pin_sent: false,
+        needs_passphrase_sent: false,
+        warnings: vec![],
+    });
+    assert_eq!(passive_safe_3.label, "Trezor Safe 3");
+    assert_eq!(passive_safe_3.status, "detected");
+    assert_eq!(passive_safe_3.action, "unlock");
+    assert!(passive_safe_3.fingerprint.is_none());
 
     let passive_model_one = hardware_device_dto(HwiDevice {
         passive: true,
@@ -4180,6 +4391,15 @@ fn labels_are_mandatory_and_bounded() {
         "invoice\u{202e}replacement",
         "invoice\u{2066}replacement",
         "invoice\u{feff}replacement",
+        "invoice\u{0600}replacement",
+        "invoice\u{2028}replacement",
+        "invoice\u{115f}replacement",
+        "invoice\u{3164}replacement",
+        "invoice\u{fe0f}replacement",
+        "invoice\u{e0001}replacement",
+        "invoice\u{e007f}replacement",
+        "invoice\u{e0100}replacement",
+        "invoice\u{e01ef}replacement",
     ] {
         assert_eq!(normalize_label(label).unwrap_err().code, "invalid_label");
     }
@@ -4484,6 +4704,18 @@ fn descriptor_backup_round_trips_and_reconstructs_a_stable_address() {
     assert_eq!(
         first_multisig_address(&validated.wallet).unwrap(),
         first_multisig_address(&backup.wallet).unwrap()
+    );
+}
+
+#[test]
+fn descriptor_backup_rejects_new_invisible_signer_labels() {
+    let mut backup = descriptor_backup();
+    backup.wallet.cosigners[0].label = "Signer\u{e0020}hidden".to_owned();
+    assert_eq!(
+        validate_multisig_backup(&serde_json::to_string(&backup).unwrap())
+            .unwrap_err()
+            .code,
+        "invalid_label"
     );
 }
 
@@ -4938,6 +5170,7 @@ fn synced_snapshots_enqueue_received_and_first_confirmation_events_once() {
         .to_owned(),
         confirmations,
         date: "1".to_owned(),
+        block_timestamp: None,
         address: Some("bcrt1qnotificationfixture".to_owned()),
         label: "Test deposit".to_owned(),
         block: (confirmations > 0).then_some(1),
@@ -5112,6 +5345,7 @@ fn transaction_dto_serializes_authoritative_detail_fields() {
         status: "pending".to_owned(),
         confirmations: 0,
         date: "1".to_owned(),
+        block_timestamp: None,
         address: None,
         label: "Self-spend".to_owned(),
         block: None,
@@ -5171,6 +5405,7 @@ fn replacement_history_collapses_a_confirmed_replacement_into_one_payment_row() 
         status: "confirmed".to_owned(),
         confirmations: 1,
         date: "2".to_owned(),
+        block_timestamp: None,
         address: Some("bcrt1qfixture".to_owned()),
         label: "Original payment".to_owned(),
         block: Some(101),
@@ -5244,6 +5479,7 @@ fn replacement_history_keeps_a_canonical_original_counted_when_it_wins_the_race(
         status: "confirmed".to_owned(),
         confirmations: 42,
         date: "3".to_owned(),
+        block_timestamp: None,
         address: Some("bcrt1qfixture".to_owned()),
         label: "Original payment".to_owned(),
         block: Some(101),
@@ -5688,6 +5924,7 @@ fn prepared_wallet_proposal_and_acceleration_roll_back_as_one_unit() {
         status: "pending".into(),
         confirmations: 0,
         date: "1".into(),
+        block_timestamp: None,
         address: Some("bcrt1qoriginalfixture".into()),
         label: "Original".into(),
         block: None,

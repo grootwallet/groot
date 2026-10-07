@@ -1,5 +1,74 @@
 # Implementation status
 
+## v0.5.1 QR copy and send progress localization — 2026-10-07
+
+Rejected payment QR codes now use a complete English sentence from the stable
+error code rather than displaying the native parser's lowercase diagnostic.
+Both single-key and multisig send progress steps render the existing French and
+Spanish translations. This changes presentation only: native validation,
+persisted formats, and BIP support are unchanged.
+
+## v0.5.1 payment scanner error visibility — 2026-10-07
+
+The payment-request scanner sizes its square camera from the modal body space
+remaining after status and rejection feedback, including when the window grows.
+The full rejection stays visible without scrolling the camera on desktop and
+mobile. This is presentation-only; QR decoding, payment-request validation,
+persisted formats, and BIP support are unchanged.
+
+## v0.5.1 send amount input guard — 2026-10-07
+
+Both send routes now reject letters and symbols in the amount field, including
+paste/autofill input, without silently stripping characters into a different
+payment amount. Sats retains optional comma thousands grouping; BTC accepts a
+point or comma decimal separator and still parses exactly to integer satoshis.
+The authoritative Rust payment policy, persisted formats, and transaction flow
+are unchanged. Browser fixtures cover both routes; physical testing remains
+separate.
+
+## v0.5.1 send and scanner presentation — 2026-10-07
+
+Both send routes use the existing warning notice for an invalid amount and for
+Max-selection feedback; the insufficient-balance copy is one short sentence.
+RBF and CPFP quote cards now have one **View more details / View less details**
+disclosure containing the editable fee rate and three fee facts: original rate,
+new rate, and new total network fee. The existing interactive amount control
+switches that fee between sats and BTC. Quote computation, minimum-rate policy,
+PSBT review, and signing are unchanged. Payment-request camera dialogs keep the
+square viewport within the modal without body scrolling and center the guide.
+No persisted format or BIP behavior changes.
+
+## v0.5.1 acceleration final guard and receive details — 2026-10-07
+
+The software, external-hardware, and multisig final broadcast commands share
+one native RBF/CPFP guard: the persisted original transaction must still be in
+the configured Core node's mempool immediately before sending the signed
+transaction. Missing or unavailable evidence preserves the signed proposal;
+an observed active-chain confirmation makes the send flow read-only. The two
+node requests are not atomic, so a block can still arrive between them. Prior
+receive verification time and fingerprint now appear only in the existing
+expandable address-details rows. No persisted format or BIP support changes.
+Normal macOS Finder launch can activate an already-running Groot copy with the
+same bundle identifier before the newer executable starts; the existing
+process-lock warning can appear only when a second process actually launches.
+Changing that Finder behavior requires a separately reviewed packaging path.
+
+## v0.5.1 hardware presentation follow-up — 2026-10-07
+
+The seven supported USB model rows use the same unproven identity copy in
+receive and signing: a passive model match says **Select to identify**, not
+**Select to confirm wallet**. **Ready** remains reserved for fresh saved-account
+proof. A receive address can display its previously verified fingerprint as
+historical evidence without treating a newly scanned device as the same live
+signer. Passive Trezor Safe 3 inventory cannot determine lock state, so its
+unidentified row says **Select to identify** instead of **Unlock to identify**;
+the selected-device unlock/check path is unchanged. Unidentified selectable
+rows, including BitBox02, use neutral badges rather than warning colors.
+Completed multisig signing moves **Save signed PSBT** under **Other
+options**, leaving finalization primary. No wallet, profile, proposal, registry,
+backup, descriptor, PSBT, database, or BIP format changes; no migration is
+required. Physical retesting of all seven exact devices is still needed.
+
 ## v0.5.0 release preparation — 2026-10-05
 
 The tested source now reports v0.5.0 across the frontend, Tauri, Cargo, and
@@ -8,6 +77,18 @@ diagnostic build identity. ADR 0082 authorizes the version through annotated tag
 `origin/main`, and local `HEAD` match, the executable is reproduced from the
 frozen signed-HWI input, and Developer ID signing and Apple notarization pass.
 This release-governance change alters no wallet behavior or persisted format.
+
+The v0.5.1 startup follow-up preserves the application-root process lock while
+correcting second-launch presentation. Desktop startup keeps the new window
+hidden until lock acquisition succeeds. If another Groot process already owns
+the same wallet-data root, the second process now presents a native **Groot is
+already open** message instructing the user to close the running version and try
+again, then exits normally after acknowledgement. It no longer propagates the
+expected lock conflict into the Rust runtime panic that macOS presented as an
+unexpected quit. Groot does not terminate the existing process or weaken the
+lock. No wallet, profile, registry, proposal, backup, secret-envelope, database,
+or network-selection format changes; no migration is required, and BIP behavior
+is unchanged.
 
 ## Current release status — 2026-10-04
 
@@ -23,13 +104,14 @@ Sep 30 release-candidate picker follow-up applies the saved-wallet eligibility
 copy consistently to BIP84 signing, BIP48 signing, and receive verification. A
 fingerprint-less device from a family absent from the wallet is now a disabled
 **Not part of this wallet** row and cannot be selected to trigger unlock. An
-eligible same-family device remains **Unlock to identify** until the existing
-native exact fingerprint, derivation, and account-xpub proof succeeds; this is
-intentionally conservative for multiple devices and for BitBox02-family records,
-whose persisted public signer record names the HWI family rather than a hardware
-submodel. Hardware cancellation guidance is shortened to **Reject the request on
-the device.** No wallet, profile, registry, proposal, backup, descriptor, PSBT,
-transaction, or database format changes; no migration is required.
+eligible same-family device remains **Select to identify**, or **Unlock to
+identify** when a PIN step is known, until the existing native exact fingerprint,
+derivation, and account-xpub proof succeeds; this is intentionally conservative
+for multiple devices and for BitBox02-family records, whose persisted public
+signer record names the HWI family rather than a hardware submodel. Hardware
+cancellation guidance is shortened to **Reject the request on the device.** No
+wallet, profile, registry, proposal, backup, descriptor, PSBT, transaction, or
+database format changes; no migration is required.
 
 Sep 30 Model One crash correction addresses the two owner-observed process
 terminations in internal candidate `0881a194`. Both macOS crash reports end on a
@@ -1570,6 +1652,38 @@ acceleration preparation, a closed payment-destination set through Taproot v1,
 and wallet/purpose-bound secure-store v5. Authenticated v2/v3/v4 records migrate
 automatically and failure-atomically; migrated protected records cannot be read
 by v0.4.96 or older. Item 12 and every other report proposal remain deferred.
+
+The 2026-10-05 v0.5.0 reassessment found that the approved invisible-format
+label rule omitted Unicode TAG characters, format controls outside the original
+fixed list, line/paragraph separators, Hangul fillers, and variation selectors.
+New and imported permanent-payment and signer labels now reject those remaining
+classes at the Rust boundary. Existing persisted labels remain byte-for-byte
+unchanged and readable. This changes no descriptor, transaction, recovery,
+backup, or BIP support.
+
+Follow-up evidence on 2026-10-06 adds deterministic hostile corpora for PSBT,
+BIP21/payment-request, and public descriptor parsing. The corpora remain bounded
+and fail closed. BIP21 inspection intentionally preserves a syntactically valid
+amount above the Mainnet release ceiling; authoritative transaction preparation
+still rejects it through the existing integer-satoshi release policy, so no URI
+parser restriction was added. The same evidence found that two same-wallet
+metadata writes could bypass the operation lock during foreground sync and let a
+stale registry snapshot reintroduce a deleted registry entry. A dedicated
+metadata-mutation lock now serializes that fast path with every ordinary wallet
+operation while foreground sync retains its operations-only lock. Regression
+tests cover fast-path serialization and the rename/delete lifecycle boundary.
+This changes no UI, persisted format, transaction behavior, recovery behavior,
+or BIP support, and no migration is required.
+
+A disposable-key release-evidence verifier now proves a detached signature can
+bind the exact version, tag, commit, `SHA256SUMS`, and `PROVENANCE.json`, rejecting
+the wrong key, wrong version, and changed evidence. It introduces no production
+signing key or release-signing requirement. The multi-network temporary-root
+review also confirmed that the process lock restricts an existing same-owner
+directory to mode `0700` before wallet storage opens; a foreign-owned directory
+cannot be chmodded by the process and setup fails. These evidence additions do
+not change wallet behavior, persisted formats, transactions, recovery, or BIP
+support.
 
 Public v0.4.96 commit `f7b4b993` remains the latest published Mainnet release.
 ADR 0082 authorizes v0.5.0 once its annotated remote tag and `origin/main` bind

@@ -10,22 +10,22 @@ const repoRoot = resolve(fileURLToPath(new URL('../../', import.meta.url)));
 const pinnedPolicySources = new Map([
   [
     'src-tauri/src/wallet/activity.rs',
-    '55f0b995153a10d44c58205895ccde3d53205079cdcf58bda28ca95b7d641669'
+    '03508eec340547946202d186aa38257e44084c65680f8ac84a9095815fc58705'
   ],
   ['src-tauri/src/session.rs', '82da6d3a2643710aaa0974f69f0fb7c932172a401ecf33c186e440c8170f35e0'],
   ['.env.mainnet', '1623f3f97de588daea2bbeae1f9c56ebc896b6bc2c22ac238563b46b688ced85'],
   ['.env.multi', '33fc3d5022968d9eaa25bfe749c0b01691c0570611a65255100718d2c50df723'],
-  ['package.json', 'a56d945f9492d816b62ca21d6122e5acf2a459fba803bf12397138795caf74f6'],
-  ['src-tauri/Cargo.toml', '3ac85270c95ddd07d5a765e109ee0c42fc28e0b700f3d96cd8952a0e4d1238ac'],
-  ['src-tauri/tauri.conf.json', '5cdd4363213702bd4849bd6e202f47fa211132320a29d103640f98d552f764e5'],
+  ['package.json', '5a676beee268ddb8a752914b91c857a021c792b2566795570df9a6cf602b521f'],
+  ['src-tauri/Cargo.toml', '9d8628de6c1b75f34a704879c4116663a510da9ad4c6e6a80a16716b6bd33e65'],
+  ['src-tauri/tauri.conf.json', '9e2c1d166c5ae7def18053931abc67abc3214e8b60d4f57dab30ce6d2fe27931'],
   ['LICENSE', 'c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4'],
   ['NOTICE', 'b39c98ac4d5186a7418ee71e1a8a7a29fb574ada3a7c58184c00125dda8d511d'],
   ['THIRD_PARTY_NOTICES.md', 'a181753f36eb3e475cddf31a69d2e75f01a86a79c70de252abb1e73a059407db'],
   [
     'docs/mainnet-release-authorization.json',
-    '474359c7a90ccc0fdc1f297ed9cdd4f7116207863b7de377bd62dbd1cc3e0703'
+    '1af74a51167285b70812c16c4300e8a61b3e114245d0c7ad15755017dc3e5b2e'
   ],
-  ['src-tauri/src/lib.rs', 'f91975ed53e93d004eb46818fb7d73fb8aa5a710eb2d9494c8d563c02e00a705'],
+  ['src-tauri/src/lib.rs', '19dbeaae0dc6de6e8690f656aa78f149e109b6a2e616cc75d280dbd3cfc2e089'],
   [
     'src-tauri/src/managed_gateway.rs',
     '7e5bf0ab7c25346448e4423bab2e748de96684612230c38b797a075fef5866d0'
@@ -34,7 +34,7 @@ const pinnedPolicySources = new Map([
     'scripts/network/check-native-builds.sh',
     '3a984ab7ef5f0d7c29d689d2ab39e114d61f1db0efd29a632cea980d7284bef4'
   ],
-  ['src/lib/config.ts', 'eee048d90a64372c4053600b76cf2ec1ab7a000117ff4f4cb6b3d78d54121a70'],
+  ['src/lib/config.ts', 'f32c494bcc72879a6d3f554c322f272d04cdc61d5f668b7b36bbd1a7133ab4be'],
   ['src-tauri/build.rs', 'ed1866cf57502e61199d75df9ff407b5ed0be54043ad94525ef6579ad98dfcb7'],
   [
     'src-tauri/src/release_policy.rs',
@@ -46,17 +46,17 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src-tauri/src/process_lock.rs',
-    '1efd78e068a904156422ffcb80c8fdc4ffe9bbe33eba510205e247065af26c60'
+    '9343fd11d26d51ccdc0fb1aece9d23bc96f8bfc3f533b2016be8f2ed1e9c8b0a'
   ],
   [
     'src-tauri/src/external_signer.rs',
-    '6d8bf6f37da304f302d84728a2775f85a825f34f8146f2ba590b26cd53fb56b4'
+    '5d280e028554b943f1d3c9e9addd0fe552ef30a80aaf1693f3728d0c8619a369'
   ],
   ['src-tauri/src/hardware.rs', '9557af47b7a5cbb0571b34e3721983bd5a4dd94d38c1866f9597cfd9435eab9a'],
   ['src-tauri/src/multisig.rs', 'f28d3422dff868c3afc458259ffd5a6e36f56b67b2924ce11e84098c0cba9e8d'],
   [
     'src-tauri/src/payjoin_support.rs',
-    '58e6d8d9dadc9a51174bbf4be8846c4fcd8535ce6007e8f89a03dd04356e0437'
+    '7bbd7fcca836ed2cee535c5cafe7281344ce66174346f88cac1d325a104789dc'
   ],
   ['src-tauri/src/recovery.rs', '96eba2aaea0461d8ed067513c044f85f8845837dbf584eb3f93e6969ec5670dc'],
   ['src-tauri/src/network.rs', 'dcf011fb789a0b690b1832a9245df5fc0199318f03a820d10f9a3b1c90f5d76b'],
@@ -69,8 +69,8 @@ const pinnedPolicySources = new Map([
     'src-tauri/src/native_backup/macos.rs',
     'bd019caa540dcf49428c3665c3ceb1e6c6699b2d53e33f4a6a51899194bb69ed'
   ],
-  ['src-tauri/src/proposal.rs', '9d90a4910b2c0cf91320c59e49f9a8e97e59fca4e4612edcc7dbee6fbaef63ba'],
-  ['src-tauri/src/wallet.rs', '72b53e5b7e6936ba105d613ae32703938c49700e002751894973eda3f56cd06a'],
+  ['src-tauri/src/proposal.rs', 'b450b07613edad8922bb54756d0152f551d714937a66065611124bcd80ecdc86'],
+  ['src-tauri/src/wallet.rs', '1c76fe79177ccae21c2adc522177f57607460431516945b82634e8d87be536ed'],
   [
     'src-tauri/src/wallet/diagnostics.rs',
     'e531480fd53ffa5db664d7a80c1bdf806351e648c0f09727cdde32fc0d24158a'
@@ -89,19 +89,19 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src-tauri/src/wallet/hardware_commands.rs',
-    '469fcbd64184a2ce11e8281705820bb2f12eb84bcdb0f978f9fefb3610c1b0fb'
+    'f8371154b46ab25e544584f49f582c5885432f1d9e083e6a9f85523ad320a380'
   ],
   [
     'src-tauri/src/wallet/label_interchange.rs',
-    '35283ce2685b0e8668a8ae7aeff07810369dabdce0805f8cc5a13053f1a85ce9'
+    '104ec552d91c45caacdfe97ef73bf3479793d1973aa93783d77593822d8d76c5'
   ],
   [
     'src-tauri/src/wallet/multisig_setup_commands.rs',
-    'aad571c2124db22a89e74709bb094fed3ede15d16816362a57e141658700f827'
+    'bd324a59434f11f8c448c8358d8a4a7dde280d27b4b137a9d246ae823c239076'
   ],
   [
     'src-tauri/src/wallet/multisig_proposal_commands.rs',
-    'f56e309dca709855fa7c8bc9f750dd6be291c8550a659d9778cb8af5c9cef3bb'
+    '95170e65fbfab6492b59a73b0e7b1c502e6a0fc2f726d9b35a29ce6ea7d6417e'
   ],
   [
     'src-tauri/src/wallet/profile_commands.rs',
@@ -121,7 +121,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src-tauri/src/wallet/transaction_commands.rs',
-    '8ea6a89b5fb7792881d17f14343cbdfb46189880e3ff316dc7909009663a6a34'
+    'b390ce6d1f76e12a4ed96236a8245fcb5ca5e879e5e0ae080f810217db508bb0'
   ],
   [
     'src-tauri/src/wallet/verification_evidence.rs',
@@ -165,7 +165,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'scripts/release/check-mainnet-gate.sh',
-    '1d1d51706f435610e123f202d82cfdb17630caada608157ce98dab9adbfb051a'
+    '6bd211e3ee92044c70c49d9d84fa5cd3e197f900fb83fc8b5c9d4fc614225027'
   ],
   [
     'scripts/release/generate-sbom.mjs',
@@ -207,14 +207,14 @@ const pinnedPolicySources = new Map([
     'src/lib/wallet/live-sync.ts',
     'a5c477820a08a6fda433fbf8c7ac9b0a2d36ede2e16593f0f0c3aebd6538a33c'
   ],
-  ['src/lib/wallet/tauri.ts', '0bb9d92cbd172624049f712f1b8d100058ded9a9615b54e886636476e4a3793b'],
+  ['src/lib/wallet/tauri.ts', '30802302cd851cda5bf4cee6967be47a48dcb30e98b1dc528c4e7ebc7ee535c0'],
   [
     'src/lib/wallet/contracts/errors.ts',
     'd5f7120ca3ea63a9f7f95c9e14b01b27dbcfb1dc52ac4974d6271963e8eff15f'
   ],
   [
     'src/lib/wallet/contracts/port.ts',
-    '4bb29c20cae8a0c10c4b03690da73a7afe79077ed39e4373b10ef125a848fe94'
+    '761dcdb5a73c91e5e61bd819b15104df2ee70287bf54940f9803bb0ca85fa73c'
   ],
   [
     'src/lib/wallet/contracts/runtime.ts',

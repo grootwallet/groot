@@ -281,6 +281,14 @@ mod tests {
     }
 
     #[test]
+    fn already_running_error_tells_the_user_how_to_recover() {
+        assert_eq!(
+            ProcessLockError::AlreadyRunning.to_string(),
+            "Groot is already open for this wallet data directory. Quit the other Groot process and try again."
+        );
+    }
+
+    #[test]
     fn rejects_non_directory_app_data_path() {
         let path = temporary_directory();
         File::create(&path).unwrap();
@@ -352,6 +360,25 @@ mod tests {
         assert_eq!(
             fs::metadata(&path).unwrap().permissions().mode() & 0o777,
             0o600
+        );
+
+        drop(lock);
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn existing_app_data_directory_is_restricted_before_lock_use() {
+        use std::os::unix::fs::PermissionsExt as _;
+
+        let directory = temporary_directory();
+        fs::create_dir(&directory).unwrap();
+        fs::set_permissions(&directory, fs::Permissions::from_mode(0o777)).unwrap();
+
+        let lock = ProcessLock::acquire(&directory).unwrap();
+        assert_eq!(
+            fs::metadata(&directory).unwrap().permissions().mode() & 0o777,
+            0o700
         );
 
         drop(lock);

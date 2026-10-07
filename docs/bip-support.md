@@ -1,5 +1,42 @@
 # Bitcoin Improvement Proposal support
 
+The 2026-10-07 send amount input guard changes no BIP support, transaction
+construction, signing, PSBT, descriptor, or persisted format. Comma-decimal BTC
+text is normalized only during exact frontend conversion to integer satoshis.
+
+The 2026-10-07 send and camera presentation follow-up changes no BIP support,
+transaction construction, fee policy, descriptor, PSBT, or persisted format. It
+reuses the existing amount and warning components and only changes how the
+already-authoritative acceleration quote is disclosed.
+
+The 2026-10-07 final acceleration guard and receive-details follow-up has no
+BIP-support, descriptor, PSBT, signing, address, backup, or persisted-format
+change. It adds a configured-node mempool-presence check immediately before
+RBF/CPFP broadcast and reuses existing historical receive evidence in the
+shared address-details presentation.
+
+The 2026-10-07 device-state copy and signed-PSBT disclosure follow-up changes
+no BIP support or evidence, account proof, descriptor, address derivation,
+PSBT encoding, signing rule, or persisted wallet format. A previously verified
+receive fingerprint is displayed only as historical evidence; current device
+identity still requires the existing live BIP32 account-key proof.
+
+The 2026-10-06 internal follow-up changes no BIP support, descriptor or PSBT
+encoding, derivation, recovery, or persisted wallet format. Selected hardware
+send signers receive the existing BIP32/BIP48/BIP84 saved-account proof before
+the UI shows their fingerprint and **Ready**; signature validation remains
+authoritative in Rust. Public-key imports without a saved device type can use
+the same exact-path BIP32 account proof; a model guess alone is insufficient.
+CPFP confirmation-race copy, observed-versus-block time,
+amount feedback, and modal layout are presentation or error-classification
+changes, not protocol changes.
+
+The 2026-10-06 hardware-picker copy and spacing correction does not change BIP32
+identity proof, BIP48 descriptors, address derivation, PSBT handling, signing,
+recovery, interoperability, or persisted formats. It makes the existing passive
+discovery boundary explicit: an eligible fingerprint-less device must be selected
+before Rust can prove its saved account identity.
+
 The 2026-10-05 v0.5.0 release-version preparation changes build metadata only.
 It does not change supported BIPs, descriptors, derivation, transaction policy,
 signing, recovery, sync, or interoperability behavior.
@@ -679,6 +716,11 @@ The hardware-policy and address-modal copy/layout follow-up has no BIP support
 impact. It removes duplicated presentation text and keeps the existing signer
 identity, BIP48 policy values, complete public keys, exact address, PSBT,
 trusted-display review, and signing boundaries unchanged.
+
+The passive Safe 3 and unidentified-device badge correction has no BIP support
+impact. It changes only the reported pre-identification status and its visual
+treatment; selected-device fingerprint verification, address display, PSBT,
+signing, and interoperability rules are unchanged.
 
 The one-item remote-Core batch correction has no BIP support impact. It preserves
 JSON-RPC request/response framing when an indexed match resolves to exactly one

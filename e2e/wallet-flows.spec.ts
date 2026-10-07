@@ -826,7 +826,7 @@ test('creates an external-signer wallet, signs by cable, and configures its isol
   await expect(addressDetails).not.toHaveAttribute('open', '');
   await expect(
     verificationDialog.getByRole('button', { name: /^Travel signing key / })
-  ).toContainText('Ready');
+  ).toContainText('Select to identify');
   await expect(
     page.locator('.address-label').getByText('Not verified', { exact: true })
   ).toBeVisible();
@@ -987,6 +987,10 @@ test('creates an external-signer wallet, signs by cable, and configures its isol
   await hardwareReview.getByText('View more details', { exact: true }).click();
   await expect(hardwareReview.getByText('Fee rate', { exact: true })).toBeVisible();
   await expect(hardwareReview.getByText('Transaction inputs', { exact: true })).toHaveCount(0);
+  await hardwareReview.getByRole('button', { name: /Virtual Coldcard/ }).click();
+  await expect(hardwareReview.getByRole('button', { name: /^Travel signing key / })).toContainText(
+    'Ready'
+  );
   await hardwareReview.getByRole('button', { name: /^Travel signing key / }).click();
   await expect(page.getByRole('status', { name: 'Waiting for hardware signature' })).toContainText(
     'Review and approve on the device.'
@@ -1705,19 +1709,25 @@ test('RBF starts safely and presents one payment row with durable lineage', asyn
   await expect(page.getByText('Your payment amount and recipient will not change.')).toBeVisible();
   await expect(page.getByText('Original fee rate', { exact: true })).toBeHidden();
   await expect(page.getByLabel('Custom acceleration fee rate')).toBeHidden();
-  await page.getByText('Change fee rate', { exact: true }).click();
+  await page.locator('.acceleration-more-details summary').click();
   const rate = page.getByLabel('Custom acceleration fee rate');
   await expect(rate).not.toHaveValue('0');
   await rate.fill('2.5');
   await rate.blur();
   await expect(rate).toHaveValue('2.5');
-  await page.getByText('View fee details', { exact: true }).click();
+  await expect(page.locator('.acceleration-more-details summary')).toContainText(
+    'View less details'
+  );
   await expect(
     page.locator('.acceleration-quote-details > div').filter({ hasText: 'New fee rate' })
   ).toContainText('2.5 sat/vB');
-  await expect(
-    page.locator('.acceleration-quote-details > div').filter({ hasText: 'Effective fee rate' })
-  ).toContainText('2.5 sat/vB');
+  await expect(page.locator('.acceleration-quote-details')).toContainText('New total network fee');
+  await page.screenshot({ path: test.info().outputPath('rbf-details.png') });
+  const totalFee = page.locator('.acceleration-quote-details .interactive-amount');
+  const originalUnit = await totalFee.innerText();
+  await totalFee.click();
+  expect(await totalFee.innerText()).not.toBe(originalUnit);
+  await totalFee.click();
   await page.getByRole('button', { name: 'Continue to sign' }).click();
   const review = page.locator('.acceleration-review-summary');
   await expect(review).toContainText('Speed-up cost');
@@ -1806,14 +1816,15 @@ test('pending incoming transaction opens CPFP review without offering sender-sid
   await expect(page).toHaveURL(/accelerate=cpfp/);
   await expect(page.getByRole('heading', { name: 'Speed up transaction' })).toBeVisible();
   await expect(page.getByText('You will spend this much more')).toBeVisible();
-  await page.getByText('Change fee rate', { exact: true }).click();
+  await page.locator('.acceleration-more-details summary').click();
   const rate = page.getByLabel('Custom acceleration fee rate');
   await expect(rate).toBeVisible();
   await rate.fill('7');
   await rate.blur();
   await expect(rate).toHaveValue('7');
-  await page.getByText('View fee details', { exact: true }).click();
-  await expect(page.getByText('Target package rate')).toBeVisible();
+  await expect(page.getByText('New package fee rate')).toBeVisible();
+  await expect(page.getByText('New total network fee')).toBeVisible();
+  await page.screenshot({ path: test.info().outputPath('cpfp-details.png') });
   await expect(page.getByRole('button', { name: 'Continue to sign' })).toBeVisible();
 });
 
@@ -2348,7 +2359,7 @@ test('coin control selects, freezes, and carries coins into send', async ({ page
   await expect(page.locator('.coin-mode')).toContainText('More private');
   await page.getByRole('button', { name: 'Max' }).click();
   await expect(page.getByLabel('Amount', { exact: true })).toHaveValue('2480260');
-  await expect(page.locator('.max-spend-guidance')).toContainText(
+  await expect(page.locator('.send-amount-notice')).toContainText(
     'Maximum spendable amount selected'
   );
   await expect(
@@ -2410,6 +2421,23 @@ test('page headers stay concise and Coins summary amounts toggle denomination', 
   await selected.click();
   await expect(selected).toContainText('sats');
 });
+
+for (const [language, progressLabel, steps] of [
+  ['fr', 'Progression du paiement', ['Intention', 'Montant et frais', 'Vérifier et signer']],
+  ['es', 'Progreso del pago', ['Intención', 'Importe y comisión', 'Revisar y firmar']]
+] as const) {
+  test(`send progress is translated in ${language} for both wallet types`, async ({ page }) => {
+    await page.addInitScript((value) => localStorage.setItem('groot-language', value), language);
+    for (const route of ['/send', '/multisig/send']) {
+      await page.goto(route);
+      const progress = page.getByRole('navigation', { name: progressLabel });
+      await expect(progress.locator('li strong')).toHaveText([...steps]);
+      expect(
+        await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)
+      ).toBe(true);
+    }
+  });
+}
 
 test('send reviews a proposal and rejects a wrong credential', async ({ page }) => {
   await page.goto('/send');
@@ -2570,6 +2598,7 @@ test('payment QR scanner loads on demand and cancels safely while loading', asyn
   const camera = dialog.locator('.camera-frame');
   const guide = dialog.locator('.scan-guide');
   await expect(camera).toBeVisible();
+  await expect(dialog).toHaveCSS('transform', 'none');
 
   const cameraBox = await camera.boundingBox();
   const guideBox = await guide.boundingBox();
@@ -2577,6 +2606,15 @@ test('payment QR scanner loads on demand and cancels safely while loading', asyn
   expect(guideBox).not.toBeNull();
   expect(Math.abs(cameraBox!.width - cameraBox!.height)).toBeLessThanOrEqual(1);
   expect(Math.abs(guideBox!.width - guideBox!.height)).toBeLessThanOrEqual(1);
+  expect(
+    Math.abs(guideBox!.x + guideBox!.width / 2 - (cameraBox!.x + cameraBox!.width / 2))
+  ).toBeLessThanOrEqual(1);
+  expect(
+    Math.abs(guideBox!.y + guideBox!.height / 2 - (cameraBox!.y + cameraBox!.height / 2))
+  ).toBeLessThanOrEqual(1);
+  expect(
+    await dialog.locator('.modal-body').evaluate((body) => body.scrollHeight <= body.clientHeight)
+  ).toBe(true);
   expect(cameraBox!.width).toBeGreaterThanOrEqual(
     (page.viewportSize()?.width ?? 1180) > 760 ? 540 : 320
   );
@@ -2588,6 +2626,59 @@ test('payment QR scanner loads on demand and cancels safely while loading', asyn
       page.evaluate(() => (window as unknown as { scannerDestroyed?: number }).scannerDestroyed)
     )
     .toBe(1);
+});
+
+test('rejected payment QR stays fully visible without scrolling the camera', async ({ page }) => {
+  await page.route(/\/qr-scanner\.js(?:\?|$)/, (route) =>
+    route.fulfill({
+      contentType: 'application/javascript',
+      body: `export default class {
+        constructor(_video, onscan) { window.emitPaymentQr = () => onscan({ data: 'not-a-bitcoin-request' }); }
+        async start() {}
+        destroy() {}
+      }`
+    })
+  );
+  await page.goto('/send');
+  await page.getByRole('button', { name: 'Scan Bitcoin payment QR' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Scan payment request' });
+  await expect
+    .poll(() =>
+      page.evaluate(() => typeof (window as Window & { emitPaymentQr?: () => void }).emitPaymentQr)
+    )
+    .toBe('function');
+  await page.evaluate(() => (window as Window & { emitPaymentQr: () => void }).emitPaymentQr());
+  const rejection = dialog.getByRole('alert');
+  await expect(rejection).toContainText('QR code rejected');
+  await expect(rejection).toContainText(
+    'This QR code is not a valid Bitcoin payment request for this network.'
+  );
+
+  for (const size of [page.viewportSize()!, { width: 1600, height: 1000 }]) {
+    await page.setViewportSize(size);
+    const visible = await dialog.evaluate((element) => {
+      const modal = element.getBoundingClientRect();
+      const body = element.querySelector('.modal-body')!;
+      const camera = element.querySelector('.camera-frame')!.getBoundingClientRect();
+      const error = element.querySelector('[role="alert"]')!.getBoundingClientRect();
+      return {
+        modalBottom: modal.bottom,
+        bodyScrolls: body.scrollHeight > body.clientHeight,
+        cameraSquare: Math.abs(camera.width - camera.height) <= 1,
+        cameraBottom: camera.bottom,
+        errorBottom: error.bottom,
+        viewportHeight: window.innerHeight
+      };
+    });
+    expect(visible.bodyScrolls).toBe(false);
+    expect(visible.cameraSquare).toBe(true);
+    expect(visible.cameraBottom).toBeLessThanOrEqual(visible.errorBottom);
+    expect(visible.errorBottom).toBeLessThanOrEqual(visible.modalBottom - 10);
+    expect(visible.modalBottom).toBeLessThanOrEqual(visible.viewportHeight);
+    await page.screenshot({
+      path: test.info().outputPath(`payment-scanner-error-${size.width}.png`)
+    });
+  }
 });
 
 test('custom fees validate and wallet deletion requires typed confirmation', async ({ page }) => {

@@ -215,4 +215,56 @@ mod tests {
             PaymentRequestError::InvalidLength.to_string()
         );
     }
+
+    #[test]
+    fn hostile_payment_request_corpus_fails_closed() {
+        let address = &mainnet_addresses()[2];
+        let invalid = [
+            "",
+            "   ",
+            "bitcoin:",
+            "bitcoin:not-an-address",
+            "bitcoin://not-an-address",
+            "lightning:not-a-bitcoin-request",
+            &format!("bitcoin:{address}?amount=-1"),
+            &format!("bitcoin:{address}?amount=1e-8"),
+            &format!("bitcoin:{address}?req-unknown=1"),
+            &format!("bitcoin:{address}?label=%"),
+            &format!("bitcoin:{address}?amount=0.000000001"),
+        ];
+        for request in invalid {
+            assert!(
+                inspect_payment_request(request, Network::Bitcoin).is_err(),
+                "hostile corpus input was unexpectedly accepted: {request:?}"
+            );
+        }
+
+        let oversized = format!(
+            "bitcoin:{address}?label={}",
+            "a".repeat(MAX_PAYJOIN_URI_BYTES)
+        );
+        assert!(matches!(
+            inspect_payment_request(&oversized, Network::Bitcoin),
+            Err(PaymentRequestError::InvalidLength)
+        ));
+
+        // BIP21 inspection preserves a syntactically valid integer amount even
+        // when it exceeds Bitcoin's supply. Transaction preparation remains the
+        // authoritative product/release-policy boundary and rejects it.
+        let policy_bounded = inspect_payment_request(
+            &format!("bitcoin:{address}?amount=21000000.00000001"),
+            Network::Bitcoin,
+        )
+        .unwrap();
+        assert_eq!(
+            policy_bounded.amount_sats.as_deref(),
+            Some("2100000000000001")
+        );
+        assert!(crate::release_policy::validate_spend(
+            Network::Bitcoin,
+            1,
+            policy_bounded.amount_sats.unwrap().parse().unwrap()
+        )
+        .is_err());
+    }
 }

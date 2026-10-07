@@ -1,7 +1,7 @@
 {
   "name": "groot-wallet",
   "private": true,
-  "version": "0.5.0",
+  "version": "0.5.1",
   "license": "Apache-2.0",
   "author": "Thibaud Marechal <t@thibm.net>",
   "repository": {
@@ -80,7 +80,7 @@
     "release:compare": "bash scripts/release/compare-unsigned.sh",
     "release:verify:macos": "bash scripts/release/verify-macos-package.sh",
     "release:test:macos-lifecycle": "bash scripts/release/test-macos-packaged-lifecycle.sh",
-    "release:test:update": "node scripts/release/test-update-bundle.mjs",
+    "release:test:update": "node scripts/release/test-update-bundle.mjs && node --test scripts/release/verify-release-evidence.test.mjs",
     "release:test:hwi": "node scripts/release/test-hwi-artifact.mjs && node --test scripts/release/verify-packaged-hwi.test.mjs scripts/release/build-mainnet-internal-rc.test.mjs",
     "release:verify:packaged-hwi": "node scripts/release/verify-packaged-hwi.mjs",
     "release:test:compare": "bash scripts/release/test-compare-unsigned.sh && bash scripts/release/test-reproducible-rust-env.sh",

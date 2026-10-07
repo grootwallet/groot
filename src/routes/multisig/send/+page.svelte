@@ -53,6 +53,7 @@
     type AccelerationQuote,
     type CpfpAccelerationQuote,
     type HardwareDevice,
+    type HardwareIdentity,
     type MultisigProposal,
     type MultisigWallet,
     type PolicyVerificationAddress,
@@ -119,6 +120,7 @@
     convertAmountInput,
     denomination,
     formatAmount,
+    hasOnlyAmountInputCharacters,
     parseAmountInput,
     setDenomination
   } from '$lib/denomination';
@@ -208,7 +210,9 @@
   const broadcastExplorerUrl = $derived(
     txid ? transactionExplorerUrl(defaultConfig.network, txid) : null
   );
-  let hardwareAction = $state<'scan' | 'sign'>('scan');
+  let hardwareAction = $state<'scan' | 'identify' | 'sign'>('scan');
+  let identifiedDevices = $state<Record<string, HardwareIdentity>>({});
+  let unrelatedDeviceIds = $state<string[]>([]);
   let hardwareAttentionSignal = $state(0),
     hardwareCancelRequested = $state(false);
   let hardwareScanGeneration = 0;
@@ -299,6 +303,15 @@
       })
     ),
     estimatedFee = $derived(quotedMaxFee ?? Math.ceil(selectedRateNumber * 220)),
+    amountFeedback = $derived(
+      !amount.trim()
+        ? ''
+        : !Number.isSafeInteger(amountSats) || amountSats <= 0
+          ? 'Enter an amount greater than zero in the selected unit.'
+          : amountSats + estimatedFee > available
+            ? 'Amount plus fee exceeds your available balance.'
+            : ''
+    ),
     addressValid = $derived(hasAddressPrefixForNetwork(address, defaultConfig.network)),
     valid = $derived(
       addressValid &&
@@ -965,6 +978,10 @@
         accelerationRequest.method !== request.method
       )
         return;
+      if (cause instanceof WalletError && cause.code === 'transaction_confirmed') {
+        markAccelerationConfirmed();
+        return;
+      }
       accelerationQuoteFailed = true;
       feeEstimateError = accelerationUnavailableDescription(request.method, cause, $locale);
     }
@@ -1003,6 +1020,10 @@
       );
       accelerationRequest = null;
     } catch (cause) {
+      if (cause instanceof WalletError && cause.code === 'transaction_confirmed') {
+        markAccelerationConfirmed();
+        return;
+      }
       accelerationQuoteFailed = true;
       feeEstimateError = accelerationUnavailableDescription(request.method, cause, $locale);
       toast({
@@ -1033,8 +1054,7 @@
     updateAvailable();
   }
   function deviceHasSigned(device: HardwareDevice) {
-    const signer = savedSignerForDevice(device);
-    const fingerprint = device.fingerprint ?? signer?.fingerprint;
+    const fingerprint = identifiedDevices[device.id]?.fingerprint;
     return Boolean(
       fingerprint &&
       proposal?.signedFingerprints.some(
@@ -1044,7 +1064,7 @@
   }
   function savedSignerForDevice(device: HardwareDevice) {
     const candidates = savedSignerCandidatesForDevice(
-      device,
+      { ...device, fingerprint: identifiedDevices[device.id]?.fingerprint ?? device.fingerprint },
       wallet?.cosigners ?? [],
       proposal?.eligibleSignerFingerprints ?? []
     );
@@ -1086,6 +1106,8 @@
     if (accelerationConfirmed) return;
     const releaseHardwareReview = walletShell.beginHardwareReview();
     const generation = ++hardwareScanGeneration;
+    identifiedDevices = {};
+    unrelatedDeviceIds = [];
     deviceOpen = true;
     activeHardwareDevice = null;
     hardwareAction = 'scan';
@@ -1119,6 +1141,8 @@
     hardwareScanGeneration += 1;
     busy = false;
     deviceOpen = false;
+    identifiedDevices = {};
+    unrelatedDeviceIds = [];
     void walletService.cancelHardwareOperations(true).catch((cause) => {
       const description = localizedError(cause, $locale, 'Could not stop the hardware scan.');
       deviceError = description;
@@ -1140,13 +1164,15 @@
     deviceOpen = true;
   }
   async function handleHardware(device: HardwareDevice, pinResolved = false) {
+    if (unrelatedDeviceIds.includes(device.id)) return;
     if (
       hardwareWalletMembership(
         device,
         (wallet?.cosigners ?? []).map((signer) => signer.fingerprint),
         (wallet?.cosigners ?? [])
           .map((signer) => signer.deviceType)
-          .filter((deviceType): deviceType is string => Boolean(deviceType))
+          .filter((deviceType): deviceType is string => Boolean(deviceType)),
+        wallet?.cosigners ?? []
       ) === 'unrelated'
     )
       return;
@@ -1159,17 +1185,21 @@
       deviceError = device.message;
       return;
     }
+    if (!identifiedDevices[device.id]) {
+      await identifyHardware(device);
+      return;
+    }
     const signer = savedSignerForDevice(device);
     const signerCandidates = savedSignerCandidatesForDevice(
       device,
       wallet?.cosigners ?? [],
       proposal?.eligibleSignerFingerprints ?? []
     );
-    if (!device.fingerprint && !signer && requiresInteractivePolicyVerification(device)) {
+    if (!signer && requiresInteractivePolicyVerification(device)) {
       deviceError =
         signerCandidates.length > 1
-          ? 'More than one saved signer uses this device family. Unlock the intended device and rescan so Groot can bind its exact fingerprint.'
-          : 'Unlock this device and rescan so Groot can bind it to an eligible saved signer.';
+          ? 'More than one saved signer uses this device family. Select the intended signer to identify it.'
+          : 'This device did not match an eligible signer for this payment.';
       return;
     }
     if (
@@ -1213,6 +1243,36 @@
       return;
     }
     await sign(device);
+  }
+  async function identifyHardware(device: HardwareDevice) {
+    if (busy) return;
+    const releaseHardwareReview = walletShell.beginHardwareReview();
+    const generation = hardwareScanGeneration;
+    hardwareAction = 'identify';
+    busy = true;
+    deviceError = '';
+    try {
+      const identity = await walletService.identifySavedHardwareDevice(device.id);
+      if (generation !== hardwareScanGeneration || !deviceOpen) return;
+      identifiedDevices = { ...identifiedDevices, [device.id]: identity };
+      toast({
+        title: 'Signer identified',
+        description: translate($locale, '{signer} is ready.', { signer: identity.label }),
+        tone: 'success'
+      });
+    } catch (cause) {
+      if (generation !== hardwareScanGeneration) return;
+      if (await redirectExpiredHardwareSession(cause)) return;
+      if (cause instanceof WalletError && cause.code === 'unknown_signer') {
+        unrelatedDeviceIds = [...unrelatedDeviceIds, device.id];
+        deviceError = 'This signer is not part of this wallet.';
+      } else {
+        deviceError = localizedError(cause, $locale, 'Could not identify this signer.');
+      }
+    } finally {
+      releaseHardwareReview();
+      busy = false;
+    }
   }
   async function startHardwarePin(device: HardwareDevice) {
     const releaseHardwareReview = walletShell.beginHardwareReview();
@@ -1463,6 +1523,10 @@
       );
       txid = result.txid;
     } catch (cause) {
+      if (cause instanceof WalletError && cause.code === 'transaction_confirmed') {
+        markAccelerationConfirmed();
+        return;
+      }
       error = localizedError(cause, $locale, 'Broadcast failed.');
     } finally {
       pin = '';
@@ -1936,7 +2000,7 @@
               prepareCustomAcceleration();
             }}
           >
-            <div class="send-stage-heading">
+            <div class="send-stage-heading" class:compact={Boolean(rbfQuote || cpfpQuote)}>
               <h2>
                 {translate(
                   $locale,
@@ -1946,15 +2010,12 @@
                     : 'Enter a custom fee rate'
                 )}
               </h2>
-              <p>
-                {translate(
-                  $locale,
-                  (accelerationRequest.method === 'rbf' && rbfQuote) ||
-                    (accelerationRequest.method === 'cpfp' && cpfpQuote)
-                    ? 'Confirm the additional fee, then continue to sign.'
-                    : 'Bitcoin Core has no usable estimate. Groot will not invent one; choose the sat/vB rate\n          every signer will review.'
-                )}
-              </p>
+              {#if !rbfQuote && !cpfpQuote}<p>
+                  {translate(
+                    $locale,
+                    'Bitcoin Core has no usable estimate. Groot will not invent one; choose the sat/vB rate\n          every signer will review.'
+                  )}
+                </p>{/if}
             </div>
             {#if (accelerationRequest.method === 'rbf' && rbfQuote) || (accelerationRequest.method === 'cpfp' && cpfpQuote)}
               <div class="acceleration-default-choice">
@@ -1974,8 +2035,12 @@
                   )}
                 </p>
               </div>
-              <details class="acceleration-optional-control">
-                <summary>{translate($locale, 'Change fee rate')}</summary>
+              <details class="acceleration-optional-control acceleration-more-details">
+                <summary
+                  ><span class="details-closed">{translate($locale, 'View more details')}</span
+                  ><span class="details-open">{translate($locale, 'View less details')}</span
+                  ></summary
+                >
                 <label class="field"
                   ><span
                     >{translate(
@@ -2001,9 +2066,6 @@
                     })}</small
                   ></label
                 >
-              </details>
-              <details class="acceleration-optional-control">
-                <summary>{translate($locale, 'View fee details')}</summary>
                 {#if accelerationRequest.method === 'rbf' && rbfQuote}<dl
                     class="details-list acceleration-quote-details"
                   >
@@ -2012,49 +2074,25 @@
                       <dd>{rbfQuote.originalEffectiveFeeRate} {translate($locale, 'sat/vB')}</dd>
                     </div>
                     <div>
-                      <dt>{translate($locale, 'Minimum fee rate')}</dt>
-                      <dd>{rbfQuote.minimumFeeRate} {translate($locale, 'sat/vB')}</dd>
-                    </div>
-                    <div>
                       <dt>{translate($locale, 'New fee rate')}</dt>
                       <dd>{rbfQuote.targetFeeRate} {translate($locale, 'sat/vB')}</dd>
                     </div>
                     <div>
-                      <dt>{translate($locale, 'New network fee')}</dt>
-                      <dd><Amount value={rbfQuote.estimatedReplacementFee} /></dd>
-                    </div>
-                    <div>
-                      <dt>{translate($locale, 'Additional fee')}</dt>
-                      <dd><Amount value={rbfQuote.incrementalFee} /></dd>
-                    </div>
-                    <div>
-                      <dt>{translate($locale, 'Effective fee rate')}</dt>
-                      <dd>{rbfQuote.resultingEffectiveFeeRate} {translate($locale, 'sat/vB')}</dd>
+                      <dt>{translate($locale, 'New total network fee')}</dt>
+                      <dd><Amount value={rbfQuote.estimatedReplacementFee} interactive /></dd>
                     </div>
                   </dl>{:else if cpfpQuote}<dl class="details-list acceleration-quote-details">
                     <div>
-                      <dt>{translate($locale, 'Parent fee rate')}</dt>
+                      <dt>{translate($locale, 'Original fee rate')}</dt>
                       <dd>{cpfpQuote.parentEffectiveFeeRate} {translate($locale, 'sat/vB')}</dd>
                     </div>
                     <div>
-                      <dt>{translate($locale, 'Minimum package rate')}</dt>
-                      <dd>{cpfpQuote.minimumFeeRate} {translate($locale, 'sat/vB')}</dd>
-                    </div>
-                    <div>
-                      <dt>{translate($locale, 'Target package rate')}</dt>
+                      <dt>{translate($locale, 'New package fee rate')}</dt>
                       <dd>{cpfpQuote.targetFeeRate} {translate($locale, 'sat/vB')}</dd>
                     </div>
                     <div>
-                      <dt>{translate($locale, 'Child network fee')}</dt>
-                      <dd><Amount value={cpfpQuote.childFee} /></dd>
-                    </div>
-                    <div>
-                      <dt>{translate($locale, 'Package network fee')}</dt>
-                      <dd><Amount value={cpfpQuote.packageFee} /></dd>
-                    </div>
-                    <div>
-                      <dt>{translate($locale, 'Effective package rate')}</dt>
-                      <dd>{cpfpQuote.resultingPackageFeeRate} {translate($locale, 'sat/vB')}</dd>
+                      <dt>{translate($locale, 'New total network fee')}</dt>
+                      <dd><Amount value={cpfpQuote.packageFee} interactive /></dd>
                     </div>
                   </dl>{/if}
               </details>
@@ -2312,8 +2350,19 @@
               <div class="amount-input">
                 <input
                   aria-label={translate($locale, 'Amount')}
-                  bind:value={amount}
-                  oninput={() => {
+                  value={amount}
+                  onbeforeinput={(event) => {
+                    if (event.data && !hasOnlyAmountInputCharacters(event.data, $denomination)) {
+                      event.preventDefault();
+                    }
+                  }}
+                  oninput={(event) => {
+                    const next = event.currentTarget.value;
+                    if (!hasOnlyAmountInputCharacters(next, $denomination)) {
+                      event.currentTarget.value = amount;
+                      return;
+                    }
+                    amount = next;
                     if (maxSpendFeeTimer) clearTimeout(maxSpendFeeTimer);
                     maxSpendRequestRevision += 1;
                     maxSpendActive = false;
@@ -2349,14 +2398,21 @@
                   >{/if}</small
               ></label
             >
-            {#if maxSpendActive}<p class="max-spend-guidance" role="status">
-                {translate(
-                  $locale,
-                  frozenAmount > 0
-                    ? 'Maximum spendable amount selected. Frozen coins remain in this wallet.'
-                    : 'Maximum spendable amount selected after the network fee.'
-                )}
-              </p>{/if}
+            {#if amountFeedback}<WarningNotice
+                title={translate($locale, 'Check amount')}
+                body={translate($locale, amountFeedback)}
+                role="alert"
+                icon
+                class="send-amount-notice"
+              />{/if}
+            {#if maxSpendActive && !amountFeedback}<WarningNotice
+                title={translate($locale, 'Maximum spendable amount selected')}
+                body={frozenAmount > 0
+                  ? translate($locale, 'Frozen coins remain in this wallet.')
+                  : ''}
+                role="status"
+                class="send-amount-notice"
+              />{/if}
             <div class="coin-control-field">
               <span>{translate($locale, 'Coin selection')}</span><button
                 type="button"
@@ -2704,14 +2760,7 @@
                       >
                     </div>
                   </div>
-                  <Button
-                    variant="secondary"
-                    class="full signed-psbt-export"
-                    loading={savingPsbt}
-                    loadingLabel={translate($locale, 'Saving signed PSBT…')}
-                    onclick={saveProposalPsbt}
-                    ><Download size={16} />{translate($locale, 'Save signed PSBT')}</Button
-                  ><PasswordField
+                  <PasswordField
                     label={translate($locale, 'App PIN')}
                     inputLabel="App PIN"
                     bind:value={pin}
@@ -2723,7 +2772,17 @@
                     loading={busy}
                     loadingLabel={translate($locale, 'Finalizing & broadcasting…')}
                     onclick={broadcast}>{translate($locale, 'Finalize & broadcast')}</Button
-                  >{:else}<Button
+                  >
+                  <details class="signed-psbt-options acceleration-optional-control">
+                    <summary>{translate($locale, 'Other options')}</summary>
+                    <Button
+                      variant="secondary"
+                      loading={savingPsbt}
+                      loadingLabel={translate($locale, 'Saving signed PSBT…')}
+                      onclick={saveProposalPsbt}
+                      ><Download size={16} />{translate($locale, 'Save signed PSBT')}</Button
+                    >
+                  </details>{:else}<Button
                     size="large"
                     class="full signature-requirement-action"
                     disabled
@@ -2788,180 +2847,212 @@
   onclose={closeHardwareScan}
   attentionSignal={hardwareAttentionSignal}
   upper
+  wide
 >
-  {#if proposal}
-    <section
-      class="hardware-review"
-      aria-label={translate($locale, 'Authoritative transaction details')}
-    >
-      {#if busy && policyReviewDevice && requiresInteractivePolicyVerification(policyReviewDevice)}<p
-          class="hardware-review-step"
+  <div class="single-hardware-signing-layout">
+    <div class="single-hardware-review-pane">
+      {#if proposal}
+        <section
+          class="hardware-review"
+          aria-label={translate($locale, 'Authoritative transaction details')}
         >
-          {translate($locale, 'Step 2 of 2 · Transaction review')}
-        </p>{/if}
-      <div class="hardware-review-amount">
-        <span>{translate($locale, 'You send')}</span><Amount
-          value={Number(proposal.amount)}
-          interactive
-        />
-      </div>
-      <dl class="details-list hardware-review-primary">
-        <div>
-          <dt>{translate($locale, 'To')}</dt>
-          <dd>
-            <button
-              type="button"
-              class="compact-address-button"
-              onclick={() => (hardwareAddressOpen = true)}
-              >{compactAddress(hardwareRecipient)}</button
+          {#if busy && policyReviewDevice && requiresInteractivePolicyVerification(policyReviewDevice)}<p
+              class="hardware-review-step"
             >
-          </dd>
-        </div>
-        <div class="label-details-row">
-          <dt>{translate($locale, 'Label')}</dt>
-          <dd><PermanentLabelTags labels={proposal.labels ?? [proposal.label]} prominent /></dd>
-        </div>
-        <div>
-          <dt>{translate($locale, 'Network')}</dt>
-          <dd>{proposal.network}</dd>
-        </div>
-        <div>
-          <dt>{translate($locale, 'Network fee')}</dt>
-          <dd><Amount value={Number(proposal.fee)} interactive /></dd>
-        </div>
-        <div class="total">
-          <dt>{translate($locale, 'Total')}</dt>
-          <dd><Amount value={Number(proposal.total)} interactive /></dd>
-        </div>
-      </dl>
-      {#if hardwareTestnetAddressDevice}<p class="verification-network-note">
-          {hardwareTestnetAddressDevice}
-          {translate($locale, 'shows the Regtest output with a')}
-          <code>{translate($locale, 'tb1')}</code>
-          {translate(
+              {translate($locale, 'Step 2 of 2 · Transaction review')}
+            </p>{/if}
+          <div class="hardware-review-amount">
+            <span>{translate($locale, 'You send')}</span><Amount
+              value={Number(proposal.amount)}
+              interactive
+            />
+          </div>
+          <dl class="details-list hardware-review-primary">
+            <div>
+              <dt>{translate($locale, 'To')}</dt>
+              <dd>
+                <button
+                  type="button"
+                  class="compact-address-button"
+                  onclick={() => (hardwareAddressOpen = true)}
+                  >{compactAddress(hardwareRecipient)}</button
+                >
+              </dd>
+            </div>
+            <div class="label-details-row">
+              <dt>{translate($locale, 'Label')}</dt>
+              <dd><PermanentLabelTags labels={proposal.labels ?? [proposal.label]} prominent /></dd>
+            </div>
+            <div>
+              <dt>{translate($locale, 'Network')}</dt>
+              <dd>{proposal.network}</dd>
+            </div>
+            <div>
+              <dt>{translate($locale, 'Network fee')}</dt>
+              <dd><Amount value={Number(proposal.fee)} interactive /></dd>
+            </div>
+            <div class="total">
+              <dt>{translate($locale, 'Total')}</dt>
+              <dd><Amount value={Number(proposal.total)} interactive /></dd>
+            </div>
+          </dl>
+          {#if hardwareTestnetAddressDevice}<p class="verification-network-note">
+              {hardwareTestnetAddressDevice}
+              {translate($locale, 'shows the Regtest output with a')}
+              <code>{translate($locale, 'tb1')}</code>
+              {translate(
+                $locale,
+                'prefix. Rust\n          supplied this alias only after proving it decodes to the identical Bitcoin output script.'
+              )}
+            </p>{/if}
+          <TransactionReviewDetails
+            {proposal}
+            compact
+            interactiveAmounts
+            policy={proposal.spendPath === 'delayed'
+              ? `${delayedSpendKeyName} only`
+              : wallet?.recoveryTemplate?.type === 'recovery'
+                ? '2 of 3 primary keys'
+                : `${wallet?.threshold} of ${wallet?.cosigners.length}`}
+            changeAddressOverride={hardwareChangeAddress}
+            onChangeAddress={() => (hardwareChangeAddressOpen = true)}
+          />
+        </section>
+      {/if}
+    </div>
+    <div class="single-hardware-device-pane">
+      {#if busy}
+        {#if policyReviewDevice && requiresInteractivePolicyVerification(policyReviewDevice)}<div
+            class="hardware-phase-reference"
+          >
+            <span
+              ><strong>{translate($locale, 'Device still showing the wallet policy?')}</strong
+              ><small
+                >{translate(
+                  $locale,
+                  'Return to the saved policy reference without interrupting this signing request.'
+                )}</small
+              ></span
+            ><Button variant="secondary" size="small" onclick={showPolicyDuringSigning}
+              >{translate($locale, 'View policy reference')}</Button
+            >
+          </div>{/if}
+        <HardwareActionPrompt
+          title={translate(
             $locale,
-            'prefix. Rust\n          supplied this alias only after proving it decodes to the identical Bitcoin output script.'
+            hardwareCancelRequested
+              ? 'Cancel on your hardware device'
+              : hardwareAction === 'identify'
+                ? 'Identifying signer'
+                : hardwareAction === 'sign'
+                  ? 'Check your hardware device'
+                  : 'Looking for hardware devices'
           )}
-        </p>{/if}
-      <TransactionReviewDetails
-        {proposal}
-        compact
-        interactiveAmounts
-        policy={proposal.spendPath === 'delayed'
-          ? `${delayedSpendKeyName} only`
-          : wallet?.recoveryTemplate?.type === 'recovery'
-            ? '2 of 3 primary keys'
-            : `${wallet?.threshold} of ${wallet?.cosigners.length}`}
-        changeAddressOverride={hardwareChangeAddress}
-        onChangeAddress={() => (hardwareChangeAddressOpen = true)}
-      />
-    </section>
-  {/if}
-  {#if busy}
-    {#if policyReviewDevice && requiresInteractivePolicyVerification(policyReviewDevice)}<div
-        class="hardware-phase-reference"
-      >
-        <span
-          ><strong>{translate($locale, 'Device still showing the wallet policy?')}</strong><small
+          detail={translate(
+            $locale,
+            hardwareCancelRequested
+              ? 'Reject the request on the device.'
+              : hardwareAction === 'identify'
+                ? 'Unlock or approve the public-key request on the selected device.'
+                : hardwareAction === 'sign'
+                  ? 'Review and approve on the device.'
+                  : 'Keep each signer connected and follow its prompts.'
+          )}
+          label={translate(
+            $locale,
+            hardwareCancelRequested
+              ? 'Waiting for hardware cancellation'
+              : hardwareAction === 'identify'
+                ? 'Waiting for signer identity'
+                : hardwareAction === 'sign'
+                  ? 'Waiting for hardware signature'
+                  : 'Hardware device scan in progress'
+          )}
+        />
+      {:else if devices.length === 0}
+        <div class="device-scan">
+          <strong>{translate($locale, 'No device found')}</strong><span
             >{translate(
               $locale,
-              'Return to the saved policy reference without interrupting this signing request.'
-            )}</small
-          ></span
-        ><Button variant="secondary" size="small" onclick={showPolicyDuringSigning}
-          >{translate($locale, 'View policy reference')}</Button
-        >
-      </div>{/if}
-    <HardwareActionPrompt
-      title={translate(
-        $locale,
-        hardwareCancelRequested
-          ? 'Cancel on your hardware device'
-          : hardwareAction === 'sign'
-            ? 'Check your hardware device'
-            : 'Looking for hardware devices'
-      )}
-      detail={translate(
-        $locale,
-        hardwareCancelRequested
-          ? 'Reject the request on the device.'
-          : hardwareAction === 'sign'
-            ? 'Review and approve on the device.'
-            : 'Keep each signer connected and follow its prompts.'
-      )}
-      label={translate(
-        $locale,
-        hardwareCancelRequested
-          ? 'Waiting for hardware cancellation'
-          : hardwareAction === 'sign'
-            ? 'Waiting for hardware signature'
-            : 'Hardware device scan in progress'
-      )}
-    />
-  {:else if devices.length === 0}
-    <div class="device-scan">
-      <strong>{translate($locale, 'No device found')}</strong><span
-        >{translate($locale, 'Connect an HWI-compatible device, or use signed PSBT import.')}</span
-      ><Button variant="secondary" onclick={scan}>{translate($locale, 'Scan again')}</Button>
+              'Connect an HWI-compatible device, or use signed PSBT import.'
+            )}</span
+          ><Button variant="secondary" onclick={scan}>{translate($locale, 'Scan again')}</Button>
+        </div>
+      {:else}
+        <HardwareDeviceList
+          {devices}
+          emptyMessage=""
+          onselect={handleHardware}
+          onrescan={scan}
+          showRescan
+          detailedStatus
+          savedSigners={wallet?.cosigners ?? []}
+          eligibleFingerprints={(wallet?.cosigners ?? []).map((signer) => signer.fingerprint)}
+          eligibleDeviceTypes={(wallet?.cosigners ?? [])
+            .map((signer) => signer.deviceType)
+            .filter((deviceType): deviceType is string => Boolean(deviceType))}
+          membershipOverrides={Object.fromEntries(
+            devices
+              .filter(
+                (device) => identifiedDevices[device.id] || unrelatedDeviceIds.includes(device.id)
+              )
+              .map((device) => [
+                device.id,
+                unrelatedDeviceIds.includes(device.id)
+                  ? ('unrelated' as const)
+                  : ('candidate' as const)
+              ])
+          )}
+          deviceDisplayName={(device) => identifiedDevices[device.id]?.label ?? device.label}
+          deviceSecondaryLabel={(device) => identifiedDevices[device.id]?.fingerprint ?? ''}
+          deviceDisabled={(device, membership) =>
+            membership === 'unrelated' ||
+            unrelatedDeviceIds.includes(device.id) ||
+            deviceHasSigned(device) ||
+            device.action === 'none' ||
+            policyRegistrationProfile(device).registration === 'unsupported'}
+          deviceStateLabel={(device, membership: HardwareWalletMembership) => {
+            const policyRequired = requiresPolicySetup(device);
+            const policyVerified = devicePolicyVerification(device);
+            if (deviceHasSigned(device)) return 'Already signed';
+            if (membership !== 'candidate') return hardwareDeviceStateLabel(device, membership);
+            if (identifiedDevices[device.id] && (!policyRequired || policyVerified)) return 'Ready';
+            if (
+              policyRegistrationProfile(device).registration === 'unsupported' ||
+              (policyRequired && !policyVerified)
+            ) {
+              return policyReadinessLabel(device, policyVerified);
+            }
+            return hardwareDeviceStateLabel(device, membership);
+          }}
+        />
+      {/if}
+      {#if !busy && showColdcardPolicyHelp}<div class="hardware-policy-help">
+          <strong>{translate($locale, 'Coldcard must know this wallet policy')}</strong><span
+            >{translate(
+              $locale,
+              'If it reports an unknown multisig wallet, import this public descriptor from Settings →\n        Multisig Wallets → Import.'
+            )}</span
+          ><Button variant="secondary" size="small" onclick={saveColdcardPolicy}
+            ><Download size={14} />{translate($locale, 'Save wallet policy')}</Button
+          >
+        </div>{/if}
+      {#if deviceError}<div class="hardware-inline-error" role="alert">
+          <AlertTriangle size={18} /><span
+            ><strong
+              >{translate(
+                $locale,
+                hardwareAction === 'identify'
+                  ? 'Signer identification failed'
+                  : 'This device could not sign'
+              )}</strong
+            ><small>{deviceError}</small></span
+          ><Button variant="secondary" size="small" onclick={scan}
+            >{translate($locale, 'Rescan')}</Button
+          >
+        </div>{/if}
     </div>
-  {:else}
-    <HardwareDeviceList
-      {devices}
-      emptyMessage=""
-      onselect={handleHardware}
-      onrescan={scan}
-      showRescan
-      detailedStatus
-      savedSigners={wallet?.cosigners ?? []}
-      eligibleFingerprints={(wallet?.cosigners ?? []).map((signer) => signer.fingerprint)}
-      eligibleDeviceTypes={(wallet?.cosigners ?? [])
-        .map((signer) => signer.deviceType)
-        .filter((deviceType): deviceType is string => Boolean(deviceType))}
-      membershipOverrides={Object.fromEntries(
-        devices.filter(deviceHasSigned).map((device) => [device.id, 'candidate' as const])
-      )}
-      deviceSecondaryLabel={(device) =>
-        device.fingerprint ??
-        (deviceHasSigned(device) ? (savedSignerForDevice(device)?.fingerprint ?? '') : '')}
-      deviceDisabled={(device, membership) =>
-        membership === 'unrelated' ||
-        deviceHasSigned(device) ||
-        device.action === 'none' ||
-        policyRegistrationProfile(device).registration === 'unsupported'}
-      deviceStateLabel={(device, membership: HardwareWalletMembership) => {
-        const policyRequired = requiresPolicySetup(device);
-        const policyVerified = devicePolicyVerification(device);
-        if (deviceHasSigned(device)) return 'Already signed';
-        if (membership !== 'candidate') return hardwareDeviceStateLabel(device, membership);
-        if (
-          policyRegistrationProfile(device).registration === 'unsupported' ||
-          (policyRequired && !policyVerified)
-        ) {
-          return policyReadinessLabel(device, policyVerified);
-        }
-        return hardwareDeviceStateLabel(device, membership);
-      }}
-    />
-  {/if}
-  {#if !busy && showColdcardPolicyHelp}<div class="hardware-policy-help">
-      <strong>{translate($locale, 'Coldcard must know this wallet policy')}</strong><span
-        >{translate(
-          $locale,
-          'If it reports an unknown multisig wallet, import this public descriptor from Settings →\n        Multisig Wallets → Import.'
-        )}</span
-      ><Button variant="secondary" size="small" onclick={saveColdcardPolicy}
-        ><Download size={14} />{translate($locale, 'Save wallet policy')}</Button
-      >
-    </div>{/if}
-  {#if deviceError}<div class="hardware-inline-error" role="alert">
-      <AlertTriangle size={18} /><span
-        ><strong>{translate($locale, 'This device could not sign')}</strong><small
-          >{deviceError}</small
-        ></span
-      ><Button variant="secondary" size="small" onclick={scan}
-        >{translate($locale, 'Rescan')}</Button
-      >
-    </div>{/if}
+  </div>
 </Modal>
 <Modal
   open={policyReviewOpen && !accelerationConfirmed}
@@ -3105,6 +3196,7 @@
 <Modal
   open={paymentScanOpen}
   wide
+  fixedViewport
   title={translate($locale, 'Scan payment request')}
   description={translate(
     $locale,

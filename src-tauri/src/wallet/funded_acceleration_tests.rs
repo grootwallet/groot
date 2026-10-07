@@ -1051,8 +1051,10 @@ fn funded_rbf_and_cpfp_cross_groot_proposal_boundaries() {
         original_txid,
         "an active-chain duplicate remains an idempotent success"
     );
-    let race = broadcast_transaction_with_rpc(&rpc, &replacement_tx).unwrap_err();
-    assert_eq!(race.code, "broadcast_failed");
+    let race =
+        broadcast_proposal_transaction_with_rpc(&rpc, &db, &rbf.proposal_id, &replacement_tx)
+            .unwrap_err();
+    assert_eq!(race.code, "transaction_confirmed");
     assert_eq!(
         proposal_status(&db, &rbf.proposal_id),
         ("ready".to_owned(), None)
@@ -1061,7 +1063,9 @@ fn funded_rbf_and_cpfp_cross_groot_proposal_boundaries() {
     rpc.invalidate_block(&original_block[0]).unwrap();
     mine_empty_block(&rpc, &mining);
     sync(&mut wallet, &mut db, Arc::clone(&rpc));
-    let replacement_txid = broadcast_transaction_with_rpc(&rpc, &replacement_tx).unwrap();
+    let replacement_txid =
+        broadcast_proposal_transaction_with_rpc(&rpc, &db, &rbf.proposal_id, &replacement_tx)
+            .unwrap();
     sync(&mut receiver, &mut receiver_db, Arc::clone(&rpc));
     label_provenance::reconcile_wallet_outputs(&receiver, &receiver_db, now()).unwrap();
     assert_eq!(receiver.transactions().count(), 1);
@@ -1174,7 +1178,15 @@ fn funded_rbf_and_cpfp_cross_groot_proposal_boundaries() {
     let child_tx =
         finalized_multisig_proposal_transaction(&mut db, &metadata, &cpfp.proposal_id, &ready.psbt)
             .unwrap();
-    let child_txid = broadcast_transaction_with_rpc(&rpc, &child_tx).unwrap();
+    let confirmed_parent_block = rpc.generate_to_address(1, &mining).unwrap();
+    let obsolete_child =
+        broadcast_proposal_transaction_with_rpc(&rpc, &db, &cpfp.proposal_id, &child_tx)
+            .unwrap_err();
+    assert_eq!(obsolete_child.code, "transaction_confirmed");
+    rpc.invalidate_block(&confirmed_parent_block[0]).unwrap();
+    mine_empty_block(&rpc, &mining);
+    let child_txid =
+        broadcast_proposal_transaction_with_rpc(&rpc, &db, &cpfp.proposal_id, &child_tx).unwrap();
     let parent_entry = rpc.get_mempool_entry(&replacement_txid).unwrap();
     let child_entry = rpc.get_mempool_entry(&child_txid).unwrap();
     assert_eq!(child_entry.depends, vec![replacement_txid]);

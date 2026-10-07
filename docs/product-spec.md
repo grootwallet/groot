@@ -25,6 +25,12 @@ The sole proposal action is explicit discard through native cancellation; the
 confirmed payment is untouched. Reopening must preserve this read-only state,
 and discarding must not regenerate a payment draft. Without a saved proposal,
 the confirmed-original notice may simply offer an Overview exit.
+Immediately before submitting any RBF replacement or CPFP child, native Rust
+must verify that its exact original transaction is still in the configured
+node's mempool. Missing or unavailable evidence fails closed and leaves the
+saved signed proposal untouched. A confirmed original produces the read-only
+proposal state. A block can still arrive between the final node query and
+submission; Groot must not claim that these separate RPC calls are atomic.
 
 Status: canonical for public v0.4.96, including the approved macOS Mainnet scope.
 
@@ -44,7 +50,7 @@ remain disabled. A fingerprint-less device from a family absent from the saved
 wallet is also disabled without initiating unlock. When passive inventory and
 every eligible saved signer both expose an exact model, a different model is
 disabled as **Not part of this wallet** and the matching model says **Select to
-confirm wallet**. Otherwise an eligible same-family device remains unknown until
+identify**. Otherwise an eligible same-family device remains unknown until
 Rust proves its exact account identity.
 Matching signers omit technical membership prose and show **Policy unverified**
 only when required saved policy evidence is absent.
@@ -74,11 +80,14 @@ Hardware pickers for an existing wallet distinguish connection readiness from
 wallet membership. A non-matching discovered fingerprint is unavailable and
 labelled **Not part of this wallet**. A missing fingerprint remains unknown unless
 exact passive model evidence can rule it out or identify it as the only compatible
-saved model; compatibility is presented as **Select to confirm wallet**, never as
+saved model; compatibility is presented as **Select to identify**, never as
 proof of membership or readiness.
 A matching fingerprint is only a candidate: native full account-key proof remains
 mandatory before address display, policy verification, or signing. Public backup
 recovery accepts importable text/BSMS/JSON, not the human-readable PDF export.
+Reopening receive verification may show the address's saved prior verifier
+fingerprint as historical evidence, but a new scan cannot label a connected
+device **Ready** from that evidence. Live identity is proved again on selection.
 
 Groot is an onchain-only Bitcoin wallet and multisig coordinator. It prioritizes the smallest understandable flows for receiving, sending, reviewing activity, inspecting coins, and coordinating descriptor-based hardware signers. There are no cloud backups, Lightning, address books, or editable labels in the first release.
 
@@ -285,6 +294,8 @@ may erase or replace committed history.
 ## Send
 
 Single-key and multisig payments use the same **Economy**, **Standard**, **Priority**, and **Custom** fee selector. Public-network presets come only from the connected Bitcoin Core node. When its current mempool is empty or fits comfortably within one block, the presets may correctly share the same current low rate instead of repeating stale high historical estimates. The UI names Bitcoin Core as the source without exposing RPC method names. The global **sats** or **BTC** display preference applies across balances, coins, activity, send flows, alerts, errors, and notifications. The `sats` unit is always lowercase and `BTC` is always uppercase. BTC always displays eight decimals; accounting and IPC remain integer satoshis.
+
+Editable send amounts reject letters and symbols without silently removing them from pasted text. Sats accept digits with optional comma thousands grouping; BTC accepts digits with either a point or comma decimal separator, to at most eight places. Both forms are parsed exactly into integer satoshis before preparation.
 
 1. A labeled three-stage progress indicator keeps every send flow consistent: **Intent**, **Amount & fee**, and **Review & sign**. Intent asks for one to five mandatory permanent payment labels first, then a network-valid recipient address, so the user names the purpose before choosing how to fund it. The address field can scan a static QR containing either a plain address or a bounded BIP21 payment URI. Rust parses the exact payload without changing address case, rejects malformed, wrong-network, unknown-required, and unsupported Payjoin requests, and returns the canonical address plus optional integer-satoshi amount, label, and message. Payment destinations are limited to P2PKH, P2SH (including nested SegWit), SegWit v0 P2WPKH/P2WSH, and SegWit v1 P2TR; P2A and witness v2-v16 are rejected. Taproot remains send-only. The renderer prefills the amount and, when the user has not already chosen a permanent label, uses the URI message or label as an editable suggestion; every imported value remains visible for review before transaction preparation. Existing and provenance-derived records may display more than five labels after consolidation or other wallet activity. The selected unlocked wallet suggests at most four recently used labels without prefilling one; typing filters its complete label history and ranks exact normalized matches first without resizing the flow when nothing matches. Choosing a suggestion adds a removable token inside the field and removes that label from the available list. Enter, Tab, comma, and semicolon commit typed text as a token; empty-input Backspace selects the final token before a second press removes it. Choosing or typing matching normalized text intentionally groups the payment with that label entity; every submitted proposal assignment remains immutable. Amount & fee contains the integer satoshi amount, coin selection, and fee rate. Separate onchain clusters remain separate until a transaction links them, and review continues to report that public link honestly.
 2. Choose economy, standard, priority, or a validated custom sat/vB rate greater than zero and no more than 10,000. Custom rates may be decimal and below 1 sat/vB; Rust preserves the requested decimal text and rounds upward only to Bitcoin's 0.004 sat/vB sat/kwu precision. The authoritative review reports the transaction's resulting effective rate, which may be slightly higher because the final fee is a whole number of satoshis. A node may still reject a rate below its current relay or mempool minimum; Groot surfaces that rejection instead of silently raising the user's choice.

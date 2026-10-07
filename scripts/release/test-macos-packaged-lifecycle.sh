@@ -60,30 +60,25 @@ wait_for_lock "$first_pid" || {
 
 GROOT_REGTEST_APP_DATA_DIR="$profile" "$binary" >"$second_log" 2>&1 &
 second_pid="$!"
-second_status=""
 for _ in $(seq 1 100); do
   if ! kill -0 "$second_pid" 2>/dev/null; then
-    set +e
-    wait "$second_pid"
-    second_status="$?"
-    set -e
-    second_pid=""
-    break
+    echo "A second packaged process exited instead of presenting the already-open warning." >&2
+    exit 1
   fi
   sleep 0.05
 done
-if [[ -z "$second_status" ]]; then
-  echo "A second packaged process remained alive instead of failing closed." >&2
-  exit 1
-fi
-[[ "$second_status" -ne 0 ]] || {
-  echo "A second packaged process unexpectedly opened the same profile." >&2
+kill -0 "$first_pid" 2>/dev/null || {
+  echo "The original packaged process exited during the second-launch warning." >&2
   exit 1
 }
-grep -Eiq "already (open|running)|another Groot process" "$second_log" || {
-  echo "The second-launch failure was not understandable." >&2
-  exit 1
-}
+
+# The native warning intentionally waits for human acknowledgement. This
+# non-interactive harness proves that the expected lock conflict no longer
+# panics and that it leaves the lock owner alive; packaged UI acceptance owns
+# the warning copy, hidden second window, and normal exit after pressing OK.
+kill "$second_pid"
+wait "$second_pid" 2>/dev/null || true
+second_pid=""
 
 kill -KILL "$first_pid"
 wait "$first_pid" 2>/dev/null || true
@@ -96,4 +91,4 @@ wait_for_lock "$restart_pid" || {
   exit 1
 }
 
-echo "Packaged macOS process exclusion and forced-termination recovery passed."
+echo "Packaged macOS duplicate-launch wait and forced-termination recovery passed."

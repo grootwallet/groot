@@ -277,6 +277,15 @@ fn validate_multisig_setup_draft(
     Ok(Some(preview))
 }
 
+fn validate_new_multisig_setup_draft(
+    draft: &MultisigSetupDraft,
+) -> ApiResult<Option<MultisigPreviewDto>> {
+    for cosigner in &draft.cosigners {
+        validate_label_formatting(&cosigner.label)?;
+    }
+    validate_multisig_setup_draft(draft)
+}
+
 fn rename_cosigner_label(
     cosigners: &mut [CosignerInput],
     signer_id: &str,
@@ -455,7 +464,7 @@ pub fn multisig_setup_draft_save(
     let _operation = operation_guard(&state)?;
     draft.version = MULTISIG_SETUP_DRAFT_VERSION;
     draft.updated_at = now();
-    let preview = validate_multisig_setup_draft(&draft)?;
+    let preview = validate_new_multisig_setup_draft(&draft)?;
     {
         let pending = state
             .pending_policy_verifications
@@ -612,6 +621,16 @@ mod setup_draft_tests {
             "wallet_corrupt"
         );
 
+        let mut hidden_label = draft();
+        hidden_label.cosigners[0].label = "Signer\u{e0020}hidden".to_owned();
+        assert!(validate_multisig_setup_draft(&hidden_label).is_ok());
+        assert_eq!(
+            validate_new_multisig_setup_draft(&hidden_label)
+                .unwrap_err()
+                .code,
+            "invalid_label"
+        );
+
         let mut duplicate = draft();
         duplicate.cosigners[1] = duplicate.cosigners[0].clone();
         assert_eq!(
@@ -734,6 +753,9 @@ mod setup_draft_tests {
 #[tauri::command]
 pub fn multisig_preview(policy: PolicyInput) -> ApiResult<MultisigPreviewDto> {
     reject_virtual_cosigners(&policy.cosigners)?;
+    for cosigner in &policy.cosigners {
+        validate_label_formatting(&cosigner.label)?;
+    }
     policy.preview().map_err(policy_api_error)
 }
 
@@ -743,6 +765,9 @@ pub fn recovery_policy_analyze(
     cosigners: Vec<crate::multisig::CosignerInput>,
 ) -> ApiResult<PolicyAnalysis> {
     reject_virtual_cosigners(&cosigners)?;
+    for cosigner in &cosigners {
+        validate_label_formatting(&cosigner.label)?;
+    }
     analyze_template(&template, &cosigners).map_err(recovery_api_error)
 }
 

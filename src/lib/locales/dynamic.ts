@@ -36,9 +36,9 @@ export const dynamicCopy = {
     fr: 'Ne fait pas partie de ce portefeuille',
     es: 'No forma parte de esta cartera'
   },
-  'Select to confirm wallet': {
-    fr: 'Sélectionnez pour confirmer le portefeuille',
-    es: 'Selecciona para confirmar la cartera'
+  'Select to identify': {
+    fr: 'Sélectionnez pour identifier',
+    es: 'Selecciona para identificar'
   },
   'Unlock to identify': {
     fr: 'Déverrouillez pour identifier',
@@ -415,14 +415,6 @@ export const dynamicCopy = {
   'Network switch failed': {
     fr: 'Échec du changement de réseau',
     es: 'Error al cambiar de red'
-  },
-  'Wallet match unknown': {
-    fr: 'Correspondance avec le portefeuille inconnue',
-    es: 'Coincidencia con la cartera desconocida'
-  },
-  'Locked · wallet match unknown': {
-    fr: 'Verrouillé · correspondance inconnue',
-    es: 'Bloqueado · coincidencia desconocida'
   },
   'Ready for this wallet': {
     fr: 'Prêt pour ce portefeuille',

@@ -293,6 +293,16 @@ describe('hardware receive verification UI', () => {
     );
   });
 
+  it('shows saved receive evidence without presenting it as live device readiness', () => {
+    expect(verificationFlow).toContain('hardwareVerifiedAt={address.hardwareVerifiedAt}');
+    expect(verificationFlow).toContain('hardwareVerifiedBy={address.hardwareVerifiedBy}');
+    expect(addressComparison).toContain("translate($locale, 'Signer fingerprint')");
+    expect(hardwareDeviceList).toContain("class:ready={stateLabel === 'Ready'}");
+    expect(verificationFlow).not.toContain(
+      'deviceStateLabel={(device) => address.hardwareVerifiedBy'
+    );
+  });
+
   it('keeps delayed Miniscript policies outside the pinned HWI USB boundary', () => {
     expect(multisigSetup).toContain(
       "{#if templateKind === 'standard'}<button onclick={scanHardware}"
@@ -363,6 +373,8 @@ describe('hardware receive verification UI', () => {
     expect(verificationFlow).toContain('<WarningNotice');
     expect(verificationFlow).toContain('title={translate($locale, verifyErrorTitle)}');
     expect(verificationFlow).toContain("verifyErrorTitle = 'Signer is not part of this wallet'");
+    expect(verificationFlow).toContain('class:with-error={Boolean(verifyError)}');
+    expect(verificationFlow).toContain('.verification-device-list.with-error');
     expect(verificationFlow).not.toContain('<p class="form-error" role="alert">{verifyError}</p>');
     expect(verificationFlow).toContain('onclick={retryVerificationDevice}');
     expect(verificationFlow).toContain("translate($locale, 'Try this signer again')");
@@ -425,6 +437,10 @@ describe('hardware receive verification UI', () => {
       "'BitBox may request its password again for this new secure connection. Enter it only on BitBox.'"
     );
     expect(hardwareDeviceList).toContain('hardwareDeviceStateLabel(device, membership');
+    expect(hardwareDeviceList).toContain("stateLabel !== 'Select to identify'");
+    expect(hardwareDeviceList).not.toContain(
+      "membership !== 'candidate' && membership !== 'compatible'"
+    );
     expect(hardwareDeviceList).toContain(
       "deviceSecondaryLabel = (device) => device.fingerprint ?? ''"
     );
@@ -698,15 +714,16 @@ describe('hardware receive verification UI', () => {
     expect(signing).toContain('deviceError = hardwareCancelRequested');
   });
 
-  it('keeps locked signer matching fail-closed while allowing one eligible device family', () => {
+  it('requires selected-device identity proof before calling a signer ready', () => {
     expect(multisigSend).toContain('savedSignerCandidatesForDevice(');
     expect(multisigSend).toContain('candidates.length === 1 ? candidates[0] : null');
+    expect(multisigSend).toContain('await walletService.identifySavedHardwareDevice(device.id)');
+    expect(multisigSend).toContain("cause.code === 'unknown_signer'");
     expect(multisigSend).toContain(
-      'More than one saved signer uses this device family. Unlock the intended device and rescan'
+      'identifiedDevices[device.id] && (!policyRequired || policyVerified)'
     );
-    expect(multisigSend).toContain(
-      'Unlock this device and rescan so Groot can bind it to an eligible saved signer.'
-    );
+    expect(singleKeySend).toContain('await walletService.identifySavedHardwareDevice(device.id)');
+    expect(singleKeySend).toContain("? 'Ready'");
   });
 
   it('turns hardware-signing close requests into visible on-device cancellation guidance', () => {

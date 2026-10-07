@@ -21,6 +21,11 @@ export type HardwarePinPrompt = {
   pinRequired: boolean;
 };
 
+export type HardwareIdentity = {
+  fingerprint: string;
+  label: string;
+};
+
 export type ExternalSignerSource = 'usb' | 'qr' | 'file' | 'manual';
 export type ExternalSigner = {
   label: string;

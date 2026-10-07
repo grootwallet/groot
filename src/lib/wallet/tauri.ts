@@ -25,6 +25,7 @@ import type {
 import type {
   CosignerHealthCheck,
   HardwareDevice,
+  HardwareIdentity,
   HardwareHealthCheckRecord,
   MultisigPreview,
   MultisigCreation,
@@ -552,6 +553,9 @@ export class TauriWalletAdapter implements WalletPort {
   }
   sendHardwarePin(challengeId: string, pinPositions: string) {
     return command<void>('hardware_send_pin', { challengeId, pinPositions });
+  }
+  identifySavedHardwareDevice(deviceId: string) {
+    return command<HardwareIdentity>('hardware_identify_saved_device', { deviceId });
   }
   async checkHardwareCosigner(
     cosigner: PolicyDraft['cosigners'][number],

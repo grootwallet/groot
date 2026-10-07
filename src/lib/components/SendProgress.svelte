@@ -19,7 +19,7 @@
         <span
           >{#if current > number}<Check size={12} strokeWidth={2.5} />{:else}{number}{/if}</span
         >
-        <strong>{label}</strong>
+        <strong>{translate($locale, label)}</strong>
       </li>
     {/each}
   </ol>

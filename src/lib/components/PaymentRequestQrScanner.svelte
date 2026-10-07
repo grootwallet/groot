@@ -85,11 +85,19 @@
   .scanner {
     position: relative;
     display: grid;
+    flex: 1 1 auto;
+    min-height: 0;
+    width: 100%;
+    container-type: inline-size;
+    grid-template-rows: minmax(0, 1fr) auto;
     gap: 0.75rem;
+    justify-items: center;
   }
   .camera-frame {
     position: relative;
-    width: 100%;
+    height: min(100%, 100cqw);
+    width: auto;
+    max-width: 100%;
     aspect-ratio: 1;
     overflow: hidden;
     border-radius: 1rem;
@@ -105,15 +113,16 @@
     position: absolute;
     width: 68%;
     aspect-ratio: 1;
-    top: 16%;
+    top: 50%;
     left: 50%;
-    transform: translateX(-50%);
+    transform: translate(-50%, -50%);
     border: 2px solid color-mix(in srgb, var(--link) 75%, white);
     border-radius: 1rem;
     pointer-events: none;
   }
   .scan-status {
     display: flex;
+    justify-self: stretch;
     align-items: flex-start;
     gap: 0.5rem;
     color: var(--muted);

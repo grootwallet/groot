@@ -314,8 +314,27 @@ fn internal(error: impl ToString) -> ApiError {
     api_error("internal_error", error)
 }
 
-fn operation_guard(state: &AppState) -> ApiResult<MutexGuard<'_, ()>> {
+struct OperationGuard<'a> {
+    _operation: MutexGuard<'a, ()>,
+    _metadata: MutexGuard<'a, ()>,
+}
+
+struct MetadataOperationGuard<'a> {
+    _operation: Option<MutexGuard<'a, ()>>,
+    _metadata: MutexGuard<'a, ()>,
+}
+
+fn foreground_sync_operation_guard(state: &AppState) -> ApiResult<MutexGuard<'_, ()>> {
     state.operations.lock().map_err(internal)
+}
+
+fn operation_guard(state: &AppState) -> ApiResult<OperationGuard<'_>> {
+    let operation = foreground_sync_operation_guard(state)?;
+    let metadata = state.metadata_operations.lock().map_err(internal)?;
+    Ok(OperationGuard {
+        _operation: operation,
+        _metadata: metadata,
+    })
 }
 
 // Display-only profile and signer metadata live outside the wallet database.
@@ -324,9 +343,15 @@ fn operation_guard(state: &AppState) -> ApiResult<MutexGuard<'_, ()>> {
 fn metadata_operation_guard<'a>(
     state: &'a AppState,
     wallet_id: Uuid,
-) -> ApiResult<Option<MutexGuard<'a, ()>>> {
+) -> ApiResult<MetadataOperationGuard<'a>> {
     match state.operations.try_lock() {
-        Ok(guard) => Ok(Some(guard)),
+        Ok(operation) => {
+            let metadata = state.metadata_operations.lock().map_err(internal)?;
+            Ok(MetadataOperationGuard {
+                _operation: Some(operation),
+                _metadata: metadata,
+            })
+        }
         Err(TryLockError::Poisoned(error)) => Err(internal(error)),
         Err(TryLockError::WouldBlock) => {
             let syncing_selected_wallet = state
@@ -336,9 +361,16 @@ fn metadata_operation_guard<'a>(
                 .as_ref()
                 .is_some_and(|sync| sync.wallet_id == wallet_id);
             if syncing_selected_wallet {
-                Ok(None)
+                Ok(MetadataOperationGuard {
+                    _operation: None,
+                    _metadata: state.metadata_operations.lock().map_err(internal)?,
+                })
             } else {
-                operation_guard(state).map(Some)
+                let guard = operation_guard(state)?;
+                Ok(MetadataOperationGuard {
+                    _operation: Some(guard._operation),
+                    _metadata: guard._metadata,
+                })
             }
         }
     }
@@ -582,6 +614,7 @@ fn lock_wallet(state: &State<'_, AppState>, wallet_id: Uuid) -> ApiResult<()> {
 #[derive(Default)]
 pub struct AppState {
     operations: Mutex<()>,
+    metadata_operations: Mutex<()>,
     foreground_sync: Mutex<Option<ActiveForegroundSync>>,
     persisted_sync_reads: RwLock<()>,
     proposals: Mutex<HashMap<String, PendingProposal>>,
@@ -1134,6 +1167,7 @@ pub struct TransactionDto {
     status: String,
     confirmations: u32,
     date: String,
+    block_timestamp: Option<String>,
     address: Option<String>,
     label: String,
     intent_label: Option<PermanentLabelDto>,
@@ -1452,6 +1486,13 @@ pub struct CosignerHealthDto {
     summary: String,
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HardwareIdentityDto {
+    fingerprint: String,
+    label: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct HardwareHealthCheckRecordDto {
@@ -1761,7 +1802,7 @@ fn hardware_device_dto(device: HwiDevice) -> HardwareDeviceDto {
         )
     } else if passive_trezor_on_device_unlock {
         (
-            "needs_device_unlock",
+            "detected",
             "Detected. Select this Trezor and follow any unlock request on the device.",
             "unlock",
         )
@@ -4133,11 +4174,40 @@ fn ensure_expected_genesis(network: Network, observed: BlockHash) -> ApiResult<(
 fn broadcast_transaction(
     app: &AppHandle,
     state: &State<'_, AppState>,
+    db: &Connection,
+    proposal_id: &str,
     transaction: &Transaction,
 ) -> ApiResult<Txid> {
     let rpc = rpc_client(app, state)?;
     checked_chain_identity(&rpc)?;
-    broadcast_transaction_with_rpc(&rpc, transaction)
+    broadcast_proposal_transaction_with_rpc(&rpc, db, proposal_id, transaction)
+}
+
+fn broadcast_proposal_transaction_with_rpc(
+    rpc: &Client,
+    db: &Connection,
+    proposal_id: &str,
+    transaction: &Transaction,
+) -> ApiResult<Txid> {
+    if let Some((method, original_txid)) = proposal_acceleration_origin(db, proposal_id)? {
+        require_acceleration_original_pending(rpc, method, original_txid)?;
+    }
+    broadcast_transaction_with_rpc(rpc, transaction)
+}
+
+fn require_acceleration_original_pending(
+    rpc: &Client,
+    method: AccelerationMethod,
+    original_txid: Txid,
+) -> ApiResult<()> {
+    match rpc.get_mempool_entry(&original_txid) {
+        Ok(_) => Ok(()),
+        Err(CoreRpcError::JsonRpc(jsonrpc::Error::Rpc(response))) if response.code == -5 => {
+            let confirmed = transaction_confirmed_in_active_chain(rpc, original_txid);
+            Err(transaction_commands::acceleration_original_missing_from_mempool(method, confirmed))
+        }
+        Err(error) => Err(rpc_api_error(error)),
+    }
 }
 
 fn broadcast_transaction_with_rpc(rpc: &Client, transaction: &Transaction) -> ApiResult<Txid> {
@@ -4149,23 +4219,7 @@ fn broadcast_transaction_with_rpc(rpc: &Client, transaction: &Transaction) -> Ap
         )),
         Err(_) => {
             let in_mempool = rpc.get_mempool_entry(&expected).is_ok();
-            let confirmed_in_active_chain = rpc
-                .get_raw_transaction_info(&expected, None)
-                .ok()
-                .filter(|transaction| {
-                    transaction.txid == expected
-                        && transaction.confirmations.unwrap_or_default() > 0
-                })
-                .and_then(|transaction| transaction.blockhash)
-                .and_then(|blockhash| {
-                    rpc.get_raw_transaction_info(&expected, Some(&blockhash))
-                        .ok()
-                })
-                .is_some_and(|transaction| {
-                    transaction.txid == expected
-                        && transaction.confirmations.unwrap_or_default() > 0
-                        && transaction.in_active_chain == Some(true)
-                });
+            let confirmed_in_active_chain = transaction_confirmed_in_active_chain(rpc, expected);
             if in_mempool || confirmed_in_active_chain {
                 Ok(expected)
             } else {
@@ -4176,6 +4230,21 @@ fn broadcast_transaction_with_rpc(rpc: &Client, transaction: &Transaction) -> Ap
             }
         }
     }
+}
+
+fn transaction_confirmed_in_active_chain(rpc: &Client, txid: Txid) -> bool {
+    rpc.get_raw_transaction_info(&txid, None)
+        .ok()
+        .filter(|transaction| {
+            transaction.txid == txid && transaction.confirmations.unwrap_or_default() > 0
+        })
+        .and_then(|transaction| transaction.blockhash)
+        .and_then(|blockhash| rpc.get_raw_transaction_info(&txid, Some(&blockhash)).ok())
+        .is_some_and(|transaction| {
+            transaction.txid == txid
+                && transaction.confirmations.unwrap_or_default() > 0
+                && transaction.in_active_chain == Some(true)
+        })
 }
 
 fn now() -> u64 {
@@ -4227,8 +4296,43 @@ pub(crate) fn label_has_unsafe_formatting(label: &str) -> bool {
     })
 }
 
+// Keep the v0.5.0 predicate above stable for compatibility checks that also run
+// while opening already-persisted signer metadata. New and imported labels use
+// this stricter boundary. The format ranges follow Unicode 18.0 General_Category
+// Cf; the remaining ranges are invisible separators, fillers, and variation
+// selectors called out by the v0.5.0 independent reassessments.
+fn label_has_extended_unsafe_formatting(label: &str) -> bool {
+    label.chars().any(|character| {
+        matches!(
+            character,
+            '\u{0600}'..='\u{0605}'
+                | '\u{06dd}'
+                | '\u{070f}'
+                | '\u{0890}'..='\u{0891}'
+                | '\u{08e2}'
+                | '\u{115f}'..='\u{1160}'
+                | '\u{17b4}'..='\u{17b5}'
+                | '\u{180b}'..='\u{180d}'
+                | '\u{180f}'
+                | '\u{2028}'..='\u{2029}'
+                | '\u{206a}'..='\u{206f}'
+                | '\u{2800}'
+                | '\u{3164}'
+                | '\u{fe00}'..='\u{fe0f}'
+                | '\u{ffa0}'
+                | '\u{110bd}'
+                | '\u{110cd}'
+                | '\u{13430}'..='\u{1343f}'
+                | '\u{1bca0}'..='\u{1bca3}'
+                | '\u{1d173}'..='\u{1d17a}'
+                | '\u{e0000}'..='\u{e007f}'
+                | '\u{e0100}'..='\u{e01ef}'
+        )
+    })
+}
+
 pub(crate) fn validate_label_formatting(label: &str) -> ApiResult<()> {
-    if label_has_unsafe_formatting(label) {
+    if label_has_unsafe_formatting(label) || label_has_extended_unsafe_formatting(label) {
         return Err(api_error(
             "invalid_label",
             "Permanent labels cannot contain invisible or directional formatting characters.",
@@ -5188,6 +5292,9 @@ fn validate_multisig_backup(encoded: &str) -> ApiResult<MultisigBackupDto> {
         cosigners: backup.wallet.cosigners.clone(),
     };
     reject_virtual_cosigners(&policy.cosigners)?;
+    for cosigner in &policy.cosigners {
+        validate_label_formatting(&cosigner.label)?;
+    }
     let (expected_external, expected_internal, expected_policy_type, expected_paths) =
         if let Some(template) = &backup.wallet.recovery_template {
             let analysis =
@@ -5935,6 +6042,7 @@ fn apply_replacement_history(
                 status: "replaced".to_owned(),
                 confirmations: 0,
                 date: row.get::<_, u64>(11)?.to_string(),
+                block_timestamp: None,
                 address: row.get(7)?,
                 label: row.get(8)?,
                 intent_label: None,
@@ -6126,6 +6234,29 @@ fn proposal_acceleration_method(
         )),
     })
     .transpose()
+}
+
+fn proposal_acceleration_origin(
+    db: &Connection,
+    proposal_id: &str,
+) -> ApiResult<Option<(AccelerationMethod, Txid)>> {
+    let Some(method) = proposal_acceleration_method(db, proposal_id)? else {
+        return Ok(None);
+    };
+    let original = db
+        .query_row(
+            "SELECT original_txid FROM groot_accelerations WHERE proposal_id = ?1",
+            params![proposal_id],
+            |row| row.get::<_, String>(0),
+        )
+        .map_err(internal)?;
+    let txid = Txid::from_str(&original).map_err(|_| {
+        api_error(
+            "proposal_mismatch",
+            "The stored acceleration transaction reference is invalid.",
+        )
+    })?;
+    Ok(Some((method, txid)))
 }
 
 fn validate_rbf_original_intent(
@@ -6482,7 +6613,7 @@ fn run_foreground_sync(
     }
 
     let result = (|| {
-        let _operation = operation_guard(state)?;
+        let _operation = foreground_sync_operation_guard(state)?;
         ensure_foreground_sync_not_cancelled(Some(cancel.as_ref()))?;
         let selected = require_unlocked_for_background_sync(app, state)?;
         if selected != wallet_id {
@@ -7174,7 +7305,9 @@ fn confirmations(
         ChainPosition::Confirmed { anchor, .. } => (
             tip.saturating_sub(anchor.block_id.height).saturating_add(1),
             Some(anchor.block_id.height),
-            anchor.confirmation_time.to_string(),
+            fallback_first_seen
+                .unwrap_or(anchor.confirmation_time)
+                .to_string(),
         ),
         ChainPosition::Unconfirmed { first_seen, .. } => (
             0,

@@ -1041,7 +1041,7 @@ pub async fn multisig_proposal_broadcast(
             &proposal_id,
             &reviewed_psbt,
         )?;
-        let txid = broadcast_transaction(&app, &state, &transaction)?;
+        let txid = broadcast_transaction(&app, &state, &db, &proposal_id, &transaction)?;
         let delayed_policy = delayed_policy_context(&metadata)?;
         let snapshot = commit_multisig_broadcast(
             &mut db,
@@ -1169,6 +1169,9 @@ pub async fn multisig_create(
         let _admission_cleanup = clear_new_wallet_admission_on_exit(&state);
         validate_credential(credential.as_str())?;
         reject_virtual_cosigners(&policy.cosigners)?;
+        for cosigner in &policy.cosigners {
+            validate_label_formatting(&cosigner.label)?;
+        }
         // An offline, watch-only coordinator does not need a short-lived HWI
         // admission. Mainnet receive remains gated on durable device evidence.
         let preview = policy.preview().map_err(policy_api_error)?;
@@ -1324,6 +1327,9 @@ pub async fn multisig_recovery_create(
         })?;
         reject_virtual_cosigners(&cosigners)?;
         reject_usb_cosigners_for_delayed_policy(&cosigners)?;
+        for cosigner in &cosigners {
+            validate_label_formatting(&cosigner.label)?;
+        }
         let policy = PolicyInput {
             name: name.clone(),
             threshold: 2,

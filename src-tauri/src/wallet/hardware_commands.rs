@@ -506,7 +506,7 @@ pub(super) fn saved_cosigner_candidates_for_device(
             signer
                 .device_type
                 .as_deref()
-                .is_some_and(|saved_type| saved_type.eq_ignore_ascii_case(&device.device_type))
+                .is_none_or(|saved_type| saved_type.eq_ignore_ascii_case(&device.device_type))
         })
         .cloned()
         .collect::<Vec<_>>();
@@ -1685,6 +1685,87 @@ fn check_draft_cosigner(
 }
 
 #[tauri::command]
+pub async fn hardware_identify_saved_device(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    device_id: String,
+) -> ApiResult<HardwareIdentityDto> {
+    let (initiating_wallet_id, _activity) = begin_unlocked_user_operation(&app, &state)?;
+    let selected = selected_profile(&app)?;
+    if selected.id != initiating_wallet_id {
+        return Err(api_error(
+            "wallet_selection_changed",
+            "The selected wallet changed during device identification.",
+        ));
+    }
+    let device = recently_scanned_hardware_device(&state, &device_id)?;
+    let hwi = hwi_cli(&app)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let native_state = app.state::<AppState>();
+        let _wallet_operation = operation_guard(&native_state)?;
+        if selected_profile(&app)?.id != selected.id {
+            return Err(api_error(
+                "wallet_selection_changed",
+                "The selected wallet changed during device identification.",
+            ));
+        }
+        let operation = hwi
+            .begin_interactive_operation()
+            .map_err(hardware_api_error)?;
+        let (identity, label) = match selected.kind {
+            WalletKind::Multisig => {
+                let saved = read_multisig_metadata(&app)?;
+                let candidates = saved_cosigner_candidates_for_device(&saved.cosigners, &device)?;
+                let identity = prove_live_cosigner_identity_for_candidates(
+                    &hwi,
+                    &operation,
+                    &device,
+                    &candidates,
+                )?;
+                let label = candidates
+                    .iter()
+                    .find(|candidate| {
+                        candidate
+                            .fingerprint
+                            .eq_ignore_ascii_case(&identity.fingerprint)
+                    })
+                    .map(|candidate| candidate.label.clone())
+                    .ok_or_else(unknown_hardware_signer)?;
+                (identity, label)
+            }
+            WalletKind::WatchOnly => {
+                let saved = read_external_signer_metadata(&app)?.signer;
+                let identity =
+                    prove_live_external_signer_identity(&hwi, &operation, &device, &saved)?;
+                (identity, saved.label)
+            }
+            WalletKind::SingleKey => {
+                return Err(api_error(
+                    "wrong_wallet_kind",
+                    "The selected wallet has no saved hardware signer.",
+                ));
+            }
+        };
+        operation
+            .complete_if_active(|| {
+                if selected_profile(&app)?.id != selected.id {
+                    return Err(api_error(
+                        "wallet_selection_changed",
+                        "The selected wallet changed during device identification.",
+                    ));
+                }
+                Ok(HardwareIdentityDto {
+                    fingerprint: identity.fingerprint,
+                    label,
+                })
+            })
+            .map_err(hardware_api_error)?
+    })
+    .await
+    .map_err(internal)?
+}
+
+#[tauri::command]
 pub async fn hardware_check_cosigner(
     app: AppHandle,
     state: State<'_, AppState>,
@@ -2053,19 +2134,13 @@ pub(super) fn prove_live_cosigner_identity_for_candidates(
     expected: &[CosignerInput],
 ) -> ApiResult<VerifiedHardwareIdentity> {
     let first = expected.first().ok_or_else(unknown_hardware_signer)?;
-    let expected_device_type = first.device_type.as_deref().ok_or_else(|| {
-        api_error(
-            "invalid_hardware_request",
-            "This signer has no saved interactive USB device type.",
-        )
-    })?;
-    require_matching_policy_device_type(Some(expected_device_type), &device.device_type)?;
+    require_matching_policy_device_type(first.device_type.as_deref(), &device.device_type)?;
     if expected.iter().any(|signer| {
         signer.derivation_path != first.derivation_path
             || signer
                 .device_type
                 .as_deref()
-                .is_none_or(|device_type| !device_type.eq_ignore_ascii_case(expected_device_type))
+                .is_some_and(|device_type| !device_type.eq_ignore_ascii_case(&device.device_type))
     }) {
         return Err(api_error(
             "invalid_hardware_request",
@@ -2547,6 +2622,7 @@ pub fn external_signer_create(
             "Wallet names must contain 1 to 48 characters.",
         ));
     }
+    validate_label_formatting(&signer.label)?;
     validate_credential(credential.as_str())?;
     signer.validate().map_err(external_signer_api_error)?;
     require_mainnet_hardware_admission(
@@ -3129,7 +3205,7 @@ pub async fn external_signer_proposal_broadcast(
             ));
         }
         let transaction = psbt.extract_tx().map_err(internal)?;
-        let txid = broadcast_transaction(&app, &state, &transaction)?;
+        let txid = broadcast_transaction(&app, &state, &db, &proposal_id, &transaction)?;
         let mut persisted = db.transaction().map_err(internal)?;
         let mut wallet = load_wallet_transaction(&mut persisted)?;
         apply_locally_broadcast_transaction(&mut wallet, &transaction);
@@ -4044,6 +4120,24 @@ mod health_check_tests {
     }
 
     #[test]
+    fn public_key_import_can_be_a_candidate_for_exact_live_identity_proof() {
+        let mut manual = signer_from_seed(26);
+        manual.device_type = None;
+        let mut other_family = signer_from_seed(27);
+        other_family.device_type = Some("trezor".to_owned());
+        let jade = HwiDevice {
+            device_type: "jade".to_owned(),
+            path: "opaque-resolved-path".to_owned(),
+            ..HwiDevice::default()
+        };
+        let candidates =
+            saved_cosigner_candidates_for_device(&[other_family, manual.clone()], &jade).unwrap();
+        assert_eq!(candidates.len(), 1);
+        assert_eq!(candidates[0].fingerprint, manual.fingerprint);
+        assert_eq!(candidates[0].xpub, manual.xpub);
+    }
+
+    #[test]
     fn identified_device_cannot_fall_back_to_another_same_family_signer() {
         let mut expected = signer_from_seed(13);
         expected.device_type = Some("jade".to_owned());
@@ -4088,7 +4182,7 @@ mod health_check_tests {
         let mut wrong = signer_from_seed(16);
         wrong.device_type = Some("jade".to_owned());
         let mut expected = signer_from_seed(17);
-        expected.device_type = Some("jade".to_owned());
+        expected.device_type = None;
         let response =
             serde_json::to_string(&serde_json::json!({ "xpub": expected.xpub })).unwrap();
         let shell_response = response.replace('\'', "'\"'\"'");
