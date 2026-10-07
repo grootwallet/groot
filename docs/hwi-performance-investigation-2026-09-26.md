@@ -65,6 +65,17 @@ Groot owners: `hardware.rs`, `wallet/hardware_commands.rs`, ADRs 0041 and 0043.
 
 ## Proposed speed work, in order
 
+On 2026-10-07, the owner reported that a connected, unlocked Trezor Safe 3
+in an existing Mainnet multisig wallet took 11.89 seconds from selecting
+receive verification to address display; Groot completed immediately after
+device approval. This is one owner-timed physical observation, not a measured
+distribution or a breakdown by phase. Current receive verification performs
+fresh exact-path account proof and then trusted display through two HWI CLI
+invocations. The prior no-device launch measurements make startup a plausible
+contributor, but do not establish how much of this 11.89 seconds was startup,
+device communication, or an on-device wait. Cached fingerprints must not
+replace the fresh account proof.
+
 - Add opt-in, bounded, identifier-free phase timing: admission, native
   enumeration, HWI authentication/startup, identity proof, display, cleanup.
   Separate device waiting from CPU/startup. Never log arguments, responses,

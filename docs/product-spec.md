@@ -44,7 +44,7 @@ remain disabled. A fingerprint-less device from a family absent from the saved
 wallet is also disabled without initiating unlock. When passive inventory and
 every eligible saved signer both expose an exact model, a different model is
 disabled as **Not part of this wallet** and the matching model says **Select to
-confirm wallet**. Otherwise an eligible same-family device remains unknown until
+identify**. Otherwise an eligible same-family device remains unknown until
 Rust proves its exact account identity.
 Matching signers omit technical membership prose and show **Policy unverified**
 only when required saved policy evidence is absent.
@@ -74,11 +74,14 @@ Hardware pickers for an existing wallet distinguish connection readiness from
 wallet membership. A non-matching discovered fingerprint is unavailable and
 labelled **Not part of this wallet**. A missing fingerprint remains unknown unless
 exact passive model evidence can rule it out or identify it as the only compatible
-saved model; compatibility is presented as **Select to confirm wallet**, never as
+saved model; compatibility is presented as **Select to identify**, never as
 proof of membership or readiness.
 A matching fingerprint is only a candidate: native full account-key proof remains
 mandatory before address display, policy verification, or signing. Public backup
 recovery accepts importable text/BSMS/JSON, not the human-readable PDF export.
+Reopening receive verification may show the address's saved prior verifier
+fingerprint as historical evidence, but a new scan cannot label a connected
+device **Ready** from that evidence. Live identity is proved again on selection.
 
 Groot is an onchain-only Bitcoin wallet and multisig coordinator. It prioritizes the smallest understandable flows for receiving, sending, reviewing activity, inspecting coins, and coordinating descriptor-based hardware signers. There are no cloud backups, Lightning, address books, or editable labels in the first release.
 

@@ -1,5 +1,17 @@
 # Implementation status
 
+## v0.5.1 hardware presentation follow-up — 2026-10-07
+
+The seven supported USB model rows use the same unproven identity copy in
+receive and signing: a passive model match says **Select to identify**, not
+**Select to confirm wallet**. **Ready** remains reserved for fresh saved-account
+proof. A receive address can display its previously verified fingerprint as
+historical evidence without treating a newly scanned device as the same live
+signer. Completed multisig signing moves **Save signed PSBT** under **Other
+options**, leaving finalization primary. No wallet, profile, proposal, registry,
+backup, descriptor, PSBT, database, or BIP format changes; no migration is
+required. Physical retesting of all seven exact devices is still needed.
+
 ## v0.5.0 release preparation — 2026-10-05
 
 The tested source now reports v0.5.0 across the frontend, Tauri, Cargo, and

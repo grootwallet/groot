@@ -293,6 +293,16 @@ describe('hardware receive verification UI', () => {
     );
   });
 
+  it('shows saved receive evidence without presenting it as live device readiness', () => {
+    expect(verificationFlow).toContain('{#if address.hardwareVerifiedBy}');
+    expect(verificationFlow).toContain('Previously verified by');
+    expect(verificationFlow).toContain('Connected signer identity is checked again each time.');
+    expect(hardwareDeviceList).toContain("class:ready={stateLabel === 'Ready'}");
+    expect(verificationFlow).not.toContain(
+      'deviceStateLabel={(device) => address.hardwareVerifiedBy'
+    );
+  });
+
   it('keeps delayed Miniscript policies outside the pinned HWI USB boundary', () => {
     expect(multisigSetup).toContain(
       "{#if templateKind === 'standard'}<button onclick={scanHardware}"

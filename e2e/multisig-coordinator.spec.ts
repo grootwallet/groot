@@ -759,6 +759,7 @@ test('spends end-to-end from the ready-made demo wallet', async ({ page }) => {
   await hardwareDialog.getByRole('button', { name: /^Coldcard / }).click();
   const coldcardSetup = page.getByRole('dialog', { name: 'Prepare Coldcard for this wallet' });
   if (await coldcardSetup.isVisible()) {
+    await expect(page.locator('.toast-region .toast')).toHaveCount(0);
     await coldcardSetup
       .getByRole('checkbox', { name: /I imported and verified this policy/ })
       .check();
@@ -776,16 +777,18 @@ test('spends end-to-end from the ready-made demo wallet', async ({ page }) => {
   await hardwareDialog.getByRole('button', { name: /^Trezor / }).click();
   await expect(signerSummary.getByText('2 of 2 collected')).toBeVisible();
   await expect(page.getByRole('button', { name: /more signatures? required/ })).toHaveCount(0);
+  await expect(hardwareDialog).toBeHidden();
   await expect(page.getByRole('button', { name: 'Finalize & broadcast' })).toBeVisible();
   const saveSignedPsbt = page.getByRole('button', { name: 'Save signed PSBT' });
+  await expect(saveSignedPsbt).toBeHidden();
+  for (const close of await page.locator('.toast-close').all()) await close.click();
+  await expect(page.locator('.toast-region .toast')).toHaveCount(0);
+  await page.locator('.signed-psbt-options').scrollIntoViewIfNeeded();
+  await page.screenshot({
+    path: test.info().outputPath(`multisig-ready-to-finalize-${page.viewportSize()?.width}.png`)
+  });
+  await page.locator('details.signed-psbt-options > summary').click();
   await expect(saveSignedPsbt).toBeVisible();
-  await expect
-    .poll(async () => {
-      const saveButton = await saveSignedPsbt.boundingBox();
-      const pinLabel = await page.locator('.password-field .field-label').boundingBox();
-      return (pinLabel?.y ?? 0) - ((saveButton?.y ?? 0) + (saveButton?.height ?? 0));
-    })
-    .toBeGreaterThanOrEqual(16);
   await expect(page.getByRole('region', { name: 'Signed transaction review' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Sign with device' })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Show unsigned QR' })).toHaveCount(0);

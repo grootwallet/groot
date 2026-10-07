@@ -2766,14 +2766,7 @@
                       >
                     </div>
                   </div>
-                  <Button
-                    variant="secondary"
-                    class="full signed-psbt-export"
-                    loading={savingPsbt}
-                    loadingLabel={translate($locale, 'Saving signed PSBT…')}
-                    onclick={saveProposalPsbt}
-                    ><Download size={16} />{translate($locale, 'Save signed PSBT')}</Button
-                  ><PasswordField
+                  <PasswordField
                     label={translate($locale, 'App PIN')}
                     inputLabel="App PIN"
                     bind:value={pin}
@@ -2785,7 +2778,17 @@
                     loading={busy}
                     loadingLabel={translate($locale, 'Finalizing & broadcasting…')}
                     onclick={broadcast}>{translate($locale, 'Finalize & broadcast')}</Button
-                  >{:else}<Button
+                  >
+                  <details class="signed-psbt-options acceleration-optional-control">
+                    <summary>{translate($locale, 'Other options')}</summary>
+                    <Button
+                      variant="secondary"
+                      loading={savingPsbt}
+                      loadingLabel={translate($locale, 'Saving signed PSBT…')}
+                      onclick={saveProposalPsbt}
+                      ><Download size={16} />{translate($locale, 'Save signed PSBT')}</Button
+                    >
+                  </details>{:else}<Button
                     size="large"
                     class="full signature-requirement-action"
                     disabled

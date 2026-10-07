@@ -1,5 +1,11 @@
 # Bitcoin Improvement Proposal support
 
+The 2026-10-07 device-state copy and signed-PSBT disclosure follow-up changes
+no BIP support or evidence, account proof, descriptor, address derivation,
+PSBT encoding, signing rule, or persisted wallet format. A previously verified
+receive fingerprint is displayed only as historical evidence; current device
+identity still requires the existing live BIP32 account-key proof.
+
 The 2026-10-06 internal follow-up changes no BIP support, descriptor or PSBT
 encoding, derivation, recovery, or persisted wallet format. Selected hardware
 send signers receive the existing BIP32/BIP48/BIP84 saved-account proof before

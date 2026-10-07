@@ -36,6 +36,12 @@ export const copyCatalog = {
     fr: 'En attente de l’identité du signataire',
     es: 'Esperando la identidad del firmante'
   },
+  'Previously verified by': { fr: 'Déjà vérifié par', es: 'Verificado anteriormente por' },
+  'Connected signer identity is checked again each time.': {
+    fr: 'L’identité du signataire connecté est vérifiée à chaque fois.',
+    es: 'La identidad del firmante conectado se comprueba cada vez.'
+  },
+  'Other options': { fr: 'Autres options', es: 'Otras opciones' },
   ...settingsCopy,
   ...onboardingCopy,
   ...componentCopy,

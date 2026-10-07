@@ -41,6 +41,7 @@ describe('hardware device display names', () => {
     expect(hardwareWalletMembershipLabel('candidate')).toBe('');
     expect(hardwareWalletMembershipLabel('candidate', true)).toBe('Policy unverified');
     expect(hardwareWalletMembershipLabel('unknown', true)).toBe('Select to identify');
+    expect(hardwareWalletMembershipLabel('compatible')).toBe('Select to identify');
     expect(hardwareWalletMembershipLabel('unrelated', true)).toBe('Not part of this wallet');
   });
   it('keeps each compact state honest about wallet membership', () => {
@@ -100,9 +101,7 @@ describe('hardware device display names', () => {
         savedSafe3
       )
     ).toBe('compatible');
-    expect(hardwareDeviceStateLabel(device('safe-3'), 'compatible')).toBe(
-      'Select to confirm wallet'
-    );
+    expect(hardwareDeviceStateLabel(device('safe-3'), 'compatible')).toBe('Select to identify');
     expect(
       hardwareWalletMembership(
         { ...device('model-one'), label: 'Trezor Model One', model: 'trezor' },
@@ -111,6 +110,31 @@ describe('hardware device display names', () => {
         [...savedSafe3, { fingerprint: '11223344', label: 'Alice', deviceType: 'trezor' }]
       )
     ).toBe('unknown');
+  });
+  it.each([
+    'Coldcard Mk4',
+    'Blockstream Jade',
+    'BitBox02 Bitcoin-only',
+    'BitBox02 Nova Bitcoin-only',
+    'Trezor Model One',
+    'Trezor Safe 3',
+    'Ledger Nano S Plus'
+  ])('uses the same unproven identity states for %s', (model) => {
+    const connected = { ...device(model), label: model };
+    expect(hardwareDeviceStateLabel(connected, 'unknown')).toBe('Select to identify');
+    expect(hardwareDeviceStateLabel(connected, 'compatible')).toBe('Select to identify');
+    expect(hardwareDeviceStateLabel(connected, 'candidate')).toBe('Select to identify');
+    expect(hardwareDeviceStateLabel(connected, 'unrelated')).toBe('Not part of this wallet');
+    const locked = {
+      ...connected,
+      action: 'unlock' as const,
+      status: 'needs_device_unlock' as const
+    };
+    expect(hardwareDeviceStateLabel(locked, 'unknown')).toBe('Unlock to identify');
+    expect(hardwareDeviceStateLabel(locked, 'compatible')).toBe('Unlock to identify');
+    const unavailable = { ...connected, action: 'none' as const, status: 'not_ready' as const };
+    expect(hardwareDeviceStateLabel(unavailable, 'unknown')).toBe('Attention required');
+    expect(hardwareDeviceStateLabel(unavailable, 'compatible')).toBe('Attention required');
   });
   it('uses the saved user name after an exact fingerprint match', () => {
     const jade = { ...device('jade'), fingerprint: '1B9B9B49', label: 'jade' };

@@ -9032,8 +9032,12 @@ code {
   font-size: var(--font-size-meta);
   color: var(--muted);
 }
-.signed-psbt-export {
-  margin-bottom: 18px;
+.signed-psbt-options {
+  margin-top: 14px;
+  border-bottom: 0;
+}
+.signed-psbt-options > .button {
+  margin: 0 0 12px;
 }
 
 /* Progressive disclosure and coin control */
