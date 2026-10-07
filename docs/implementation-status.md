@@ -1,5 +1,20 @@
 # Implementation status
 
+## v0.5.1 acceleration final guard and receive details — 2026-10-07
+
+The software, external-hardware, and multisig final broadcast commands share
+one native RBF/CPFP guard: the persisted original transaction must still be in
+the configured Core node's mempool immediately before sending the signed
+transaction. Missing or unavailable evidence preserves the signed proposal;
+an observed active-chain confirmation makes the send flow read-only. The two
+node requests are not atomic, so a block can still arrive between them. Prior
+receive verification time and fingerprint now appear only in the existing
+expandable address-details rows. No persisted format or BIP support changes.
+Normal macOS Finder launch can activate an already-running Groot copy with the
+same bundle identifier before the newer executable starts; the existing
+process-lock warning can appear only when a second process actually launches.
+Changing that Finder behavior requires a separately reviewed packaging path.
+
 ## v0.5.1 hardware presentation follow-up — 2026-10-07
 
 The seven supported USB model rows use the same unproven identity copy in

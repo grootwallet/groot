@@ -25,6 +25,12 @@ The sole proposal action is explicit discard through native cancellation; the
 confirmed payment is untouched. Reopening must preserve this read-only state,
 and discarding must not regenerate a payment draft. Without a saved proposal,
 the confirmed-original notice may simply offer an Overview exit.
+Immediately before submitting any RBF replacement or CPFP child, native Rust
+must verify that its exact original transaction is still in the configured
+node's mempool. Missing or unavailable evidence fails closed and leaves the
+saved signed proposal untouched. A confirmed original produces the read-only
+proposal state. A block can still arrive between the final node query and
+submission; Groot must not claim that these separate RPC calls are atomic.
 
 Status: canonical for public v0.4.96, including the approved macOS Mainnet scope.
 

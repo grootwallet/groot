@@ -782,14 +782,7 @@ pub(crate) fn cpfp_parent_fee(
                 &error,
                 CoreRpcError::JsonRpc(jsonrpc::Error::Rpc(response)) if response.code == -5
             ) {
-                let confirmed = rpc
-                    .get_raw_transaction_info(&parent_txid, None)
-                    .ok()
-                    .is_some_and(|transaction| {
-                        transaction.txid == parent_txid
-                            && transaction.confirmations.unwrap_or_default() > 0
-                            && transaction.in_active_chain == Some(true)
-                    });
+                let confirmed = transaction_confirmed_in_active_chain(&rpc, parent_txid);
                 if confirmed {
                     cpfp_parent_missing_from_mempool(true)
                 } else {
@@ -814,6 +807,23 @@ pub(crate) fn cpfp_parent_missing_from_mempool(confirmed: bool) -> ApiError {
             "acceleration_unavailable",
             "This transaction is no longer available for CPFP. It may have confirmed or left the mempool. Update the wallet and try again.",
         )
+    }
+}
+
+pub(crate) fn acceleration_original_missing_from_mempool(
+    method: AccelerationMethod,
+    confirmed: bool,
+) -> ApiError {
+    match method {
+        AccelerationMethod::Cpfp => cpfp_parent_missing_from_mempool(confirmed),
+        AccelerationMethod::Rbf if confirmed => api_error(
+            "transaction_confirmed",
+            "The original transaction has confirmed. RBF is no longer needed.",
+        ),
+        AccelerationMethod::Rbf => api_error(
+            "acceleration_unavailable",
+            "The original transaction is no longer available for RBF. It may have confirmed or left the mempool. Update the wallet and try again.",
+        ),
     }
 }
 
@@ -1567,7 +1577,7 @@ pub async fn tx_sign_and_broadcast(
             return Err(internal("The transaction could not be fully signed."));
         }
         let transaction = proposal.psbt.extract_tx().map_err(internal)?;
-        let txid = broadcast_transaction(&app, &state, &transaction)?;
+        let txid = broadcast_transaction(&app, &state, &db, &proposal_id, &transaction)?;
         drop(wallet);
         let mut persisted = db.transaction().map_err(internal)?;
         let mut wallet = load_wallet_transaction(&mut persisted)?;

@@ -1522,6 +1522,10 @@
       );
       txid = result.txid;
     } catch (cause) {
+      if (cause instanceof WalletError && cause.code === 'transaction_confirmed') {
+        markAccelerationConfirmed();
+        return;
+      }
       error = localizedError(cause, $locale, 'Broadcast failed.');
     } finally {
       pin = '';

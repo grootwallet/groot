@@ -1,5 +1,11 @@
 # Bitcoin Improvement Proposal support
 
+The 2026-10-07 final acceleration guard and receive-details follow-up has no
+BIP-support, descriptor, PSBT, signing, address, backup, or persisted-format
+change. It adds a configured-node mempool-presence check immediately before
+RBF/CPFP broadcast and reuses existing historical receive evidence in the
+shared address-details presentation.
+
 The 2026-10-07 device-state copy and signed-PSBT disclosure follow-up changes
 no BIP support or evidence, account proof, descriptor, address derivation,
 PSBT encoding, signing rule, or persisted wallet format. A previously verified

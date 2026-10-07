@@ -3,18 +3,23 @@
   import { translate } from '$lib/i18n-catalog';
   import { ChevronDown } from '@lucide/svelte';
   import type { HardwareAddressComparison } from '$lib/wallet/hardware-display';
+  import LocalTimestamp from './LocalTimestamp.svelte';
   import ReadableAddress from './ReadableAddress.svelte';
 
   let {
     comparison,
     derivationPath,
     addressIndex,
+    hardwareVerifiedAt = null,
+    hardwareVerifiedBy = null,
     copied = false,
     oncopy
   } = $props<{
     comparison: HardwareAddressComparison;
     derivationPath: string;
     addressIndex: number;
+    hardwareVerifiedAt?: string | null;
+    hardwareVerifiedBy?: string | null;
     copied?: boolean;
     oncopy: () => void;
   }>();
@@ -50,6 +55,14 @@
         <dt>{translate($locale, 'Address index')}</dt>
         <dd><code>{addressIndex}</code></dd>
       </div>
+      {#if hardwareVerifiedAt}<div>
+          <dt>{translate($locale, 'Hardware verified')}</dt>
+          <dd><LocalTimestamp value={hardwareVerifiedAt} /></dd>
+        </div>{/if}
+      {#if hardwareVerifiedBy}<div>
+          <dt>{translate($locale, 'Signer fingerprint')}</dt>
+          <dd><code>{hardwareVerifiedBy}</code></dd>
+        </div>{/if}
     </dl>
   </details>
 </section>

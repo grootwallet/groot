@@ -23,6 +23,10 @@ and offers **Discard proposal**. Reopening checks the loaded snapshot too. Disca
 uses the existing native cancellation operation and must not recreate a payment
 draft on navigation. Before a proposal exists, an Overview exit remains available.
 It never auto-broadcasts or deletes a proposal. Native stale-input validation remains authoritative.
+The final native broadcast gate also checks that the original RBF/CPFP
+transaction is still in the configured node's mempool after signing; when it
+has confirmed, the route switches to the read-only proposal notice instead of
+retrying a now-unnecessary fee payment.
 
 In existing-wallet hardware selection, scan results retain known non-wallet
 devices as disabled rows labelled **Not part of this wallet**. A locked or

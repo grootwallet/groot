@@ -389,13 +389,11 @@
     {comparison}
     derivationPath={address.derivationPath}
     addressIndex={address.id}
+    hardwareVerifiedAt={address.hardwareVerifiedAt}
+    hardwareVerifiedBy={address.hardwareVerifiedBy}
     {copied}
     oncopy={copyVerificationAddress}
   />
-  {#if address.hardwareVerifiedBy}<p class="hardware-previous-verification">
-      {translate($locale, 'Previously verified by')} <code>{address.hardwareVerifiedBy}</code>
-      <span>{translate($locale, 'Connected signer identity is checked again each time.')}</span>
-    </p>{/if}
   {#if verifyBusy}
     <HardwareActionPrompt
       title={translate(
@@ -532,18 +530,6 @@
 />
 
 <style>
-  .hardware-previous-verification {
-    margin: 12px 0;
-    color: var(--muted);
-    font-size: var(--font-size-meta);
-  }
-  .hardware-previous-verification code {
-    color: var(--text);
-  }
-  .hardware-previous-verification span {
-    display: block;
-    margin-top: 3px;
-  }
   .verification-device-list.with-error {
     margin-bottom: 10px;
   }

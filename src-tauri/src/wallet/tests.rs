@@ -22,6 +22,42 @@ struct MempoolBatchFixture {
     reject_batch: bool,
 }
 
+struct MissingAccelerationOriginalFixture {
+    original_txid: Txid,
+}
+
+impl jsonrpc::client::Transport for MissingAccelerationOriginalFixture {
+    fn send_request(
+        &self,
+        request: jsonrpc::Request<'_>,
+    ) -> Result<jsonrpc::Response, jsonrpc::Error> {
+        assert!(matches!(
+            request.method,
+            "getmempoolentry" | "getrawtransaction"
+        ));
+        let params: Vec<serde_json::Value> =
+            serde_json::from_str(request.params.expect("transaction parameters").get())?;
+        assert_eq!(params[0], self.original_txid.to_string());
+        Ok(serde_json::from_value(serde_json::json!({
+            "result": null,
+            "error": { "code": -5, "message": "Transaction not found" },
+            "id": request.id,
+            "jsonrpc": "2.0"
+        }))?)
+    }
+
+    fn send_batch(
+        &self,
+        _requests: &[jsonrpc::Request<'_>],
+    ) -> Result<Vec<jsonrpc::Response>, jsonrpc::Error> {
+        Err(jsonrpc::Error::WrongBatchResponseSize)
+    }
+
+    fn fmt_target(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("missing acceleration original fixture")
+    }
+}
+
 struct BlockFilterBatchFixture {
     genesis: BlockHash,
     block_hash: BlockHash,
@@ -3083,6 +3119,48 @@ fn cpfp_missing_parent_distinguishes_confirmed_from_unknown() {
         .message
         .contains("may have confirmed or left the mempool"));
     assert!(!unknown.message.contains("Bitcoin Core"));
+}
+
+#[test]
+fn final_broadcast_refuses_cpfp_and_rbf_when_original_left_mempool() {
+    let original_txid = Txid::from_byte_array([37; 32]);
+    let db = Connection::open_in_memory().unwrap();
+    db.execute_batch(
+        "CREATE TABLE groot_accelerations (
+            proposal_id TEXT PRIMARY KEY, method TEXT NOT NULL, original_txid TEXT NOT NULL
+        );",
+    )
+    .unwrap();
+    let transaction = Transaction {
+        version: Version::TWO,
+        lock_time: LockTime::ZERO,
+        input: vec![],
+        output: vec![],
+    };
+    for method in [AccelerationMethod::Cpfp, AccelerationMethod::Rbf] {
+        db.execute(
+            "INSERT INTO groot_accelerations (proposal_id, method, original_txid)
+             VALUES (?1, ?2, ?3)",
+            params![method.as_str(), method.as_str(), original_txid.to_string()],
+        )
+        .unwrap();
+        let rpc = Client::from_jsonrpc(jsonrpc::client::Client::with_transport(
+            MissingAccelerationOriginalFixture { original_txid },
+        ));
+        let error =
+            broadcast_proposal_transaction_with_rpc(&rpc, &db, method.as_str(), &transaction)
+                .unwrap_err();
+        assert_eq!(error.code, "acceleration_unavailable");
+        assert!(!error.message.contains("Bitcoin Core"));
+    }
+    assert_eq!(
+        acceleration_original_missing_from_mempool(AccelerationMethod::Cpfp, true).code,
+        "transaction_confirmed"
+    );
+    assert_eq!(
+        acceleration_original_missing_from_mempool(AccelerationMethod::Rbf, true).code,
+        "transaction_confirmed"
+    );
 }
 
 #[test]

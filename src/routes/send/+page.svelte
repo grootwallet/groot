@@ -888,6 +888,10 @@
       passphrase = '';
       step = 4;
     } catch (cause) {
+      if (cause instanceof WalletError && cause.code === 'transaction_confirmed') {
+        markAccelerationConfirmed();
+        return;
+      }
       if (cause instanceof WalletError && cause.code === 'rate_limited') {
         const messageSeconds = Number(cause.message.match(/(\d+)\s+seconds?/)?.[1] ?? 0);
         startRetryCountdown(cause.details?.retryAfterSeconds ?? messageSeconds ?? 1);

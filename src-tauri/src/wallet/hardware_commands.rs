@@ -3205,7 +3205,7 @@ pub async fn external_signer_proposal_broadcast(
             ));
         }
         let transaction = psbt.extract_tx().map_err(internal)?;
-        let txid = broadcast_transaction(&app, &state, &transaction)?;
+        let txid = broadcast_transaction(&app, &state, &db, &proposal_id, &transaction)?;
         let mut persisted = db.transaction().map_err(internal)?;
         let mut wallet = load_wallet_transaction(&mut persisted)?;
         apply_locally_broadcast_transaction(&mut wallet, &transaction);

@@ -1041,7 +1041,7 @@ pub async fn multisig_proposal_broadcast(
             &proposal_id,
             &reviewed_psbt,
         )?;
-        let txid = broadcast_transaction(&app, &state, &transaction)?;
+        let txid = broadcast_transaction(&app, &state, &db, &proposal_id, &transaction)?;
         let delayed_policy = delayed_policy_context(&metadata)?;
         let snapshot = commit_multisig_broadcast(
             &mut db,

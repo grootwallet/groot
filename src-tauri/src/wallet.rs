@@ -4174,11 +4174,40 @@ fn ensure_expected_genesis(network: Network, observed: BlockHash) -> ApiResult<(
 fn broadcast_transaction(
     app: &AppHandle,
     state: &State<'_, AppState>,
+    db: &Connection,
+    proposal_id: &str,
     transaction: &Transaction,
 ) -> ApiResult<Txid> {
     let rpc = rpc_client(app, state)?;
     checked_chain_identity(&rpc)?;
-    broadcast_transaction_with_rpc(&rpc, transaction)
+    broadcast_proposal_transaction_with_rpc(&rpc, db, proposal_id, transaction)
+}
+
+fn broadcast_proposal_transaction_with_rpc(
+    rpc: &Client,
+    db: &Connection,
+    proposal_id: &str,
+    transaction: &Transaction,
+) -> ApiResult<Txid> {
+    if let Some((method, original_txid)) = proposal_acceleration_origin(db, proposal_id)? {
+        require_acceleration_original_pending(rpc, method, original_txid)?;
+    }
+    broadcast_transaction_with_rpc(rpc, transaction)
+}
+
+fn require_acceleration_original_pending(
+    rpc: &Client,
+    method: AccelerationMethod,
+    original_txid: Txid,
+) -> ApiResult<()> {
+    match rpc.get_mempool_entry(&original_txid) {
+        Ok(_) => Ok(()),
+        Err(CoreRpcError::JsonRpc(jsonrpc::Error::Rpc(response))) if response.code == -5 => {
+            let confirmed = transaction_confirmed_in_active_chain(rpc, original_txid);
+            Err(transaction_commands::acceleration_original_missing_from_mempool(method, confirmed))
+        }
+        Err(error) => Err(rpc_api_error(error)),
+    }
 }
 
 fn broadcast_transaction_with_rpc(rpc: &Client, transaction: &Transaction) -> ApiResult<Txid> {
@@ -4190,23 +4219,7 @@ fn broadcast_transaction_with_rpc(rpc: &Client, transaction: &Transaction) -> Ap
         )),
         Err(_) => {
             let in_mempool = rpc.get_mempool_entry(&expected).is_ok();
-            let confirmed_in_active_chain = rpc
-                .get_raw_transaction_info(&expected, None)
-                .ok()
-                .filter(|transaction| {
-                    transaction.txid == expected
-                        && transaction.confirmations.unwrap_or_default() > 0
-                })
-                .and_then(|transaction| transaction.blockhash)
-                .and_then(|blockhash| {
-                    rpc.get_raw_transaction_info(&expected, Some(&blockhash))
-                        .ok()
-                })
-                .is_some_and(|transaction| {
-                    transaction.txid == expected
-                        && transaction.confirmations.unwrap_or_default() > 0
-                        && transaction.in_active_chain == Some(true)
-                });
+            let confirmed_in_active_chain = transaction_confirmed_in_active_chain(rpc, expected);
             if in_mempool || confirmed_in_active_chain {
                 Ok(expected)
             } else {
@@ -4217,6 +4230,21 @@ fn broadcast_transaction_with_rpc(rpc: &Client, transaction: &Transaction) -> Ap
             }
         }
     }
+}
+
+fn transaction_confirmed_in_active_chain(rpc: &Client, txid: Txid) -> bool {
+    rpc.get_raw_transaction_info(&txid, None)
+        .ok()
+        .filter(|transaction| {
+            transaction.txid == txid && transaction.confirmations.unwrap_or_default() > 0
+        })
+        .and_then(|transaction| transaction.blockhash)
+        .and_then(|blockhash| rpc.get_raw_transaction_info(&txid, Some(&blockhash)).ok())
+        .is_some_and(|transaction| {
+            transaction.txid == txid
+                && transaction.confirmations.unwrap_or_default() > 0
+                && transaction.in_active_chain == Some(true)
+        })
 }
 
 fn now() -> u64 {
@@ -6206,6 +6234,29 @@ fn proposal_acceleration_method(
         )),
     })
     .transpose()
+}
+
+fn proposal_acceleration_origin(
+    db: &Connection,
+    proposal_id: &str,
+) -> ApiResult<Option<(AccelerationMethod, Txid)>> {
+    let Some(method) = proposal_acceleration_method(db, proposal_id)? else {
+        return Ok(None);
+    };
+    let original = db
+        .query_row(
+            "SELECT original_txid FROM groot_accelerations WHERE proposal_id = ?1",
+            params![proposal_id],
+            |row| row.get::<_, String>(0),
+        )
+        .map_err(internal)?;
+    let txid = Txid::from_str(&original).map_err(|_| {
+        api_error(
+            "proposal_mismatch",
+            "The stored acceleration transaction reference is invalid.",
+        )
+    })?;
+    Ok(Some((method, txid)))
 }
 
 fn validate_rbf_original_intent(

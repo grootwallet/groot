@@ -295,6 +295,14 @@ test('keeps multisig receive verification disclosure visibly expandable', async 
   await expect(
     awaitingAddresses.getByText('Hardware verified', { exact: true }).first()
   ).toBeVisible();
+  await page.getByRole('button', { name: 'Verify again' }).click();
+  await expect(dialog.getByText('Previously verified by')).toHaveCount(0);
+  await expect(dialog.getByText('Signer fingerprint')).toBeHidden();
+  await dialog.getByText('Address details').click();
+  await expect(dialog.getByText('Signer fingerprint')).toBeVisible();
+  await expect(dialog.getByText('Hardware verified')).toBeVisible();
+  await dialog.getByRole('button', { name: 'Close' }).click();
+  await expect(page.getByText('The verification time was saved with this address.')).toBeHidden();
   await page.getByRole('button', { name: 'Show address details', exact: true }).click();
   await expect(page.getByText('Native SegWit · standard multisig', { exact: true })).toBeVisible();
   await expect(page.getByText('Descriptor · Miniscript', { exact: true })).toHaveCount(0);
