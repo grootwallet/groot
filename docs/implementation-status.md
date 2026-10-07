@@ -1,5 +1,17 @@
 # Implementation status
 
+## v0.5.1 send and scanner presentation — 2026-10-07
+
+Both send routes use the existing warning notice for an invalid amount and for
+Max-selection feedback; the insufficient-balance copy is one short sentence.
+RBF and CPFP quote cards now have one **View more details / View less details**
+disclosure containing the editable fee rate and three fee facts: original rate,
+new rate, and new total network fee. The existing interactive amount control
+switches that fee between sats and BTC. Quote computation, minimum-rate policy,
+PSBT review, and signing are unchanged. Payment-request camera dialogs keep the
+square viewport within the modal without body scrolling and center the guide.
+No persisted format or BIP behavior changes.
+
 ## v0.5.1 acceleration final guard and receive details — 2026-10-07
 
 The software, external-hardware, and multisig final broadcast commands share

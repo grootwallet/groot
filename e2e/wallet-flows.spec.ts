@@ -1709,19 +1709,25 @@ test('RBF starts safely and presents one payment row with durable lineage', asyn
   await expect(page.getByText('Your payment amount and recipient will not change.')).toBeVisible();
   await expect(page.getByText('Original fee rate', { exact: true })).toBeHidden();
   await expect(page.getByLabel('Custom acceleration fee rate')).toBeHidden();
-  await page.getByText('Change fee rate', { exact: true }).click();
+  await page.locator('.acceleration-more-details summary').click();
   const rate = page.getByLabel('Custom acceleration fee rate');
   await expect(rate).not.toHaveValue('0');
   await rate.fill('2.5');
   await rate.blur();
   await expect(rate).toHaveValue('2.5');
-  await page.getByText('View fee details', { exact: true }).click();
+  await expect(page.locator('.acceleration-more-details summary')).toContainText(
+    'View less details'
+  );
   await expect(
     page.locator('.acceleration-quote-details > div').filter({ hasText: 'New fee rate' })
   ).toContainText('2.5 sat/vB');
-  await expect(
-    page.locator('.acceleration-quote-details > div').filter({ hasText: 'Effective fee rate' })
-  ).toContainText('2.5 sat/vB');
+  await expect(page.locator('.acceleration-quote-details')).toContainText('New total network fee');
+  await page.screenshot({ path: test.info().outputPath('rbf-details.png') });
+  const totalFee = page.locator('.acceleration-quote-details .interactive-amount');
+  const originalUnit = await totalFee.innerText();
+  await totalFee.click();
+  expect(await totalFee.innerText()).not.toBe(originalUnit);
+  await totalFee.click();
   await page.getByRole('button', { name: 'Continue to sign' }).click();
   const review = page.locator('.acceleration-review-summary');
   await expect(review).toContainText('Speed-up cost');
@@ -1810,14 +1816,15 @@ test('pending incoming transaction opens CPFP review without offering sender-sid
   await expect(page).toHaveURL(/accelerate=cpfp/);
   await expect(page.getByRole('heading', { name: 'Speed up transaction' })).toBeVisible();
   await expect(page.getByText('You will spend this much more')).toBeVisible();
-  await page.getByText('Change fee rate', { exact: true }).click();
+  await page.locator('.acceleration-more-details summary').click();
   const rate = page.getByLabel('Custom acceleration fee rate');
   await expect(rate).toBeVisible();
   await rate.fill('7');
   await rate.blur();
   await expect(rate).toHaveValue('7');
-  await page.getByText('View fee details', { exact: true }).click();
-  await expect(page.getByText('Target package rate')).toBeVisible();
+  await expect(page.getByText('New package fee rate')).toBeVisible();
+  await expect(page.getByText('New total network fee')).toBeVisible();
+  await page.screenshot({ path: test.info().outputPath('cpfp-details.png') });
   await expect(page.getByRole('button', { name: 'Continue to sign' })).toBeVisible();
 });
 
@@ -2352,7 +2359,7 @@ test('coin control selects, freezes, and carries coins into send', async ({ page
   await expect(page.locator('.coin-mode')).toContainText('More private');
   await page.getByRole('button', { name: 'Max' }).click();
   await expect(page.getByLabel('Amount', { exact: true })).toHaveValue('2480260');
-  await expect(page.locator('.max-spend-guidance')).toContainText(
+  await expect(page.locator('.send-amount-notice')).toContainText(
     'Maximum spendable amount selected'
   );
   await expect(
@@ -2581,6 +2588,15 @@ test('payment QR scanner loads on demand and cancels safely while loading', asyn
   expect(guideBox).not.toBeNull();
   expect(Math.abs(cameraBox!.width - cameraBox!.height)).toBeLessThanOrEqual(1);
   expect(Math.abs(guideBox!.width - guideBox!.height)).toBeLessThanOrEqual(1);
+  expect(
+    Math.abs(guideBox!.x + guideBox!.width / 2 - (cameraBox!.x + cameraBox!.width / 2))
+  ).toBeLessThanOrEqual(1);
+  expect(
+    Math.abs(guideBox!.y + guideBox!.height / 2 - (cameraBox!.y + cameraBox!.height / 2))
+  ).toBeLessThanOrEqual(1);
+  expect(
+    await dialog.locator('.modal-body').evaluate((body) => body.scrollHeight <= body.clientHeight)
+  ).toBe(true);
   expect(cameraBox!.width).toBeGreaterThanOrEqual(
     (page.viewportSize()?.width ?? 1180) > 760 ? 540 : 320
   );

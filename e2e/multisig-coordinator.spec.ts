@@ -410,9 +410,13 @@ test('explains an oversized BTC amount before review on both send routes', async
     if (await showBtc.isVisible()) await showBtc.click();
     await page.getByLabel('Amount', { exact: true }).fill('1500');
     await expect(page.getByRole('alert')).toContainText(
-      'Amount plus the estimated network fee exceeds your available balance. Check whether you entered BTC or sats.'
+      'Amount plus fee exceeds your available balance.'
     );
+    await expect(page.locator('.send-amount-notice')).toContainText('Check amount');
     await expect(page.getByRole('button', { name: 'Review payment' })).toBeDisabled();
+    await page.screenshot({
+      path: test.info().outputPath(`oversized-${route === '/send' ? 'single' : 'multi'}.png`)
+    });
   }
 });
 
@@ -1273,7 +1277,7 @@ test('selects and freezes multisig coins before entering the send flow', async (
   await expect(page.locator('.coin-mode')).toContainText('More private');
   await page.getByRole('button', { name: 'Max' }).click();
   await expect(page.getByLabel('Amount', { exact: true })).toHaveValue('2479707');
-  await expect(page.locator('.max-spend-guidance')).toContainText(
+  await expect(page.locator('.send-amount-notice')).toContainText(
     'Maximum spendable amount selected'
   );
   await expect(

@@ -2404,6 +2404,10 @@ code {
 .modal.modal-wide {
   width: min(760px, 100%);
 }
+.modal.modal-fixed-viewport .modal-body {
+  overflow: hidden;
+  scrollbar-gutter: auto;
+}
 .modal:focus-visible {
   outline: none;
 }
@@ -2531,17 +2535,8 @@ code {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
 }
-.max-spend-guidance {
+.send-amount-notice {
   margin: -10px 0 19px;
-  color: var(--muted);
-  font-size: var(--font-size-meta);
-  font-weight: 650;
-}
-.send-amount-error {
-  margin: -10px 0 19px;
-  color: var(--danger);
-  font-size: var(--font-size-meta);
-  font-weight: 650;
 }
 .field > em {
   font-size: var(--font-size-meta);
@@ -3918,12 +3913,22 @@ code {
 .acceleration-optional-control {
   border-bottom: 1px solid var(--border);
 }
+.acceleration-more-details {
+  border: 0;
+}
 .acceleration-optional-control > summary {
   padding: 13px 0;
   color: var(--link);
   font-size: var(--font-size-meta);
   font-weight: 700;
   cursor: pointer;
+}
+.acceleration-more-details .details-open,
+.acceleration-more-details[open] .details-closed {
+  display: none;
+}
+.acceleration-more-details[open] .details-open {
+  display: inline;
 }
 .acceleration-optional-control > .field,
 .acceleration-optional-control > .acceleration-quote-details,
@@ -3932,9 +3937,12 @@ code {
 }
 .acceleration-quote-details {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0 18px;
+  grid-template-columns: minmax(0, 1fr);
   width: 100%;
+  border-top: 0;
+}
+.acceleration-quote-details > div:last-child {
+  border-bottom: 0;
 }
 .acceleration-unavailable-notice {
   margin: 18px 0;

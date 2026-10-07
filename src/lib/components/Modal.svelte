@@ -13,6 +13,7 @@
     attentionSignal = 0,
     wide = false,
     upper = false,
+    fixedViewport = false,
     children
   } = $props();
   let dialog = $state<HTMLDivElement>();
@@ -128,6 +129,7 @@
       bind:this={dialog}
       class="modal"
       class:modal-wide={wide}
+      class:modal-fixed-viewport={fixedViewport}
       class:modal-attention={attentionActive}
       role="dialog"
       aria-modal="true"

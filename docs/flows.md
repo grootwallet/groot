@@ -194,6 +194,10 @@ Every stage is named in the same three-step progress indicator. A compact signer
 `pending transaction with a wallet-controlled output → Spend output (CPFP) → persisted acceleration PSBT → normal review/sign/broadcast`
 
 Acceleration never bypasses review or signer thresholds. Confirmed, non-replaceable, missing-output, insufficient-value, and confirmation-race states fail explicitly and remain retryable after sync.
+The quote leads with the additional wallet cost. One optional **View more details**
+disclosure contains the editable rate, minimum, original rate, new rate, and
+new total network fee; it becomes **View less details** when expanded. The fee
+amount toggles between sats and BTC through the shared amount control.
 
 `wallet-owned inputs → only wallet-owned value outputs → Rust classifies self_spend → activity shows Self-spend and fee debit → no counterparty row`
 

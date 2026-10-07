@@ -19,8 +19,12 @@ describe('payment request QR scanning', () => {
     expect(scanner).toContain('class="camera-frame"');
     expect(scanner).toMatch(/\.camera-frame\s*\{[\s\S]*?aspect-ratio:\s*1;/);
     expect(scanner).toMatch(/\.scan-guide\s*\{[\s\S]*?aspect-ratio:\s*1;/);
+    expect(scanner).toMatch(/\.scan-guide\s*\{[\s\S]*?top:\s*50%;/);
+    expect(scanner).toContain('transform: translate(-50%, -50%);');
     expect(singleSend).toMatch(/open=\{paymentScanOpen\}[\s\S]*?wide/);
     expect(multisigSend).toMatch(/open=\{paymentScanOpen\}[\s\S]*?wide/);
+    expect(singleSend).toMatch(/open=\{paymentScanOpen\}[\s\S]*?fixedViewport/);
+    expect(multisigSend).toMatch(/open=\{paymentScanOpen\}[\s\S]*?fixedViewport/);
   });
 
   it.each([

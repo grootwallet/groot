@@ -189,9 +189,12 @@ describe('send review layout', () => {
     for (const route of [singleSend, multisigSend]) {
       expect(route).toContain("'You will spend this much more'");
       expect(route).toContain('class="acceleration-default-choice"');
-      expect(route).toContain('class="acceleration-optional-control"');
-      expect(route).toContain("'Change fee rate'");
-      expect(route).toContain("'View fee details'");
+      expect(route).toContain('class="acceleration-optional-control acceleration-more-details"');
+      expect(route).toContain("'View more details'");
+      expect(route).toContain("'View less details'");
+      expect(route).toContain("'New total network fee'");
+      expect(route).not.toContain("'Change fee rate'");
+      expect(route).not.toContain("'View fee details'");
       expect(route).toContain("'Transaction accelerated'");
       expect(route).toContain('class="success-amount"');
       expect(route).toContain('variant="secondary" href="/activity"');

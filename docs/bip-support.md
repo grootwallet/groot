@@ -1,5 +1,10 @@
 # Bitcoin Improvement Proposal support
 
+The 2026-10-07 send and camera presentation follow-up changes no BIP support,
+transaction construction, fee policy, descriptor, PSBT, or persisted format. It
+reuses the existing amount and warning components and only changes how the
+already-authoritative acceleration quote is disclosed.
+
 The 2026-10-07 final acceleration guard and receive-details follow-up has no
 BIP-support, descriptor, PSBT, signing, address, backup, or persisted-format
 change. It adds a configured-node mempool-presence check immediately before

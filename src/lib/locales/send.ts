@@ -149,6 +149,15 @@ export const sendCopy = {
     fr: 'Montant maximal disponible sélectionné',
     es: 'Importe máximo disponible seleccionado'
   },
+  'Check amount': { fr: 'Vérifiez le montant', es: 'Comprueba el importe' },
+  'Amount plus fee exceeds your available balance.': {
+    fr: 'Le montant et les frais dépassent votre solde disponible.',
+    es: 'El importe más la comisión supera tu saldo disponible.'
+  },
+  'Frozen coins remain in this wallet.': {
+    fr: 'Les pièces gelées restent dans ce portefeuille.',
+    es: 'Las monedas congeladas permanecen en esta cartera.'
+  },
   'Frozen coins remain in this wallet. Unfreeze them first to include them.': {
     fr: 'Les pièces gelées restent dans ce portefeuille. Dégelez-les d’abord pour les inclure.',
     es: 'Las monedas congeladas permanecen en esta cartera. Descongélalas primero para incluirlas.'
@@ -629,6 +638,14 @@ export const sendCopy = {
     es: 'Tasa efectiva del paquete'
   },
   'New network fee': { fr: 'Nouveaux frais de réseau', es: 'Nueva comisión de red' },
+  'New total network fee': {
+    fr: 'Nouveaux frais de réseau totaux',
+    es: 'Nueva comisión de red total'
+  },
+  'New package fee rate': {
+    fr: 'Nouveau taux de frais du paquet',
+    es: 'Nueva tasa de comisión del paquete'
+  },
   'Additional fee': { fr: 'Frais supplémentaires', es: 'Comisión adicional' },
   'Effective fee rate': { fr: 'Taux de frais effectif', es: 'Tasa de comisión efectiva' },
   'Minimum {rate} sat/vB': {

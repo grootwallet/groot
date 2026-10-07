@@ -308,7 +308,7 @@
         : !Number.isSafeInteger(amountSats) || amountSats <= 0
           ? 'Enter an amount greater than zero in the selected unit.'
           : amountSats + estimatedFee > available
-            ? 'Amount plus the estimated network fee exceeds your available balance. Check whether you entered BTC or sats.'
+            ? 'Amount plus fee exceeds your available balance.'
             : ''
     ),
     addressValid = $derived(hasAddressPrefixForNetwork(address, defaultConfig.network)),
@@ -1999,7 +1999,7 @@
               prepareCustomAcceleration();
             }}
           >
-            <div class="send-stage-heading">
+            <div class="send-stage-heading" class:compact={Boolean(rbfQuote || cpfpQuote)}>
               <h2>
                 {translate(
                   $locale,
@@ -2009,15 +2009,12 @@
                     : 'Enter a custom fee rate'
                 )}
               </h2>
-              <p>
-                {translate(
-                  $locale,
-                  (accelerationRequest.method === 'rbf' && rbfQuote) ||
-                    (accelerationRequest.method === 'cpfp' && cpfpQuote)
-                    ? 'Confirm the additional fee, then continue to sign.'
-                    : 'Bitcoin Core has no usable estimate. Groot will not invent one; choose the sat/vB rate\n          every signer will review.'
-                )}
-              </p>
+              {#if !rbfQuote && !cpfpQuote}<p>
+                  {translate(
+                    $locale,
+                    'Bitcoin Core has no usable estimate. Groot will not invent one; choose the sat/vB rate\n          every signer will review.'
+                  )}
+                </p>{/if}
             </div>
             {#if (accelerationRequest.method === 'rbf' && rbfQuote) || (accelerationRequest.method === 'cpfp' && cpfpQuote)}
               <div class="acceleration-default-choice">
@@ -2037,8 +2034,12 @@
                   )}
                 </p>
               </div>
-              <details class="acceleration-optional-control">
-                <summary>{translate($locale, 'Change fee rate')}</summary>
+              <details class="acceleration-optional-control acceleration-more-details">
+                <summary
+                  ><span class="details-closed">{translate($locale, 'View more details')}</span
+                  ><span class="details-open">{translate($locale, 'View less details')}</span
+                  ></summary
+                >
                 <label class="field"
                   ><span
                     >{translate(
@@ -2064,9 +2065,6 @@
                     })}</small
                   ></label
                 >
-              </details>
-              <details class="acceleration-optional-control">
-                <summary>{translate($locale, 'View fee details')}</summary>
                 {#if accelerationRequest.method === 'rbf' && rbfQuote}<dl
                     class="details-list acceleration-quote-details"
                   >
@@ -2075,49 +2073,25 @@
                       <dd>{rbfQuote.originalEffectiveFeeRate} {translate($locale, 'sat/vB')}</dd>
                     </div>
                     <div>
-                      <dt>{translate($locale, 'Minimum fee rate')}</dt>
-                      <dd>{rbfQuote.minimumFeeRate} {translate($locale, 'sat/vB')}</dd>
-                    </div>
-                    <div>
                       <dt>{translate($locale, 'New fee rate')}</dt>
                       <dd>{rbfQuote.targetFeeRate} {translate($locale, 'sat/vB')}</dd>
                     </div>
                     <div>
-                      <dt>{translate($locale, 'New network fee')}</dt>
-                      <dd><Amount value={rbfQuote.estimatedReplacementFee} /></dd>
-                    </div>
-                    <div>
-                      <dt>{translate($locale, 'Additional fee')}</dt>
-                      <dd><Amount value={rbfQuote.incrementalFee} /></dd>
-                    </div>
-                    <div>
-                      <dt>{translate($locale, 'Effective fee rate')}</dt>
-                      <dd>{rbfQuote.resultingEffectiveFeeRate} {translate($locale, 'sat/vB')}</dd>
+                      <dt>{translate($locale, 'New total network fee')}</dt>
+                      <dd><Amount value={rbfQuote.estimatedReplacementFee} interactive /></dd>
                     </div>
                   </dl>{:else if cpfpQuote}<dl class="details-list acceleration-quote-details">
                     <div>
-                      <dt>{translate($locale, 'Parent fee rate')}</dt>
+                      <dt>{translate($locale, 'Original fee rate')}</dt>
                       <dd>{cpfpQuote.parentEffectiveFeeRate} {translate($locale, 'sat/vB')}</dd>
                     </div>
                     <div>
-                      <dt>{translate($locale, 'Minimum package rate')}</dt>
-                      <dd>{cpfpQuote.minimumFeeRate} {translate($locale, 'sat/vB')}</dd>
-                    </div>
-                    <div>
-                      <dt>{translate($locale, 'Target package rate')}</dt>
+                      <dt>{translate($locale, 'New package fee rate')}</dt>
                       <dd>{cpfpQuote.targetFeeRate} {translate($locale, 'sat/vB')}</dd>
                     </div>
                     <div>
-                      <dt>{translate($locale, 'Child network fee')}</dt>
-                      <dd><Amount value={cpfpQuote.childFee} /></dd>
-                    </div>
-                    <div>
-                      <dt>{translate($locale, 'Package network fee')}</dt>
-                      <dd><Amount value={cpfpQuote.packageFee} /></dd>
-                    </div>
-                    <div>
-                      <dt>{translate($locale, 'Effective package rate')}</dt>
-                      <dd>{cpfpQuote.resultingPackageFeeRate} {translate($locale, 'sat/vB')}</dd>
+                      <dt>{translate($locale, 'New total network fee')}</dt>
+                      <dd><Amount value={cpfpQuote.packageFee} interactive /></dd>
                     </div>
                   </dl>{/if}
               </details>
@@ -2412,17 +2386,21 @@
                   >{/if}</small
               ></label
             >
-            {#if amountFeedback}<p class="send-amount-error" role="alert">
-                {translate($locale, amountFeedback)}
-              </p>{/if}
-            {#if maxSpendActive}<p class="max-spend-guidance" role="status">
-                {translate(
-                  $locale,
-                  frozenAmount > 0
-                    ? 'Maximum spendable amount selected. Frozen coins remain in this wallet.'
-                    : 'Maximum spendable amount selected after the network fee.'
-                )}
-              </p>{/if}
+            {#if amountFeedback}<WarningNotice
+                title={translate($locale, 'Check amount')}
+                body={translate($locale, amountFeedback)}
+                role="alert"
+                icon
+                class="send-amount-notice"
+              />{/if}
+            {#if maxSpendActive && !amountFeedback}<WarningNotice
+                title={translate($locale, 'Maximum spendable amount selected')}
+                body={frozenAmount > 0
+                  ? translate($locale, 'Frozen coins remain in this wallet.')
+                  : ''}
+                role="status"
+                class="send-amount-notice"
+              />{/if}
             <div class="coin-control-field">
               <span>{translate($locale, 'Coin selection')}</span><button
                 type="button"
@@ -3206,6 +3184,7 @@
 <Modal
   open={paymentScanOpen}
   wide
+  fixedViewport
   title={translate($locale, 'Scan payment request')}
   description={translate(
     $locale,
