@@ -105,6 +105,7 @@
     convertAmountInput,
     denomination,
     formatAmount,
+    hasOnlyAmountInputCharacters,
     parseAmountInput,
     setDenomination
   } from '$lib/denomination';
@@ -1682,8 +1683,19 @@
               <div class="amount-input">
                 <input
                   aria-label={translate($locale, 'Amount')}
-                  bind:value={amount}
-                  oninput={() => {
+                  value={amount}
+                  onbeforeinput={(event) => {
+                    if (event.data && !hasOnlyAmountInputCharacters(event.data, $denomination)) {
+                      event.preventDefault();
+                    }
+                  }}
+                  oninput={(event) => {
+                    const next = event.currentTarget.value;
+                    if (!hasOnlyAmountInputCharacters(next, $denomination)) {
+                      event.currentTarget.value = amount;
+                      return;
+                    }
+                    amount = next;
                     maxSpendRequestRevision += 1;
                     maxSpendActive = false;
                     maxSpendQuote = null;

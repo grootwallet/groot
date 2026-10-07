@@ -1,5 +1,9 @@
 # Bitcoin Improvement Proposal support
 
+The 2026-10-07 send amount input guard changes no BIP support, transaction
+construction, signing, PSBT, descriptor, or persisted format. Comma-decimal BTC
+text is normalized only during exact frontend conversion to integer satoshis.
+
 The 2026-10-07 send and camera presentation follow-up changes no BIP support,
 transaction construction, fee policy, descriptor, PSBT, or persisted format. It
 reuses the existing amount and warning components and only changes how the

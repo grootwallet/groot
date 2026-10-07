@@ -420,6 +420,32 @@ test('explains an oversized BTC amount before review on both send routes', async
   }
 });
 
+test('send amount fields reject letters and accept exact decimal separators', async ({ page }) => {
+  for (const route of ['/send', '/multisig/send']) {
+    await page.goto(route);
+    await page.getByLabel('Bitcoin address').fill('bcrt1qdummy00085n8k2r7v4cx9s6jlawephgzuqf5t8ul');
+    await page.getByLabel('Payment label').fill('Numeric amount test');
+    await page.getByRole('button', { name: 'Continue to amount' }).click();
+    const showSats = page.getByRole('button', { name: 'Show transaction amount in sats' });
+    if (await showSats.isVisible()) await showSats.click();
+    const amount = page.getByLabel('Amount', { exact: true });
+    await amount.fill('1000');
+    await amount.pressSequentially('abc');
+    await expect(amount).toHaveValue('1000');
+    await amount.fill('1e3');
+    await expect(amount).toHaveValue('1000');
+    await page.getByRole('button', { name: 'Show transaction amount in BTC' }).click();
+    await amount.fill('0,00001000');
+    await expect(amount).toHaveValue('0,00001000');
+    await expect(page.getByRole('button', { name: 'Review payment' })).toBeEnabled();
+    await amount.fill('0x10');
+    await expect(amount).toHaveValue('0,00001000');
+    await page.screenshot({
+      path: test.info().outputPath(`numeric-amount-${route === '/send' ? 'single' : 'multi'}.png`)
+    });
+  }
+});
+
 test('confirmed RBF proposal keeps its review until explicitly discarded', async ({ page }) => {
   for (const route of ['/send', '/multisig/send']) {
     await page.goto(

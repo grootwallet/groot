@@ -1,5 +1,15 @@
 # Implementation status
 
+## v0.5.1 send amount input guard — 2026-10-07
+
+Both send routes now reject letters and symbols in the amount field, including
+paste/autofill input, without silently stripping characters into a different
+payment amount. Sats retains optional comma thousands grouping; BTC accepts a
+point or comma decimal separator and still parses exactly to integer satoshis.
+The authoritative Rust payment policy, persisted formats, and transaction flow
+are unchanged. Browser fixtures cover both routes; physical testing remains
+separate.
+
 ## v0.5.1 send and scanner presentation — 2026-10-07
 
 Both send routes use the existing warning notice for an invalid amount and for
