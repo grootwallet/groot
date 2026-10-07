@@ -744,6 +744,8 @@ export function localizedError(
     if (cause && typeof cause === 'object' && 'code' in cause) {
       if (cause.code === 'network_unavailable')
         return 'Bitcoin Core is unavailable. Check the connection in Settings.';
+      if (cause.code === 'invalid_payment_request')
+        return 'This QR code is not a valid Bitcoin payment request for this network.';
       if (cause.code === 'internal_error') return fallback;
     }
     return cause instanceof Error ? cause.message : fallback;

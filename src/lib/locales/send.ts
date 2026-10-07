@@ -1,6 +1,9 @@
 import type { CatalogSection } from './types';
 
 export const sendCopy = {
+  Intent: { fr: 'Intention', es: 'Intención' },
+  'Amount & fee': { fr: 'Montant et frais', es: 'Importe y comisión' },
+  'Review & sign': { fr: 'Vérifier et signer', es: 'Revisar y firmar' },
   'Preparing fee acceleration': {
     fr: 'Préparation de l’accélération des frais',
     es: 'Preparando la aceleración de comisión'

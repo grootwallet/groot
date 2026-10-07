@@ -1,5 +1,21 @@
 # Implementation status
 
+## v0.5.1 QR copy and send progress localization — 2026-10-07
+
+Rejected payment QR codes now use a complete English sentence from the stable
+error code rather than displaying the native parser's lowercase diagnostic.
+Both single-key and multisig send progress steps render the existing French and
+Spanish translations. This changes presentation only: native validation,
+persisted formats, and BIP support are unchanged.
+
+## v0.5.1 payment scanner error visibility — 2026-10-07
+
+The payment-request scanner sizes its square camera from the modal body space
+remaining after status and rejection feedback, including when the window grows.
+The full rejection stays visible without scrolling the camera on desktop and
+mobile. This is presentation-only; QR decoding, payment-request validation,
+persisted formats, and BIP support are unchanged.
+
 ## v0.5.1 send amount input guard — 2026-10-07
 
 Both send routes now reject letters and symbols in the amount field, including

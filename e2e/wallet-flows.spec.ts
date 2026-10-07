@@ -2422,6 +2422,23 @@ test('page headers stay concise and Coins summary amounts toggle denomination', 
   await expect(selected).toContainText('sats');
 });
 
+for (const [language, progressLabel, steps] of [
+  ['fr', 'Progression du paiement', ['Intention', 'Montant et frais', 'Vérifier et signer']],
+  ['es', 'Progreso del pago', ['Intención', 'Importe y comisión', 'Revisar y firmar']]
+] as const) {
+  test(`send progress is translated in ${language} for both wallet types`, async ({ page }) => {
+    await page.addInitScript((value) => localStorage.setItem('groot-language', value), language);
+    for (const route of ['/send', '/multisig/send']) {
+      await page.goto(route);
+      const progress = page.getByRole('navigation', { name: progressLabel });
+      await expect(progress.locator('li strong')).toHaveText([...steps]);
+      expect(
+        await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)
+      ).toBe(true);
+    }
+  });
+}
+
 test('send reviews a proposal and rejects a wrong credential', async ({ page }) => {
   await page.goto('/send');
   const paymentProgress = page.getByRole('navigation', { name: 'Payment progress' });
@@ -2581,6 +2598,7 @@ test('payment QR scanner loads on demand and cancels safely while loading', asyn
   const camera = dialog.locator('.camera-frame');
   const guide = dialog.locator('.scan-guide');
   await expect(camera).toBeVisible();
+  await expect(dialog).toHaveCSS('transform', 'none');
 
   const cameraBox = await camera.boundingBox();
   const guideBox = await guide.boundingBox();
@@ -2608,6 +2626,59 @@ test('payment QR scanner loads on demand and cancels safely while loading', asyn
       page.evaluate(() => (window as unknown as { scannerDestroyed?: number }).scannerDestroyed)
     )
     .toBe(1);
+});
+
+test('rejected payment QR stays fully visible without scrolling the camera', async ({ page }) => {
+  await page.route(/\/qr-scanner\.js(?:\?|$)/, (route) =>
+    route.fulfill({
+      contentType: 'application/javascript',
+      body: `export default class {
+        constructor(_video, onscan) { window.emitPaymentQr = () => onscan({ data: 'not-a-bitcoin-request' }); }
+        async start() {}
+        destroy() {}
+      }`
+    })
+  );
+  await page.goto('/send');
+  await page.getByRole('button', { name: 'Scan Bitcoin payment QR' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Scan payment request' });
+  await expect
+    .poll(() =>
+      page.evaluate(() => typeof (window as Window & { emitPaymentQr?: () => void }).emitPaymentQr)
+    )
+    .toBe('function');
+  await page.evaluate(() => (window as Window & { emitPaymentQr: () => void }).emitPaymentQr());
+  const rejection = dialog.getByRole('alert');
+  await expect(rejection).toContainText('QR code rejected');
+  await expect(rejection).toContainText(
+    'This QR code is not a valid Bitcoin payment request for this network.'
+  );
+
+  for (const size of [page.viewportSize()!, { width: 1600, height: 1000 }]) {
+    await page.setViewportSize(size);
+    const visible = await dialog.evaluate((element) => {
+      const modal = element.getBoundingClientRect();
+      const body = element.querySelector('.modal-body')!;
+      const camera = element.querySelector('.camera-frame')!.getBoundingClientRect();
+      const error = element.querySelector('[role="alert"]')!.getBoundingClientRect();
+      return {
+        modalBottom: modal.bottom,
+        bodyScrolls: body.scrollHeight > body.clientHeight,
+        cameraSquare: Math.abs(camera.width - camera.height) <= 1,
+        cameraBottom: camera.bottom,
+        errorBottom: error.bottom,
+        viewportHeight: window.innerHeight
+      };
+    });
+    expect(visible.bodyScrolls).toBe(false);
+    expect(visible.cameraSquare).toBe(true);
+    expect(visible.cameraBottom).toBeLessThanOrEqual(visible.errorBottom);
+    expect(visible.errorBottom).toBeLessThanOrEqual(visible.modalBottom - 10);
+    expect(visible.modalBottom).toBeLessThanOrEqual(visible.viewportHeight);
+    await page.screenshot({
+      path: test.info().outputPath(`payment-scanner-error-${size.width}.png`)
+    });
+  }
 });
 
 test('custom fees validate and wallet deletion requires typed confirmation', async ({ page }) => {

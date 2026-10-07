@@ -2404,9 +2404,19 @@ code {
 .modal.modal-wide {
   width: min(760px, 100%);
 }
+.modal.modal-fixed-viewport {
+  height: min(720px, 100%);
+}
 .modal.modal-fixed-viewport .modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
   overflow: hidden;
   scrollbar-gutter: auto;
+}
+.modal.modal-fixed-viewport .hardware-inline-error {
+  flex: none;
+  margin-top: 0;
 }
 .modal:focus-visible {
   outline: none;

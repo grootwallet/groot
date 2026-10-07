@@ -145,6 +145,24 @@ describe('locale preferences', () => {
     ).toBe('Wallet sync failed.');
   });
 
+  it('uses a complete English sentence for rejected payment QR codes', () => {
+    expect(
+      localizedError(
+        { code: 'invalid_payment_request', message: 'the QR code is not a valid Bitcoin address' },
+        'en'
+      )
+    ).toBe('This QR code is not a valid Bitcoin payment request for this network.');
+  });
+
+  it('translates every send progress step', () => {
+    expect(
+      ['Intent', 'Amount & fee', 'Review & sign'].map((step) => translate('fr', step))
+    ).toEqual(['Intention', 'Montant et frais', 'Vérifier et signer']);
+    expect(
+      ['Intent', 'Amount & fee', 'Review & sign'].map((step) => translate('es', step))
+    ).toEqual(['Intención', 'Importe y comisión', 'Revisar y firmar']);
+  });
+
   it('translates security and privacy tooltip copy', () => {
     expect(
       translate(
