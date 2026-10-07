@@ -823,7 +823,9 @@ test('spends end-to-end from the ready-made demo wallet', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'Finalize & broadcast' })).toBeVisible();
   const saveSignedPsbt = page.getByRole('button', { name: 'Save signed PSBT' });
   await expect(saveSignedPsbt).toBeHidden();
-  for (const close of await page.locator('.toast-close').all()) await close.click();
+  await page.locator('.toast-close').evaluateAll((buttons) => {
+    for (const button of buttons) (button as HTMLButtonElement).click();
+  });
   await expect(page.locator('.toast-region .toast')).toHaveCount(0);
   await page.locator('.signed-psbt-options').scrollIntoViewIfNeeded();
   await page.screenshot({

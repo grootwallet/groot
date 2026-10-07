@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
   "status": "approved",
-  "authorizedVersion": "0.5.0",
-  "authorizedTag": "v0.5.0",
-  "decisionAdr": "0082"
+  "authorizedVersion": "0.5.1",
+  "authorizedTag": "v0.5.1",
+  "decisionAdr": "0083"
 }

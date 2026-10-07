@@ -1,6 +1,6 @@
 # Signed update and rollback procedure
 
-Groot currently has no in-app updater and mainnet remains disabled. This procedure defines offline release evidence; it does not enable automatic installation.
+Groot currently has no in-app updater. This procedure defines offline release evidence; it does not enable automatic installation.
 
 ## Produce and verify
 

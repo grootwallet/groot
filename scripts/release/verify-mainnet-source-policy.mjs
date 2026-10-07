@@ -15,15 +15,15 @@ const pinnedPolicySources = new Map([
   ['src-tauri/src/session.rs', '82da6d3a2643710aaa0974f69f0fb7c932172a401ecf33c186e440c8170f35e0'],
   ['.env.mainnet', '1623f3f97de588daea2bbeae1f9c56ebc896b6bc2c22ac238563b46b688ced85'],
   ['.env.multi', '33fc3d5022968d9eaa25bfe749c0b01691c0570611a65255100718d2c50df723'],
-  ['package.json', 'a99c2f13ea714048b36db818b1bb668fa07af50354ec276a9058b75151aa7903'],
-  ['src-tauri/Cargo.toml', '3ac85270c95ddd07d5a765e109ee0c42fc28e0b700f3d96cd8952a0e4d1238ac'],
-  ['src-tauri/tauri.conf.json', '5cdd4363213702bd4849bd6e202f47fa211132320a29d103640f98d552f764e5'],
+  ['package.json', '5a676beee268ddb8a752914b91c857a021c792b2566795570df9a6cf602b521f'],
+  ['src-tauri/Cargo.toml', '9d8628de6c1b75f34a704879c4116663a510da9ad4c6e6a80a16716b6bd33e65'],
+  ['src-tauri/tauri.conf.json', '9e2c1d166c5ae7def18053931abc67abc3214e8b60d4f57dab30ce6d2fe27931'],
   ['LICENSE', 'c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4'],
   ['NOTICE', 'b39c98ac4d5186a7418ee71e1a8a7a29fb574ada3a7c58184c00125dda8d511d'],
   ['THIRD_PARTY_NOTICES.md', 'a181753f36eb3e475cddf31a69d2e75f01a86a79c70de252abb1e73a059407db'],
   [
     'docs/mainnet-release-authorization.json',
-    '474359c7a90ccc0fdc1f297ed9cdd4f7116207863b7de377bd62dbd1cc3e0703'
+    '1af74a51167285b70812c16c4300e8a61b3e114245d0c7ad15755017dc3e5b2e'
   ],
   ['src-tauri/src/lib.rs', '19dbeaae0dc6de6e8690f656aa78f149e109b6a2e616cc75d280dbd3cfc2e089'],
   [
@@ -34,7 +34,7 @@ const pinnedPolicySources = new Map([
     'scripts/network/check-native-builds.sh',
     '3a984ab7ef5f0d7c29d689d2ab39e114d61f1db0efd29a632cea980d7284bef4'
   ],
-  ['src/lib/config.ts', 'eee048d90a64372c4053600b76cf2ec1ab7a000117ff4f4cb6b3d78d54121a70'],
+  ['src/lib/config.ts', 'f32c494bcc72879a6d3f554c322f272d04cdc61d5f668b7b36bbd1a7133ab4be'],
   ['src-tauri/build.rs', 'ed1866cf57502e61199d75df9ff407b5ed0be54043ad94525ef6579ad98dfcb7'],
   [
     'src-tauri/src/release_policy.rs',
@@ -165,7 +165,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'scripts/release/check-mainnet-gate.sh',
-    '1d1d51706f435610e123f202d82cfdb17630caada608157ce98dab9adbfb051a'
+    '6bd211e3ee92044c70c49d9d84fa5cd3e197f900fb83fc8b5c9d4fc614225027'
   ],
   [
     'scripts/release/generate-sbom.mjs',

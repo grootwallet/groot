@@ -35,15 +35,15 @@ contains_fixed '"regtest" | "signet" | "testnet4" | "mainnet" | "multi" => {}' s
   || fail "the native compile-time network allowlist changed"
 node scripts/release/verify-mainnet-source-policy.mjs
 contains_fixed '"status": "approved"' docs/mainnet-release-authorization.json \
-  || fail "the v0.5.0 public-release authorization is not approved"
+  || fail "the v0.5.1 public-release authorization is not approved"
 contains_fixed '"schemaVersion": 2' docs/mainnet-release-authorization.json \
   || fail "the authorization record does not use the version/tag schema"
-contains_fixed '"authorizedVersion": "0.5.0"' docs/mainnet-release-authorization.json \
-  || fail "the authorization record does not name v0.5.0"
-contains_fixed '"authorizedTag": "v0.5.0"' docs/mainnet-release-authorization.json \
-  || fail "the authorization record does not name the v0.5.0 tag"
-contains_fixed '"decisionAdr": "0082"' docs/mainnet-release-authorization.json \
-  || fail "the authorization record does not name ADR 0082"
+contains_fixed '"authorizedVersion": "0.5.1"' docs/mainnet-release-authorization.json \
+  || fail "the authorization record does not name v0.5.1"
+contains_fixed '"authorizedTag": "v0.5.1"' docs/mainnet-release-authorization.json \
+  || fail "the authorization record does not name the v0.5.1 tag"
+contains_fixed '"decisionAdr": "0083"' docs/mainnet-release-authorization.json \
+  || fail "the authorization record does not name ADR 0083"
 node scripts/release/assert-public-release-authorized.mjs "$(git rev-parse HEAD)"
 contains_fixed "const authorization = verifyPublicReleaseAuthorization({ repoRoot, commit });" scripts/release/package-macos-ga.mjs \
   || fail "the production packager no longer enforces version/tag release authorization"
@@ -138,4 +138,4 @@ contains_fixed "Blockstream Jade" docs/mainnet-release-checklist.md \
 contains_fixed "The authorization covers macOS Apple silicon only." docs/mainnet-threat-model.md \
   || fail "the threat model no longer scopes the approved release platform"
 
-echo "Mainnet release gate: v0.5.0 is approved for the exact annotated remote tag."
+echo "Mainnet release gate: v0.5.1 is approved for the exact annotated remote tag."
