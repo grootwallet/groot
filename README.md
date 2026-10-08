@@ -1,16 +1,78 @@
 # Groot
 
-A minimal onchain Bitcoin wallet and descriptor multisig coordinator built with SvelteKit, Tauri v2, BDK, and Miniscript. The v0.4.96 macOS desktop application is approved for Mainnet and provides restart-bound, isolated Regtest, Testnet4, and Mainnet namespaces. BDK owns Groot's wallet databases, while the Regtest Bitcoin Core `groot-dev` wallet is only the faucet and miner.
+A minimal onchain Bitcoin wallet and descriptor multisig coordinator built with SvelteKit, Tauri v2, BDK, and Miniscript. The v0.5.1 macOS desktop application is approved for Mainnet and provides restart-bound, isolated Regtest, Testnet4, and Mainnet namespaces. BDK owns Groot's wallet databases, while the Regtest Bitcoin Core `groot-dev` wallet is only the faucet and miner.
 
 The owner-certified release evidence is summarized in the
 [Mainnet checklist](docs/mainnet-release-checklist.md), and exact commit
-`f7b4b993` is authorized by [ADR 0053](docs/adr/0053-proposed-limited-mainnet-enablement.md).
+`c731fa1c` is authorized for v0.5.1 by
+[ADR 0083](docs/adr/0083-authorize-v0.5.1-release-tag.md).
 
 ## Repository boundary
 
 This repository, [`grootwallet/groot`](https://github.com/grootwallet/groot), is the wallet application: native desktop/mobile through Tauri plus the browser-based wallet prototype. It does not contain the marketing website.
 
 The public marketing website lives only in [`thibistaken/groot-site`](https://github.com/thibistaken/groot-site). That repository is canonical for marketing code, copy, screenshots, SEO metadata, and Vercel deployment. Product behavior and security evidence remain canonical here.
+
+## Download and verify v0.5.1
+
+Most macOS users need only
+[`Groot-0.5.1-macos-arm64.dmg`](https://github.com/grootwallet/groot/releases/download/v0.5.1/Groot-0.5.1-macos-arm64.dmg).
+It is Developer ID signed, notarized, and stapled for Apple-silicon Macs.
+
+The release has three complementary trust layers: the maintainer's SSH-signed
+Git tag authenticates its source identity, Apple Developer ID signing and
+notarization authenticate the packaged macOS app, and GitHub's signed release
+attestation binds the tag to the exact uploaded asset digests. Checksums,
+provenance, the SBOM, and reproducible-build results are supporting evidence,
+not additional signatures.
+
+| Release item                  | Purpose                                                                                                         |
+| ----------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `Groot-0.5.1-macos-arm64.dmg` | Normal installer: open it and drag Groot to Applications.                                                       |
+| `Groot-0.5.1-macos-arm64.zip` | Portable packaged app for users or deployment tools that prefer ZIP.                                            |
+| `SHA256SUMS`                  | SHA-256 checksums for the five uploaded release assets.                                                         |
+| `PROVENANCE.json`             | Machine-readable release/build identity, reproducibility, signing, and notarization evidence.                   |
+| `groot.cdx.json`              | CycloneDX software bill of materials for dependency auditing.                                                   |
+| Source archives               | GitHub-generated snapshots for source inspection; use the signed Git tag for authenticated source verification. |
+| Release attestation           | GitHub-signed statement binding the tag and exact uploaded asset digests to this release.                       |
+
+With a recent [GitHub CLI](https://cli.github.com/), verify the release and a
+downloaded asset against GitHub's release attestation:
+
+```sh
+gh release verify v0.5.1 -R grootwallet/groot
+gh release verify-asset v0.5.1 Groot-0.5.1-macos-arm64.dmg -R grootwallet/groot
+```
+
+Alternatively, download all five uploaded assets and check their hashes:
+
+```sh
+mkdir groot-v0.5.1 && cd groot-v0.5.1
+gh release download v0.5.1 -R grootwallet/groot
+shasum -a 256 -c SHA256SUMS
+```
+
+To authenticate the source tag with Groot's independently trusted SSH signing
+key, first compare the key fingerprint with a trusted Groot channel. The
+expected Ed25519 fingerprint is
+`SHA256:j8HmNKPgJTSJXLr0k6K1oiL3a9i/Z9RnoHsCyL5Hhzk`. Then:
+
+```sh
+git clone https://github.com/grootwallet/groot.git
+cd groot
+git fetch --tags origin
+ssh-keygen -lf docs/release-git-tag-signing.pub -E sha256
+printf '%s\n' 'groot-release ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIP834m8yg1rFILkTlr7+fwEq2/dLTl2eZkYMKJKE3kAn' > /tmp/groot-release-allowed-signers
+git -c gpg.ssh.allowedSignersFile=/tmp/groot-release-allowed-signers verify-tag v0.5.1
+git rev-parse 'v0.5.1^{}'
+```
+
+The final command must print
+`c731fa1cc6ce6431662342a007d9ca6bed6abbe6`. The SSH signature authenticates
+the Git tag and source commit; it does not by itself authenticate downloaded
+binaries. Use the GitHub release attestation and Apple's Developer ID checks for
+the packaged app. See the [release signing-key notes](docs/release-git-tag-signing.md)
+for the complete trust boundary.
 
 ## License
 
