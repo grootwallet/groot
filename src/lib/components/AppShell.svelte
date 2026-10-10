@@ -143,6 +143,7 @@
   function requestInitialHistoryApproval(force = false) {
     const id = selectedWalletId;
     if (!id || (!force && declinedInitialScans.has(id)) || initialApprovalBusy) return;
+    if (!force && initialApprovalWalletId === id) return;
     initialApprovalWalletId = id;
     initialApprovalError = '';
     initialApprovalManaged = false;
@@ -160,14 +161,16 @@
     if (initialApprovalBusy) return;
     if (initialApprovalWalletId) declinedInitialScans.add(initialApprovalWalletId);
     initialApprovalWalletId = null;
-    await goto('/settings');
+    await goto('/settings?nodeConnection=1');
   }
   async function approveInitialHistoryScan() {
     const id = initialApprovalWalletId;
     if (!id || initialApprovalBusy) return;
     initialApprovalBusy = true;
     initialApprovalError = '';
+    let scanStarted = false;
     try {
+      await pauseAutomaticSync();
       const session = await walletService.session();
       if (!session.unlocked || session.profile.id !== id)
         throw new WalletError(
@@ -178,6 +181,7 @@
       await walletService.saveRecoveryScanSettings(0, settings.gapLimit, '', id);
       declinedInitialScans.delete(id);
       const scan = walletService.fullRescan('', id);
+      scanStarted = true;
       initialApprovalWalletId = null;
       void scan
         .then(() => toast({ title: 'Wallet history verified', tone: 'success' }))
@@ -194,7 +198,9 @@
             description: initialApprovalError,
             tone: 'danger'
           });
-        });
+        })
+        .finally(() => resumeAutomaticSync())
+        .catch(() => undefined);
     } catch (cause) {
       initialApprovalError = localizedError(
         cause,
@@ -208,6 +214,7 @@
       });
     } finally {
       initialApprovalBusy = false;
+      if (!scanStarted) await resumeAutomaticSync();
     }
   }
   function handleKeyboardShortcut(event: KeyboardEvent) {
@@ -819,25 +826,33 @@
   title={translate($locale, 'Approve wallet-history scan')}
   description={translate(
     $locale,
-    'Groot will scan from genesis so earlier payments are not missed.'
+    'Use Groot’s network for simplicity and speed, or set up your own node for better privacy.'
   )}
   onclose={() => {
     void declineInitialHistoryScan();
   }}
 >
-  <WarningNotice
-    title={translate($locale, 'Wallet privacy')}
-    body={translate(
-      $locale,
-      initialApprovalManaged
-        ? 'Groot managed will receive your public wallet scripts and can link your wallet activity with your connection. Your keys stay on your device. Choose Settings to use your own node.'
-        : 'Your configured node will receive wallet queries. Your keys stay on your device. Choose Settings to review the connection and protect your privacy.'
-    )}
-  />
-  {#if initialApprovalError}<p class="form-error" role="alert">{initialApprovalError}</p>{/if}
+  <div class="modal-form">
+    <WarningNotice
+      title={translate($locale, 'Wallet privacy')}
+      body={translate(
+        $locale,
+        initialApprovalManaged
+          ? 'Groot’s network can see your wallet activity. Your keys stay on your device.'
+          : 'Your own node checks your wallet history. Your keys stay on your device.'
+      )}
+    />
+    {#if initialApprovalError}<WarningNotice
+        tone="danger"
+        icon
+        role="alert"
+        title={translate($locale, 'Scan could not start')}
+        body={initialApprovalError}
+      />{/if}
+  </div>
   <div class="modal-footer">
     <Button variant="secondary" disabled={initialApprovalBusy} onclick={declineInitialHistoryScan}
-      >{translate($locale, 'No, open Settings')}</Button
+      >{translate($locale, 'Set up my own node')}</Button
     ><Button
       loading={initialApprovalBusy}
       loadingLabel={translate($locale, 'Starting scan…')}

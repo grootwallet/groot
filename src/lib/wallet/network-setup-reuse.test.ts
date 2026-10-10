@@ -79,19 +79,13 @@ describe('protected network setup reuse', () => {
     ).toBeLessThan(source.indexOf('mark_selected_mainnet_node_verified(&app, &state)'));
   });
 
-  it('retains the default choice for software and hardware creation', () => {
+  it('keeps network copying in Settings, out of new-wallet credential forms', () => {
     for (const route of directAdoptionRoutes) {
-      expect(route).toContain('let reuseNetworkSetup = $state(true)');
-      expect(route).toContain('walletService.networkSetupSources()');
-      expect(route).toContain(
-        'Copies its node and sync method. This wallet protects its own copy.'
-      );
+      expect(route).not.toContain('reuseNetworkSetup');
+      expect(route).not.toContain('walletService.networkSetupSources()');
+      expect(route).not.toContain('walletService.adoptNetworkSetup(');
     }
-    expect(welcome).toContain('networkSetupSource?.walletId');
-    expect(welcome).toContain('creation.networkSetupCopied');
-    expect(directAdoptionRoutes[1]).toContain('walletService.adoptNetworkSetup(');
-    expect(multisigCreationRoute).not.toContain('networkSetupSourceWalletId');
-    expect(multisigCreationRoute).not.toContain('walletService.adoptNetworkSetup(');
+    expect(settings).toContain('walletService.adoptNetworkSetup(');
   });
 
   it('copies multisig network setup before publishing the new profile', () => {

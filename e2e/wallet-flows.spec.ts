@@ -3006,8 +3006,11 @@ test('declining the first scan opens Settings and keeps history unverified', asy
   await page.goto('/?fixture-initial-history-required=1');
   const approval = page.getByRole('dialog', { name: 'Approve wallet-history scan' });
   await expect(approval).toBeVisible();
-  await approval.getByRole('button', { name: 'No, open Settings' }).click();
+  await approval.getByRole('button', { name: 'Set up my own node' }).click();
   await expect(page).toHaveURL(/\/settings/);
+  const connection = page.getByRole('dialog', { name: 'Connect Bitcoin Core' });
+  await expect(connection).toBeVisible();
+  await connection.getByRole('button', { name: 'Close', exact: true }).click();
   await page.getByRole('link', { name: 'Overview', exact: true }).click();
   await expect(approval).toBeHidden();
   await expect(page.getByLabel('Unverified balance')).toContainText('Never synced');

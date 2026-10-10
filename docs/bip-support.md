@@ -1,5 +1,13 @@
 # Bitcoin Improvement Proposal support
 
+## Internal rc02 feedback — 2026-10-10
+
+Hardware-only app PIN changes live in Settings → Security, require the existing PIN, and lock the wallet. Software passphrases cannot change. Existing stored wallet/backup formats remain compatible; native encrypted-file rotation recovers interrupted attempts using the old PIN. See ADR 0085.
+
+Creation does not offer another wallet’s network setup. First-history approval uses concise privacy copy and opens the Bitcoin Core connection dialog directly when declined; targeted genesis approval can retry after partial observations. Scan and receive-policy errors use WarningNotice. Policy address details reuse HardwareAddressComparison. Recovery creation remains disabled with Coming soon and its descriptive body. Delete acknowledgements follow DELETE with normal form spacing.
+
+Matching BIP329 xpub records are reported as signer keys matched, not unsupported labels; independently editable signer names are kept. BIP329 address labels and atomic conflict checks are unchanged. No Bitcoin derivation, BIP39 passphrase, script, PSBT or backup format changes; BIP329 reporting evidence is updated. Device testing remains distinct from fixture/native tests.
+
 ## Upcoming release recovery evidence — 2026-10-10
 
 Issue #116 / ADR 0084 changes BIP329 recovery handling: native descriptor ownership restores missing address rows and labels atomically, with a first-10,000-index search plus indexed ownership. Foreign-wallet/network and transaction/output membership checks remain enforced. Known xpub name differences are ignored without renaming. BIP129 standard sortedmulti policy comparisons account for textual key permutations using full origins, xpubs and threshold. BIP389 presentation remains one receive/change multipath descriptor, with old branch-pair and BSMS/JSON imports preserved. First-history privacy consent, backup acknowledgements, worker-thread deletion, device tag styling and identifier grouping add no BIP support. Timelocked policy creation is unavailable; existing compilation/test evidence is not a public funded-policy claim.

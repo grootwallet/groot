@@ -1361,10 +1361,10 @@
                   id="untested-recovery-description"
                   >{translate(
                     $locale,
-                    'Not available yet. This policy has not been tested.'
+                    'A smaller signer group can recover the wallet after a delay.'
                   )}</small
                 ></span
-              ><span class="policy-kind-meta">{translate($locale, 'About one month')}</span
+              ><span class="policy-kind-meta">{translate($locale, 'Coming soon')}</span
               >{#if templateKind === 'recovery'}<span class="policy-kind-check" aria-hidden="true"
                   ><Check size={16} strokeWidth={3} /></span
                 >{/if}</button

@@ -1,5 +1,13 @@
 # Groot architecture
 
+## Internal rc02 feedback — 2026-10-10
+
+Hardware-only app PIN changes live in Settings → Security, require the existing PIN, and lock the wallet. Software passphrases cannot change. Existing stored wallet/backup formats remain compatible; native encrypted-file rotation recovers interrupted attempts using the old PIN. See ADR 0085.
+
+Creation does not offer another wallet’s network setup. First-history approval uses concise privacy copy and opens the Bitcoin Core connection dialog directly when declined; targeted genesis approval can retry after partial observations. Scan and receive-policy errors use WarningNotice. Policy address details reuse HardwareAddressComparison. Recovery creation remains disabled with Coming soon and its descriptive body. Delete acknowledgements follow DELETE with normal form spacing.
+
+Matching BIP329 xpub records are reported as signer keys matched, not unsupported labels; independently editable signer names are kept. BIP329 address labels and atomic conflict checks are unchanged. No Bitcoin derivation, BIP39 passphrase, script, PSBT or backup format changes; BIP329 reporting evidence is updated. Device testing remains distinct from fixture/native tests.
+
 ## Upcoming feedback boundary changes — 2026-10-10
 
 Under ADR 0084 the shell owns a wallet-scoped first-history approval modal built from existing components. The sync controller reports initial_scan_required instead of automatically invoking fullRescan. Explicit scan-settings save grants process-local native approval; an empty-credential first rescan fails without it. Existing node configurations and persisted schemas are preserved. Recovery inspection returns public policy metadata; selected-device proof remains authoritative in Rust. Deletion commands perform authentication and exact-directory removal on blocking workers and share a pure backup-gate validator. BIP329 restore derives ownership from native descriptors and commits metadata, labels, and reveal state together. UI never infers ownership from an address string.

@@ -9,7 +9,6 @@
     ChevronDown,
     FileUp,
     HelpCircle,
-    Network,
     QrCode,
     ShieldCheck
   } from '@lucide/svelte';
@@ -36,7 +35,6 @@
     type ExternalSigner,
     type ExternalSignerSource,
     type HardwareDevice,
-    type NetworkSetupSource,
     type WalletErrorCode
   } from '$lib/wallet';
 
@@ -78,18 +76,7 @@
   let isBitBox = $derived(Boolean(signer?.deviceType?.toLowerCase().includes('bitbox')));
   let isBitBoxNova = $derived(Boolean(isBitBox && signer?.label.toLowerCase().includes('nova')));
   let isFileImport = $derived(signer?.source === 'file');
-  let networkSetupSource = $state<NetworkSetupSource | null>(null);
-  let reuseNetworkSetup = $state(true);
   let hardwareScanGeneration = 0;
-
-  onMount(async () => {
-    try {
-      networkSetupSource =
-        (await walletService.networkSetupSources()).find((source) => source.ready) ?? null;
-    } catch {
-      networkSetupSource = null;
-    }
-  });
 
   onDestroy(() => {
     hardwareScanGeneration += 1;
@@ -319,27 +306,17 @@
     errorCode = '';
     existingWalletId = null;
     try {
-      let networkSetupCopied = true;
       await walletService.createExternalSignerWallet(
         walletName,
         { ...signer, label: walletName },
         pin
       );
-      if (reuseNetworkSetup && networkSetupSource) {
-        try {
-          await walletService.adoptNetworkSetup(networkSetupSource.walletId, pin);
-        } catch {
-          networkSetupCopied = false;
-        }
-      }
       pin = '';
       confirmation = '';
       toast({
         title: 'Hardware signer added',
-        description: networkSetupCopied
-          ? 'Only public descriptors are stored in Groot.'
-          : 'Network setup was not copied. Configure it in Settings.',
-        tone: networkSetupCopied ? 'success' : 'default'
+        description: 'Only public descriptors are stored in Groot.',
+        tone: 'success'
       });
       await walletShell.refreshProfiles();
       await goto('/?initial=full');
@@ -679,20 +656,7 @@
         autocomplete="new-password"
         error={confirmation && pin !== confirmation ? 'PINs do not match.' : ''}
       />
-      {#if networkSetupSource}<label class="credential-warning credential-ack"
-          ><input type="checkbox" bind:checked={reuseNetworkSetup} /><Network size={16} />
-          <p>
-            <strong
-              >{translate($locale, 'Use')}
-              {networkSetupSource.walletName}{translate($locale, '’s network setup.')}</strong
-            ><span
-              >{translate(
-                $locale,
-                'Copies its node and sync method. This wallet protects its own copy.'
-              )}</span
-            >
-          </p></label
-        >{/if}
+
       {#if error}
         <WarningNotice
           tone="danger"

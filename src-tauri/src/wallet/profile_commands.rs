@@ -1348,8 +1348,10 @@ pub async fn recovery_scan_settings_save(
         let _operation = operation_guard(&state)?;
         require_unlocked(&app, &state)?;
         validate_recovery_gap_limit(gap_limit)?;
-        let tip = checked_block_height(&rpc_client(&app, &state)?)?;
-        validate_recovery_birthday(birthday_height, tip)?;
+        if birthday_height != 0 {
+            let tip = checked_block_height(&rpc_client(&app, &state)?)?;
+            validate_recovery_birthday(birthday_height, tip)?;
+        }
         let profile = selected_profile(&app)?;
         if expected_wallet_id.is_some_and(|id| id != profile.id) { return Err(api_error("wallet_selection_changed", "The selected wallet changed. Approve its scan again.")); }
         let mut db = match profile.kind {
@@ -1357,12 +1359,7 @@ pub async fn recovery_scan_settings_save(
             WalletKind::SingleKey | WalletKind::WatchOnly => open_db(&app)?,
         };
         if credential.is_empty() {
-            if has_completed_sync(&db)? {
-                return Err(api_error(
-                    "invalid_credential",
-                    "Enter the wallet credential before changing recovery-scan settings.",
-                ));
-            }
+            validate_credential_free_scan_settings(has_completed_sync(&db)?, expected_wallet_id.is_some(), birthday_height)?;
         } else {
             check_auth_throttle(&app, &state)?;
             let verified = verify_selected_credential(&app, credential.as_str());
@@ -1377,6 +1374,11 @@ pub async fn recovery_scan_settings_save(
             .transpose()?
             .unwrap_or(0);
         let required = external_required.max(internal_required);
+        let gap_limit = if credential.is_empty() && expected_wallet_id.is_some() {
+            let effective = gap_limit.max(required);
+            validate_recovery_gap_limit(effective)?;
+            effective
+        } else { gap_limit };
         if gap_limit < required {
             return Err(api_error(
                 "invalid_scan_settings",
@@ -1538,7 +1540,7 @@ pub async fn wallet_full_rescan(
                 WalletKind::SingleKey | WalletKind::WatchOnly => (open_db(&app)?, false),
             };
             if credential.is_empty() {
-                if has_completed_sync(&db)? {
+                if has_completed_sync(&db)? && expected_wallet_id.is_none() {
                     return Err(api_error(
                         "invalid_credential",
                         "Enter the wallet credential before starting another full rescan.",

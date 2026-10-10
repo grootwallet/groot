@@ -83,6 +83,7 @@ export interface WalletProfilesPort {
   recoverWallet(name: string, credential: string): Promise<void>;
   unlock(credential: string): Promise<void>;
   lock(): Promise<void>;
+  changePin(currentPin: string, newPin: string, expectedWalletId: string): Promise<void>;
   deleteWallet(
     credential: string,
     confirmation: string,

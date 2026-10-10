@@ -559,6 +559,25 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
   async recoveryScanStatus() {
     return structuredClone(this._scanStatus);
   }
+  async changePin(currentPin: string, newPin: string, expectedWalletId: string) {
+    const session = await this.session();
+    if (
+      !session.unlocked ||
+      session.profile.id !== expectedWalletId ||
+      session.profile.kind === 'single_key'
+    )
+      throw new WalletError(
+        'invalid_credential',
+        'App PIN changes are available for hardware wallets only.'
+      );
+    if (this._credentials.get(expectedWalletId) !== currentPin)
+      throw new WalletError('invalid_credential', 'Incorrect app PIN.');
+    if (!currentPin || !newPin || currentPin === newPin)
+      throw new WalletError('invalid_credential', 'Choose a different app PIN.');
+    this._credentials.set(expectedWalletId, newPin);
+    if (session.profile.kind === 'multisig') this._multisigCredential = newPin;
+    await this.lock();
+  }
   async fullRescan(credential: string, expectedWalletId?: string) {
     if (expectedWalletId && expectedWalletId !== this._selectedWalletId)
       throw new WalletError('wallet_selection_changed', 'The selected wallet changed.');
@@ -1179,7 +1198,13 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     };
   }
   async importLabels() {
-    return { importedCount: 2, unchangedCount: 1, ignoredCount: 1, spendabilityChangeCount: 0 };
+    return {
+      importedCount: 2,
+      unchangedCount: 1,
+      ignoredCount: 0,
+      matchedSignerCount: 3,
+      spendabilityChangeCount: 0
+    };
   }
 
   async signAndBroadcast(proposalId: string, reviewBinding: string, credential: string) {
@@ -2168,6 +2193,14 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     return this.snapshot();
   }
   async createMultisigAddress(labels: string[]) {
+    if (
+      typeof location !== 'undefined' &&
+      location.search.includes('fixture-policy-quorum-required')
+    )
+      throw new WalletError(
+        'hardware_not_approved',
+        'Verify the complete wallet policy on enough hardware signers before receiving bitcoin.'
+      );
     return this.createAddress(labels);
   }
   async claimObservedMultisigAddress(outpoint: string, rawLabels: string[]) {

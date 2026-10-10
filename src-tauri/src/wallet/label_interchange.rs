@@ -33,6 +33,7 @@ pub struct LabelImportResultDto {
     imported_count: usize,
     unchanged_count: usize,
     ignored_count: usize,
+    matched_signer_count: usize,
     spendability_change_count: usize,
 }
 
@@ -397,6 +398,7 @@ fn import_records(
     let mut spendability = BTreeMap::<String, bool>::new();
     let signer_map = signers.iter().cloned().collect::<BTreeMap<_, _>>();
     let mut ignored = initial_ignored;
+    let mut matched_signers = 0;
     // Recovered descriptors have no presentation rows. Match public addresses
     // against native derivation, never the label database alone. Bound work
     // independently of the hostile record count.
@@ -566,7 +568,7 @@ fn import_records(
             "xpub" => match signer_map.get(&record.reference) {
                 // Signer display names are independently editable. Importing
                 // address history must not rename them or fail after recovery.
-                Some(_) => ignored += 1,
+                Some(_) => matched_signers += 1,
                 None => {
                     return Err(api_error(
                         "backup_mismatch",
@@ -663,6 +665,7 @@ fn import_records(
         imported_count: imported,
         unchanged_count: unchanged,
         ignored_count: ignored,
+        matched_signer_count: matched_signers,
         spendability_change_count: spendability_changes,
     })
 }
@@ -1303,7 +1306,8 @@ mod tests {
         )
         .unwrap();
         assert_eq!(result.imported_count, 1);
-        assert_eq!(result.ignored_count, 1);
+        assert_eq!(result.ignored_count, 0);
+        assert_eq!(result.matched_signer_count, 1);
     }
 
     #[test]

@@ -2229,7 +2229,10 @@ test('keeps untested timelocked creation disabled and defaults to standard 2-of-
 }) => {
   await page.goto('/multisig/new');
   await expect(page.getByRole('button', { name: /^Recovery/ })).toBeDisabled();
-  await expect(page.getByText('Not available yet. This policy has not been tested.')).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Recovery/ })).toContainText('Coming soon');
+  await expect(
+    page.getByText('A smaller signer group can recover the wallet after a delay.')
+  ).toBeVisible();
   await expect(page.getByRole('button', { name: /^Assisted recovery/ })).toBeDisabled();
   await page.getByRole('button', { name: /^Standard/ }).click();
   await page.getByRole('button', { name: 'Continue', exact: true }).click();

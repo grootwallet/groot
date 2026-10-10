@@ -17,6 +17,85 @@ export type { MessageValues, Translation, CatalogSection } from './locales/types
 // translations makes reviews able to compare meaning without chasing opaque IDs.
 // User data and protocol identifiers must never be passed through this catalog.
 export const copyCatalog = {
+  '{count} coin settings changed.': {
+    fr: '{count} réglages de pièces modifiés.',
+    es: '{count} ajustes de monedas cambiados.'
+  },
+  '{count} signer keys matched; current signer names kept.': {
+    fr: '{count} clés de signataires reconnues ; noms actuels conservés.',
+    es: '{count} claves de firmantes coinciden; se mantienen los nombres actuales.'
+  },
+  '{count} unsupported records skipped.': {
+    fr: '{count} entrées non prises en charge ignorées.',
+    es: '{count} registros no compatibles omitidos.'
+  },
+  'A smaller signer group can recover the wallet after a delay.': {
+    fr: 'Un groupe réduit de signataires peut récupérer le portefeuille après un délai.',
+    es: 'Un grupo menor de firmantes puede recuperar el monedero tras un plazo.'
+  },
+  'Address could not be created': {
+    fr: 'Impossible de créer l’adresse',
+    es: 'No se pudo crear la dirección'
+  },
+  'App PIN changed': { fr: 'PIN de l’application modifié', es: 'PIN de la aplicación cambiado' },
+  'App PIN not changed': {
+    fr: 'PIN de l’application non modifié',
+    es: 'PIN de la aplicación sin cambiar'
+  },
+  'Approve the history scan to restore transaction history.': {
+    fr: 'Approuvez l’analyse pour restaurer l’historique des transactions.',
+    es: 'Aprueba el escaneo para restaurar el historial de transacciones.'
+  },
+  'Change app PIN': { fr: 'Changer le PIN de l’application', es: 'Cambiar PIN de la aplicación' },
+  'Changing PIN…': { fr: 'Modification du PIN…', es: 'Cambiando PIN…' },
+  'Confirm new app PIN': { fr: 'Confirmer le nouveau PIN', es: 'Confirmar nuevo PIN' },
+  'Current app PIN': { fr: 'PIN actuel de l’application', es: 'PIN actual de la aplicación' },
+  'Groot’s network can see your wallet activity. Your keys stay on your device.': {
+    fr: 'Le réseau Groot peut voir l’activité de votre portefeuille. Vos clés restent sur votre appareil.',
+    es: 'La red de Groot puede ver la actividad de tu monedero. Tus claves permanecen en tu dispositivo.'
+  },
+  'Imported {imported}; {unchanged} already present.': {
+    fr: '{imported} importées ; {unchanged} déjà présentes.',
+    es: '{imported} importadas; {unchanged} ya presentes.'
+  },
+  'Locks this wallet after changing its PIN.': {
+    fr: 'Verrouille ce portefeuille après le changement de PIN.',
+    es: 'Bloquea este monedero después de cambiar su PIN.'
+  },
+  'Open Policy, verify the required signers, then return here.': {
+    fr: 'Ouvrez Politique, vérifiez les signataires requis, puis revenez ici.',
+    es: 'Abre Política, verifica los firmantes necesarios y vuelve aquí.'
+  },
+  'Scan could not start': {
+    fr: 'Impossible de lancer l’analyse',
+    es: 'No se pudo iniciar el escaneo'
+  },
+  'Set up my own node': { fr: 'Configurer mon propre nœud', es: 'Configurar mi propio nodo' },
+  'Unlock this wallet with your new PIN.': {
+    fr: 'Déverrouillez ce portefeuille avec votre nouveau PIN.',
+    es: 'Desbloquea este monedero con tu nuevo PIN.'
+  },
+  'Use Groot’s network for simplicity and speed, or set up your own node for better privacy.': {
+    fr: 'Utilisez le réseau Groot pour sa simplicité et sa rapidité, ou votre propre nœud pour plus de confidentialité.',
+    es: 'Usa la red de Groot por su sencillez y rapidez, o configura tu propio nodo para más privacidad.'
+  },
+  'Verify this wallet on your hardware signers before receiving bitcoin.': {
+    fr: 'Vérifiez ce portefeuille sur vos signataires matériels avant de recevoir du bitcoin.',
+    es: 'Verifica este monedero en tus firmantes físicos antes de recibir bitcoin.'
+  },
+  'Verify your wallet policy': {
+    fr: 'Vérifier la politique du portefeuille',
+    es: 'Verificar la política del monedero'
+  },
+  'Your hardware keys and device passphrase stay the same. This wallet will lock after the change.':
+    {
+      fr: 'Vos clés matérielles et la passphrase de l’appareil restent inchangées. Ce portefeuille sera verrouillé après le changement.',
+      es: 'Tus claves físicas y la frase de contraseña del dispositivo no cambian. Este monedero se bloqueará tras el cambio.'
+    },
+  'Your own node checks your wallet history. Your keys stay on your device.': {
+    fr: 'Votre propre nœud vérifie l’historique du portefeuille. Vos clés restent sur votre appareil.',
+    es: 'Tu propio nodo comprueba el historial de tu monedero. Tus claves permanecen en tu dispositivo.'
+  },
   'Enlarge wallet descriptor QR': {
     fr: 'Agrandir le QR du descripteur du portefeuille',
     es: 'Ampliar el QR del descriptor del monedero'

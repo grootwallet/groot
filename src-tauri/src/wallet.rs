@@ -5159,6 +5159,7 @@ fn verify_external_signer_credential(app: &AppHandle, credential: &str) -> ApiRe
     validate_credential(credential)?;
     let metadata = read_external_signer_metadata(app)?;
     let profile = selected_profile_of_kind(app, WalletKind::WatchOnly)?;
+    pin_change::recover_pending(&profile_directory(app, profile.id)?, profile.id)?;
     let mut plaintext = secure_store::load(
         &secret_path(app)?,
         credential,
@@ -5529,6 +5530,7 @@ fn add_multisig_global_xpubs(psbt: &mut Psbt, metadata: &MultisigWalletDto) -> A
 fn verify_multisig_credential(app: &AppHandle, credential: &str) -> ApiResult<()> {
     validate_credential(credential)?;
     let profile = selected_profile_of_kind(app, WalletKind::Multisig)?;
+    pin_change::recover_pending(&profile_directory(app, profile.id)?, profile.id)?;
     let path = multisig_secret_path(app)?;
     let encoded = read_private_text(&path).map_err(|_| {
         api_error(
@@ -7703,6 +7705,8 @@ fn enqueue_snapshot_notifications(db: &Connection, snapshot: &WalletSnapshotDto)
     Ok(())
 }
 
+#[path = "wallet/pin_change.rs"]
+pub(crate) mod pin_change;
 #[path = "wallet/profile_commands.rs"]
 pub(crate) mod profile_commands;
 

@@ -1,8 +1,18 @@
 # Groot design system
 
+## Internal rc02 feedback — 2026-10-10
+
+Hardware-only app PIN changes live in Settings → Security, require the existing PIN, and lock the wallet. Software passphrases cannot change. Existing stored wallet/backup formats remain compatible; native encrypted-file rotation recovers interrupted attempts using the old PIN. See ADR 0085.
+
+Creation does not offer another wallet’s network setup. First-history approval uses concise privacy copy and opens the Bitcoin Core connection dialog directly when declined; targeted genesis approval can retry after partial observations. Scan and receive-policy errors use WarningNotice. Policy address details reuse HardwareAddressComparison. Recovery creation remains disabled with Coming soon and its descriptive body. Delete acknowledgements follow DELETE with normal form spacing.
+
+Matching BIP329 xpub records are reported as signer keys matched, not unsupported labels; independently editable signer names are kept. BIP329 address labels and atomic conflict checks are unchanged. No Bitcoin derivation, BIP39 passphrase, script, PSBT or backup format changes; BIP329 reporting evidence is updated. Device testing remains distinct from fixture/native tests.
+
+Owner preference: always reuse existing UI components and typography. A new reusable component or font treatment requires explicit owner approval; explain the verified gap first. Test instructions should give a short action and the expected visible result.
+
 ## Upcoming release feedback conventions — 2026-10-10
 
-Use the existing Modal, WarningNotice, Button, PermanentLabelEditor, ReadableAddress, HardwareDeviceList, PolicySignerList, and TrezorPinModal for first-scan approval, backup restore, and deletion. No new reusable component is introduced. First-scan approval leads with privacy and two actions: Approve and scan, or No, open Settings. Passive Select to identify badges use the existing amber attention treatment for visibility. Four-character identifier blocks leave any remainder at the end. Expanded policy-address references use the same derivation-path definition row as receive-address details. Backups display one multipath descriptor; internal branch pairs are not separate user choices.
+Use the existing Modal, WarningNotice, Button, PermanentLabelEditor, ReadableAddress, HardwareDeviceList, PolicySignerList, and TrezorPinModal for first-scan approval, backup restore, and deletion. No new reusable component is introduced. First-scan approval leads with privacy and two actions: Approve and scan, or Set up my own node. Passive Select to identify badges use the existing amber attention treatment for visibility. Four-character identifier blocks leave any remainder at the end. Expanded policy-address references use the same derivation-path definition row as receive-address details. Backups display one multipath descriptor; internal branch pairs are not separate user choices.
 
 Status: canonical UI guidance for the current desktop/mobile application.
 

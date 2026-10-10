@@ -1,5 +1,13 @@
 # Implementation status
 
+## Internal rc02 feedback — 2026-10-10
+
+Hardware-only app PIN changes live in Settings → Security, require the existing PIN, and lock the wallet. Software passphrases cannot change. Existing stored wallet/backup formats remain compatible; native encrypted-file rotation recovers interrupted attempts using the old PIN. See ADR 0085.
+
+Creation does not offer another wallet’s network setup. First-history approval uses concise privacy copy and opens the Bitcoin Core connection dialog directly when declined; targeted genesis approval can retry after partial observations. Scan and receive-policy errors use WarningNotice. Policy address details reuse HardwareAddressComparison. Recovery creation remains disabled with Coming soon and its descriptive body. Delete acknowledgements follow DELETE with normal form spacing.
+
+Matching BIP329 xpub records are reported as signer keys matched, not unsupported labels; independently editable signer names are kept. BIP329 address labels and atomic conflict checks are unchanged. No Bitcoin derivation, BIP39 passphrase, script, PSBT or backup format changes; BIP329 reporting evidence is updated. Device testing remains distinct from fixture/native tests.
+
 ## Upcoming release feedback implementation — 2026-10-10
 
 Issue #116 targets reported public v0.5.1 · c731fa1c feedback. Current author/copyright presentation uses Rochal Holdings. ADR 0084 introduces explicit first-history consent, genesis defaults, off-thread authenticated deletion and backup gates without changing persisted formats. Standard multisig backup restoration now has a Mainnet device-identification path; untested timelocked Recovery creation is disabled. BIP329 recovery no longer requires previously saved receive rows, and signer display-name differences do not block compatible labels. Unknown-source labeling shares the multi-label editor. Multipath descriptor presentation, first-policy derivation details, four-character grouping, and amber passive-identification tags reuse existing components. Automated and physical verification are tracked separately; implementation does not certify a replacement release.

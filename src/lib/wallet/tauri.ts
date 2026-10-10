@@ -337,6 +337,9 @@ export class TauriWalletAdapter implements WalletPort {
   recoveryScanStatus() {
     return command<import('./contracts').RecoveryScanStatus>('recovery_scan_status');
   }
+  changePin(currentPin: string, newPin: string, expectedWalletId: string) {
+    return command<void>('wallet_pin_change', { currentPin, newPin, expectedWalletId });
+  }
   async fullRescan(credential: string, expectedWalletId?: string) {
     const generation = this.#generation;
     const walletId = this.#selectedWalletId;
