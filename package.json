@@ -1,7 +1,7 @@
 {
   "name": "groot-wallet",
   "private": true,
-  "version": "0.5.1",
+  "version": "5.2.0-rc01",
   "license": "Apache-2.0",
   "author": "Rochal Holdings",
   "repository": {
