@@ -51,7 +51,12 @@ export type RecoveryPolicyAnalysis = {
   warnings: { code: string; message: string }[];
   maxSatisfactionWeight: number;
 };
-export type RecoveryDrill = { firstAddress: string; matchesCurrentWallet: boolean };
+export type RecoveryDrill = {
+  firstAddress: string;
+  matchesCurrentWallet: boolean;
+  threshold?: number;
+  cosigners?: CosignerDraft[];
+};
 
 export type MultisigSetupStage = 'policy' | 'keys' | 'review' | 'backup';
 export type MultisigSetupTemplate = 'standard' | 'recovery' | 'inheritance';

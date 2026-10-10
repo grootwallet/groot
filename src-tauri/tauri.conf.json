@@ -21,7 +21,7 @@
   "bundle": {
     "active": true,
     "targets": "all",
-    "copyright": "Copyright 2026 Thibaud Marechal and contributors",
+    "copyright": "Copyright 2026 Rochal Holdings and contributors",
     "resources": {
       "../LICENSE": "LICENSE.txt",
       "../NOTICE": "NOTICE.txt",

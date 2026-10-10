@@ -51,3 +51,5 @@ is introduced by this ADR.
 Licensing and attribution do not change product behavior or any persisted or
 interchange format. Existing wallet data remains compatible and no migration is
 required. Bitcoin Improvement Proposal support is unchanged.
+
+Current attribution presentation is superseded by ADR 0084 at the owner’s request. The historical ownership evidence and license decision above remain intact.

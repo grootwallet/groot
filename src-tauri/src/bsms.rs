@@ -159,8 +159,42 @@ impl DescriptorRecord {
         internal_descriptor: &str,
     ) -> Result<bool, BsmsError> {
         let (external, internal) = self.descriptor_pair()?;
-        Ok(external == strip_checksum(external_descriptor)
-            && internal == strip_checksum(internal_descriptor))
+        if external == strip_checksum(external_descriptor)
+            && internal == strip_checksum(internal_descriptor)
+        {
+            return Ok(true);
+        }
+        let other = match Self::from_descriptor_pair(
+            external_descriptor,
+            internal_descriptor,
+            &self.first_address,
+        ) {
+            Ok(other) => other,
+            Err(BsmsError::UnsupportedPaths | BsmsError::DescriptorMismatch) => return Ok(false),
+            Err(error) => return Err(error),
+        };
+        // sortedmulti sorts derived public keys at every index. Compare complete
+        // account origins and xpubs rather than descriptor text or one address.
+        match (self.standard_policy(), other.standard_policy()) {
+            (Ok((left_threshold, left)), Ok((right_threshold, right))) => {
+                let canonical = |keys: Vec<StandardCosigner>| {
+                    let mut keys = keys
+                        .into_iter()
+                        .map(|key| {
+                            (
+                                key.fingerprint.to_string(),
+                                key.xpub.to_string(),
+                                key.derivation_path,
+                            )
+                        })
+                        .collect::<Vec<_>>();
+                    keys.sort();
+                    keys
+                };
+                Ok(left_threshold == right_threshold && canonical(left) == canonical(right))
+            }
+            _ => Ok(false),
+        }
     }
 
     /// Extracts the public participants from Groot's standard BIP48 sortedmulti policy.
@@ -492,6 +526,54 @@ mod tests {
             PublicDescriptorPair::parse(&"wsh(".repeat(MAX_BSMS_BYTES)),
             Err(BsmsError::TooLarge)
         );
+    }
+
+    #[test]
+    fn sortedmulti_key_order_changes_checksum_but_not_receive_or_change_addresses() {
+        let (external, internal) = descriptors();
+        let permute = |descriptor: &str| {
+            let body = strip_checksum(descriptor)
+                .strip_prefix("wsh(sortedmulti(2,")
+                .unwrap()
+                .strip_suffix("))")
+                .unwrap();
+            let reversed = body.split(',').rev().collect::<Vec<_>>().join(",");
+            Descriptor::<DescriptorPublicKey>::from_str(&format!("wsh(sortedmulti(2,{reversed}))"))
+                .unwrap()
+                .to_string()
+        };
+        let reordered_external = permute(&external);
+        let reordered_internal = permute(&internal);
+        assert_ne!(external, reordered_external);
+        assert_ne!(
+            external.rsplit_once('#').unwrap().1,
+            reordered_external.rsplit_once('#').unwrap().1
+        );
+        let left = bdk_wallet::Wallet::create(external.clone(), internal.clone())
+            .network(bdk_wallet::bitcoin::Network::Regtest)
+            .create_wallet_no_persist()
+            .unwrap();
+        let right =
+            bdk_wallet::Wallet::create(reordered_external.clone(), reordered_internal.clone())
+                .network(bdk_wallet::bitcoin::Network::Regtest)
+                .create_wallet_no_persist()
+                .unwrap();
+        for keychain in [
+            bdk_wallet::KeychainKind::External,
+            bdk_wallet::KeychainKind::Internal,
+        ] {
+            for index in [0, 1, 17] {
+                assert_eq!(
+                    left.peek_address(keychain, index).address,
+                    right.peek_address(keychain, index).address
+                );
+            }
+        }
+        let first = first_address(&external, &internal);
+        let record = DescriptorRecord::from_descriptor_pair(&external, &internal, &first).unwrap();
+        assert!(record
+            .matches_descriptor_pair(&reordered_external, &reordered_internal)
+            .unwrap());
     }
 
     #[test]

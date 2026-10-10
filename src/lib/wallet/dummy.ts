@@ -356,7 +356,24 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
   async lock() {
     if (this._selectedWalletId) this._unlockedWalletIds.delete(this._selectedWalletId);
   }
-  async deleteWallet(credential: string, confirmation: string) {
+  async deleteWallet(
+    credential: string,
+    confirmation: string,
+    backupConfirmed: boolean,
+    passphraseBackupConfirmed: boolean
+  ) {
+    const profile = this._profiles.find((wallet) => wallet.id === this._selectedWalletId);
+    if (!backupConfirmed || (profile?.kind === 'single_key' && !passphraseBackupConfirmed))
+      throw new WalletError('backup_mismatch', 'Confirm your backups before deletion.');
+    if (
+      profile?.kind === 'single_key' &&
+      !profile.backupVerified &&
+      (await this.overview(this._selectedWalletId ?? '')).balance.total > 0
+    )
+      throw new WalletError(
+        'backup_mismatch',
+        'Verify your recovery backup in Groot before deletion.'
+      );
     if (confirmation !== 'DELETE')
       throw new WalletError('confirmation_mismatch', 'Type DELETE exactly.');
     const expected = this._selectedWalletId
@@ -511,7 +528,14 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
   async recoveryScanSettings() {
     return { ...this._scanSettings };
   }
-  async saveRecoveryScanSettings(birthdayHeight: number, gapLimit: number, credential: string) {
+  async saveRecoveryScanSettings(
+    birthdayHeight: number,
+    gapLimit: number,
+    credential: string,
+    expectedWalletId?: string
+  ) {
+    if (expectedWalletId && expectedWalletId !== this._selectedWalletId)
+      throw new WalletError('wallet_selection_changed', 'The selected wallet changed.');
     const initialFixtureScan = !this._initialHistoryCompleted && this._initialHistoryRequired;
     if (
       !this._selectedWalletId ||
@@ -527,14 +551,20 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
       gapLimit > 1000
     )
       throw new WalletError('internal_error', 'Invalid recovery scan settings.');
+    this.initialScanApproved = true;
     this._scanSettings = { birthdayHeight, gapLimit };
     return { ...this._scanSettings };
   }
+  private initialScanApproved = false;
   async recoveryScanStatus() {
     return structuredClone(this._scanStatus);
   }
-  async fullRescan(credential: string) {
+  async fullRescan(credential: string, expectedWalletId?: string) {
+    if (expectedWalletId && expectedWalletId !== this._selectedWalletId)
+      throw new WalletError('wallet_selection_changed', 'The selected wallet changed.');
     const initialFixtureScan = !this._initialHistoryCompleted && this._initialHistoryRequired;
+    if (initialFixtureScan && !credential && !this.initialScanApproved)
+      throw new WalletError('initial_scan_required', 'Approve the first wallet-history scan.');
     if (
       !this._selectedWalletId ||
       (credential !== this._credentials.get(this._selectedWalletId) &&
@@ -623,7 +653,17 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
       updatedAt: Math.floor(Date.now() / 1000)
     };
     this._initialHistoryCompleted = true;
-    return this.snapshot();
+    const snapshot = await this.snapshot();
+    if (this._selectedWalletId)
+      this.#emit({
+        type: 'wallet_updated',
+        walletId: this._selectedWalletId,
+        walletKind:
+          this._profiles.find((profile) => profile.id === this._selectedWalletId)?.kind ??
+          'single_key',
+        snapshot
+      });
+    return snapshot;
   }
   async cancelFullRescan() {
     if (this._scanStatus.status !== 'running')
@@ -1371,6 +1411,7 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
   }
   async multisigPolicyVerificationAddress() {
     return {
+      derivationPath: `${MULTISIG_ACCOUNT_PATH}/0/0`,
       canonicalAddress: 'bcrt1qfixturepolicyaddress',
       testnetAlias: 'tb1qfixturepolicyaddress'
     };
@@ -1912,6 +1953,8 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     const matchesCurrentWallet = currentTemplate === importedTemplate;
     this._recoveryVerified = matchesCurrentWallet;
     return {
+      threshold: this._multisig?.threshold ?? 2,
+      cosigners: structuredClone(this._multisig?.cosigners ?? fixtureMultisigWallet().cosigners),
       firstAddress: isBsms
         ? lines[3]
         : `${addressPrefixForNetwork(defaultConfig.network)}qdummy5n8k2r7v4cx9s6jlawephgzuqf5t8ul`,
@@ -1950,6 +1993,8 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
         parsed?.wallet?.externalDescriptor === this._multisig?.externalDescriptor;
       this._recoveryVerified = matchesCurrentWallet;
       return {
+        threshold: this._multisig?.threshold ?? 2,
+        cosigners: structuredClone(this._multisig?.cosigners ?? fixtureMultisigWallet().cosigners),
         firstAddress: `${addressPrefixForNetwork(defaultConfig.network)}qdummy5n8k2r7v4cx9s6jlawephgzuqf5t8ul`,
         matchesCurrentWallet
       };
@@ -1993,18 +2038,17 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
       throw new WalletError('invalid_backup', 'Enter a valid Groot descriptor backup.');
     }
   }
-  async deleteMultisig(credential: string, confirmation: string) {
+  async deleteMultisig(credential: string, confirmation: string, backupConfirmed: boolean) {
+    if (!backupConfirmed)
+      throw new WalletError('backup_mismatch', 'Confirm your key backups before deletion.');
     if (!this._multisig) throw new WalletError('wallet_not_found', 'No multisig wallet exists.');
     if (!this._recoveryVerified)
       throw new WalletError(
         'backup_mismatch',
         'Complete a successful recovery test before deleting this wallet.'
       );
-    if (confirmation !== this._multisig.name)
-      throw new WalletError(
-        'confirmation_mismatch',
-        'Type the exact wallet name to delete this coordinator.'
-      );
+    if (confirmation !== 'DELETE')
+      throw new WalletError('confirmation_mismatch', 'Type DELETE exactly.');
     if (credential !== this._multisigCredential)
       throw new WalletError('invalid_credential', 'Incorrect app PIN.');
     if (this._multisigProfileId) {
@@ -2126,8 +2170,11 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
   async createMultisigAddress(labels: string[]) {
     return this.createAddress(labels);
   }
-  async claimObservedMultisigAddress(outpoint: string, rawLabel: string) {
-    const label = normalizePermanentLabel(rawLabel);
+  async claimObservedMultisigAddress(outpoint: string, rawLabels: string[]) {
+    const labels = rawLabels.map(normalizePermanentLabel);
+    if (!labels.length || labels.length > 5)
+      throw new WalletError('invalid_label', 'Choose one to five labels.');
+    const label = labels[0];
     const coin = this._coins.find((item) => item.outpoint === outpoint);
     if (!coin || coin.provenance.context !== 'received' || coin.primaryLabel) {
       throw new WalletError(
@@ -2135,24 +2182,23 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
         'The selected coin is not an unlabeled received output.'
       );
     }
-    const labelEntity = this.recordLabelUsage(label, 'receive');
-    const permanentLabel = {
-      id: labelEntity?.id ?? `receive-observed-${Date.now()}`,
-      text: labelEntity?.text ?? label,
-      origin: 'receive' as const
-    };
+    const permanentLabels = labels.map((text) => {
+      const entity = this.recordLabelUsage(text, 'receive');
+      return {
+        id: entity?.id ?? `receive-observed-${text}`,
+        text: entity?.text ?? text,
+        origin: 'receive' as const
+      };
+    });
     coin.label = label;
-    coin.primaryLabel = permanentLabel;
-    coin.provenance = {
-      ...coin.provenance,
-      state: 'known',
-      labels: [permanentLabel]
-    };
+    coin.primaryLabel = permanentLabels[0];
+    coin.provenance = { ...coin.provenance, state: 'known', labels: permanentLabels };
     const id = Math.max(-1, ...this._addresses.map((address) => address.id)) + 1;
     const address: ReceiveAddress = {
       id,
       address: coin.address,
       label,
+      labels,
       created: 'Just now',
       status: 'used',
       derivationPath: `${MULTISIG_ACCOUNT_PATH}/0/${id}`

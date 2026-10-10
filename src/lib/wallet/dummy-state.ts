@@ -62,6 +62,20 @@ export function fixtureAddressForNetwork(address: string): string {
 
 function fixtureCoins(): Utxo[] {
   const coins = structuredClone(utxos);
+  if (
+    typeof location !== 'undefined' &&
+    new URLSearchParams(location.search).has('fixture-unlabeled-receive')
+  ) {
+    coins[0].primaryLabel = null;
+    coins[0].label = '';
+    coins[0].provenance = {
+      state: 'unknown',
+      context: 'received',
+      labels: [],
+      clusterCount: 0,
+      addressReused: false
+    };
+  }
   const maturityFixture = fixtureDelayedPolicy !== null;
 
   if (!maturityFixture) return coins;
@@ -162,7 +176,9 @@ export abstract class DummyWalletState {
           kind: 'single_key',
           descriptorChecksum: 'fixture01',
           createdAt: 1,
-          backupVerified: true
+          backupVerified:
+            typeof location === 'undefined' ||
+            !new URLSearchParams(location.search).has('fixture-unverified-backup')
         },
         {
           id: 'fixture-multisig',

@@ -72,6 +72,7 @@ export type SignerPolicyVerification = {
 };
 
 export type PolicyVerificationAddress = {
+  derivationPath: string;
   canonicalAddress: string;
   testnetAlias: string | null;
 };

@@ -1,5 +1,9 @@
 # Implementation status
 
+## Upcoming release feedback implementation — 2026-10-10
+
+Issue #116 targets reported public v0.5.1 · c731fa1c feedback. Current author/copyright presentation uses Rochal Holdings. ADR 0084 introduces explicit first-history consent, genesis defaults, off-thread authenticated deletion and backup gates without changing persisted formats. Standard multisig backup restoration now has a Mainnet device-identification path; untested timelocked Recovery creation is disabled. BIP329 recovery no longer requires previously saved receive rows, and signer display-name differences do not block compatible labels. Unknown-source labeling shares the multi-label editor. Multipath descriptor presentation, first-policy derivation details, four-character grouping, and amber passive-identification tags reuse existing components. Automated and physical verification are tracked separately; implementation does not certify a replacement release.
+
 ## v0.5.1 QR copy and send progress localization — 2026-10-07
 
 Rejected payment QR codes now use a complete English sentence from the stable
@@ -1622,8 +1626,7 @@ remain unchanged.
 The base wallet now declares Apache-2.0 consistently in the root license and
 notice, Node/Rust manifests, contribution policy, generated application SBOM,
 provenance, and packaged legal resources. Third-party HWI, vendored code,
-dependencies, and fonts retain their own terms. Git history supports Thibaud
-Marechal and the same-email `thib` alias as the current contributor identity;
+dependencies, and fonts retain their own terms. Historical contributor evidence remains recorded in ADR 0080; current application attribution is Rochal Holdings under ADR 0084;
 the repository contains no company assignment or CLA, so any undisclosed prior
 assignment remains an ownership question rather than an invented corporate
 claim. ADR 0080 records the boundary and no-trademark grant.

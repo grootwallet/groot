@@ -187,3 +187,26 @@ Compatibility is exact for every persisted format and public contract. There is
 no schema migration, UI change, dependency change, native command removal, or
 BIP impact. This reduces periodic coordination work and makes scheduler ownership
 explicit; it does not move wallet authority into the webview.
+
+## Feedback audit refresh — 2026-10-10 / #116
+
+The earlier developer-onboarding analysis remains directionally correct. At the start of this change, app.css had 11,934 lines, wallet.rs 8,112, standard Send 2,747, multisig Send 3,432, dummy.ts 2,635 and tauri.ts 988. Size concentrates review risk, but is not evidence that every repeated guard is removable.
+
+Concrete debt found during the feedback investigation:
+
+- Unknown-source labels bypassed the existing shared token editor and accepted only one backend label. The fix reuses the editor, submission helper, native normalization and atomic assignment logic.
+- BIP329 ownership conflated presentation records with descriptor identity. Recovery needs a bounded native ownership search and transactional restoration, not another UI validator.
+- Two deletion commands performed expensive credential and filesystem work synchronously. Moving both to workers and sharing a pure backup gate is a focused responsiveness and policy fix.
+- Overview had an obsolete first-scan choice modal alongside scheduler-driven automatic scanning. The new shell-owned consent flow removes that duplicate presentation and prevents a scheduler consent race.
+- Descriptor presentation repeated receive/change sections despite a shared multipath formatter. Removing those sections reduces UI branches while retaining old persisted/export schemas.
+
+Recommended follow-up sequence, each in its own issue-linked change:
+
+1. Capture a regression baseline: validation, Rust checks, isolated Regtest, desktop/mobile light/dark views, bundle/native sizes and startup/navigation/sync timings. Do not claim measured improvement without that comparison.
+2. Extract pure Send presentation-state helpers for amount, fee, saved proposal and acceleration transitions, with characterization tests. Keep PSBT construction, review and spend policy in Rust.
+3. Split adapters along existing WalletPort areas without changing contracts, event/session lifetimes or error codes. Start with diagnostics/export rather than signing.
+4. Move cohesive native wallet.rs domains into modules: authenticated deletion/registry lifecycle, notification delivery, then recovery settings. Preserve explicit command-boundary guards and transaction ordering.
+5. Split semantic CSS in fixed import order under #86, preserving selectors before removing duplicates. Defer Tailwind: no measured need justifies a styling-tool migration in this release.
+6. Refactor hardware orchestration last. Share selected-device/PIN continuations only after characterizing model-specific behavior; require exact-device physical evidence and retain native identity/admission guards.
+
+Do not mix code movement with policy redesign, remove repeated authentication/context checks as cosmetic deduplication, introduce dependencies opportunistically, or change persisted formats without an independently approved compatibility plan. No whole-repository rewrite is proposed.

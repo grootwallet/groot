@@ -35,6 +35,7 @@
     type SavedFileResult
   } from '$lib/wallet';
   import { defaultConfig, networkName } from '$lib/config';
+  import { combineDescriptorBranches } from '$lib/descriptors';
   import { walletPolicyPresentation } from '$lib/wallet/policy';
 
   let wallet = $state<MultisigWallet | null>(null);
@@ -49,12 +50,13 @@
   let exportedBackups = $state<{ bsms: string; groot: string } | null>(null);
   let showReceiveQr = $state(false);
   let receiveQr = $state('');
-  let changeQr = $state('');
   let receivePrintQr = $state<PrintableQr | null>(null);
-  let changePrintQr = $state<PrintableQr | null>(null);
   let loadedBackupName = $state('');
   const policyPresentation = $derived(wallet ? walletPolicyPresentation(wallet) : null);
 
+  const combinedDescriptor = $derived(
+    wallet ? combineDescriptorBranches(wallet.externalDescriptor, wallet.internalDescriptor) : null
+  );
   onDestroy(() => {
     pin = '';
     backup = '';
@@ -65,30 +67,14 @@
     void walletService.multisigWallet().then((value) => (wallet = value));
   });
   $effect(() => {
-    const current = wallet;
+    const descriptor = combinedDescriptor;
     receiveQr = '';
-    changeQr = '';
     receivePrintQr = null;
-    changePrintQr = null;
-    if (!current) return;
-    receivePrintQr = createPrintableQr(current.externalDescriptor);
-    changePrintQr = createPrintableQr(current.internalDescriptor);
-    void QRCode.toDataURL(current.externalDescriptor, {
-      width: 520,
-      margin: 2,
-      errorCorrectionLevel: 'L'
-    })
+    if (!descriptor) return;
+    receivePrintQr = createPrintableQr(descriptor);
+    void QRCode.toDataURL(descriptor, { width: 520, margin: 2, errorCorrectionLevel: 'L' })
       .then((value) => {
-        if (wallet?.externalDescriptor === current.externalDescriptor) receiveQr = value;
-      })
-      .catch(() => undefined);
-    void QRCode.toDataURL(current.internalDescriptor, {
-      width: 520,
-      margin: 2,
-      errorCorrectionLevel: 'L'
-    })
-      .then((value) => {
-        if (wallet?.internalDescriptor === current.internalDescriptor) changeQr = value;
+        if (combinedDescriptor === descriptor) receiveQr = value;
       })
       .catch(() => undefined);
   });
@@ -369,11 +355,11 @@
         <div class="descriptor-qr-preview">
           <div>
             <span
-              ><QrCode size={16} /><strong>{translate($locale, 'Receive descriptor QR')}</strong
+              ><QrCode size={16} /><strong>{translate($locale, 'Wallet descriptor QR')}</strong
               ></span
             >{#if receiveQr}<button
                 class="descriptor-qr-trigger"
-                aria-label={translate($locale, 'Enlarge receive descriptor QR')}
+                aria-label={translate($locale, 'Enlarge wallet descriptor QR')}
                 onclick={() => (showReceiveQr = true)}
                 ><img
                   src={receiveQr}
@@ -387,10 +373,10 @@
               >{/if}
           </div>
           <div class="descriptor-copy-row">
-            <code>{wallet.externalDescriptor}</code><button
-              aria-label={translate($locale, 'Copy receive descriptor')}
-              onclick={() => copyDescriptor(wallet!.externalDescriptor, 'Receive')}
-              >{#if copiedPublicValue === wallet.externalDescriptor}<Check size={15} />{:else}<Copy
+            <code>{combinedDescriptor ?? ''}</code><button
+              aria-label={translate($locale, 'Copy wallet descriptor')}
+              onclick={() => copyDescriptor(combinedDescriptor ?? '', 'Receive')}
+              >{#if copiedPublicValue === combinedDescriptor}<Check size={15} />{:else}<Copy
                   size={15}
                 />{/if}</button
             >
@@ -528,24 +514,14 @@
         </section>
         <section class="print-descriptors">
           <div>
-            <h2>{translate($locale, 'Receive descriptor')}</h2>
+            <h2>{translate($locale, 'Wallet descriptor')}</h2>
             {#if receivePrintQr}<svg
                 class="print-qr"
                 viewBox={`0 0 ${receivePrintQr.size} ${receivePrintQr.size}`}
                 shape-rendering="crispEdges"
-                aria-label={translate($locale, 'Receive descriptor QR code')}
+                aria-label={translate($locale, 'Wallet descriptor QR code')}
                 role="img"><path d={receivePrintQr.path} /></svg
-              >{/if}<code>{wallet.externalDescriptor}</code>
-          </div>
-          <div>
-            <h2>{translate($locale, 'Change descriptor')}</h2>
-            {#if changePrintQr}<svg
-                class="print-qr"
-                viewBox={`0 0 ${changePrintQr.size} ${changePrintQr.size}`}
-                shape-rendering="crispEdges"
-                aria-label={translate($locale, 'Change descriptor QR code')}
-                role="img"><path d={changePrintQr.path} /></svg
-              >{/if}<code>{wallet.internalDescriptor}</code>
+              >{/if}<code>{combinedDescriptor ?? ''}</code>
           </div>
         </section>
         <footer>
@@ -566,20 +542,20 @@
 
 <Modal
   open={showReceiveQr && Boolean(receiveQr)}
-  title={translate($locale, 'Receive descriptor QR')}
+  title={translate($locale, 'Wallet descriptor QR')}
   description={translate(
     $locale,
     'Public watch-only descriptor. Anyone who sees it can follow this wallet’s addresses.'
   )}
   onclose={() => (showReceiveQr = false)}
   >{#if receiveQr}<div class="large-qr descriptor-qr-modal">
-      <img src={receiveQr} alt={translate($locale, 'Large QR code for the receive descriptor')} />
+      <img src={receiveQr} alt={translate($locale, 'Large QR code for the wallet descriptor')} />
       <Button
         variant="secondary"
-        onclick={() => wallet && copyDescriptor(wallet.externalDescriptor, 'Receive')}
-        >{#if copiedPublicValue === wallet?.externalDescriptor}<Check size={15} />{:else}<Copy
+        onclick={() => wallet && copyDescriptor(combinedDescriptor ?? '', 'Receive')}
+        >{#if copiedPublicValue === combinedDescriptor}<Check size={15} />{:else}<Copy
             size={15}
-          />{/if}{translate($locale, 'Copy receive descriptor')}</Button
+          />{/if}{translate($locale, 'Copy wallet descriptor')}</Button
       >
     </div>{/if}</Modal
 >

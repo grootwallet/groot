@@ -1,5 +1,9 @@
 # Bitcoin Improvement Proposal support
 
+## Upcoming release recovery evidence — 2026-10-10
+
+Issue #116 / ADR 0084 changes BIP329 recovery handling: native descriptor ownership restores missing address rows and labels atomically, with a first-10,000-index search plus indexed ownership. Foreign-wallet/network and transaction/output membership checks remain enforced. Known xpub name differences are ignored without renaming. BIP129 standard sortedmulti policy comparisons account for textual key permutations using full origins, xpubs and threshold. BIP389 presentation remains one receive/change multipath descriptor, with old branch-pair and BSMS/JSON imports preserved. First-history privacy consent, backup acknowledgements, worker-thread deletion, device tag styling and identifier grouping add no BIP support. Timelocked policy creation is unavailable; existing compilation/test evidence is not a public funded-policy claim.
+
 The 2026-10-07 send amount input guard changes no BIP support, transaction
 construction, signing, PSBT, descriptor, or persisted format. Comma-decimal BTC
 text is normalized only during exact frontend conversion to integer satoshis.

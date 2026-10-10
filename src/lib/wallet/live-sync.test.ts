@@ -91,7 +91,7 @@ describe('live wallet sync', () => {
     controller.stop();
   });
 
-  it('starts an unconfigured first scan and treats an active resumable scan as expected', async () => {
+  it('requests explicit first-scan approval and treats an active resumable scan as expected', async () => {
     const onError = vi.fn();
     const wallet = {
       sync: vi
@@ -106,11 +106,11 @@ describe('live wallet sync', () => {
     const controller = createLiveSync(wallet, () => 'single_key', 60_000, onError);
     controller.start();
     await controller.runNow();
-    expect(wallet.fullRescan).toHaveBeenCalledOnce();
-    expect(wallet.fullRescan).toHaveBeenCalledWith('');
+    expect(wallet.fullRescan).not.toHaveBeenCalled();
     await controller.runNow();
     await controller.runNow();
-    expect(onError).not.toHaveBeenCalled();
+    expect(onError).toHaveBeenCalledOnce();
+    expect(onError).toHaveBeenCalledWith({ code: 'initial_scan_required' });
     expect(wallet.sync).toHaveBeenCalledTimes(3);
     controller.stop();
   });
@@ -208,7 +208,7 @@ describe('live wallet sync', () => {
 
     expect(wallet.testNodeConnection).toHaveBeenCalledOnce();
     expect(wallet.sync).toHaveBeenCalledTimes(2);
-    expect(wallet.fullRescan).toHaveBeenCalledWith('');
+    expect(wallet.fullRescan).not.toHaveBeenCalled();
     controller.stop();
   });
 

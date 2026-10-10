@@ -1,6 +1,6 @@
 # ADR 0072: Automatically scan new hardware wallets from genesis
 
-- Status: accepted
+- Status: superseded by ADR 0084 for automatic first-scan admission; genesis remains the safe default
 - Date: 2026-09-20
 - Supersedes: ADR 0016 and ADR 0071 only for the initial scan of a newly created external-hardware profile
 - Extends: ADR 0040, ADR 0064, ADR 0070, and ADR 0071

@@ -1,5 +1,9 @@
 # Groot design system
 
+## Upcoming release feedback conventions — 2026-10-10
+
+Use the existing Modal, WarningNotice, Button, PermanentLabelEditor, ReadableAddress, HardwareDeviceList, PolicySignerList, and TrezorPinModal for first-scan approval, backup restore, and deletion. No new reusable component is introduced. First-scan approval leads with privacy and two actions: Approve and scan, or No, open Settings. Passive Select to identify badges use the existing amber attention treatment for visibility. Four-character identifier blocks leave any remainder at the end. Expanded policy-address references use the same derivation-path definition row as receive-address details. Backups display one multipath descriptor; internal branch pairs are not separate user choices.
+
 Status: canonical UI guidance for the current desktop/mobile application.
 
 The approved website-alignment direction is recorded in

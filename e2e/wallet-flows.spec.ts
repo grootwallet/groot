@@ -2004,7 +2004,7 @@ test('failed recovery scans discard stale progress before retry', async ({ page 
   await expect(recoveryScan.getByText(/blocks processed/)).toHaveCount(0);
 });
 
-test('first Bitcoin Core scan starts automatically without requesting a passphrase', async ({
+test('first wallet scan requires privacy approval without requesting a passphrase', async ({
   page
 }) => {
   await page.goto('/welcome?fixture-empty=1&fixture-initial-history-required=1');
@@ -2040,7 +2040,15 @@ test('first Bitcoin Core scan starts automatically without requesting a passphra
   await openCreatedSoftwareWallet(page);
 
   await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible();
-  await expect(page.getByRole('dialog', { name: 'First wallet-history scan' })).toHaveCount(0);
+  const approval = page.getByRole('dialog', { name: 'Approve wallet-history scan' });
+  await expect(approval).toBeVisible();
+  await page.screenshot({
+    path: test.info().outputPath('initial-scan-approval.png'),
+    animations: 'disabled'
+  });
+  await expect(approval.getByLabel('Wallet passphrase', { exact: true })).toHaveCount(0);
+  await approval.getByRole('button', { name: 'Approve and scan' }).click();
+  await expect(approval).toBeHidden();
   await expect(page.getByLabel('Wallet passphrase', { exact: true })).toHaveCount(0);
   await expect(page.getByText('Never synced')).toHaveCount(0);
   await expect(page.getByText('Wallet history not verified')).toHaveCount(0);
@@ -2709,6 +2717,10 @@ test('custom fees validate and wallet deletion requires typed confirmation', asy
   await page.getByLabel('Type DELETE to confirm').fill('delete');
   await expect(page.getByRole('button', { name: 'Delete wallet' })).toBeDisabled();
   await page.getByLabel('Type DELETE to confirm').fill('DELETE');
+  await expect(page.getByRole('button', { name: 'Delete wallet' })).toBeDisabled();
+  await page.getByLabel('I have backed up my recovery words.').check();
+  await expect(page.getByRole('button', { name: 'Delete wallet' })).toBeDisabled();
+  await page.getByLabel('I have backed up my wallet passphrase separately.').check();
   await page.getByRole('button', { name: 'Delete wallet' }).click();
   await expect(page.getByRole('heading', { name: 'Family wallet' })).toBeVisible();
   await expect(page.getByText('Enter this wallet’s app PIN to continue.')).toBeVisible();
@@ -2987,5 +2999,45 @@ test('light and dark theme tokens keep readable text contrast', async ({ page })
       expect(ratio, `${theme} unlock ${surface} contrast`).toBeGreaterThanOrEqual(4.5);
     }
     await page.goto('/settings');
+  }
+});
+
+test('declining the first scan opens Settings and keeps history unverified', async ({ page }) => {
+  await page.goto('/?fixture-initial-history-required=1');
+  const approval = page.getByRole('dialog', { name: 'Approve wallet-history scan' });
+  await expect(approval).toBeVisible();
+  await approval.getByRole('button', { name: 'No, open Settings' }).click();
+  await expect(page).toHaveURL(/\/settings/);
+  await page.getByRole('link', { name: 'Overview', exact: true }).click();
+  await expect(approval).toBeHidden();
+  await expect(page.getByLabel('Unverified balance')).toContainText('Never synced');
+});
+
+test('funded unverified software deletion requires a tested backup while an empty wallet may be deleted', async ({
+  page
+}) => {
+  for (const empty of [false, true]) {
+    await page.goto(
+      `/settings?fixture-unverified-backup=1${empty ? '&fixture-empty-wallet=1' : ''}`
+    );
+    await page.getByRole('button', { name: 'Delete', exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: 'Delete this wallet?' });
+    await dialog.getByLabel('I have backed up my recovery words.').check();
+    await dialog.getByLabel('I have backed up my wallet passphrase separately.').check();
+    await dialog.getByLabel('Wallet passphrase', { exact: true }).fill('prototype-passphrase');
+    await dialog.getByLabel('Type DELETE to confirm').fill('DELETE');
+    if (!empty) {
+      await expect(
+        dialog.getByRole('button', { name: 'Delete wallet', exact: true })
+      ).toBeDisabled();
+      await expect(dialog.getByRole('button', { name: 'Verify now' })).toBeVisible();
+    } else {
+      await page.screenshot({
+        path: test.info().outputPath('software-delete-backups.png'),
+        animations: 'disabled'
+      });
+      await dialog.getByRole('button', { name: 'Delete wallet', exact: true }).click();
+      await expect(page.getByRole('heading', { name: 'Family wallet' })).toBeVisible();
+    }
   }
 });

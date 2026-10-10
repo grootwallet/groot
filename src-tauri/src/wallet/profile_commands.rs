@@ -1339,6 +1339,7 @@ pub async fn recovery_scan_settings_save(
     birthday_height: u32,
     gap_limit: u32,
     credential: String,
+    expected_wallet_id: Option<Uuid>,
 ) -> ApiResult<RecoveryScanSettingsDto> {
     let credential = Zeroizing::new(credential);
     tauri::async_runtime::spawn_blocking(move || {
@@ -1350,6 +1351,7 @@ pub async fn recovery_scan_settings_save(
         let tip = checked_block_height(&rpc_client(&app, &state)?)?;
         validate_recovery_birthday(birthday_height, tip)?;
         let profile = selected_profile(&app)?;
+        if expected_wallet_id.is_some_and(|id| id != profile.id) { return Err(api_error("wallet_selection_changed", "The selected wallet changed. Approve its scan again.")); }
         let mut db = match profile.kind {
             WalletKind::Multisig => open_multisig_db(&app)?,
             WalletKind::SingleKey | WalletKind::WatchOnly => open_db(&app)?,
@@ -1389,6 +1391,7 @@ pub async fn recovery_scan_settings_save(
             params![birthday_height, gap_limit],
         )
         .map_err(internal)?;
+        state.approved_initial_scans.lock().map_err(internal)?.insert(profile.id);
         Ok(RecoveryScanSettingsDto {
             birthday_height,
             gap_limit,
@@ -1483,6 +1486,7 @@ pub async fn wallet_full_rescan_cancel(app: AppHandle) -> ApiResult<RecoveryScan
 pub async fn wallet_full_rescan(
     app: AppHandle,
     credential: String,
+    expected_wallet_id: Option<Uuid>,
 ) -> ApiResult<WalletSnapshotDto> {
     let credential = Zeroizing::new(credential);
     let diagnostic_app = app.clone();
@@ -1528,6 +1532,7 @@ pub async fn wallet_full_rescan(
             let _operation = operation_guard(&state)?;
             require_unlocked(&app, &state)?;
             let profile = selected_profile(&app)?;
+            if expected_wallet_id.is_some_and(|id| id != profile.id) { return Err(api_error("wallet_selection_changed", "The selected wallet changed. Approve its scan again.")); }
             let (mut db, is_multisig) = match profile.kind {
                 WalletKind::Multisig => (open_multisig_db(&app)?, true),
                 WalletKind::SingleKey | WalletKind::WatchOnly => (open_db(&app)?, false),
@@ -1538,6 +1543,9 @@ pub async fn wallet_full_rescan(
                         "invalid_credential",
                         "Enter the wallet credential before starting another full rescan.",
                     ));
+                }
+                if !state.approved_initial_scans.lock().map_err(internal)?.contains(&profile.id) {
+                    return Err(api_error("initial_scan_required", "Approve the first wallet-history scan before sending wallet scripts to the configured node."));
                 }
                 if !has_saved_recovery_scan_settings(&db)? {
                     return Err(api_error(

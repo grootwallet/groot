@@ -197,7 +197,13 @@
           address={displayedAddress}
           copied={addressCopied}
           oncopy={copyAddress}
-        />{/if}
+        />
+        <dl>
+          <div>
+            <dt>{translate($locale, 'Derivation path')}</dt>
+            <dd><code>{policyAddress.derivationPath}</code></dd>
+          </div>
+        </dl>{/if}
       {#if testnetAddressDevice}<small
           >{testnetAddressDevice}
           {translate($locale, 'displays the Regtest script with a')}

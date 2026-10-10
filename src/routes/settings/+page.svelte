@@ -1035,20 +1035,59 @@
     scanOptionsOpen = false;
     scanOpen = false;
   }
-  function openDeleteWallet() {
+  let deletionBackupConfirmed = $state(false);
+  let deletionPassphraseConfirmed = $state(false);
+  let deletionError = $state('');
+  let deletionChecking = $state(false);
+  let deletionBlocked = $state(false);
+  async function openDeleteWallet() {
     deleteCredential = '';
     confirmText = '';
+    deletionBackupConfirmed = false;
+    deletionPassphraseConfirmed = false;
+    deletionError = '';
+    deletionBlocked = false;
     deleting = true;
+    if (isSoftwareWallet && !selectedProfile?.backupVerified) {
+      const id = selectedWalletId;
+      deletionChecking = true;
+      try {
+        const overview = await walletService.overview(id ?? '');
+        if (deleting && selectedWalletId === id) deletionBlocked = overview.balance.total > 0;
+      } catch (cause) {
+        if (deleting && selectedWalletId === id) {
+          deletionBlocked = true;
+          deletionError = localizedError(cause, $locale);
+        }
+      } finally {
+        deletionChecking = false;
+      }
+    }
   }
   function closeDeleteWallet() {
+    if (busy) return;
     deleteCredential = '';
     confirmText = '';
     deleting = false;
   }
   async function deleteWallet() {
+    if (
+      busy ||
+      deletionChecking ||
+      deletionBlocked ||
+      !deletionBackupConfirmed ||
+      (isSoftwareWallet && !deletionPassphraseConfirmed)
+    )
+      return;
     busy = true;
+    deletionError = '';
     try {
-      await walletService.deleteWallet(deleteCredential, confirmText);
+      await walletService.deleteWallet(
+        deleteCredential,
+        confirmText,
+        deletionBackupConfirmed,
+        deletionPassphraseConfirmed
+      );
       deleting = false;
       confirmText = '';
       deleteCredential = '';
@@ -1060,6 +1099,7 @@
       const registry = await walletService.profiles();
       await goto(registry.wallets.length ? '/unlock' : '/welcome');
     } catch (cause) {
+      deletionError = localizedError(cause, $locale);
       toast({
         title: 'Could not delete wallet',
         description: localizedError(cause, $locale),
@@ -1907,9 +1947,44 @@
 >
   <WarningNotice
     tone="danger"
-    title={translate($locale, 'Make sure your recovery phrase is backed up.')}
+    title={translate(
+      $locale,
+      isSoftwareWallet
+        ? 'Make sure your recovery phrase is backed up.'
+        : 'Keep your signer keys and wallet descriptor backed up.'
+    )}
     body={translate($locale, 'Without it, your bitcoin cannot be recovered.')}
   />
+  <label class="check-row"
+    ><input type="checkbox" bind:checked={deletionBackupConfirmed} disabled={busy} /><span
+      >{translate(
+        $locale,
+        isSoftwareWallet
+          ? 'I have backed up my recovery words.'
+          : 'I have backed up my signer keys and wallet descriptor.'
+      )}</span
+    ></label
+  >
+  {#if isSoftwareWallet}<label class="check-row"
+      ><input type="checkbox" bind:checked={deletionPassphraseConfirmed} disabled={busy} /><span
+        >{translate($locale, 'I have backed up my wallet passphrase separately.')}</span
+      ></label
+    >
+    {#if !selectedProfile?.backupVerified}<WarningNotice
+        title={translate($locale, 'Recovery backup not verified')}
+        body={translate(
+          $locale,
+          'A software wallet with bitcoin cannot be deleted until its recovery backup is verified in Groot. An empty wallet can be deleted.'
+        )}
+      />{/if}{/if}
+  {#if deletionBlocked && isSoftwareWallet && !selectedProfile?.backupVerified}<Button
+      variant="secondary"
+      onclick={() => {
+        closeDeleteWallet();
+        verifyOpen = true;
+      }}>{translate($locale, 'Verify now')}</Button
+    >{/if}
+  {#if deletionError}<p class="form-error" role="alert">{deletionError}</p>{/if}
   <PasswordField
     label={credentialLabel}
     bind:value={deleteCredential}
@@ -1925,7 +2000,12 @@
     <Button variant="secondary" onclick={closeDeleteWallet}>{translate($locale, 'Cancel')}</Button
     ><Button
       variant="danger"
-      disabled={confirmText !== 'DELETE' || !deleteCredential}
+      disabled={deletionChecking ||
+        deletionBlocked ||
+        confirmText !== 'DELETE' ||
+        !deleteCredential ||
+        !deletionBackupConfirmed ||
+        (isSoftwareWallet && !deletionPassphraseConfirmed)}
       loading={busy}
       loadingLabel={translate($locale, 'Deleting…')}
       onclick={deleteWallet}>{translate($locale, 'Delete wallet')}</Button

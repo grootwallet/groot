@@ -83,7 +83,12 @@ export interface WalletProfilesPort {
   recoverWallet(name: string, credential: string): Promise<void>;
   unlock(credential: string): Promise<void>;
   lock(): Promise<void>;
-  deleteWallet(credential: string, confirmation: string): Promise<void>;
+  deleteWallet(
+    credential: string,
+    confirmation: string,
+    backupConfirmed: boolean,
+    passphraseBackupConfirmed: boolean
+  ): Promise<void>;
   resetRegtestWallet(confirmation: string): Promise<void>;
 }
 
@@ -108,10 +113,11 @@ export interface WalletNetworkPort {
   saveRecoveryScanSettings(
     birthdayHeight: number,
     gapLimit: number,
-    credential: string
+    credential: string,
+    expectedWalletId?: string
   ): Promise<RecoveryScanSettings>;
   recoveryScanStatus(): Promise<RecoveryScanStatus>;
-  fullRescan(credential: string): Promise<WalletSnapshot>;
+  fullRescan(credential: string, expectedWalletId?: string): Promise<WalletSnapshot>;
   cancelFullRescan(): Promise<RecoveryScanStatus>;
 }
 
@@ -290,9 +296,9 @@ export interface WalletMultisigPort {
   recoveryDrill(encodedBackup: string): Promise<RecoveryDrill>;
   multisigRecoveryDrillStatus(): Promise<boolean>;
   recoverMultisig(encodedBackup: string, credential: string): Promise<MultisigWallet>;
-  deleteMultisig(credential: string, confirmation: string): Promise<void>;
+  deleteMultisig(credential: string, confirmation: string, backupConfirmed: boolean): Promise<void>;
   createMultisigAddress(labels: string[]): Promise<ReceiveAddress>;
-  claimObservedMultisigAddress(outpoint: string, label: string): Promise<ReceiveAddress>;
+  claimObservedMultisigAddress(outpoint: string, labels: string[]): Promise<ReceiveAddress>;
   discardMultisigAddress(id: number): Promise<void>;
   verifyMultisigAddress(deviceId: string, addressId: number): Promise<ReceiveAddress>;
   prepareMultisigPayment(

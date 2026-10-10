@@ -50,7 +50,7 @@ Keep the legal architecture legible:
 3. Keep genuinely enterprise-only administration, compliance integrations, support tooling, hosted family/business services, and managed-service operations in a separate service or repository under their own terms, which may be proprietary. Do not link a closed module into the core wallet or make it necessary for standard wallet operation.
 4. Publish protocol specifications and interoperable client behavior even when a hosted implementation is paid.
 
-ADR 0080 records the completed base-wallet decision and the current ownership qualification: Git history names Thibaud Marechal and the same-email `thib` alias, while no corporate assignment or CLA appears in the repository. Any undisclosed employment, contractor, or assignment claim still requires owner/legal confirmation. This is not legal advice. Avoid a custom source-available license for the consumer wallet; if commercial source-available terms are considered for separate enterprise code, select a standard form with counsel and state when or whether it converts to an open-source license.
+ADR 0080 records the Apache-2.0 base-wallet decision. ADR 0084 updates current application author/copyright presentation to Rochal Holdings at the owner's request. Historical contribution and assignment evidence remains unchanged; presentation is not a new assignment document. Separate enterprise code may use independently chosen standard terms.
 
 ## Revenue model
 

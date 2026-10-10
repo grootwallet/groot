@@ -1,5 +1,9 @@
 # Groot architecture
 
+## Upcoming feedback boundary changes — 2026-10-10
+
+Under ADR 0084 the shell owns a wallet-scoped first-history approval modal built from existing components. The sync controller reports initial_scan_required instead of automatically invoking fullRescan. Explicit scan-settings save grants process-local native approval; an empty-credential first rescan fails without it. Existing node configurations and persisted schemas are preserved. Recovery inspection returns public policy metadata; selected-device proof remains authoritative in Rust. Deletion commands perform authentication and exact-directory removal on blocking workers and share a pure backup-gate validator. BIP329 restore derives ownership from native descriptors and commits metadata, labels, and reveal state together. UI never infers ownership from an address string.
+
 ## Diagnostic boundary
 
 ADR 0066 tightens the existing Mainnet setup-copy path for multisig creation:
