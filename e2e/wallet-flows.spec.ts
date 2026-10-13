@@ -1087,7 +1087,7 @@ test('creates an external-signer wallet, signs by cable, and configures its isol
   await expect(page.getByText('Descriptor backup saved', { exact: true })).toBeVisible();
   await descriptorDialog.getByRole('button', { name: 'Close' }).click();
   await page.getByRole('button', { name: /Bitcoin Core connection/ }).click();
-  await page.getByRole('button', { name: 'Custom remote' }).click();
+  await page.getByRole('button', { name: 'Custom remote', exact: true }).click();
   await page.getByLabel('RPC URL').fill('https://regtest-node.example:18443');
   await page.getByLabel('RPC username').fill('groot');
   await page.getByLabel('RPC password', { exact: true }).fill('rpc-secret');
@@ -1986,6 +1986,15 @@ test('network services use one Core row unless compact filters are active', asyn
   await coreDialog.getByRole('button', { name: 'Use compact filters for wallet activity' }).click();
 
   const syncDialog = page.getByRole('dialog', { name: 'Wallet activity sync' });
+  if ((page.viewportSize()?.width ?? 1180) <= 760) {
+    await expect(syncDialog.getByRole('button', { name: /Compact filters/ })).toHaveCount(0);
+    await expect(
+      syncDialog.getByRole('button', { name: 'Bitcoin Core', exact: true })
+    ).toBeVisible();
+    await syncDialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await expect(coreRow).toContainText('activity, fees, and broadcast');
+    return;
+  }
   await syncDialog.getByRole('button', { name: 'Compact filters' }).click();
   await syncDialog.getByLabel('Wallet passphrase', { exact: true }).fill('prototype-passphrase');
   await syncDialog.getByRole('button', { name: 'Save source' }).click();
@@ -2585,6 +2594,64 @@ test('an address copied from Receive completes the browser send flow', async ({ 
   await page.getByRole('button', { name: /Sign & broadcast/ }).click();
   await expect(page.getByRole('heading', { name: 'Payment sent' })).toBeVisible();
   await expect(page.getByText('Remaining wallet balance: 2,455,253 sats')).toBeVisible();
+});
+
+test('closing a phone QR scan while camera permission is pending releases the stream', async ({
+  page
+}) => {
+  let decoderRequested = false;
+  await page.route(/\/qr-scanner\.js(?:\?|$)/, async (route) => {
+    decoderRequested = true;
+    await route.abort();
+  });
+  await page.addInitScript(() => {
+    const flags = window as unknown as {
+      releaseCameraPermission?: () => void;
+      permissionTrackStopped?: boolean;
+    };
+    Object.defineProperty(navigator, 'mediaDevices', {
+      configurable: true,
+      value: {
+        getUserMedia: () =>
+          new Promise((resolve) => {
+            flags.releaseCameraPermission = () =>
+              resolve({
+                getTracks: () => [
+                  {
+                    stop: () => {
+                      flags.permissionTrackStopped = true;
+                    }
+                  }
+                ]
+              });
+          })
+      }
+    });
+  });
+  await page.goto('/mobile/watch');
+  await page.getByRole('button', { name: 'Allow camera', exact: true }).click();
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        Boolean(
+          (window as unknown as { releaseCameraPermission?: unknown }).releaseCameraPermission
+        )
+      )
+    )
+    .toBe(true);
+  await page.getByRole('link', { name: 'Groot home', exact: true }).click();
+  await expect(page).toHaveURL(/\/$/);
+  await page.evaluate(() =>
+    (window as unknown as { releaseCameraPermission: () => void }).releaseCameraPermission()
+  );
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => (window as unknown as { permissionTrackStopped?: boolean }).permissionTrackStopped
+      )
+    )
+    .toBe(true);
+  expect(decoderRequested).toBe(false);
 });
 
 test('payment QR scanner loads on demand and cancels safely while loading', async ({ page }) => {

@@ -4,7 +4,7 @@
   import { Camera, CameraOff } from '@lucide/svelte';
   import { onDestroy } from 'svelte';
   import Button from './Button.svelte';
-  import QrScanner from 'qr-scanner';
+  import type QrScanner from 'qr-scanner';
 
   let {
     onframe,
@@ -99,6 +99,9 @@
         video: true
       });
       for (const track of permissionStream.getTracks()) track.stop();
+      if (stopped) return;
+      const { default: QrScanner } = await import('qr-scanner');
+      if (stopped) return;
 
       scanner = new QrScanner(
         video,
@@ -115,8 +118,13 @@
         }
       );
       await scanner.start();
+      if (stopped) {
+        scanner.destroy();
+        return;
+      }
       cameraActive = true;
     } catch (cause) {
+      if (stopped) return;
       const name = cause instanceof DOMException ? cause.name : '';
       const message = cause instanceof Error ? cause.message : '';
       error =
