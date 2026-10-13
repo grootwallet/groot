@@ -98,28 +98,6 @@ export function createLiveSync(
         typeof failure === 'object' &&
         failure !== null &&
         'code' in failure &&
-        String(failure.code) === 'initial_scan_required'
-      ) {
-        try {
-          await wallet.fullRescan?.('');
-        } catch (scanCause) {
-          if (
-            typeof scanCause === 'object' &&
-            scanCause !== null &&
-            'code' in scanCause &&
-            ['sync_cancelled', 'sync_in_progress', 'scan_in_progress'].includes(
-              String(scanCause.code)
-            )
-          )
-            return;
-          report(scanCause);
-        }
-        return;
-      }
-      if (
-        typeof failure === 'object' &&
-        failure !== null &&
-        'code' in failure &&
         ['sync_cancelled', 'sync_in_progress', 'scan_in_progress'].includes(String(failure.code))
       ) {
         return;

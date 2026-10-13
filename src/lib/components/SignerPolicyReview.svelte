@@ -18,7 +18,7 @@
   import Button from './Button.svelte';
   import LocalTimestamp from './LocalTimestamp.svelte';
   import PolicySignerList from './PolicySignerList.svelte';
-  import ReadableAddress from './ReadableAddress.svelte';
+  import HardwareAddressComparison from './HardwareAddressComparison.svelte';
   import { compactAddress } from '$lib/address-display';
 
   let {
@@ -193,8 +193,10 @@
           >{translate($locale, addressExpanded ? 'Hide full address' : 'Show full address')}</span
         ></button
       >
-      {#if addressExpanded}<ReadableAddress
-          address={displayedAddress}
+      {#if addressExpanded}<HardwareAddressComparison
+          comparison={{ address: displayedAddress, deviceName: testnetAddressDevice }}
+          derivationPath={policyAddress.derivationPath}
+          addressIndex={0}
           copied={addressCopied}
           oncopy={copyAddress}
         />{/if}

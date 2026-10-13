@@ -627,6 +627,7 @@ pub struct AppState {
     unlocked_wallets: Mutex<WalletSessions>,
     pending_mnemonic: Mutex<Option<PendingMnemonic>>,
     verified_recovery: Mutex<HashMap<Uuid, String>>,
+    approved_initial_scans: Mutex<HashSet<Uuid>>,
     pending_hardware_pins: Mutex<HashMap<String, PendingHardwarePin>>,
     recent_hardware_scan: Mutex<Option<RecentHardwareScan>>,
     recently_unlocked_hardware_paths: Mutex<HashMap<String, Instant>>,
@@ -1524,6 +1525,7 @@ pub struct SignerPolicyVerificationDto {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PolicyVerificationAddressDto {
+    derivation_path: String,
     canonical_address: String,
     testnet_alias: Option<String>,
 }
@@ -1592,6 +1594,8 @@ struct ExternalSignerBackupRecord<'a> {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RecoveryDrillDto {
+    threshold: usize,
+    cosigners: Vec<CosignerInput>,
     first_address: String,
     matches_current_wallet: bool,
 }
@@ -5174,6 +5178,7 @@ fn verify_external_signer_credential(app: &AppHandle, credential: &str) -> ApiRe
     validate_credential(credential)?;
     let metadata = read_external_signer_metadata(app)?;
     let profile = selected_profile_of_kind(app, WalletKind::WatchOnly)?;
+    pin_change::recover_pending(&profile_directory(app, profile.id)?, profile.id)?;
     let mut plaintext = secure_store::load(
         &secret_path(app)?,
         credential,
@@ -5544,6 +5549,7 @@ fn add_multisig_global_xpubs(psbt: &mut Psbt, metadata: &MultisigWalletDto) -> A
 fn verify_multisig_credential(app: &AppHandle, credential: &str) -> ApiResult<()> {
     validate_credential(credential)?;
     let profile = selected_profile_of_kind(app, WalletKind::Multisig)?;
+    pin_change::recover_pending(&profile_directory(app, profile.id)?, profile.id)?;
     let path = multisig_secret_path(app)?;
     let encoded = read_private_text(&path).map_err(|_| {
         api_error(
@@ -7724,6 +7730,8 @@ fn enqueue_snapshot_notifications(db: &Connection, snapshot: &WalletSnapshotDto)
     Ok(())
 }
 
+#[path = "wallet/pin_change.rs"]
+pub(crate) mod pin_change;
 #[path = "wallet/profile_commands.rs"]
 pub(crate) mod profile_commands;
 
@@ -7991,51 +7999,84 @@ pub(crate) mod transaction_commands;
 #[path = "wallet/payment_draft_commands.rs"]
 pub(crate) mod payment_draft_commands;
 
+fn validate_wallet_deletion_backup(
+    kind: WalletKind,
+    verified: bool,
+    balance: u64,
+    keys_confirmed: bool,
+    passphrase_confirmed: bool,
+) -> ApiResult<()> {
+    if !keys_confirmed || (kind == WalletKind::SingleKey && !passphrase_confirmed) {
+        return Err(api_error("backup_mismatch", "Confirm your key backup and, for a software wallet, your separately saved passphrase before deletion."));
+    }
+    if kind == WalletKind::SingleKey && balance > 0 && !verified {
+        return Err(api_error("backup_mismatch", "Verify this software wallet's recovery backup in Groot before deleting a wallet with bitcoin."));
+    }
+    Ok(())
+}
+
 #[tauri::command]
-pub fn wallet_delete(
+pub async fn wallet_delete(
     app: AppHandle,
-    state: State<'_, AppState>,
     credential: String,
     confirmation: String,
+    backup_confirmed: bool,
+    passphrase_backup_confirmed: bool,
 ) -> ApiResult<()> {
     let credential = Zeroizing::new(credential);
-    let _operation = operation_guard(&state)?;
-    require_unlocked(&app, &state)?;
-    if confirmation != "DELETE" {
-        return Err(api_error(
-            "confirmation_mismatch",
-            "Type DELETE exactly to remove this wallet.",
-        ));
-    }
-    check_auth_throttle(&app, &state)?;
-    let profile = selected_profile(&app)?;
-    let verified = match profile.kind {
-        WalletKind::SingleKey => decrypt_mnemonic(&app, credential.as_str()).map(|_| ()),
-        WalletKind::WatchOnly => verify_external_signer_credential(&app, credential.as_str()),
-        WalletKind::Multisig => Err(api_error(
-            "wrong_wallet_kind",
-            "Delete multisig wallets from the wallet settings.",
-        )),
-    };
-    record_auth_result(&app, &state, &verified)?;
-    verified?;
-    state.proposals.lock().map_err(internal)?.clear();
-    let dir = profile_directory(&app, profile.id)?;
-    delete_registered_wallet(&app, profile.id, &dir)?;
-    forget_core_mempool_snapshot(&state, profile.id);
-    lock_wallet(&state, profile.id)?;
-    diagnostics::record(
-        &app,
-        &state,
-        diagnostics::DiagnosticEventKind::WalletRemoved,
-        diagnostics::DiagnosticOutcome::Succeeded,
-        diagnostics::DiagnosticContext {
-            wallet_kind: Some(diagnostics::wallet_kind(profile.kind)),
-            ..Default::default()
-        },
-        None,
-    );
-    Ok(())
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let _operation = operation_guard(&state)?;
+        require_unlocked(&app, &state)?;
+        if confirmation != "DELETE" {
+            return Err(api_error(
+                "confirmation_mismatch",
+                "Type DELETE exactly to remove this wallet.",
+            ));
+        }
+        check_auth_throttle(&app, &state)?;
+        let profile = selected_profile(&app)?;
+        let verified = match profile.kind {
+            WalletKind::SingleKey => decrypt_mnemonic(&app, credential.as_str()).map(|_| ()),
+            WalletKind::WatchOnly => verify_external_signer_credential(&app, credential.as_str()),
+            WalletKind::Multisig => Err(api_error(
+                "wrong_wallet_kind",
+                "Delete multisig wallets from the wallet settings.",
+            )),
+        };
+        record_auth_result(&app, &state, &verified)?;
+        verified?;
+        let mut db = open_db(&app)?;
+        let wallet = load_wallet(&mut db)?;
+        validate_wallet_deletion_backup(
+            profile.kind.clone(),
+            profile.backup_verified,
+            wallet.balance().total().to_sat(),
+            backup_confirmed,
+            passphrase_backup_confirmed,
+        )?;
+        drop(wallet);
+        drop(db);
+        state.proposals.lock().map_err(internal)?.clear();
+        let dir = profile_directory(&app, profile.id)?;
+        delete_registered_wallet(&app, profile.id, &dir)?;
+        forget_core_mempool_snapshot(&state, profile.id);
+        lock_wallet(&state, profile.id)?;
+        diagnostics::record(
+            &app,
+            &state,
+            diagnostics::DiagnosticEventKind::WalletRemoved,
+            diagnostics::DiagnosticOutcome::Succeeded,
+            diagnostics::DiagnosticContext {
+                wallet_kind: Some(diagnostics::wallet_kind(profile.kind)),
+                ..Default::default()
+            },
+            None,
+        );
+        Ok(())
+    })
+    .await
+    .map_err(internal)?
 }
 
 #[tauri::command]

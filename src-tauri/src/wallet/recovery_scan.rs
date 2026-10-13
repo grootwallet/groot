@@ -43,6 +43,22 @@ pub(super) fn persist_initial_recovery_scan_settings(
     Ok(())
 }
 
+// A targeted genesis approval is explicit network consent, including retries.
+// Birthday changes and untargeted rescans of verified wallets still authenticate.
+pub(super) fn validate_credential_free_scan_settings(
+    completed: bool,
+    targeted: bool,
+    birthday: u32,
+) -> ApiResult<()> {
+    if birthday != 0 || (completed && !targeted) {
+        return Err(api_error(
+            "invalid_credential",
+            "Enter the wallet credential before changing recovery-scan settings.",
+        ));
+    }
+    Ok(())
+}
+
 pub(super) fn has_completed_sync(db: &Connection) -> ApiResult<bool> {
     db.query_row(
         "SELECT EXISTS(SELECT 1 FROM groot_chain_observation WHERE singleton = 1)",
@@ -382,4 +398,33 @@ pub(super) fn enforce_change_recovery_gap(
         ));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod consent_tests {
+    use super::*;
+    #[test]
+    fn explicit_genesis_retry_is_allowed_after_observation_but_narrowing_is_not() {
+        assert!(validate_credential_free_scan_settings(true, true, 0).is_ok());
+        assert!(validate_credential_free_scan_settings(false, true, 0).is_ok());
+        assert!(validate_credential_free_scan_settings(false, false, 0).is_ok());
+        assert_eq!(
+            validate_credential_free_scan_settings(true, false, 0)
+                .unwrap_err()
+                .code,
+            "invalid_credential"
+        );
+        assert_eq!(
+            validate_credential_free_scan_settings(false, true, 1)
+                .unwrap_err()
+                .code,
+            "invalid_credential"
+        );
+        assert_eq!(
+            validate_credential_free_scan_settings(true, true, 1)
+                .unwrap_err()
+                .code,
+            "invalid_credential"
+        );
+    }
 }

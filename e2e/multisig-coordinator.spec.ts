@@ -5,12 +5,6 @@ const keys = [
   { label: 'Ledger', fingerprint: 'b1b2c3d4', xpub: 'tpubD6NzVbkrYhZ4Y-e2e-public-key-2' },
   { label: 'Trezor', fingerprint: 'c1b2c3d4', xpub: 'tpubD6NzVbkrYhZ4Y-e2e-public-key-3' }
 ];
-const recoveryKey = {
-  label: 'Recovery key',
-  fingerprint: 'd1b2c3d4',
-  xpub: 'tpubD6NzVbkrYhZ4Y-e2e-public-key-4'
-};
-
 async function continueToSigners(page: Page, name: string) {
   const configure = page.getByRole('button', { name: 'Continue', exact: true });
   const walletName = page.getByLabel('Wallet name');
@@ -1027,9 +1021,7 @@ test('surfaces partial and fully signed proposals on Overview', async ({ page })
   ).toContainText('Signing in progress');
 });
 
-test('keeps advanced wallet actions compact and makes both descriptors inspectable', async ({
-  page
-}) => {
+test('keeps advanced wallet actions compact with one multipath descriptor', async ({ page }) => {
   await page.goto('/multisig');
   await page.getByRole('button', { name: 'More wallet actions' }).click();
   await expect(page.getByRole('menuitem', { name: /Show descriptors/ })).toBeVisible();
@@ -1040,11 +1032,10 @@ test('keeps advanced wallet actions compact and makes both descriptors inspectab
   const descriptors = page.getByRole('dialog', { name: 'Wallet descriptors' });
   await expect(descriptors.getByText('Portable wallet descriptor', { exact: true })).toBeVisible();
   await expect(descriptors.getByText('/<0;1>/*', { exact: false })).toBeVisible();
-  await descriptors.getByText('View separate receive and change descriptors').click();
-  await expect(descriptors.getByText('Receive descriptor', { exact: true })).toBeVisible();
-  await expect(descriptors.getByText('Change descriptor', { exact: true })).toBeVisible();
-  await expect(descriptors.getByRole('button', { name: 'Copy receive descriptor' })).toBeVisible();
-  await expect(descriptors.getByRole('button', { name: 'Copy change descriptor' })).toBeVisible();
+  await expect(descriptors.getByText('View separate receive and change descriptors')).toHaveCount(
+    0
+  );
+  await expect(descriptors.getByRole('button', { name: 'Copy wallet descriptor' })).toBeVisible();
   await descriptors.getByRole('button', { name: 'Close' }).click();
 });
 
@@ -1357,7 +1348,7 @@ test('offers safe recipes and advanced M-of-N control', async ({ page }, testInf
       )
     ).toBeGreaterThanOrEqual(15);
   }
-  for (const plan of ['Standard', 'Recovery']) {
+  for (const plan of ['Standard']) {
     await page.getByRole('button', { name: new RegExp(`^${plan}`) }).click();
     const selectedMark = page.locator('.policy-kind-card.active .policy-kind-check svg');
     await expect(selectedMark).toBeVisible();
@@ -1760,9 +1751,7 @@ test('creates and verifies a simple 2-of-3 descriptor wallet', async ({ page }) 
   await expect(page.getByText('Portable wallet descriptor', { exact: true })).toBeVisible();
   await expect(page.getByTestId('descriptor-preview')).toContainText('/<0;1>/*');
   await expect(page.getByRole('button', { name: 'Copy wallet descriptor' })).toBeVisible();
-  await page.getByText('View separate receive and change descriptors').click();
-  await expect(page.getByRole('button', { name: 'Copy receive descriptor' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Copy change descriptor' })).toBeVisible();
+  await expect(page.getByText('View separate receive and change descriptors')).toHaveCount(0);
   await saveSetupDescriptor(page, 'family-vault-descriptors.txt');
   await expect(page.getByRole('button', { name: 'Show in Finder' })).toBeVisible();
   const creationProgress = page.getByRole('navigation', { name: 'Wallet creation progress' });
@@ -1996,12 +1985,13 @@ test('creates and verifies a simple 2-of-3 descriptor wallet', async ({ page }) 
   await expect(page.getByRole('heading', { name: 'Delete multisig wallet' })).toBeVisible();
   await expect(page.getByText('Recovery tested')).toBeVisible();
   await expect(
-    page.locator('label.field').filter({ has: page.getByLabel('Wallet name confirmation') })
+    page.locator('label.field').filter({ has: page.getByLabel('Type DELETE to confirm') })
   ).toContainText('Type');
-  await page.getByLabel('Wallet name confirmation').fill('Family vault typo');
+  await page.getByLabel('Type DELETE to confirm').fill('delete');
   await page.getByLabel('Delete wallet app PIN', { exact: true }).fill('coordinator-pin');
   await expect(page.getByRole('button', { name: 'Delete wallet from this device' })).toBeDisabled();
-  await page.getByLabel('Wallet name confirmation').fill('Family vault');
+  await page.getByLabel('Type DELETE to confirm').fill('DELETE');
+  await page.getByLabel('I have backed up my signer keys and wallet descriptor.').check();
   await page.getByLabel('Delete wallet app PIN', { exact: true }).fill('wrong-pin');
   await page.getByRole('button', { name: 'Delete wallet from this device' }).click();
   const deleteDialog = page.getByRole('dialog', { name: 'Permanently delete this wallet?' });
@@ -2094,9 +2084,9 @@ test('exports and validates the recommended BSMS record', async ({ page }) => {
   expect(json).not.toBe(bsms);
   await page.getByRole('button', { name: /BSMS 1\.0/ }).click();
   await expect(page.getByLabel('Descriptor backup', { exact: true })).toHaveValue(bsms);
-  await page.getByRole('button', { name: 'Enlarge receive descriptor QR' }).click();
-  const qrDialog = page.getByRole('dialog', { name: 'Receive descriptor QR' });
-  await expect(qrDialog.getByAltText('Large QR code for the receive descriptor')).toBeVisible();
+  await page.getByRole('button', { name: 'Enlarge wallet descriptor QR' }).click();
+  const qrDialog = page.getByRole('dialog', { name: 'Wallet descriptor QR' });
+  await expect(qrDialog.getByAltText('Large QR code for the wallet descriptor')).toBeVisible();
   await qrDialog.getByRole('button', { name: 'Close' }).click();
   await expect(qrDialog).toHaveCount(0);
   const downloadPromise = page.waitForEvent('download');
@@ -2243,75 +2233,20 @@ test('gates and simulates guided Miniscript recovery policies', async ({ page })
   await expect(page.getByText(/intentionally reduce theft resistance/)).toBeVisible();
 });
 
-test('creates a guided recovery descriptor from a visible template', async ({ page }, testInfo) => {
+test('keeps untested timelocked creation disabled and defaults to standard 2-of-3', async ({
+  page
+}) => {
   await page.goto('/multisig/new');
-  await page.getByRole('button', { name: /^Recovery/ }).click();
-  await expect(page.getByLabel('Wallet name')).toHaveCount(0);
-  await page.getByRole('button', { name: 'Continue', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Recovery wallet' })).toBeVisible();
-  await expect(page.getByText('4,320 blocks', { exact: true }).first()).toBeVisible();
-  await expect(page.getByText('The wait starts separately for each received coin.')).toBeVisible();
-  await revealInsight(page, 'Recovery key spending authority', testInfo.project.name === 'mobile');
+  await expect(page.getByRole('button', { name: /^Recovery/ })).toBeDisabled();
+  await expect(page.getByRole('button', { name: /^Recovery/ })).toContainText('Coming soon');
   await expect(
-    page.getByRole('tooltip').filter({ hasText: 'can spend that coin by itself' })
+    page.getByText('A smaller signer group can recover the wallet after a delay.')
   ).toBeVisible();
-  if (testInfo.project.name === 'mobile') {
-    const tooltipBounds = await page
-      .getByRole('tooltip')
-      .filter({ hasText: 'can spend that coin by itself' })
-      .evaluate((tooltip) => {
-        const bounds = tooltip.getBoundingClientRect();
-        return {
-          left: bounds.left,
-          right: bounds.right,
-          bottom: bounds.bottom,
-          viewportWidth: window.innerWidth,
-          viewportHeight: window.innerHeight
-        };
-      });
-    expect(tooltipBounds.left).toBeGreaterThanOrEqual(12);
-    expect(tooltipBounds.right).toBeLessThanOrEqual(tooltipBounds.viewportWidth - 12);
-    expect(tooltipBounds.bottom).toBeLessThanOrEqual(tooltipBounds.viewportHeight);
-  }
-  await expect(page.getByText('Four separate keys')).toBeVisible();
-  await continueToSigners(page, 'Resilient vault');
-  for (const key of [...keys, recoveryKey]) {
-    await page.getByRole('button', { name: 'Add a signer' }).click();
-    await page.getByRole('button', { name: 'Enter public key' }).click();
-    await page.getByLabel('Signer label').fill(key.label);
-    await page.getByLabel('Master fingerprint').fill(key.fingerprint);
-    await page.getByLabel('Account xpub').fill(key.xpub);
-    await page.getByRole('button', { name: 'Add key' }).click();
-  }
-  await expect(page.getByText('Recovery-only signer', { exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Review wallet' }).click();
-  await expect(page.getByText('2 of 3 primary keys + recovery key later')).toBeVisible();
-  await page.getByRole('button', { name: 'Continue to backup' }).click();
-  await page.getByRole('button', { name: 'Descriptor logic' }).click();
-  await expect(page.getByTestId('descriptor-preview')).toContainText('4,320 blocks');
-  await saveSetupDescriptor(page, 'resilient-vault-descriptors.txt');
-  await page.getByRole('button', { name: 'Finish hardware setup before first signature' }).click();
-  await expect(page.getByLabel('App PIN', { exact: true })).toBeEnabled();
-  await page.getByLabel('App PIN', { exact: true }).fill('recovery-pin');
-  await page.getByLabel('Confirm app PIN', { exact: true }).fill('recovery-pin');
-  await page.getByRole('button', { name: 'Create wallet' }).click();
-  await expect(page.getByRole('heading', { name: 'Resilient vault' })).toBeVisible();
-});
-
-test('keeps assisted recovery honest and offers simple recovery waits', async ({ page }) => {
-  await page.goto('/multisig/new');
-  const assisted = page.getByRole('button', { name: /^Assisted recovery/ });
-  await expect(assisted).toBeDisabled();
-  await expect(assisted).toContainText('Coming soon');
-  await page.getByRole('button', { name: /^Recovery/ }).click();
+  await expect(page.getByRole('button', { name: /^Assisted recovery/ })).toBeDisabled();
+  await page.getByRole('button', { name: /^Standard/ }).click();
   await page.getByRole('button', { name: 'Continue', exact: true }).click();
-  const recoveryWait = page.getByRole('group', { name: 'Recovery key wait' });
-  await expect(recoveryWait).toBeVisible();
-  await expect(recoveryWait.locator('.recovery-delay-title')).toHaveCSS('font-size', '13px');
-  await expect(recoveryWait.getByRole('button').first()).toHaveCSS('border-radius', '12px');
-  await page.getByRole('button', { name: /About 3 months/ }).click();
-  await expect(page.getByText('13,140 blocks', { exact: true }).first()).toBeVisible();
-  await expect(page.locator('body')).not.toContainText('About one year');
+  await expect(page.getByRole('heading', { name: 'Standard multisig' })).toBeVisible();
+  await expect(page.getByText('2 of 3', { exact: true }).first()).toBeVisible();
 });
 
 test('opens the exact existing wallet after duplicate multisig creation', async ({ page }) => {
@@ -2453,4 +2388,32 @@ test('coordinator has no horizontal overflow on mobile', async ({ page }, testIn
     }));
   expect(parseFloat(motion.animationDuration || '0')).toBeLessThanOrEqual(0.001);
   expect(parseFloat(motion.transitionDuration || '0')).toBeLessThanOrEqual(0.001);
+});
+
+test('unknown-source received labels tokenize on Tab and save multiple permanent labels', async ({
+  page
+}) => {
+  await page.goto('/coins?fixture-selected-multisig=1&fixture-unlabeled-receive=1');
+  await page
+    .getByRole('button', { name: /^Show details for/ })
+    .first()
+    .click();
+  await page.getByRole('button', { name: 'Add label', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Add label' });
+  const input = dialog.getByRole('textbox', { name: 'Labels', exact: true });
+  await input.fill('Recovered payment');
+  await input.press('Tab');
+  await expect(input).toHaveValue('');
+  await expect(dialog.getByText('Recovered payment', { exact: true })).toBeVisible();
+  await input.fill('Family');
+  await input.press('Tab');
+  await expect(input).toHaveValue('');
+  await page.screenshot({
+    path: test.info().outputPath('observed-labels.png'),
+    animations: 'disabled'
+  });
+  await dialog.getByRole('button', { name: 'Save label' }).click();
+  await expect(dialog).toBeHidden();
+  await expect(page.getByText('Recovered payment', { exact: true }).first()).toBeVisible();
+  await expect(page.getByText('Family', { exact: true }).first()).toBeVisible();
 });

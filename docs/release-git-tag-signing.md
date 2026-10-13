@@ -20,3 +20,17 @@ before any tag is signed.
 This SSH key does not replace Apple Developer ID signing, notarization, or the
 separate offline Ed25519 update-manifest signature described in
 [`release-update-rollback.md`](release-update-rollback.md).
+
+## Verify public v0.5.1 source
+
+From a checked-out Groot repository, first compare the full public-key fingerprint above with an independently trusted Groot channel. Then:
+
+```sh
+git fetch --tags origin
+ssh-keygen -lf docs/release-git-tag-signing.pub -E sha256
+printf '%s\n' 'groot-release ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIP834m8yg1rFILkTlr7+fwEq2/dLTl2eZkYMKJKE3kAn' > /tmp/groot-release-allowed-signers
+git -c gpg.ssh.allowedSignersFile=/tmp/groot-release-allowed-signers verify-tag v0.5.1
+git rev-parse 'v0.5.1^{}'
+```
+
+The source commit must be `c731fa1cc6ce6431662342a007d9ca6bed6abbe6`. This authenticates source, not binaries; use release attestation and Apple package verification for downloads.

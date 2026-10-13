@@ -9,6 +9,7 @@ export type WalletShellContext = {
   refreshProfiles: () => Promise<void>;
   selectWallet: (walletId: string) => Promise<void>;
   beginHardwareReview: () => () => void;
+  requestInitialHistoryApproval: (force?: boolean) => void;
   requestUnlockSync: (walletId: string) => void;
   consumeUnlockSync: (walletId: string) => boolean;
   pauseAutomaticSync: () => Promise<void>;

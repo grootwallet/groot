@@ -54,17 +54,13 @@ describe('foreground wallet navigation', () => {
     expect(appShell).toContain(
       "if (previousPath === '/unlock' && !walletSelectionTask) void liveSync.runNow();"
     );
-    expect(appShell).toContain(
-      "if (previousPath === '/welcome' || previousPath === '/hardware/new')"
-    );
+    expect(appShell).toContain('previousPath && profileMutatingRoutes.has(previousPath)');
     const afterNavigation = appShell.slice(
       appShell.indexOf('afterNavigate(({ from }) =>'),
       appShell.indexOf('async function selectWallet')
     );
     expect(
-      afterNavigation.indexOf(
-        "if (previousPath === '/welcome' || previousPath === '/hardware/new')"
-      )
+      afterNavigation.indexOf('previousPath && profileMutatingRoutes.has(previousPath)')
     ).toBeLessThan(afterNavigation.indexOf('if (isPrototypeWallet) return'));
     const creationResume = appShell.slice(
       appShell.indexOf('async function resumeAfterWalletCreation'),
@@ -217,26 +213,14 @@ describe('foreground wallet navigation', () => {
     );
   });
 
-  it('starts the safe initial scan automatically and presents resumable progress', () => {
-    expect(overview).toContain("initialScanMode = $state<'new' | 'birthday' | 'full'>('new')");
-    expect(overview).toContain('let showManualScanOptions = $state(false)');
-    expect(overview).toContain('let showAdvancedScanOptions = $state(false)');
-    expect(overview).toContain("'New wallet · no earlier activity'");
-    expect(overview).toContain("'Existing wallet · use a birthday block'");
-    expect(overview).toContain("'Full history · safest'");
-    expect(overview).toContain("'Address discovery options'");
-    expect(overview).toContain('!snapshot?.syncedAt && nodeReady');
-    expect(overview).toContain("page.url.searchParams.has('initial')");
-    expect(overview).toContain('automaticInitialScanPending &&');
-    expect(overview).toContain('requestAutomaticInitialScan();');
-    expect(overview).toContain(".fullRescan('')");
-    expect(overview).toContain('startRecoveryStatusPolling(true)');
-    expect(overview).toContain('const startupDeadline = Date.now() + 10_000');
-    expect(overview).toContain(
-      "href={nodeReady && savedRecoveryCanResume ? undefined : '/settings'}"
-    );
-    expect(overview).toContain("const credential = ''");
-    expect(overview).toContain('walletService.fullRescan(credential)');
+  it('requires first-history approval while preserving progress and unverified balances', () => {
+    expect(overview).toContain('walletShell.requestInitialHistoryApproval();');
+    expect(overview).not.toContain('requestAutomaticInitialScan');
+    expect(overview).not.toContain('initial-scan-options');
+    expect(appShell).toContain('approveInitialHistoryScan');
+    expect(appShell).toContain("saveRecoveryScanSettings(0, settings.gapLimit, '', id)");
+    expect(appShell).toContain("walletService.fullRescan('', id)");
+    expect(appShell).toContain('declinedInitialScans.add');
     expect(overview).toContain('recoveryStatus.processedBlocks');
     expect(overview).toContain("'Syncing · {percent}%'");
     expect(overview).toContain("'{processed} / {total} blocks'");

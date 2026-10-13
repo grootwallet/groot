@@ -18,6 +18,197 @@ export type { MessageValues, Translation, CatalogSection } from './locales/types
 // translations makes reviews able to compare meaning without chasing opaque IDs.
 // User data and protocol identifiers must never be passed through this catalog.
 export const copyCatalog = {
+  '{count} coin settings changed.': {
+    fr: '{count} réglages de pièces modifiés.',
+    es: '{count} ajustes de monedas cambiados.'
+  },
+  '{count} signer keys matched; current signer names kept.': {
+    fr: '{count} clés de signataires reconnues ; noms actuels conservés.',
+    es: '{count} claves de firmantes coinciden; se mantienen los nombres actuales.'
+  },
+  '{count} unsupported records skipped.': {
+    fr: '{count} entrées non prises en charge ignorées.',
+    es: '{count} registros no compatibles omitidos.'
+  },
+  'A smaller signer group can recover the wallet after a delay.': {
+    fr: 'Un groupe réduit de signataires peut récupérer le portefeuille après un délai.',
+    es: 'Un grupo menor de firmantes puede recuperar el monedero tras un plazo.'
+  },
+  'Address could not be created': {
+    fr: 'Impossible de créer l’adresse',
+    es: 'No se pudo crear la dirección'
+  },
+  'App PIN changed': { fr: 'PIN de l’application modifié', es: 'PIN de la aplicación cambiado' },
+  'App PIN not changed': {
+    fr: 'PIN de l’application non modifié',
+    es: 'PIN de la aplicación sin cambiar'
+  },
+  'Approve the history scan to restore transaction history.': {
+    fr: 'Approuvez l’analyse pour restaurer l’historique des transactions.',
+    es: 'Aprueba el escaneo para restaurar el historial de transacciones.'
+  },
+  'Change app PIN': { fr: 'Changer le PIN de l’application', es: 'Cambiar PIN de la aplicación' },
+  'Changing PIN…': { fr: 'Modification du PIN…', es: 'Cambiando PIN…' },
+  'Confirm new app PIN': { fr: 'Confirmer le nouveau PIN', es: 'Confirmar nuevo PIN' },
+  'Current app PIN': { fr: 'PIN actuel de l’application', es: 'PIN actual de la aplicación' },
+  'Groot’s network can see your wallet activity. Your keys stay on your device.': {
+    fr: 'Le réseau Groot peut voir l’activité de votre portefeuille. Vos clés restent sur votre appareil.',
+    es: 'La red de Groot puede ver la actividad de tu monedero. Tus claves permanecen en tu dispositivo.'
+  },
+  'Imported {imported}; {unchanged} already present.': {
+    fr: '{imported} importées ; {unchanged} déjà présentes.',
+    es: '{imported} importadas; {unchanged} ya presentes.'
+  },
+  'Locks this wallet after changing its PIN.': {
+    fr: 'Verrouille ce portefeuille après le changement de PIN.',
+    es: 'Bloquea este monedero después de cambiar su PIN.'
+  },
+  'Open Policy, verify the required signers, then return here.': {
+    fr: 'Ouvrez Politique, vérifiez les signataires requis, puis revenez ici.',
+    es: 'Abre Política, verifica los firmantes necesarios y vuelve aquí.'
+  },
+  'Scan could not start': {
+    fr: 'Impossible de lancer l’analyse',
+    es: 'No se pudo iniciar el escaneo'
+  },
+  'Set up my own node': { fr: 'Configurer mon propre nœud', es: 'Configurar mi propio nodo' },
+  'Unlock this wallet with your new PIN.': {
+    fr: 'Déverrouillez ce portefeuille avec votre nouveau PIN.',
+    es: 'Desbloquea este monedero con tu nuevo PIN.'
+  },
+  'Use Groot’s network for simplicity and speed, or set up your own node for better privacy.': {
+    fr: 'Utilisez le réseau Groot pour sa simplicité et sa rapidité, ou votre propre nœud pour plus de confidentialité.',
+    es: 'Usa la red de Groot por su sencillez y rapidez, o configura tu propio nodo para más privacidad.'
+  },
+  'Verify this wallet on your hardware signers before receiving bitcoin.': {
+    fr: 'Vérifiez ce portefeuille sur vos signataires matériels avant de recevoir du bitcoin.',
+    es: 'Verifica este monedero en tus firmantes físicos antes de recibir bitcoin.'
+  },
+  'Verify your wallet policy': {
+    fr: 'Vérifier la politique du portefeuille',
+    es: 'Verificar la política del monedero'
+  },
+  'Your hardware keys and device passphrase stay the same. This wallet will lock after the change.':
+    {
+      fr: 'Vos clés matérielles et la passphrase de l’appareil restent inchangées. Ce portefeuille sera verrouillé après le changement.',
+      es: 'Tus claves físicas y la frase de contraseña del dispositivo no cambian. Este monedero se bloqueará tras el cambio.'
+    },
+  'Your own node checks your wallet history. Your keys stay on your device.': {
+    fr: 'Votre propre nœud vérifie l’historique du portefeuille. Vos clés restent sur votre appareil.',
+    es: 'Tu propio nodo comprueba el historial de tu monedero. Tus claves permanecen en tu dispositivo.'
+  },
+  'Enlarge wallet descriptor QR': {
+    fr: 'Agrandir le QR du descripteur du portefeuille',
+    es: 'Ampliar el QR del descriptor del monedero'
+  },
+  '{count} of {total} signers identified': {
+    fr: '{count} signataires identifiés sur {total}',
+    es: '{count} de {total} firmantes identificados'
+  },
+  'A software wallet with bitcoin cannot be deleted until its recovery backup is verified in Groot. An empty wallet can be deleted.':
+    {
+      fr: 'Un portefeuille logiciel contenant du bitcoin ne peut être supprimé avant la vérification de sa sauvegarde dans Groot. Un portefeuille vide peut être supprimé.',
+      es: 'Un monedero de software con bitcoin no se puede eliminar hasta verificar su copia de recuperación en Groot. Un monedero vacío se puede eliminar.'
+    },
+  'Approve and scan': { fr: 'Approuver et analyser', es: 'Aprobar y escanear' },
+  'Approve wallet-history scan': {
+    fr: 'Approuver l’analyse de l’historique',
+    es: 'Aprobar el escaneo del historial'
+  },
+  'Choose the same standard or hidden wallet used in your backup.': {
+    fr: 'Choisissez le même portefeuille standard ou caché que dans votre sauvegarde.',
+    es: 'Elige el mismo monedero estándar u oculto de tu copia de seguridad.'
+  },
+  'Could not identify signer': {
+    fr: 'Impossible d’identifier le signataire',
+    es: 'No se pudo identificar al firmante'
+  },
+  'Could not scan hardware signers': {
+    fr: 'Impossible de rechercher les signataires matériels',
+    es: 'No se pudieron buscar los firmantes físicos'
+  },
+  'Follow your hardware signer': {
+    fr: 'Suivez les instructions de votre signataire',
+    es: 'Sigue las instrucciones de tu firmante físico'
+  },
+  'For a hidden wallet, select it on the device and scan again.': {
+    fr: 'Pour un portefeuille caché, sélectionnez-le sur l’appareil puis relancez la recherche.',
+    es: 'Para un monedero oculto, selecciónalo en el dispositivo y vuelve a buscar.'
+  },
+  'Groot managed will receive your public wallet scripts and can link your wallet activity with your connection. Your keys stay on your device. Choose Settings to use your own node.':
+    {
+      fr: 'Le service Groot recevra les scripts publics de votre portefeuille et pourra relier votre activité à votre connexion. Vos clés restent sur votre appareil. Ouvrez les paramètres pour utiliser votre propre nœud.',
+      es: 'El servicio de Groot recibirá los scripts públicos de tu monedero y podrá vincular tu actividad con tu conexión. Tus claves permanecen en tu dispositivo. Abre Ajustes para usar tu propio nodo.'
+    },
+  'Groot will scan from genesis so earlier payments are not missed.': {
+    fr: 'Groot analysera depuis le bloc de genèse pour retrouver les paiements antérieurs.',
+    es: 'Groot escaneará desde el bloque génesis para encontrar los pagos anteriores.'
+  },
+  'I have backed up my recovery words.': {
+    fr: 'J’ai sauvegardé mes mots de récupération.',
+    es: 'He guardado mis palabras de recuperación.'
+  },
+  'I have backed up my signer keys and wallet descriptor.': {
+    fr: 'J’ai sauvegardé les clés de mes signataires et le descripteur du portefeuille.',
+    es: 'He guardado las claves de mis firmantes y el descriptor del monedero.'
+  },
+  'I have backed up my wallet passphrase separately.': {
+    fr: 'J’ai sauvegardé séparément la phrase secrète de mon portefeuille.',
+    es: 'He guardado por separado la frase de contraseña de mi monedero.'
+  },
+  'Identify backup signers': {
+    fr: 'Identifier les signataires de la sauvegarde',
+    es: 'Identificar los firmantes de la copia'
+  },
+  'Invalid backup': { fr: 'Sauvegarde invalide', es: 'Copia de seguridad no válida' },
+  'Keep the signer connected and review its screen.': {
+    fr: 'Gardez le signataire connecté et vérifiez son écran.',
+    es: 'Mantén el firmante conectado y revisa su pantalla.'
+  },
+  'Keep your signer keys and wallet descriptor backed up.': {
+    fr: 'Conservez une sauvegarde des clés et du descripteur du portefeuille.',
+    es: 'Guarda las claves de tus firmantes y el descriptor del monedero.'
+  },
+  'Large QR code for the wallet descriptor': {
+    fr: 'Grand code QR du descripteur du portefeuille',
+    es: 'Código QR ampliado del descriptor del monedero'
+  },
+  'No, open Settings': { fr: 'Non, ouvrir les paramètres', es: 'No, abrir Ajustes' },
+  'Not available yet. This policy has not been tested.': {
+    fr: 'Pas encore disponible. Cette politique n’a pas été testée.',
+    es: 'Aún no disponible. Esta política no se ha probado.'
+  },
+  'Recovery failed': { fr: 'Échec de la récupération', es: 'La recuperación falló' },
+  'Scan devices': { fr: 'Rechercher les appareils', es: 'Buscar dispositivos' },
+  'Scan the complete wallet history, or choose a private connection in Settings.': {
+    fr: 'Analysez tout l’historique du portefeuille ou choisissez une connexion privée dans les paramètres.',
+    es: 'Escanea todo el historial del monedero o elige una conexión privada en Ajustes.'
+  },
+  'Select each hardware signer to prove its public account key matches the backup. Groot keeps the saved policy unchanged.':
+    {
+      fr: 'Sélectionnez chaque signataire matériel pour vérifier que sa clé publique de compte correspond à la sauvegarde. Groot conserve la politique sauvegardée.',
+      es: 'Selecciona cada firmante físico para comprobar que su clave pública de cuenta coincide con la copia. Groot conserva la política guardada.'
+    },
+  'The wallet descriptor could not be combined. Your saved backup is unchanged.': {
+    fr: 'Impossible de combiner le descripteur du portefeuille. Votre sauvegarde reste inchangée.',
+    es: 'No se pudo combinar el descriptor del monedero. Tu copia guardada permanece intacta.'
+  },
+  'Wallet descriptor': { fr: 'Descripteur du portefeuille', es: 'Descriptor del monedero' },
+  'Wallet descriptor QR': {
+    fr: 'QR du descripteur du portefeuille',
+    es: 'QR del descriptor del monedero'
+  },
+  'Wallet descriptor QR code': {
+    fr: 'Code QR du descripteur du portefeuille',
+    es: 'Código QR del descriptor del monedero'
+  },
+  'Wallet privacy': { fr: 'Confidentialité du portefeuille', es: 'Privacidad del monedero' },
+  'Your configured node will receive wallet queries. Your keys stay on your device. Choose Settings to review the connection and protect your privacy.':
+    {
+      fr: 'Votre nœud configuré recevra les requêtes du portefeuille. Vos clés restent sur votre appareil. Ouvrez les paramètres pour vérifier la connexion et protéger votre confidentialité.',
+      es: 'Tu nodo configurado recibirá consultas del monedero. Tus claves permanecen en tu dispositivo. Abre Ajustes para revisar la conexión y proteger tu privacidad.'
+    },
+
   'Block time': { fr: 'Heure du bloc', es: 'Hora del bloque' },
   'Block timestamp': { fr: 'Horodatage du bloc', es: 'Marca de tiempo del bloque' },
   'First seen': { fr: 'Première observation', es: 'Primera detección' },

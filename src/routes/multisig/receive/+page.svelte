@@ -17,6 +17,7 @@
   import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
   import Button from '$lib/components/Button.svelte';
+  import InstructionCard from '$lib/components/InstructionCard.svelte';
   import LoadFailure from '$lib/components/LoadFailure.svelte';
   import WalletSkeleton from '$lib/components/WalletSkeleton.svelte';
   import PermanentLabelEditor from '$lib/components/PermanentLabelEditor.svelte';
@@ -543,15 +544,23 @@
         if (kind === 'input') generateError = '';
       }}
     />
-    {#if generateError}<p class="form-error" role="alert">{generateError}</p>{/if}
-    {#if policyVerificationNeeded && generateError}<div class="privacy-note">
-        <p>
-          {translate(
-            $locale,
-            'Verify the signer policies, then return to create this labeled address.'
-          )}
-        </p>
-        <Button variant="secondary" href="/multisig">{translate($locale, 'Open Policy')}</Button>
+    {#if generateError}<WarningNotice
+        tone="danger"
+        icon
+        role="alert"
+        title={translate($locale, 'Address could not be created')}
+        body={policyVerificationNeeded
+          ? translate(
+              $locale,
+              'Verify this wallet on your hardware signers before receiving bitcoin.'
+            )
+          : generateError}
+      />{/if}
+    {#if policyVerificationNeeded && generateError}<div class="policy-next-step">
+        <InstructionCard title={translate($locale, 'Verify your wallet policy')}>
+          <p>{translate($locale, 'Open Policy, verify the required signers, then return here.')}</p>
+          <Button href="/multisig">{translate($locale, 'Open Policy')}</Button>
+        </InstructionCard>
       </div>{/if}
     <div class="modal-footer">
       <Button

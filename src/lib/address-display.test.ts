@@ -13,8 +13,17 @@ describe('readable address display', () => {
   ])('groups %s without changing or inserting characters', (address) => {
     const groups = groupAddressForDisplay(address);
     expect(groups.join('')).toBe(address);
-    expect(groups.every((group) => group.length >= 3 && group.length <= 4)).toBe(true);
+    expect(
+      groups.every((group, index) =>
+        index === groups.length - 1 ? group.length >= 1 && group.length <= 4 : group.length === 4
+      )
+    ).toBe(true);
     expect(groups.some((group) => group.includes(' '))).toBe(false);
+  });
+
+  it('keeps four-character groups and puts the remainder at the end', () => {
+    expect(groupIdentifierForDisplay('abcdefghijklmn')).toEqual(['abcd', 'efgh', 'ijkl', 'mn']);
+    expect(groupIdentifierForDisplay('abcdefghijklm')).toEqual(['abcd', 'efgh', 'ijkl', 'm']);
   });
 
   it('handles empty and short values without inventing content', () => {

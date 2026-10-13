@@ -64,7 +64,7 @@ describe('hardware signing review usability', () => {
     expect(policy).toContain('let addressExpanded = $state(false)');
     expect(policy).toContain('<code>{compactAddress(displayedAddress)}</code>');
     expect(policy).toContain('aria-expanded={addressExpanded}');
-    expect(policy).toContain('{#if addressExpanded}<ReadableAddress');
+    expect(policy).toContain('{#if addressExpanded}<HardwareAddressComparison');
   });
 
   it('does not repeat address-comparison guidance in the hardware address modal', () => {

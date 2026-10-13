@@ -21,6 +21,7 @@
   let drillError = $state('');
   let confirmation = $state('');
   let pin = $state('');
+  let backupConfirmed = $state(false);
   let deleteError = $state('');
   let busy = $state(false);
   let deleteConfirmOpen = $state(false);
@@ -77,11 +78,11 @@
   }
 
   async function removeWallet() {
-    if (!wallet || !drillVerified || busy) return;
+    if (!wallet || !drillVerified || !backupConfirmed || busy) return;
     busy = true;
     deleteError = '';
     try {
-      await walletService.deleteMultisig(pin, confirmation);
+      await walletService.deleteMultisig(pin, confirmation, backupConfirmed);
       toast({
         title: 'Wallet deleted',
         description:
@@ -192,18 +193,18 @@
           title={translate($locale, 'Recovery test required')}
           body={translate($locale, 'Complete step 1 before deletion can be authorized.')}
         />{/if}
+      <label class="check-row"
+        ><input type="checkbox" bind:checked={backupConfirmed} disabled={busy} /><span
+          >{translate($locale, 'I have backed up my signer keys and wallet descriptor.')}</span
+        ></label
+      >
       <label class="field"
-        ><span
-          >{translate($locale, 'Type')} <q>{wallet.name}</q> {translate($locale, 'exactly')}</span
-        ><input
-          aria-label={translate($locale, 'Wallet name confirmation')}
+        ><span>{translate($locale, 'Type DELETE to confirm')}</span><input
+          aria-label={translate($locale, 'Type DELETE to confirm')}
           bind:value={confirmation}
           autocomplete="off"
         /></label
       >
-      {#if confirmation && confirmation !== wallet.name}<p class="form-error" aria-live="polite">
-          {translate($locale, 'The wallet name does not match exactly.')}
-        </p>{/if}
       <PasswordField
         label={translate($locale, 'App PIN')}
         inputLabel="Delete wallet app PIN"
@@ -213,7 +214,7 @@
       <Button
         variant="danger"
         class="full"
-        disabled={!drillVerified || confirmation !== wallet.name || !pin || busy}
+        disabled={!drillVerified || confirmation !== 'DELETE' || !backupConfirmed || !pin || busy}
         onclick={() => (deleteConfirmOpen = true)}
         >{translate($locale, 'Delete wallet from this device')}</Button
       >
@@ -231,7 +232,9 @@
   open={deleteConfirmOpen}
   title={translate($locale, 'Permanently delete this wallet?')}
   description={translate($locale, 'This cannot be undone on this device.')}
-  onclose={() => (deleteConfirmOpen = false)}
+  onclose={() => {
+    if (!busy) deleteConfirmOpen = false;
+  }}
 >
   <WarningNotice
     tone="danger"

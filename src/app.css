@@ -12091,3 +12091,19 @@ code {
 .paired-mobile span {
   font-family: var(--font-mono);
 }
+
+.policy-next-step {
+  margin-top: 16px;
+}
+.policy-next-step .instruction-card {
+  border-color: var(--link);
+  background: var(--surface-control);
+}
+.policy-next-step .instruction-card p {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: var(--font-size-meta);
+}
+.policy-next-step .button {
+  justify-self: start;
+}

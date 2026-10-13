@@ -37,7 +37,8 @@
   import { fade, fly, slide } from 'svelte/transition';
   import LoadFailure from '$lib/components/LoadFailure.svelte';
   import EmptyState from '$lib/components/EmptyState.svelte';
-  import FieldCounter from '$lib/components/FieldCounter.svelte';
+  import PermanentLabelEditor from '$lib/components/PermanentLabelEditor.svelte';
+  import { permanentLabelsForSubmission } from '$lib/wallet/label-suggestions';
   import { useWalletShellContext } from '$lib/wallet/shell-context';
   import { discreetMode } from '$lib/privacy';
   import Modal from '$lib/components/Modal.svelte';
@@ -73,6 +74,7 @@
   let freezeIntent = $state<{ outpoints: string[]; frozen: boolean } | null>(null);
   let claimIntent = $state<string | null>(null);
   let claimLabel = $state('');
+  let claimLabels = $state<string[]>([]);
   let claimError = $state('');
   let claimBusy = $state(false);
   let loading = $state(true);
@@ -340,6 +342,7 @@
   function beginObservedReceiveClaim(outpoint: string) {
     claimIntent = outpoint;
     claimLabel = '';
+    claimLabels = [];
     claimError = '';
   }
 
@@ -347,6 +350,7 @@
     if (claimBusy) return;
     claimIntent = null;
     claimLabel = '';
+    claimLabels = [];
     claimError = '';
   }
 
@@ -355,10 +359,14 @@
     claimBusy = true;
     claimError = '';
     try {
-      await walletService.claimObservedMultisigAddress(claimIntent, claimLabel);
+      await walletService.claimObservedMultisigAddress(
+        claimIntent,
+        permanentLabelsForSubmission(claimLabels, claimLabel)
+      );
       await load();
       claimIntent = null;
       claimLabel = '';
+      claimLabels = [];
       toast({
         title: 'Label saved',
         description: 'The previously unlabeled received output now has known local provenance.',
@@ -982,17 +990,14 @@
     class="modal-form"
     onsubmit={(event) => (event.preventDefault(), claimObservedReceiveAddress())}
   >
-    <label class="field">
-      <span>{translate($locale, 'Label')}</span>
-      <input
-        bind:value={claimLabel}
-        maxlength="48"
-        required
-        disabled={claimBusy}
-        placeholder={translate($locale, 'What was this payment for?')}
-      />
-      <FieldCounter value={claimLabel} max={48} />
-    </label>
+    <PermanentLabelEditor
+      id="observed-receive-label"
+      title={translate($locale, 'Labels')}
+      placeholder={translate($locale, 'What was this payment for?')}
+      suggestions={[]}
+      bind:labels={claimLabels}
+      bind:value={claimLabel}
+    />
     {#if claimError}<p class="form-error" role="alert">{claimError}</p>{/if}
     <div class="modal-footer">
       <Button
@@ -1003,7 +1008,7 @@
       >
       <Button
         type="submit"
-        disabled={!claimLabel.trim() || claimBusy}
+        disabled={!permanentLabelsForSubmission(claimLabels, claimLabel).length || claimBusy}
         loading={claimBusy}
         loadingLabel={translate($locale, 'Saving label…')}
         >{translate($locale, 'Save label')}</Button

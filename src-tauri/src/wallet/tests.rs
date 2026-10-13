@@ -2291,22 +2291,37 @@ fn observed_unlabeled_receive_outputs_keep_one_assignment_and_may_reuse_label_te
         &mut db,
         &wallet,
         &format!("{funding_txid}:0"),
-        "  Policy verification funding  ",
+        &[
+            "  Policy verification funding  ".to_owned(),
+            "Recovered".to_owned(),
+        ],
     )
     .unwrap();
+    assert_eq!(
+        claimed.labels,
+        vec!["Policy verification funding", "Recovered"]
+    );
     assert_eq!(claimed.id, 0);
     assert_eq!(claimed.label, "Policy verification funding");
     assert_eq!(claimed.status, "used");
     let provenance = label_provenance::output_summary(&db, &format!("{funding_txid}:0")).unwrap();
     assert_eq!(provenance.state, label_provenance::ProvenanceState::Known);
-    assert_eq!(provenance.labels[0].text, "Policy verification funding");
+    assert_eq!(provenance.labels.len(), 2);
+    assert!(provenance
+        .labels
+        .iter()
+        .any(|label| label.text == "Policy verification funding"));
+    assert!(provenance
+        .labels
+        .iter()
+        .any(|label| label.text == "Recovered"));
 
     assert_eq!(
         claim_observed_receive_output(
             &mut db,
             &wallet,
             &format!("{funding_txid}:0"),
-            "Replacement label",
+            &["Replacement label".to_owned()],
         )
         .err()
         .unwrap()
@@ -2317,7 +2332,7 @@ fn observed_unlabeled_receive_outputs_keep_one_assignment_and_may_reuse_label_te
         &mut db,
         &wallet,
         &format!("{funding_txid}:1"),
-        "  policy   verification FUNDING ",
+        &["  policy   verification FUNDING ".to_owned()],
     )
     .unwrap();
     assert_eq!(related.id, 1);
@@ -2335,7 +2350,7 @@ fn observed_unlabeled_receive_outputs_keep_one_assignment_and_may_reuse_label_te
             &mut db,
             &wallet,
             &format!("{funding_txid}:2"),
-            "Change label",
+            &["Change label".to_owned()],
         )
         .err()
         .unwrap()
@@ -6500,4 +6515,35 @@ fn coldcard_policy_acknowledgement_accepts_recognized_and_legacy_file_imports() 
         CosignerSource::Usb,
         Some("ledger")
     )));
+}
+
+#[test]
+fn deletion_requires_keys_and_separate_software_passphrase_backups() {
+    for kind in [
+        WalletKind::SingleKey,
+        WalletKind::WatchOnly,
+        WalletKind::Multisig,
+    ] {
+        assert_eq!(
+            validate_wallet_deletion_backup(kind.clone(), true, 0, false, true)
+                .unwrap_err()
+                .code,
+            "backup_mismatch"
+        );
+        assert!(validate_wallet_deletion_backup(kind, true, 0, true, true).is_ok());
+    }
+    assert_eq!(
+        validate_wallet_deletion_backup(WalletKind::SingleKey, true, 0, true, false)
+            .unwrap_err()
+            .code,
+        "backup_mismatch"
+    );
+    assert!(validate_wallet_deletion_backup(WalletKind::SingleKey, false, 0, true, true).is_ok());
+    assert_eq!(
+        validate_wallet_deletion_backup(WalletKind::SingleKey, false, 1, true, true)
+            .unwrap_err()
+            .code,
+        "backup_mismatch"
+    );
+    assert!(validate_wallet_deletion_backup(WalletKind::SingleKey, true, 1, true, true).is_ok());
 }

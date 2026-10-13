@@ -464,7 +464,7 @@ describe('hardware receive verification UI', () => {
       "'BitBox may request its password again for this new secure connection. Enter it only on BitBox.'"
     );
     expect(hardwareDeviceList).toContain('hardwareDeviceStateLabel(device, membership');
-    expect(hardwareDeviceList).toContain("stateLabel !== 'Select to identify'");
+    expect(hardwareDeviceList).not.toContain("stateLabel !== 'Select to identify'");
     expect(hardwareDeviceList).not.toContain(
       "membership !== 'candidate' && membership !== 'compatible'"
     );
@@ -591,7 +591,7 @@ describe('hardware receive verification UI', () => {
     expect(coins).toContain('!utxo.primaryLabel');
     expect(coins).toContain('walletService.claimObservedMultisigAddress');
     expect(coins).toContain('the assignment cannot be changed');
-    expect(coins).toContain('<FieldCounter value={claimLabel} max={48} />');
+    expect(coins).toContain('<PermanentLabelEditor');
     expect(coins).not.toContain('{[...claimLabel].length}/48');
   });
 

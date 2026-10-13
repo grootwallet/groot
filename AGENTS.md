@@ -45,7 +45,7 @@ If code and documentation disagree, stop and resolve the mismatch in the same ch
 
 - Mnemonic, seed, descriptors containing private keys, and decrypted signing material never cross into the webview.
 - The generated mnemonic is 24 BIP39 words.
-- The user credential is both the BIP39 passphrase and app unlock/signing PIN. Wrong entry must return `invalid_credential`; it must never appear to open a different wallet.
+- The software-wallet credential is its BIP39 passphrase and app unlock/signing credential. Hardware-only and multisig wallets use an independent app PIN. Wrong entry must return `invalid_credential`, never open a different wallet.
 - The credential is not logged, persisted in plaintext, included in analytics, or retained by UI state after use.
 - Every revealed receive address gets a non-empty permanent label in the same atomic operation.
 - Permanent assignments and history cannot be edited or erased. Normalized label text may be

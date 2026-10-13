@@ -3428,6 +3428,7 @@ pub(crate) fn policy_verification_address(
 ) -> ApiResult<PolicyVerificationAddressDto> {
     let canonical_address = first_multisig_address(wallet)?;
     Ok(PolicyVerificationAddressDto {
+        derivation_path: format!("{}/0/0", multisig_account_path()),
         testnet_alias: regtest_testnet_address_alias(&canonical_address),
         canonical_address,
     })
