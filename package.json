@@ -52,7 +52,7 @@
     "test:supply-chain": "node scripts/quality/check-supply-chain.mjs",
     "test:sbom": "bash scripts/quality/check-sbom.sh",
     "test:brand": "node --test scripts/quality/check-brand-identity.test.mjs && bash scripts/quality/check-brand-identity.sh && node scripts/quality/check-brand-lockup.mjs",
-    "test:versions": "node scripts/quality/check-version-surfaces.mjs",
+    "test:versions": "node --test scripts/release/release-version.test.mjs && node scripts/quality/check-version-surfaces.mjs",
     "test:localization": "node scripts/quality/check-localization.mjs",
     "test:agent-scaffolding": "bash scripts/quality/check-agent-scaffolding.sh",
     "test:hardware-preflight": "node --test scripts/hardware/*.test.mjs",
