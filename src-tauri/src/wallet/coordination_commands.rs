@@ -285,13 +285,27 @@ pub fn coordination_pending_mobile_pairings(
 }
 
 #[tauri::command]
-pub fn coordination_mobile_resume(
+pub async fn coordination_mobile_resume(
     app: AppHandle,
-    state: State<'_, AppState>,
     session_id: String,
     credential: String,
 ) -> ApiResult<PairingResponseDto> {
     let credential = Zeroizing::new(credential);
+    tauri::async_runtime::spawn_blocking(move || {
+        let handle = app.clone();
+        let state = app.state::<AppState>();
+        mobile_resume_inner(handle, state, session_id, credential)
+    })
+    .await
+    .map_err(internal)?
+}
+
+fn mobile_resume_inner(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    session_id: String,
+    credential: Zeroizing<String>,
+) -> ApiResult<PairingResponseDto> {
     let _operation = operation_guard(&state)?;
     validate_credential(credential.as_str())?;
     let session_uuid = staging_session_uuid(&session_id)?;
@@ -327,13 +341,27 @@ pub fn coordination_mobile_resume(
 }
 
 #[tauri::command]
-pub fn coordination_mobile_await_final(
+pub async fn coordination_mobile_await_final(
     app: AppHandle,
-    state: State<'_, AppState>,
     session_id: String,
     credential: String,
 ) -> ApiResult<()> {
     let credential = Zeroizing::new(credential);
+    tauri::async_runtime::spawn_blocking(move || {
+        let handle = app.clone();
+        let state = app.state::<AppState>();
+        mobile_await_final_inner(handle, state, session_id, credential)
+    })
+    .await
+    .map_err(internal)?
+}
+
+fn mobile_await_final_inner(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    session_id: String,
+    credential: Zeroizing<String>,
+) -> ApiResult<()> {
     let _operation = operation_guard(&state)?;
     validate_credential(credential.as_str())?;
     let session_uuid = staging_session_uuid(&session_id)?;
@@ -770,13 +798,27 @@ pub fn coordination_mobile_final_inspect(
 }
 
 #[tauri::command]
-pub fn coordination_mobile_complete(
+pub async fn coordination_mobile_complete(
     app: AppHandle,
-    state: State<'_, AppState>,
     frames: Vec<String>,
     credential: String,
 ) -> ApiResult<MultisigWalletDto> {
     let credential = Zeroizing::new(credential);
+    tauri::async_runtime::spawn_blocking(move || {
+        let handle = app.clone();
+        let state = app.state::<AppState>();
+        mobile_complete_inner(handle, state, frames, credential)
+    })
+    .await
+    .map_err(internal)?
+}
+
+fn mobile_complete_inner(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    frames: Vec<String>,
+    credential: Zeroizing<String>,
+) -> ApiResult<MultisigWalletDto> {
     let _operation = operation_guard(&state)?;
     validate_credential(credential.as_str())?;
     let envelope = decode_envelope(CoordinationUrType::Wallet, &frames)?;
@@ -1018,12 +1060,25 @@ pub fn coordination_mobile_psbt_review(
 }
 
 #[tauri::command]
-pub fn coordination_mobile_signer_check(
+pub async fn coordination_mobile_signer_check(
     app: AppHandle,
-    state: State<'_, AppState>,
     credential: String,
 ) -> ApiResult<CosignerHealthDto> {
     let credential = Zeroizing::new(credential);
+    tauri::async_runtime::spawn_blocking(move || {
+        let handle = app.clone();
+        let state = app.state::<AppState>();
+        mobile_signer_check_inner(handle, state, credential)
+    })
+    .await
+    .map_err(internal)?
+}
+
+fn mobile_signer_check_inner(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    credential: Zeroizing<String>,
+) -> ApiResult<CosignerHealthDto> {
     let _operation = operation_guard(&state)?;
     require_unlocked(&app, &state)?;
     let profile = selected_profile_of_kind(&app, WalletKind::Multisig)?;
@@ -1086,14 +1141,29 @@ fn mobile_signer_matches_wallet(
 }
 
 #[tauri::command]
-pub fn coordination_mobile_sign_psbt(
+pub async fn coordination_mobile_sign_psbt(
     app: AppHandle,
-    state: State<'_, AppState>,
     reviewed_psbt: String,
     revision_id: String,
     credential: String,
 ) -> ApiResult<SignedMobilePsbtDto> {
     let credential = Zeroizing::new(credential);
+    tauri::async_runtime::spawn_blocking(move || {
+        let handle = app.clone();
+        let state = app.state::<AppState>();
+        mobile_sign_psbt_inner(handle, state, reviewed_psbt, revision_id, credential)
+    })
+    .await
+    .map_err(internal)?
+}
+
+fn mobile_sign_psbt_inner(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    reviewed_psbt: String,
+    revision_id: String,
+    credential: Zeroizing<String>,
+) -> ApiResult<SignedMobilePsbtDto> {
     let _operation = operation_guard(&state)?;
     require_unlocked(&app, &state)?;
     let profile = selected_profile_of_kind(&app, WalletKind::Multisig)?;
