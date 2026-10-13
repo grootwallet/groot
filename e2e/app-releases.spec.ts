@@ -104,3 +104,24 @@ test('cancelled checks discard late offers and rate limits retain their wait ins
   await modal.getByRole('button', { name: 'Check for updates', exact: true }).click();
   await expect(modal).toContainText('Try again in an hour');
 });
+test('release notes remain dismissible when app preference storage fails', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('groot-language', 'en');
+    sessionStorage.setItem('fixture-whats-new', '1');
+    const original = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (key, value) {
+      if (key === 'groot-notes-dismissed-version')
+        throw new DOMException('Fixture quota', 'QuotaExceededError');
+      return original.call(this, key, value);
+    };
+  });
+  await page.goto('/');
+  const modal = page.getByRole('dialog', { name: 'What’s new' });
+  await expect(modal).toBeVisible({ timeout: 20_000 });
+  await modal.getByRole('button', { name: 'Continue', exact: true }).click();
+  await expect(modal).toBeHidden();
+  await expect(
+    page.getByText('Could not save the app preference. Try again.', { exact: true })
+  ).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Overview', exact: true })).toBeVisible();
+});
