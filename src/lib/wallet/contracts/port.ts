@@ -370,8 +370,11 @@ export interface WalletDiagnosticsPort {
   exportDiagnostics(format: 'json' | 'csv'): Promise<SavedFileResult>;
 }
 
+import type { AppUpdatesPort } from './updates';
+
 export interface WalletPort
   extends
+    AppUpdatesPort,
     WalletProfilesPort,
     WalletNetworkPort,
     WalletSnapshotPort,

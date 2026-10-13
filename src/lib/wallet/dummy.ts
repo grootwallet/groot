@@ -66,6 +66,20 @@ import type { PaymentDraft } from './payment-draft';
 import { pendingBalanceBreakdown, sortTransactions } from './presentation';
 
 export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
+  async checkUpdate(): Promise<import('./contracts').UpdateOffer | null> {
+    if (sessionStorage.getItem('fixture-update-delay') === '1')
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    const fixture = sessionStorage.getItem('fixture-app-update');
+    if (fixture === 'offline' || fixture === 'rate_limited') throw fixture;
+    return fixture === 'available' ? { version: '5.2.0', verificationReady: true } : null;
+  }
+  async downloadUpdate(): Promise<import('./contracts').PreparedUpdate> {
+    if (sessionStorage.getItem('fixture-update-download') === 'verification_failed')
+      throw 'verification_failed';
+    return { filename: 'Groot-5.2.0-fixture.dmg', revealToken: 'fixture-only' };
+  }
+  async cancelUpdate(): Promise<void> {}
+  async revealUpdate(_token: string): Promise<void> {}
   private multisigSetupDraftValue: import('./contracts').MultisigSetupDraft | null = null;
   private paymentDrafts = new Map<string, PaymentDraft>();
   private multisigPolicyVerificationRecords: SignerPolicyVerification[] = [];

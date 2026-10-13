@@ -18,6 +18,114 @@ export type { MessageValues, Translation, CatalogSection } from './locales/types
 // translations makes reviews able to compare meaning without chasing opaque IDs.
 // User data and protocol identifiers must never be passed through this catalog.
 export const copyCatalog = {
+  'What’s new': { fr: 'Nouveautés', es: 'Novedades' },
+  Updates: { fr: 'Mises à jour', es: 'Actualizaciones' },
+  'New update available': {
+    fr: 'Nouvelle mise à jour disponible',
+    es: 'Nueva actualización disponible'
+  },
+  'Check for updates': { fr: 'Rechercher une mise à jour', es: 'Buscar actualizaciones' },
+  'Check automatically once a day': {
+    fr: 'Rechercher automatiquement une fois par jour',
+    es: 'Buscar automáticamente una vez al día'
+  },
+  'Checks contact GitHub and disclose your IP address and Groot version, never wallet data. Installation stays under your control.':
+    {
+      fr: 'Les recherches contactent GitHub et révèlent votre adresse IP et la version de Groot, jamais les données du portefeuille. Vous contrôlez l’installation.',
+      es: 'Las búsquedas contactan con GitHub y revelan tu dirección IP y versión de Groot, nunca datos del monedero. Tú controlas la instalación.'
+    },
+  'Checking for updates…': { fr: 'Recherche de mise à jour…', es: 'Buscando actualizaciones…' },
+  'You are up to date.': { fr: 'Votre version est à jour.', es: 'Tu versión está actualizada.' },
+  'Downloading and verifying…': {
+    fr: 'Téléchargement et vérification…',
+    es: 'Descargando y verificando…'
+  },
+  'Download verified installer': {
+    fr: 'Télécharger le programme vérifié',
+    es: 'Descargar el instalador verificado'
+  },
+  'Reveal installer': { fr: 'Afficher le programme d’installation', es: 'Mostrar el instalador' },
+  'Installer verified': { fr: 'Programme d’installation vérifié', es: 'Instalador verificado' },
+  'Installer verified. Reveal it to install when you are ready.': {
+    fr: 'Programme d’installation vérifié. Affichez-le pour l’installer quand vous serez prêt.',
+    es: 'Instalador verificado. Muéstralo para instalarlo cuando quieras.'
+  },
+  'Verified downloads are unavailable until the owner’s key and signed release assets are configured.':
+    {
+      fr: 'Les téléchargements vérifiés seront disponibles après configuration de la clé du propriétaire et des fichiers de version signés.',
+      es: 'Las descargas verificadas estarán disponibles cuando se configuren la clave del propietario y los archivos firmados.'
+    },
+  'Could not reach GitHub. Check your connection and retry.': {
+    fr: 'GitHub est inaccessible. Vérifiez votre connexion et réessayez.',
+    es: 'No se pudo contactar con GitHub. Comprueba tu conexión y reintenta.'
+  },
+  'GitHub is limiting requests. Try again in an hour.': {
+    fr: 'GitHub limite les requêtes. Réessayez dans une heure.',
+    es: 'GitHub limita las solicitudes. Reintenta dentro de una hora.'
+  },
+  'This release does not have a supported installer and signed manifest.': {
+    fr: 'Cette version ne possède pas de programme compatible accompagné d’un manifeste signé.',
+    es: 'Esta versión no tiene un instalador compatible con manifiesto firmado.'
+  },
+  'Update downloads are unavailable on this platform.': {
+    fr: 'Les téléchargements de mise à jour sont indisponibles sur cette plateforme.',
+    es: 'Las descargas de actualizaciones no están disponibles en esta plataforma.'
+  },
+  'The release verification key is not configured. No installer was downloaded.': {
+    fr: 'La clé de vérification n’est pas configurée. Aucun programme n’a été téléchargé.',
+    es: 'La clave de verificación no está configurada. No se descargó ningún instalador.'
+  },
+  'Installer verification failed. The download was discarded.': {
+    fr: 'La vérification a échoué. Le téléchargement a été supprimé.',
+    es: 'La verificación falló. Se eliminó la descarga.'
+  },
+  'Update cancelled.': { fr: 'Mise à jour annulée.', es: 'Actualización cancelada.' },
+  'An update operation is already running.': {
+    fr: 'Une opération de mise à jour est en cours.',
+    es: 'Ya hay una operación de actualización en curso.'
+  },
+  'Could not save or reveal the installer. Check local file access and retry.': {
+    fr: 'Impossible d’enregistrer ou d’afficher le programme. Vérifiez l’accès aux fichiers et réessayez.',
+    es: 'No se pudo guardar o mostrar el instalador. Comprueba el acceso a archivos y reintenta.'
+  },
+  'Could not save the app preference. Try again.': {
+    fr: 'Impossible d’enregistrer la préférence. Réessayez.',
+    es: 'No se pudo guardar la preferencia. Reintenta.'
+  },
+  'Update check failed': {
+    fr: 'Recherche de mise à jour échouée',
+    es: 'Falló la búsqueda de actualizaciones'
+  },
+  'Update download failed': {
+    fr: 'Téléchargement de mise à jour échoué',
+    es: 'Falló la descarga de actualización'
+  },
+  'Groot v{version}': { fr: 'Groot v{version}', es: 'Groot v{version}' },
+  'Approve the first wallet-history scan or connect your own node, with clearer retry controls.': {
+    fr: 'Autorisez la première analyse de l’historique ou connectez votre propre nœud, avec des contrôles de reprise plus clairs.',
+    es: 'Autoriza el primer análisis del historial o conecta tu propio nodo, con controles de reintento más claros.'
+  },
+  'Restore standard multisig backups and their address labels more reliably; inspect one receive/change descriptor.':
+    {
+      fr: 'Restaurez plus fiablement les sauvegardes multisig standard et leurs libellés ; consultez un descripteur unique de réception et de monnaie.',
+      es: 'Restaura con más fiabilidad copias multisig estándar y sus etiquetas; consulta un descriptor único de recepción y cambio.'
+    },
+  'Change the app PIN for hardware and multisig wallets. Your software-wallet passphrase stays fixed.':
+    {
+      fr: 'Modifiez le PIN de l’application pour les portefeuilles matériels et multisig. La phrase secrète du portefeuille logiciel reste fixe.',
+      es: 'Cambia el PIN de la aplicación para monederos con dispositivos y multisig. La frase de contraseña del monedero de software permanece fija.'
+    },
+  'Clearer hardware identity and policy-address details, permanent-label entry and wallet deletion safeguards.':
+    {
+      fr: 'Identification des appareils, détails des adresses de politique, saisie des libellés permanents et protections de suppression plus clairs.',
+      es: 'Identidad de dispositivos, detalles de direcciones de política, introducción de etiquetas permanentes y protecciones de eliminación más claros.'
+    },
+  'Optional update checks, verified installer preparation and offline release notes; current guides consolidated.':
+    {
+      fr: 'Recherche facultative de mises à jour, préparation de programmes vérifiés et notes hors ligne ; guides actuels consolidés.',
+      es: 'Búsqueda opcional de actualizaciones, preparación de instaladores verificados y notas sin conexión; guías actuales consolidadas.'
+    },
+
   '{count} coin settings changed.': {
     fr: '{count} réglages de pièces modifiés.',
     es: '{count} ajustes de monedas cambiados.'

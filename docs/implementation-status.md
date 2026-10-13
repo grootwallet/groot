@@ -1,6 +1,6 @@
 # Current implementation status
 
-This page describes the checked-in `5.2.0-rc02` feedback branch. Public v0.5.1 is authorized only at `c731fa1c` under ADR 0083. Internal candidates do not inherit its release approval.
+This page describes the checked-in `5.2.0-rc03` feedback branch. Public v0.5.1 is authorized only at `c731fa1c` under ADR 0083. Internal candidates do not inherit its release approval.
 
 **Native** means implemented behind Rust/Tauri. **Fixture** means browser demonstration only. Neither is physical-device certification. Exact release/device evidence belongs in the [Mainnet checklist](mainnet-release-checklist.md) and [hardware certification](hardware-certification.md).
 
@@ -22,6 +22,7 @@ This page describes the checked-in `5.2.0-rc02` feedback branch. Public v0.5.1 i
 | Hardware app PIN change     | Current/new PIN, encrypted verifier and node-secret rotation, wallet lock, interruption rollback        | Hardware/coordinator multisig; phone-signer rotation unavailable; software BIP39 passphrases cannot change                          |
 | Deletion                    | Worker-based removal; backup acknowledgements after DELETE                                              | Funded software needs tested backup; multisig retains descriptor recovery test; no secure-erasure claim                             |
 | UI utilities                | EN/FR/ES, light/dark, discreet mode, zoom, sanitized logs, explicit clipboard, QR/file interchange      | Browser coverage does not certify native dialogs or physical cameras                                                                |
+| App releases                | Native GitHub stable detection and signed-manifest preparation; localized offline notes                 | Owner verification key/signatures pending; no automatic installation or public release authorization                                |
 | Notifications               | Persisted receipt/confirmation markers and selected-wallet foreground sync                              | No push while the app is terminated                                                                                                 |
 
 ## Unavailable or experimental
@@ -29,7 +30,7 @@ This page describes the checked-in `5.2.0-rc02` feedback branch. Public v0.5.1 i
 - Timelocked Recovery and Assisted recovery creation are disabled with **Coming soon**. Existing delayed-policy profiles remain compatible; native compiler/spend tests are not a release claim.
 - Decaying/expanding policies are experimental foundations, not supported creation paths.
 - Payjoin V2 recognizes requests and rejects unsupported fallback; sender/receiver sessions and transport are not implemented.
-- Windows, Linux, iOS and Android public releases are not certified. Passive USB discovery is macOS-only; Windows production HWI verification fails closed.
+- Experimental Windows/Linux x64 packaging is Signet-only, without bundled HWI, native seed UI or passive USB discovery. Builds/CI do not certify physical platforms. iOS and Android public releases are not certified. Passive USB discovery is macOS-only; Windows production HWI verification fails closed.
 - This retained mobile branch implements authenticated BIP129 enrollment, staged restart/cancel, exact-policy import, native phone backup/recovery and signature-only PSBT round trips (Refs #6). Keychain/Secure Enclave wrapping, Android secret UI, clean physical restore and device lifecycle certification remain blockers. Miniscript stays on its separate branch.
 - No cloud backup, custodial key service, Lightning, Taproot wallet, or hosted remote signing service is implemented.
 

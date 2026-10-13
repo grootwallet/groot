@@ -32,6 +32,110 @@
   } from '$lib/config';
   import { applyMultisigNetwork } from '$lib/multisig/policy';
   import { onMount } from 'svelte';
+  import { releaseNotes } from '$lib/release-notes';
+  import {
+    NOTES_DISMISSED,
+    UPDATE_OPT_IN,
+    UPDATE_LAST_ATTEMPT,
+    shouldCheckUpdates,
+    updateErrorCopy
+  } from '$lib/app-updates';
+  import type { UpdateOffer, PreparedUpdate } from '$lib/wallet/contracts';
+  let notesPending = $state(false);
+  let notesOpen = $state(false);
+  let updatesOpen = $state(false);
+  let updateBusy = $state(false);
+  let updateStatus = $state('');
+  let updateOffer = $state<UpdateOffer | null>(null);
+  let preparedUpdate = $state<PreparedUpdate | null>(null);
+  let updateOptIn = $state(false);
+  let updateGeneration = 0;
+  let updateRetryAt = 0;
+  let otherModal = $state(false);
+  function preference(key: string, value: string) {
+    try {
+      localStorage.setItem(key, value);
+      return true;
+    } catch {
+      updateStatus = 'Could not save the app preference. Try again.';
+      return false;
+    }
+  }
+  function dismissNotes() {
+    if (preference(NOTES_DISMISSED, APP_VERSION)) {
+      notesOpen = false;
+      notesPending = false;
+    }
+  }
+  function closeUpdates() {
+    updatesOpen = false;
+    updateGeneration++;
+    if (updateBusy) {
+      updateStatus = 'Update cancelled.';
+      void walletService.cancelUpdate().catch(() => undefined);
+    }
+  }
+  async function checkUpdates(automatic = false) {
+    if (updateBusy || Date.now() < updateRetryAt) return;
+    const generation = ++updateGeneration;
+    updateBusy = true;
+    updateStatus = 'Checking for updates…';
+    updateOffer = null;
+    preparedUpdate = null;
+    if (!automatic) updatesOpen = true;
+    preference(UPDATE_LAST_ATTEMPT, String(Date.now()));
+    try {
+      const offer = await walletService.checkUpdate();
+      if (generation !== updateGeneration) return;
+      updateOffer = offer;
+      preparedUpdate = null;
+      updateStatus = offer ? 'New update available' : 'You are up to date.';
+    } catch (cause) {
+      if (generation !== updateGeneration) return;
+      updateStatus = updateErrorCopy(cause);
+      if (cause === 'rate_limited') updateRetryAt = Date.now() + 60 * 60 * 1000;
+      if (!automatic) toast({ title: translate($locale, 'Update check failed'), tone: 'warning' });
+    } finally {
+      updateBusy = false;
+    }
+  }
+  async function prepareUpdate() {
+    if (updateBusy) return;
+    const generation = ++updateGeneration;
+    updateBusy = true;
+    updateStatus = 'Downloading and verifying…';
+    try {
+      const result = await walletService.downloadUpdate();
+      if (generation !== updateGeneration) return;
+      preparedUpdate = result;
+      updateStatus = 'Installer verified. Reveal it to install when you are ready.';
+      toast({ title: translate($locale, 'Installer verified'), tone: 'success' });
+    } catch (cause) {
+      if (generation !== updateGeneration) return;
+      updateStatus = updateErrorCopy(cause);
+      toast({ title: translate($locale, 'Update download failed'), tone: 'danger' });
+    } finally {
+      updateBusy = false;
+    }
+  }
+  async function revealUpdate() {
+    if (!preparedUpdate) return;
+    try {
+      await walletService.revealUpdate(preparedUpdate.revealToken);
+    } catch (cause) {
+      updateStatus = updateErrorCopy(cause);
+    }
+  }
+  $effect(() => {
+    if (
+      notesPending &&
+      startupState === 'ready' &&
+      !otherModal &&
+      !updatesOpen &&
+      !initialApprovalWalletId
+    )
+      notesOpen = true;
+  });
   import { afterNavigate, beforeNavigate, goto } from '$app/navigation';
   import { isPrototypeWallet, walletService, WalletError } from '$lib/wallet';
   import {
@@ -661,6 +765,36 @@
 
   onMount(() => {
     initDenomination();
+    try {
+      updateOptIn = localStorage.getItem(UPDATE_OPT_IN) === 'true';
+      notesPending =
+        (!isPrototypeWallet || sessionStorage.getItem('fixture-whats-new') === '1') &&
+        localStorage.getItem(NOTES_DISMISSED) !== APP_VERSION;
+    } catch {
+      notesPending = !isPrototypeWallet;
+    }
+    const openUpdates = () => {
+      updatesOpen = true;
+    };
+    window.addEventListener('groot-open-updates', openUpdates);
+    const modalObserver = new MutationObserver(() => {
+      otherModal = [...document.querySelectorAll('[role="dialog"]')].some(
+        (node) => !node.querySelector('[data-app-release-dialog]')
+      );
+    });
+    modalObserver.observe(document.body, { childList: true, subtree: true });
+    const attemptUpdates = () => {
+      if (document.visibilityState !== 'visible' || isPrototypeWallet) return;
+      let last = 0;
+      try {
+        last = Number(localStorage.getItem(UPDATE_LAST_ATTEMPT));
+      } catch {
+        return;
+      }
+      if (shouldCheckUpdates(updateOptIn, last, Date.now())) void checkUpdates(true);
+    };
+    attemptUpdates();
+    const updateTimer = setInterval(attemptUpdates, 60 * 60 * 1000);
     commandModifier = usesCommandModifier(navigator.platform);
     desktopPlatform = isDesktopPlatform(
       navigator.platform,
@@ -733,6 +867,11 @@
     window.addEventListener('keydown', handleKeyboardShortcut);
     void resolveStartupRoute();
     return () => {
+      updateGeneration++;
+      void walletService.cancelUpdate().catch(() => undefined);
+      clearInterval(updateTimer);
+      modalObserver.disconnect();
+      window.removeEventListener('groot-open-updates', openUpdates);
       unsubscribe();
       liveSync?.stop();
       sessionMonitor?.stop();
@@ -809,6 +948,13 @@
           locked={walletLocked}
         />
         <BuildIdentity runtime={runtimeIdentity} placement="sidebar" />
+        <Button
+          size="sm"
+          variant="ghost"
+          onclick={() => {
+            updatesOpen = true;
+          }}>{translate($locale, 'Updates')}</Button
+        >
       </div>
     </aside>
 
@@ -913,7 +1059,7 @@
       }}
       onconfirm={discardSetupDraft}
     />
-    {#if !initialApprovalWalletId}<ToastHost />{/if}
+    {#if !initialApprovalWalletId && !notesOpen && !updatesOpen}<ToastHost />{/if}
   {/if}
 </div>
 
@@ -956,5 +1102,89 @@
       loadingLabel={translate($locale, 'Starting scan…')}
       onclick={approveInitialHistoryScan}>{translate($locale, 'Approve and scan')}</Button
     >
+  </div>
+</Modal>
+
+{#if updateOffer && !otherModal && !notesOpen && !updatesOpen && !initialApprovalWalletId}
+  <div class="app-update-action">
+    <Button
+      size="sm"
+      variant="secondary"
+      onclick={() => {
+        updatesOpen = true;
+      }}>{translate($locale, 'New update available')}</Button
+    >
+  </div>
+{/if}
+<Modal
+  open={notesOpen && !updatesOpen && !otherModal && !initialApprovalWalletId}
+  title={translate($locale, 'What’s new')}
+  description={APP_VERSION}
+  onclose={dismissNotes}
+>
+  <div class="modal-form" data-app-release-dialog>
+    <ul class="release-note-list">
+      {#each releaseNotes as note}<li>{translate($locale, note)}</li>{/each}
+    </ul>
+    {#if updateStatus === 'Could not save the app preference. Try again.'}<WarningNotice
+        body={translate($locale, updateStatus)}
+      />{/if}
+    <Button onclick={dismissNotes}>{translate($locale, 'Continue')}</Button>
+  </div>
+</Modal>
+<Modal
+  open={updatesOpen && !otherModal && !initialApprovalWalletId}
+  title={translate($locale, 'Updates')}
+  onclose={closeUpdates}
+>
+  <div class="modal-form" data-app-release-dialog>
+    <p>
+      {translate(
+        $locale,
+        'Checks contact GitHub and disclose your IP address and Groot version, never wallet data. Installation stays under your control.'
+      )}
+    </p>
+    <label class="check-row"
+      ><input
+        type="checkbox"
+        checked={updateOptIn}
+        onchange={(event) => {
+          const enabled = event.currentTarget.checked;
+          if (preference(UPDATE_OPT_IN, String(enabled))) updateOptIn = enabled;
+        }}
+      /><span>{translate($locale, 'Check automatically once a day')}</span></label
+    >
+    <p role="status">{translate($locale, updateStatus)}</p>
+    {#if updateOffer}<p>
+        {translate($locale, 'Groot v{version}', { version: updateOffer.version })}
+      </p>{/if}
+    {#if updateOffer && !updateOffer.verificationReady}<WarningNotice
+        body={translate(
+          $locale,
+          'Verified downloads are unavailable until the owner’s key and signed release assets are configured.'
+        )}
+      />{/if}
+    {#if preparedUpdate}
+      <p>{preparedUpdate.filename}</p>
+      <Button onclick={revealUpdate}>{translate($locale, 'Reveal installer')}</Button>
+    {:else if updateOffer}
+      <Button
+        loading={updateBusy}
+        loadingLabel={translate($locale, 'Downloading and verifying…')}
+        disabled={!updateOffer.verificationReady}
+        onclick={prepareUpdate}>{translate($locale, 'Download verified installer')}</Button
+      >
+    {/if}
+    <div class="modal-actions">
+      <Button
+        variant="secondary"
+        loading={updateBusy && !updateOffer}
+        loadingLabel={translate($locale, 'Checking for updates…')}
+        disabled={updateBusy}
+        onclick={() => checkUpdates()}>{translate($locale, 'Check for updates')}</Button
+      ><Button variant="ghost" onclick={closeUpdates}
+        >{translate($locale, updateBusy ? 'Cancel' : 'Close')}</Button
+      >
+    </div>
   </div>
 </Modal>

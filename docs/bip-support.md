@@ -57,6 +57,8 @@ Candidates are not commitments. Legacy P2SH multisig, arbitrary scripts, Taproot
 
 Update scope and evidence in the same change that changes standards behavior. Check current upstream records then; do not copy an old Draft/Deployed label into a current claim. Preserve parser bounds, network/private-material rejection and interoperability limitations. This cleanup changes no standards implementation or dependency; BIP impact is **documentation only**.
 
+App release/update preparation (ADR 0086) and 5.2 naming (ADR 0087) have **no BIP impact**: no key derivation, descriptor, transaction, protocol or wallet backup format changes. Experimental platform packaging does not extend physical interoperability evidence.
+
 ## Retained mobile evidence
 
 Refs #6: BIP129 EXTENDED-token encrypted setup, signed key records and exact final descriptor/key matching are implemented and tested on the mobile feature branch. This is not universal encrypted-BSMS interoperability or physical certification. BIP48 account 0, BIP174 PSBTv0 and standard descriptor checks remain authoritative. Active-network API integration and command scheduling introduce no new BIP or custom schema migration; current secure-store envelopes retain legacy reads. QR framing is not authentication. No encrypted relay is implemented.

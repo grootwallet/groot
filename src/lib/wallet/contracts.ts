@@ -5,3 +5,4 @@ export * from './contracts/multisig';
 export * from './contracts/port';
 export * from './contracts/runtime';
 export * from './contracts/transactions';
+export * from './contracts/updates';
