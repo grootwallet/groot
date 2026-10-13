@@ -1,5 +1,10 @@
 # Groot
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/brand/lockup-horizontal-reversed.svg" />
+  <img src="assets/brand/lockup-horizontal-ink.svg" alt="Groot" width="240" />
+</picture>
+
 A minimal onchain Bitcoin wallet and descriptor multisig coordinator built with SvelteKit, Tauri v2, BDK, and Miniscript. The v0.5.1 macOS desktop application is approved for Mainnet and provides restart-bound, isolated Regtest, Testnet4, and Mainnet namespaces. BDK owns Groot's wallet databases, while the Regtest Bitcoin Core `groot-dev` wallet is only the faucet and miner.
 
 The owner-certified release evidence is summarized in the
@@ -11,7 +16,6 @@ The owner-certified release evidence is summarized in the
 
 This repository, [`grootwallet/groot`](https://github.com/grootwallet/groot), is the wallet application: native desktop/mobile through Tauri plus the browser-based wallet prototype. It does not contain the marketing website.
 
-The public marketing website lives only in [`thibistaken/groot-site`](https://github.com/thibistaken/groot-site). That repository is canonical for marketing code, copy, screenshots, SEO metadata, and Vercel deployment. Product behavior and security evidence remain canonical here.
 
 ## Download and verify v0.5.1
 
