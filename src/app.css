@@ -12118,7 +12118,7 @@ code {
   max-width: calc(100vw - 40px);
 }
 body:has(.toast-region .toast) .app-update-action {
-  bottom: calc(100px + env(safe-area-inset-bottom));
+  display: none;
 }
 .release-note-list {
   padding-left: 20px;
@@ -12129,9 +12129,6 @@ body:has(.toast-region .toast) .app-update-action {
   .app-update-action {
     right: max(12px, env(safe-area-inset-right));
     bottom: calc(142px + env(safe-area-inset-bottom));
-  }
-  body:has(.toast-region .toast) .app-update-action {
-    bottom: calc(240px + env(safe-area-inset-bottom));
   }
 }
 body:has(input:focus, textarea:focus, [contenteditable='true']:focus) .app-update-action {
