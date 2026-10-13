@@ -126,6 +126,16 @@ pub struct KeyRecord {
 }
 
 impl PairingInvitation {
+    pub fn parse_json(content: &str, now: u64) -> Result<Self, CoordinationError> {
+        if content.len() > MAX_COORDINATION_RECORD_BYTES {
+            return Err(CoordinationError::TooLarge);
+        }
+        let invitation: Self =
+            serde_json::from_str(content).map_err(|_| CoordinationError::InvalidEncoding)?;
+        invitation.validate(now)?;
+        Ok(invitation)
+    }
+
     pub fn validate(&self, now: u64) -> Result<(), CoordinationError> {
         self.validate_after_acceptance()?;
         if self.expires_at <= now {
@@ -577,6 +587,42 @@ mod tests {
             token: "00112233445566778899aabbccddeeff".to_owned(),
             expires_at: 1_900,
         }
+    }
+
+    #[test]
+    fn direct_invitation_json_is_bounded_and_uses_the_same_authentication_checks() {
+        assert_eq!(
+            PairingInvitation::parse_json(&" ".repeat(MAX_COORDINATION_RECORD_BYTES + 1), 1_000),
+            Err(CoordinationError::TooLarge)
+        );
+        assert_eq!(
+            PairingInvitation::parse_json("{", 1_000),
+            Err(CoordinationError::InvalidEncoding)
+        );
+        let original = invitation();
+        let encoded = serde_json::to_string(&original).unwrap();
+        assert_eq!(
+            PairingInvitation::parse_json(&encoded, 1_000).unwrap(),
+            original
+        );
+        let at_limit = format!(
+            "{encoded}{}",
+            " ".repeat(MAX_COORDINATION_RECORD_BYTES - encoded.len())
+        );
+        assert_eq!(
+            PairingInvitation::parse_json(&at_limit, 1_000).unwrap(),
+            original
+        );
+        assert_eq!(
+            PairingInvitation::parse_json(&encoded, 1_900),
+            Err(CoordinationError::ExpiredInvitation)
+        );
+        let mut foreign = original;
+        foreign.network = "mainnet".to_owned();
+        assert_eq!(
+            PairingInvitation::parse_json(&serde_json::to_string(&foreign).unwrap(), 1_000),
+            Err(CoordinationError::WrongNetwork)
+        );
     }
 
     fn descriptor_record() -> String {

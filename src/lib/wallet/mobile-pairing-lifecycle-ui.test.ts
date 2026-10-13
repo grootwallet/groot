@@ -174,9 +174,10 @@ describe('mobile pairing lifecycle UI', () => {
     expect(appShellSource).toContain('selectedWalletId = event.profile.id;');
   });
 
-  it('keeps signing keys before backup actions and limits live checks to desktop USB signers', () => {
+  it('keeps signing keys before backup actions and limits hardware checks to desktop device capabilities', () => {
     expect(appStyles).not.toMatch(/\.vault-backup-card\s*\{\s*order:\s*-1/);
-    expect(multisigRouteSource).toContain("selectedSigner?.source === 'usb'");
+    expect(multisigRouteSource).toContain('selectedSigner?.deviceType');
+    expect(multisigRouteSource).toContain("selectedSigner.deviceType !== 'groot-mobile'");
     expect(multisigRouteSource).toContain("coordination?.role !== 'mobile_cosigner'");
   });
 

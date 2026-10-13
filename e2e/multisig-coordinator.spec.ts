@@ -1039,7 +1039,7 @@ test('keeps advanced wallet actions compact with one multipath descriptor', asyn
   await descriptors.getByRole('button', { name: 'Close' }).click();
 });
 
-test('shows signer details without offering checks for non-interactive signers', async ({
+test('keeps hardware checks available for imported signers and hides them for offline keys', async ({
   page
 }) => {
   await page.goto('/multisig');
@@ -1090,7 +1090,7 @@ test('shows signer details without offering checks for non-interactive signers',
   await page.reload();
   await page.getByRole('button', { name: 'View Coldcard details' }).click();
   const restoredDetails = page.getByRole('dialog', { name: 'Coldcard' });
-  await expect(restoredDetails.getByRole('button', { name: 'Check signer' })).toHaveCount(0);
+  await expect(restoredDetails.getByRole('button', { name: 'Check signer' })).toBeVisible();
 });
 
 test('uses the same wallet navigation for a multisig policy', async ({ page }) => {

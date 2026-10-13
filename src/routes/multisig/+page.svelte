@@ -955,7 +955,9 @@
   onclose={() => (selectedSigner = null)}
   oncheck={selectedSigner && signerDeviceContext(selectedSigner) === LOCAL_MOBILE_SIGNER_CONTEXT
     ? openPhoneHealthCheck
-    : selectedSigner?.source === 'usb' && coordination?.role !== 'mobile_cosigner'
+    : selectedSigner?.deviceType &&
+        selectedSigner.deviceType !== 'groot-mobile' &&
+        coordination?.role !== 'mobile_cosigner'
       ? runHealthCheck
       : undefined}
   onpolicy={selectedSigner && !signerDeviceContext(selectedSigner)

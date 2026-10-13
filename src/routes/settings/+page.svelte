@@ -1241,7 +1241,10 @@
       const backup = await walletService.exportExternalSignerDescriptor(hardwareBackupPin);
       hardwareBackup = backup.descriptor;
       hardwareBackupContent = backup.content;
-      hardwareBackupFrames = await walletService.encodeWatchOnlyQr(backup.content);
+      hardwareBackupFrames =
+        defaultConfig.network === 'mainnet'
+          ? []
+          : await walletService.encodeWatchOnlyQr(backup.content);
       hardwareBackupPin = '';
       toast({
         title: 'Public descriptor ready',

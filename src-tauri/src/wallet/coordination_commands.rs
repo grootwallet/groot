@@ -205,9 +205,8 @@ pub async fn coordination_mobile_accept(
         let state = app.state::<AppState>();
         let _operation = operation_guard(&state)?;
         validate_credential(credential.as_str())?;
-        let invitation: PairingInvitation = serde_json::from_str(&invitation_json)
-            .map_err(|_| invalid_payload("The pairing invitation is malformed."))?;
-        invitation.validate(now()).map_err(coordination_api_error)?;
+        let invitation = PairingInvitation::parse_json(&invitation_json, now())
+            .map_err(coordination_api_error)?;
         let label = signer_label.trim();
         if label.is_empty() || label.chars().count() > 48 {
             return Err(api_error(
