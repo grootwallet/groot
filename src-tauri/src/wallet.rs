@@ -5478,6 +5478,16 @@ fn proposal_signing_context(
         });
     };
 
+    let analysis = analyze_template(template, &metadata.cosigners).map_err(recovery_api_error)?;
+    if analysis.external_descriptor != metadata.external_descriptor
+        || analysis.internal_descriptor != metadata.internal_descriptor
+        || analysis.paths != metadata.spending_paths
+    {
+        return Err(api_error(
+            "wallet_corrupt",
+            "The spending paths do not match the wallet descriptors.",
+        ));
+    }
     let (required, signer_ids) = match template {
         RecoveryTemplate::Recovery {
             immediate,
@@ -7841,31 +7851,52 @@ fn immediate_policy_path(wallet: &Wallet, keychain: KeychainKind) -> ApiResult<P
         .policies(keychain)
         .map_err(internal)?
         .ok_or_else(|| api_error("wallet_corrupt", "The wallet spending policy is missing."))?;
-    let SatisfiableItem::Thresh { items, threshold } = &policy.item else {
+    if !policy_contains_relative_timelock(&policy.item) {
         return Err(api_error(
             "wallet_corrupt",
             "The delayed wallet spending policy is not selectable.",
         ));
-    };
-    if *threshold != 1 || items.len() != 2 {
+    }
+    let path = lock_free_policy_path(&policy).ok_or_else(|| {
+        api_error(
+            "spending_path_unavailable",
+            "This policy has no supported immediate spending path.",
+        )
+    })?;
+    if !policy.get_condition(&path).map_err(internal)?.is_null() {
         return Err(api_error(
             "wallet_corrupt",
-            "The delayed wallet spending policy has an unexpected branch shape.",
+            "The immediate spending path contains a timelock.",
         ));
     }
-    let candidates = items
-        .iter()
-        .enumerate()
-        .filter(|(_, item)| !policy_contains_relative_timelock(&item.item))
-        .map(|(index, _)| index)
-        .collect::<Vec<_>>();
-    if candidates.len() != 1 {
-        return Err(api_error(
-            "wallet_corrupt",
-            "The immediate wallet spending branch is ambiguous.",
-        ));
+    Ok(path)
+}
+
+// The compiler may nest a lock-free threshold inside a subtree that also
+// contains delayed alternatives (Family continuity). Select conditions
+// recursively rather than rejecting that entire subtree at the root.
+fn lock_free_policy_path(policy: &bdk_wallet::descriptor::policy::Policy) -> Option<PolicyPath> {
+    match &policy.item {
+        SatisfiableItem::EcdsaSignature(_) | SatisfiableItem::Multisig { .. } => {
+            Some(PolicyPath::new())
+        }
+        SatisfiableItem::Thresh { items, threshold } => {
+            let mut path = PolicyPath::new();
+            let mut selected = Vec::new();
+            for (index, item) in items.iter().enumerate() {
+                if let Some(child) = lock_free_policy_path(item) {
+                    selected.push(index);
+                    path.extend(child);
+                }
+            }
+            if selected.len() < *threshold {
+                return None;
+            }
+            path.insert(policy.id.clone(), selected);
+            Some(path)
+        }
+        _ => None,
     }
-    Ok([(policy.id, vec![candidates[0]])].into_iter().collect())
 }
 
 fn immediate_policy_paths(wallet: &Wallet) -> ApiResult<Vec<KeychainPolicyPath>> {

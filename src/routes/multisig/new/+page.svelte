@@ -1372,10 +1372,7 @@
                   ><Check size={16} strokeWidth={3} /></span
                 >{/if}</button
             >
-            <button
-              class="policy-kind-card recovery"
-              type="button"
-              disabled
+            <button class="policy-kind-card recovery" type="button" disabled
               ><span class="policy-kind-icon"><ShieldCheck size={21} /></span><span
                 class="policy-kind-copy"
                 ><strong>{translate($locale, 'Partner continuity')}</strong><small
@@ -1390,10 +1387,7 @@
                   aria-hidden="true"><Check size={16} strokeWidth={3} /></span
                 >{/if}</button
             >
-            <button
-              class="policy-kind-card inheritance"
-              type="button"
-              disabled
+            <button class="policy-kind-card inheritance" type="button" disabled
               ><span class="policy-kind-icon"><Clock3 size={21} /></span><span
                 class="policy-kind-copy"
                 ><strong>{translate($locale, 'Family continuity')}</strong><small

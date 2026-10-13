@@ -30,7 +30,7 @@ This page describes the checked-in `5.2.0-rc02` feedback branch. Public v0.5.1 i
 - Decaying/expanding policies are experimental foundations, not supported creation paths.
 - Payjoin V2 recognizes requests and rejects unsupported fallback; sender/receiver sessions and transport are not implemented.
 - Windows, Linux, iOS and Android public releases are not certified. Passive USB discovery is macOS-only; Windows production HWI verification fails closed.
-- Mobile pairing and continuity/Miniscript development live on separate feature branches; their presence is not merged support.
+- This retained Miniscript branch adds fixed Partner/Family policy compilation, role validation, primary BDK path selection and descriptor recovery checks (Refs #17). Creation remains disabled with Coming soon; named delayed paths, renewal, all-path funded evidence and exact-device certification remain blockers. Mobile pairing stays on its separate branch.
 - No cloud backup, custodial key service, Lightning, Taproot wallet, or hosted remote signing service is implemented.
 
 ## Maintaining this page

@@ -4465,9 +4465,13 @@ fn manual_selection_rejects_empty_malformed_duplicate_and_frozen_outpoints() {
 }
 
 fn descriptor_backup() -> MultisigBackupDto {
+    descriptor_backup_with_signers(4)
+}
+
+fn descriptor_backup_with_signers(count: u8) -> MultisigBackupDto {
     let secp = Secp256k1::new();
     let path = DerivationPath::from_str(multisig_account_path()).unwrap();
-    let cosigners = (1_u8..=4)
+    let cosigners = (1_u8..=count)
         .map(|index| {
             let master = Xpriv::new_master(NetworkKind::Test, &[index; 32]).unwrap();
             let account = master.derive_priv(&secp, &path).unwrap();
@@ -4534,6 +4538,89 @@ fn delayed_policies_fail_closed_at_the_hwi_boundary() {
         })
         .collect::<Vec<_>>();
     assert!(reject_usb_cosigners_for_delayed_policy(&offline).is_ok());
+}
+
+#[test]
+fn continuity_primary_paths_preserve_roles_and_descriptor_identity() {
+    for (template, count, eligible) in [
+        (
+            RecoveryTemplate::PartnerContinuityV1 {
+                owner: SpendingPath::new(2, ["key-1", "key-2", "key-3"]),
+                partner: SpendingPath::new(2, ["key-4", "key-5"]),
+                estate: SpendingPath::new(2, ["key-6", "key-7", "key-8"]),
+            },
+            8,
+            3,
+        ),
+        (
+            RecoveryTemplate::FamilyContinuityV1 {
+                parents: SpendingPath::new(2, ["key-1", "key-2"]),
+                child_assistance: SpendingPath::new(1, ["key-3", "key-4"]),
+                child_inheritance: SpendingPath::new(2, ["key-5", "key-6"]),
+                executor_signer_id: "key-7".to_owned(),
+            },
+            7,
+            2,
+        ),
+    ] {
+        let mut metadata = descriptor_backup_with_signers(count).wallet;
+        let analysis = analyze_template(&template, &metadata.cosigners).unwrap();
+        metadata.external_descriptor = analysis.external_descriptor;
+        metadata.internal_descriptor = analysis.internal_descriptor;
+        metadata.spending_paths = analysis.paths;
+        metadata.policy_type = recovery_policy_type(&template).to_owned();
+        metadata.recovery_template = Some(template);
+        let wallet = Wallet::create(
+            metadata.external_descriptor.clone(),
+            metadata.internal_descriptor.clone(),
+        )
+        .network(network())
+        .create_wallet_no_persist()
+        .unwrap();
+        assert_eq!(immediate_policy_paths(&wallet).unwrap().len(), 2);
+        let db = Connection::open_in_memory().unwrap();
+        init_app_schema(&db).unwrap();
+        let signing = proposal_signing_context(&db, &metadata, "legacy-primary").unwrap();
+        assert_eq!(signing.required, 2);
+        assert_eq!(
+            signing.fingerprint_strings,
+            (1..=eligible)
+                .map(|index| metadata
+                    .cosigners
+                    .iter()
+                    .find(|key| key.id == format!("key-{index}"))
+                    .unwrap()
+                    .fingerprint
+                    .clone())
+                .collect::<Vec<_>>()
+        );
+        assert_eq!(
+            require_hwi_supported_multisig_policy(&metadata)
+                .unwrap_err()
+                .code,
+            "hardware_policy_unsupported"
+        );
+        // Legacy backup readers still derive the same exact policy and first address.
+        let backup = MultisigBackupDto {
+            version: 1,
+            network: network_name().to_owned(),
+            wallet: metadata.clone(),
+        };
+        let restored = validate_multisig_backup(&serde_json::to_string(&backup).unwrap())
+            .unwrap()
+            .wallet;
+        assert_eq!(
+            first_multisig_address(&restored).unwrap(),
+            first_multisig_address(&metadata).unwrap()
+        );
+        metadata.spending_paths[0].threshold = 1;
+        assert_eq!(
+            proposal_signing_context(&db, &metadata, "legacy-primary")
+                .unwrap_err()
+                .code,
+            "wallet_corrupt"
+        );
+    }
 }
 
 #[test]

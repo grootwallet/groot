@@ -136,7 +136,7 @@ fn multisig_tx_prepare_blocking(
         validate_supported_payment_destination(&address)?;
         let (applied_fee_rate, rate) = validate_fee_rate(&fee_rate)?;
         let metadata = read_multisig_metadata(&app)?;
-        let uses_delayed_policy = delayed_policy_context(&metadata)?.is_some();
+        let uses_delayed_policy = metadata.recovery_template.is_some();
         let mut db = open_multisig_db(&app)?;
         let mut transaction = db.transaction().map_err(internal)?;
         let selection_strategy = coin_selection.strategy_name().to_owned();
@@ -534,7 +534,7 @@ fn multisig_tx_max_spend_blocking(
         })?;
     validate_supported_payment_destination(&address)?;
     let (_applied, rate) = validate_fee_rate(&fee_rate)?;
-    let uses_delayed_policy = selected_delayed_policy_context(&app)?.is_some();
+    let uses_delayed_policy = read_multisig_metadata(&app)?.recovery_template.is_some();
     let mut db = open_multisig_db(&app)?;
     let mut transaction = db.transaction().map_err(internal)?;
     let frozen = frozen_outpoints(&transaction)?;

@@ -1347,7 +1347,7 @@ test('offers safe recipes and advanced M-of-N control', async ({ page }, testInf
     await expect(selectedMark).toBeVisible();
     await expect(selectedMark).toHaveCSS('stroke', 'rgb(255, 255, 255)');
   }
-  const assistedRecovery = page.getByRole('button', { name: /^Assisted recovery/ });
+  const assistedRecovery = page.getByRole('button', { name: /^Family continuity/ });
   await expect(assistedRecovery).toBeDisabled();
   await expect(assistedRecovery).toContainText('Coming soon');
   await page.getByRole('button', { name: /^Standard/ }).click();
@@ -2228,12 +2228,14 @@ test('keeps untested timelocked creation disabled and defaults to standard 2-of-
   page
 }) => {
   await page.goto('/multisig/new');
-  await expect(page.getByRole('button', { name: /^Recovery/ })).toBeDisabled();
-  await expect(page.getByRole('button', { name: /^Recovery/ })).toContainText('Coming soon');
+  await expect(page.getByRole('button', { name: /^Partner continuity/ })).toBeDisabled();
+  await expect(page.getByRole('button', { name: /^Partner continuity/ })).toContainText(
+    'Coming soon'
+  );
   await expect(
-    page.getByText('A smaller signer group can recover the wallet after a delay.')
+    page.getByText('Your 2 of 3 now, guided access for your partner later.')
   ).toBeVisible();
-  await expect(page.getByRole('button', { name: /^Assisted recovery/ })).toBeDisabled();
+  await expect(page.getByRole('button', { name: /^Family continuity/ })).toBeDisabled();
   await page.getByRole('button', { name: /^Standard/ }).click();
   await page.getByRole('button', { name: 'Continue', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Standard multisig' })).toBeVisible();

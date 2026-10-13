@@ -81,3 +81,7 @@ App logs contain allowlisted lifecycle/outcome codes and safe scalar context, ne
 ## Exclusions
 
 No cloud backup, editable permanent labels, Lightning, address book, arbitrary policy editor, terminated-app push or Payjoin sessions. Public platform support and future policy/services require the [roadmap](roadmap.md) gates. The Apache-2.0 core must remain recoverable and usable without paid services.
+
+## Retained Miniscript track
+
+Partner and Family continuity are fixed native-SegWit policy foundations under proposed ADR 0050. Primary proposals select a lock-free BDK path and only the owner/parent roles may count toward signing. Delayed role paths remain unavailable through the coordinator. Creation stays disabled until all-path funded, recovery and exact-device evidence is complete. Existing version-1 backups and drafts remain readable; no profile or proposal migration is introduced.

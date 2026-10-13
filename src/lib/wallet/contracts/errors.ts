@@ -63,6 +63,8 @@ export const WALLET_ERROR_CODES = [
   'hardware_unavailable',
   'hardware_pairing_required',
   'hardware_policy_unsupported',
+  'spending_path_unavailable',
+  'invalid_continuity_template',
   'hardware_policy_name_conflict',
   'hardware_verification_invalid',
   'hardware_not_approved',

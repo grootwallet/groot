@@ -29,3 +29,7 @@ No private key, email address, account token, notification credential, or billin
 The setup UI reuses the existing policy cards, progress, timeline, signer list, review, and backup primitives. A shared role-to-template function prevents creation and draft restoration from assigning signers differently.
 
 The immediate owner/parent path is constrained to its intended signers. Named delayed-path proposal selection, renewal orchestration, mobile phone-key custody, physical signer certification, and end-to-end inheritance drills remain release blockers; the app must not imply those gates are complete.
+
+## Current integration boundary
+
+The proposed policy shapes are retained, but creation is disabled with Coming soon on this branch. Mainnet is available only for the separately authorized existing application scope; it does not authorize Continuity. The current primary selector and backup checks are native foundations, not funded all-path or device certification. The old development candidate is historical evidence only.

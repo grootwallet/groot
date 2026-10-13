@@ -73,3 +73,7 @@ Public descriptor/BSMS/JSON and PSBT/UR imports are bounded, parsed natively, ne
 Allowlisted diagnostics retain stable codes and coarse scalar context, never arbitrary errors or sensitive payloads. Clipboard is explicit and typed; no secret reads or analytics sink. The [security model](security-model.md) owns control details.
 
 [Current status](implementation-status.md) owns capability claims, [ADRs](adr/) own decisions, and the [Mainnet checklist](mainnet-release-checklist.md) owns exact-candidate evidence. Release/source-hash guards, provenance and signatures are independent of runtime tests. Documentation cleanup does not refresh authorization or reviewed-source hashes.
+
+## Retained Miniscript boundary
+
+Rust compiles fixed Continuity roles and derives primary BDK conditions recursively, checking that no timelock survives selection. Proposal signer context recompiles and compares descriptors and path metadata before counting eligible owner/parent keys. Existing primary/delayed proposal persistence is unchanged; named Continuity delayed paths require a separate reviewed design.
