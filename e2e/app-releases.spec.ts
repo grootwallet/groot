@@ -73,7 +73,9 @@ test('updates handles offline retry, no update, verification failure and prepare
   await modal.getByRole('button', { name: 'Close', exact: true }).last().click();
   await expect(modal).toBeHidden();
   const action = page.getByRole('button', { name: 'New update available', exact: true });
-  await expect(action).toBeVisible();
+  if (await page.locator('.toast-region .toast').last().isVisible())
+    await expect(action).toBeHidden();
+  await expect(action).toBeVisible({ timeout: 10_000 });
   await action.click();
   await expect(modal).toBeVisible({ timeout: 20_000 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
