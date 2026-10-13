@@ -1122,6 +1122,24 @@
     <WalletSkeleton variant="balance" />
   {/if}
   {#if !loadError}
+    {#if pendingMobilePairingCount > 0}
+      <a
+        class="active-proposal-callout"
+        href="/mobile/pair"
+        aria-label={translate($locale, 'Resume wallet pairing')}
+      >
+        <span class="active-proposal-icon"><Smartphone size={17} /></span>
+        <span class="active-proposal-copy"
+          ><strong>{translate($locale, 'Wallet pairing in progress')}</strong><span
+            class="active-proposal-meta"
+            ><small>{translate($locale, 'Phone signer setup is waiting to finish')}</small></span
+          ></span
+        >
+        <span class="active-proposal-action"
+          >{translate($locale, 'Resume')} <ChevronRight size={15} /></span
+        >
+      </a>
+    {/if}
     {#if secondaryError}
       <LoadFailure
         title={translate($locale, 'Wallet details are unavailable')}

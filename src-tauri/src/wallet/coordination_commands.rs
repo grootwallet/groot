@@ -1,5 +1,5 @@
-use crate::build_network::{name, network, multisig_account_path};
 use super::*;
+use crate::build_network::{multisig_account_path, name, network};
 use crate::{
     coordination::{
         decrypt_bip129, derive_mobile_account, encrypt_bip129, CoordinationError, DeviceRole,
@@ -37,6 +37,15 @@ pub fn coordination_status(
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> ApiResult<CoordinationStatusDto> {
+    if name() == "mainnet" {
+        return Ok(CoordinationStatusDto {
+            shared: false,
+            role: None,
+            can_sign_on_this_device: false,
+            mobile_signer_fingerprint: None,
+            key_protection: None,
+        });
+    }
     let profile = selected_profile(&app)?;
     if profile.kind != WalletKind::Multisig {
         return Ok(CoordinationStatusDto {
@@ -83,6 +92,12 @@ pub fn coordination_watch_only_encode(content: String) -> ApiResult<Vec<String>>
 
 #[tauri::command]
 pub fn coordination_watch_only_decode(frames: Vec<String>) -> ApiResult<String> {
+    if name() == "mainnet" {
+        return Err(api_error(
+            "unsupported_operation",
+            "Mobile coordination is not available on Mainnet.",
+        ));
+    }
     let payload = coordination_transport::decode(CoordinationUrType::Wallet, &frames)
         .map_err(coordination_ur_api_error)?;
     let content = String::from_utf8(payload)
@@ -237,6 +252,7 @@ pub async fn coordination_mobile_accept(
             &pending_mobile_secret_path(&app, &invitation.session_id)?,
             &staged,
             credential.as_str(),
+            wallet_secret_context(staging_session_uuid(&invitation.session_id)?),
         )
         .map_err(secure_store_error)?;
         Ok(PairingResponseDto {
@@ -282,7 +298,11 @@ pub fn coordination_mobile_resume(
     check_staging_auth_throttle(&state, session_uuid)?;
     reconcile_mobile_pairing_storage(&app)?;
     let staged_path = pending_mobile_secret_path(&app, &session_id)?;
-    let staging = secure_store::load(&staged_path, credential.as_str());
+    let staging = secure_store::load(
+        &staged_path,
+        credential.as_str(),
+        wallet_secret_context(session_uuid),
+    );
     record_staging_attempt(&state, session_uuid, &staging)?;
     let staged_bytes = Zeroizing::new(staging.map_err(secure_store_error)?);
     let staged: PendingMobileSecret = serde_json::from_slice(&staged_bytes)
@@ -320,7 +340,11 @@ pub fn coordination_mobile_await_final(
     check_staging_auth_throttle(&state, session_uuid)?;
     reconcile_mobile_pairing_storage(&app)?;
     let staged_path = pending_mobile_secret_path(&app, &session_id)?;
-    let staging = secure_store::load(&staged_path, credential.as_str());
+    let staging = secure_store::load(
+        &staged_path,
+        credential.as_str(),
+        wallet_secret_context(session_uuid),
+    );
     record_staging_attempt(&state, session_uuid, &staging)?;
     let staged_bytes = Zeroizing::new(staging.map_err(secure_store_error)?);
     let mut staged: PendingMobileSecret = serde_json::from_slice(&staged_bytes)
@@ -337,7 +361,13 @@ pub fn coordination_mobile_await_final(
         .map_err(coordination_api_error)?;
     staged.awaiting_final_policy = true;
     let staged = Zeroizing::new(serde_json::to_vec(&staged).map_err(internal)?);
-    secure_store::store(&staged_path, &staged, credential.as_str()).map_err(secure_store_error)
+    secure_store::store(
+        &staged_path,
+        &staged,
+        credential.as_str(),
+        wallet_secret_context(session_uuid),
+    )
+    .map_err(secure_store_error)
 }
 
 fn pairing_response_from_staged(staged: &PendingMobileSecret) -> ApiResult<PairingResponseDto> {
@@ -753,7 +783,11 @@ pub fn coordination_mobile_complete(
     let session_uuid = staging_session_uuid(&envelope.session_id)?;
     check_staging_auth_throttle(&state, session_uuid)?;
     let staged_path = pending_mobile_secret_path(&app, &envelope.session_id)?;
-    let staging = secure_store::load(&staged_path, credential.as_str());
+    let staging = secure_store::load(
+        &staged_path,
+        credential.as_str(),
+        wallet_secret_context(session_uuid),
+    );
     record_staging_attempt(&state, session_uuid, &staging)?;
     let staged_bytes = Zeroizing::new(staging.map_err(secure_store_error)?);
     let staged: PendingMobileSecret = serde_json::from_slice(&staged_bytes)
@@ -821,6 +855,7 @@ pub fn coordination_mobile_complete(
             &dir.join("secret.json"),
             format!("groot-multisig:{}", wallet.external_descriptor).as_bytes(),
             credential.as_str(),
+            wallet_secret_context(id),
         )
         .map_err(secure_store_error)?;
         // The PIN gates this local envelope. It is intentionally not a BIP39 passphrase.
@@ -828,6 +863,7 @@ pub fn coordination_mobile_complete(
             &dir.join("mobile-signer.json"),
             staged.mnemonic.as_bytes(),
             credential.as_str(),
+            wallet_secret_context(id),
         )
         .map_err(secure_store_error)?;
         write_private_json(&dir.join("wallet.json"), &wallet)?;
@@ -921,12 +957,14 @@ pub async fn coordination_mobile_recover(
                 &dir.join("secret.json"),
                 format!("groot-multisig:{}", validated.wallet.external_descriptor).as_bytes(),
                 credential.as_str(),
+                wallet_secret_context(id),
             )
             .map_err(secure_store_error)?;
             secure_store::store(
                 &dir.join("mobile-signer.json"),
                 mnemonic_words.as_bytes(),
                 credential.as_str(),
+                wallet_secret_context(id),
             )
             .map_err(secure_store_error)?;
             write_private_json(&dir.join("wallet.json"), &validated.wallet)?;
@@ -1010,6 +1048,7 @@ pub fn coordination_mobile_signer_check(
     let loaded = secure_store::load(
         &profile_directory(&app, profile.id)?.join("mobile-signer.json"),
         credential.as_str(),
+        wallet_secret_context(profile.id),
     )
     .map_err(secure_store_error);
     record_auth_result(&app, &state, &loaded)?;
@@ -1071,6 +1110,7 @@ pub fn coordination_mobile_sign_psbt(
     let loaded = secure_store::load(
         &profile_directory(&app, profile.id)?.join("mobile-signer.json"),
         credential.as_str(),
+        wallet_secret_context(profile.id),
     )
     .map_err(secure_store_error);
     record_auth_result(&app, &state, &loaded)?;

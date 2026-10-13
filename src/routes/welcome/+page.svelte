@@ -397,36 +397,42 @@
             ><ArrowRight class="wallet-type-arrow" size={17} /></span
           >
         </button>
-        {#if defaultConfig.network !== 'mainnet'}<a class="wallet-type-card multisig" href="/mobile/pair">
-          <span class="wallet-type-icon"><Smartphone size={20} /></span>
-          <span class="wallet-type-copy"
-            ><strong>{translate($locale, 'Connect desktop app')}</strong><small
-              >{translate($locale, 'Add this phone as one signer in a shared wallet.')}</small
-            ></span
+        {#if defaultConfig.network !== 'mainnet'}<a
+            class="wallet-type-card multisig"
+            href="/mobile/pair"
           >
-          <span class="wallet-type-meta">{translate($locale, 'No account')}</span>
-          <ArrowRight class="wallet-type-arrow" size={17} />
-        </a>
-        <a class="wallet-type-card multisig" href="/mobile/recover">
-          <span class="wallet-type-icon"><RotateCcw size={20} /></span>
-          <span class="wallet-type-copy"
-            ><strong>{translate($locale, 'Restore phone signer')}</strong><small
-              >{translate($locale, 'Recover a shared wallet from desktop and its 24 words.')}</small
-            ></span
-          >
-          <span class="wallet-type-meta">{translate($locale, 'Replacement phone')}</span>
-          <ArrowRight class="wallet-type-arrow" size={17} />
-        </a>
-        <a class="wallet-type-card hardware" href="/mobile/watch">
-          <span class="wallet-type-icon"><Eye size={20} /></span>
-          <span class="wallet-type-copy"
-            ><strong>{translate($locale, 'Watch desktop wallet')}</strong><small
-              >{translate($locale, 'Import a hardware wallet without its signing key.')}</small
-            ></span
-          >
-          <span class="wallet-type-meta">{translate($locale, 'Watch-only')}</span>
-          <ArrowRight class="wallet-type-arrow" size={17} />
-        </a>{/if}
+            <span class="wallet-type-icon"><Smartphone size={20} /></span>
+            <span class="wallet-type-copy"
+              ><strong>{translate($locale, 'Connect desktop app')}</strong><small
+                >{translate($locale, 'Add this phone as one signer in a shared wallet.')}</small
+              ></span
+            >
+            <span class="wallet-type-meta">{translate($locale, 'No account')}</span>
+            <ArrowRight class="wallet-type-arrow" size={17} />
+          </a>
+          <a class="wallet-type-card multisig" href="/mobile/recover">
+            <span class="wallet-type-icon"><RotateCcw size={20} /></span>
+            <span class="wallet-type-copy"
+              ><strong>{translate($locale, 'Restore phone signer')}</strong><small
+                >{translate(
+                  $locale,
+                  'Recover a shared wallet from desktop and its 24 words.'
+                )}</small
+              ></span
+            >
+            <span class="wallet-type-meta">{translate($locale, 'Replacement phone')}</span>
+            <ArrowRight class="wallet-type-arrow" size={17} />
+          </a>
+          <a class="wallet-type-card hardware" href="/mobile/watch">
+            <span class="wallet-type-icon"><Eye size={20} /></span>
+            <span class="wallet-type-copy"
+              ><strong>{translate($locale, 'Watch desktop wallet')}</strong><small
+                >{translate($locale, 'Import a hardware wallet without its signing key.')}</small
+              ></span
+            >
+            <span class="wallet-type-meta">{translate($locale, 'Watch-only')}</span>
+            <ArrowRight class="wallet-type-arrow" size={17} />
+          </a>{/if}
       </div>
     {:else if mode === 'create'}
       <button

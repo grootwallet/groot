@@ -37,7 +37,7 @@ impl Drop for MobileAccount {
 
 use crate::{
     bsms::DescriptorRecord,
-    build_network::{name, multisig_account_path, parameters},
+    build_network::{multisig_account_path, name, parameters},
     multisig::{CosignerInput, PolicyInput},
 };
 
@@ -145,7 +145,7 @@ impl PairingInvitation {
         if self.version != 1 {
             return Err(CoordinationError::UnsupportedVersion);
         }
-        if self.network != name() {
+        if self.network != name() || self.network == "mainnet" {
             return Err(CoordinationError::WrongNetwork);
         }
         if self.session_id.is_empty()
@@ -170,7 +170,7 @@ impl PublicWalletRecord {
         if self.version != 2 {
             return Err(CoordinationError::UnsupportedVersion);
         }
-        if self.network != name() {
+        if self.network != name() || self.network == "mainnet" {
             return Err(CoordinationError::WrongNetwork);
         }
         if self.wallet_id.is_empty()
@@ -324,6 +324,9 @@ impl KeyRecord {
 pub fn derive_mobile_account(
     mnemonic: &bip39::Mnemonic,
 ) -> Result<(Fingerprint, MobileAccount, Xpub), CoordinationError> {
+    if name() == "mainnet" {
+        return Err(CoordinationError::WrongNetwork);
+    }
     // Multisig recovery is intentionally words-only. The local app PIN never enters BIP39.
     let seed = Zeroizing::new(mnemonic.to_seed(""));
     let master = MobileAccount(

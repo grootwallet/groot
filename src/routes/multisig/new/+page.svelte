@@ -1368,7 +1368,9 @@
     } catch (cause) {
       createErrorTitle = 'Phone pairing still incomplete';
       error = localizedError(cause, $locale, 'Could not prepare the final wallet QR.');
-    } finally { busy = false; }
+    } finally {
+      busy = false;
+    }
   }
 
   async function openExistingWallet() {
@@ -2152,22 +2154,24 @@
             >{/if}
         </WarningNotice>{/if}
       {#if createdWalletNeedsFinalPolicy}
-        <Button class="full" loading={busy} onclick={retryFinalPolicyQr}>{translate($locale, 'Retry final phone QR')}</Button>
-      {:else}<div class="coordinator-actions">
-        <Button variant="secondary" disabled={busy} onclick={() => (stage = 'review')}>
-          <ArrowLeft size={16} />{translate($locale, 'Back to verification')}
-        </Button>
-        <Button
-          size="large"
-          disabled={!saved ||
-            !policyReadinessAcknowledged ||
-            !credential ||
-            credential !== confirmation}
-          loading={busy}
-          loadingLabel={translate($locale, 'Creating wallet…')}
-          onclick={create}>{translate($locale, 'Create wallet')}</Button
+        <Button class="full" loading={busy} onclick={retryFinalPolicyQr}
+          >{translate($locale, 'Retry final phone QR')}</Button
         >
-      </div>
+      {:else}<div class="coordinator-actions">
+          <Button variant="secondary" disabled={busy} onclick={() => (stage = 'review')}>
+            <ArrowLeft size={16} />{translate($locale, 'Back to verification')}
+          </Button>
+          <Button
+            size="large"
+            disabled={!saved ||
+              !policyReadinessAcknowledged ||
+              !credential ||
+              credential !== confirmation}
+            loading={busy}
+            loadingLabel={translate($locale, 'Creating wallet…')}
+            onclick={create}>{translate($locale, 'Create wallet')}</Button
+          >
+        </div>
       {/if}
     </section>
   {/if}
@@ -2216,7 +2220,7 @@
   onclose={closeSignerPicker}
 >
   <div class="source-list">
-    {#if templateKind === 'standard'}<button
+    {#if templateKind === 'standard' && defaultConfig.network !== 'mainnet'}<button
         disabled={hasGrootPhoneSigner}
         onclick={startMobilePairing}
         ><Smartphone size={18} /><span
@@ -2289,14 +2293,15 @@
 >
   <div class="mobile-pairing-flow">
     {#if mobilePairAccepted}
-      <div class="warning-box" role="status">
-        <ShieldCheck size={17} /><strong>{translate($locale, 'Phone key added')}</strong><span
-          >{translate(
-            $locale,
-            'Keep the phone on its waiting screen. After you add the remaining signers and create the wallet, desktop will show one final QR for the phone.'
-          )}</span
-        >
-      </div>
+      <WarningNotice
+        role="status"
+        icon
+        title={translate($locale, 'Phone key added')}
+        body={translate(
+          $locale,
+          'Keep the phone on its waiting screen. After you add the remaining signers and create the wallet, desktop will show one final QR for the phone.'
+        )}
+      />
       <Button class="full" onclick={continueAfterMobileSigner}
         >{translate($locale, 'Continue wallet setup')}</Button
       >
@@ -2314,15 +2319,15 @@
           >{mobileInvitation.comparisonCode}</strong
         >
       </div>
-      <div class="warning-box" role="note">
-        <ShieldCheck size={17} /><strong>{translate($locale, 'One phone, one invitation')}</strong
-        ><span
-          >{translate(
-            $locale,
-            'On the fresh phone choose “Connect desktop app,” scan this QR, and keep the response private.'
-          )}</span
-        >
-      </div>
+      <WarningNotice
+        role="note"
+        icon
+        title={translate($locale, 'One phone, one invitation')}
+        body={translate(
+          $locale,
+          'On the fresh phone choose “Connect desktop app,” scan this QR, and keep the response private.'
+        )}
+      />
       <Button class="full" onclick={() => (mobilePairScan = true)}
         >{translate($locale, 'Scan phone QR code')}</Button
       >
@@ -2373,14 +2378,15 @@
       frames={mobileFinalFrames}
       label={translate($locale, 'Final shared wallet policy QR')}
     />
-    <div class="warning-box" role="note">
-      <ShieldCheck size={17} /><strong>{translate($locale, 'Verify before funding')}</strong><span
-        >{translate(
-          $locale,
-          'On the phone, check the same threshold and first address. Pairing is not complete until the phone accepts this policy.'
-        )}</span
-      >
-    </div>
+    <WarningNotice
+      role="note"
+      icon
+      title={translate($locale, 'Verify before funding')}
+      body={translate(
+        $locale,
+        'On the phone, check the same threshold and first address. Pairing is not complete until the phone accepts this policy.'
+      )}
+    />
     <Button class="full" onclick={() => goto('/multisig')}
       >{translate($locale, 'Phone accepted the wallet')}</Button
     >

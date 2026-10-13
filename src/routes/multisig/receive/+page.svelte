@@ -299,14 +299,14 @@
       >
     </div>
   </header>
-  {#if mobileCoordinator}<div class="warning-box" role="note">
-      <strong>{translate($locale, 'Receive labels stay on this phone')}</strong><span
-        >{translate(
-          $locale,
-          'Without optional sync, create receive requests on one device at a time. Desktop will detect payments, but it will not receive this label.'
-        )}</span
-      >
-    </div>{/if}
+  {#if mobileCoordinator}<WarningNotice
+      role="note"
+      title={translate($locale, 'Receive labels stay on this phone')}
+      body={translate(
+        $locale,
+        'Without optional sync, create receive requests on one device at a time. Desktop will detect payments, but it will not receive this label.'
+      )}
+    />{/if}
   {#if syncError}
     <div class="sync-failure-banner">
       <LoadFailure

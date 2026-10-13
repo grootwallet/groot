@@ -804,7 +804,10 @@
         <div class="preference-toggles">
           <ThemeToggle /><DiscreetModeToggle />
         </div>
-        <NetworkStatus network={defaultConfig.network} locked={walletLocked} />
+        <NetworkStatus
+          network={runtimeIdentity?.network ?? defaultConfig.network}
+          locked={walletLocked}
+        />
         <BuildIdentity runtime={runtimeIdentity} placement="sidebar" />
       </div>
     </aside>
@@ -885,7 +888,7 @@
             href="/settings"
             aria-label={t('settings', $locale)}><Settings size={20} /></a
           >{/if}<ThemeToggle /><DiscreetModeToggle /><NetworkStatus
-          network={defaultConfig.network}
+          network={runtimeIdentity?.network ?? defaultConfig.network}
           locked={walletLocked}
         />
       </div>{/if}

@@ -5,6 +5,7 @@
   import { afterNavigate, goto } from '$app/navigation';
   import { onDestroy, onMount, tick } from 'svelte';
   import { fly } from 'svelte/transition';
+  import BuildIdentity from '$lib/components/BuildIdentity.svelte';
   import Button from '$lib/components/Button.svelte';
   import Modal from '$lib/components/Modal.svelte';
   import PasswordField from '$lib/components/PasswordField.svelte';
@@ -232,6 +233,10 @@
         >{/if}
     </main>
   {/key}
+  <Button href="/welcome?add=1" variant="secondary" size="large" class="full locked-add-wallet"
+    ><Plus size={16} />{translate($locale, 'Add another wallet')}</Button
+  >
+  <BuildIdentity runtime={runtimeIdentity} placement="onboarding" />
 </div>
 
 <Modal

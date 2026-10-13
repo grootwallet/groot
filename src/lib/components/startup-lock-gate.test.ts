@@ -45,7 +45,9 @@ describe('startup wallet lock gate', () => {
     expect(appCss).toMatch(
       /\.locked-mobile-utilities\s*\{[\s\S]*?bottom:\s*max\(58px,[\s\S]*?left:\s*50%;/
     );
-    expect(unlockRoute).toContain("'Groot v{version} · {commit} · {network}'");
+    expect(unlockRoute).toContain(
+      '<BuildIdentity runtime={runtimeIdentity} placement="onboarding" />'
+    );
   });
 
   it('shows no wallet data when startup session verification fails', () => {

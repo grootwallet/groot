@@ -233,10 +233,7 @@
     networkReuseError = $state(''),
     networkReusing = $state(false);
   let reusableNetworkSetups = $derived(
-    networkSetupSources.filter(
-      (source) =>
-        source.walletId !== selectedWalletId
-    )
+    networkSetupSources.filter((source) => source.walletId !== selectedWalletId)
   );
   let selectedNetworkReuseSource = $derived(
     reusableNetworkSetups.find((source) => source.walletId === networkReuseSourceId) ?? null

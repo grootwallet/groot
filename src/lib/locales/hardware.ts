@@ -284,7 +284,7 @@ export const hardwareCopy = {
     fr: 'Trezor n’a pas accepté cette saisie dans la matrice.',
     es: 'Trezor no aceptó esa entrada de la matriz.'
   },
-  'Select this signer, unlock Ledger, and open Bitcoin Test, not Bitcoin, to continue.': {
+  'Select this signer, unlock Ledger, and open Bitcoin Test—not Bitcoin—to continue.': {
     fr: 'Sélectionnez ce signataire, déverrouillez Ledger et ouvrez Bitcoin Test, pas Bitcoin, pour continuer.',
     es: 'Selecciona este firmante, desbloquea Ledger y abre Bitcoin Test, no Bitcoin, para continuar.'
   },

@@ -141,9 +141,11 @@ pub fn network_setup_sources(
                 return None;
             }
             let config = read_node_config_for(&app, profile.id).ok()?;
-            let sync_source = read_sync_source_for(&app, profile.id).ok()?;
-            ensure_sync_source_supported_on_platform(&sync_source).ok()?;
             let ready = unlocked.is_unlocked(profile.id)
+                && (!cfg!(any(target_os = "ios", target_os = "android"))
+                    || read_sync_source_for(&app, profile.id)
+                        .and_then(|source| ensure_sync_source_supported_on_platform(&source))
+                        .is_ok())
                 && match config.auth {
                     RpcAuthMode::Cookie => true,
                     RpcAuthMode::UserPass => node_auth

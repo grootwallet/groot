@@ -416,6 +416,12 @@ pub(super) fn read_coordination_metadata(
     app: &AppHandle,
     wallet_id: Uuid,
 ) -> ApiResult<CoordinationMetadata> {
+    if crate::build_network::name() == "mainnet" {
+        return Err(api_error(
+            "unsupported_operation",
+            "Mobile coordination is not available on Mainnet.",
+        ));
+    }
     let encoded =
         read_private_text(&coordination_metadata_path(app, wallet_id)?).map_err(|_| {
             api_error(

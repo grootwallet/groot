@@ -1,5 +1,5 @@
-use crate::build_network::{name, multisig_account_path};
 use super::*;
+use crate::build_network::{multisig_account_path, name};
 use crate::secure_store::SecureStoreError;
 use bdk_bitcoind_rpc::{
     bitcoincore_rpc::{jsonrpc, Auth, Client, RpcApi},
