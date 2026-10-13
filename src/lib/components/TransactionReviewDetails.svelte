@@ -1,8 +1,12 @@
 <script lang="ts">
-  import { locale } from '$lib/i18n';
+  import { formatInteger, locale } from '$lib/i18n';
   import { translate } from '$lib/i18n-catalog';
   import { compactAddress } from '$lib/address-display';
   import Amount from './Amount.svelte';
+  import WarningNotice from './WarningNotice.svelte';
+  import InsightTip from './InsightTip.svelte';
+  import PermanentLabelTags from './PermanentLabelTags.svelte';
+  import { discreetMode } from '$lib/privacy';
   import type { MultisigProposal, PaymentProposal } from '$lib/wallet';
 
   let {
@@ -26,25 +30,30 @@
   ]);
   const recipientPaths = $derived([...new Set(proposal.recipientDerivationPaths ?? [])]);
   const changePaths = $derived([...new Set(proposal.changeDerivationPaths?.flat() ?? [])]);
+  let open = $state(false);
 </script>
 
 {#if proposal.recipientIsWalletOwned}<aside class="self-transfer-notice">
-    <strong>{translate($locale, 'Self-transfer')}</strong>
-    <span
-      >{translate(
-        $locale,
-        'This recipient belongs to this wallet. The network fee is the only amount leaving the wallet.'
-      )}</span
-    >
+    <div class="transaction-review-insight">
+      <strong>{translate($locale, 'Self-transfer')}</strong>
+      <InsightTip
+        label={translate($locale, 'Self-transfer')}
+        text={translate(
+          $locale,
+          'This recipient belongs to this wallet. The network fee is the only amount leaving the wallet.'
+        )}
+      />
+    </div>
     {#if proposal.walletControlledOutputAmount != null}<div class="self-transfer-consolidating">
         <span>
           <strong>{translate($locale, 'Consolidating')}</strong>
-          <small
-            >{translate(
+          <InsightTip
+            label={translate($locale, 'Consolidating')}
+            text={translate(
               $locale,
               'Total staying within this wallet. Compare this amount with the hardware signer.'
-            )}</small
-          >
+            )}
+          />
         </span>
         <Amount value={proposal.walletControlledOutputAmount} interactive={interactiveAmounts} />
       </div>{/if}
@@ -61,9 +70,29 @@
       )}</small
     >
   </aside>{/if}
-<details class:hardware-review-details={compact} class:proposal-review-details={!compact}>
-  <summary>{translate($locale, 'View more details')}</summary>
-  <dl class:details-list={!compact}>
+<details bind:open class:hardware-review-details={compact} class:proposal-review-details={!compact}>
+  <summary>{translate($locale, open ? 'View less details' : 'View more details')}</summary>
+  <WarningNotice
+    class="transaction-review-funding"
+    title={translate($locale, 'Coins spent together')}
+    body={translate(
+      $locale,
+      proposal.inputs.length > 1
+        ? 'Spending these coins together publicly links their sources. Their labels are shown below.'
+        : 'This payment spends one coin. Its labels are shown below.'
+    )}
+  >
+    {#if proposal.selectionImpact.fundingLabels.length}
+      <PermanentLabelTags labels={proposal.selectionImpact.fundingLabels} hidden={$discreetMode} />
+    {:else}<span>{translate($locale, 'No local labels')}</span>{/if}
+    {#if proposal.selectionImpact.hasUnknownProvenance}<span
+        >{translate($locale, 'Some coin sources are unknown.')}</span
+      >{/if}
+    {#if proposal.selectionImpact.hasAddressReuse}<span
+        >{translate($locale, 'Some coins come from a reused address.')}</span
+      >{/if}
+  </WarningNotice>
+  <dl class="details-list">
     {#if proposal.acceleration?.method === 'rbf'}
       <div>
         <dt>{translate($locale, 'Original fee rate')}</dt>
@@ -117,14 +146,14 @@
     {/if}
     <div>
       <dt>{translate($locale, 'Inputs')}</dt>
-      <dd>
-        {proposal.inputs.length}{' · '}<Amount
+      <dd class="transaction-review-input-total">
+        <span>{proposal.inputs.length} ·</span><Amount
           value={proposal.inputs.reduce((sum, input) => sum + Number(input.amount), 0)}
           interactive={interactiveAmounts}
         />
       </dd>
     </div>
-    {#if inputPaths.length}<div>
+    {#if inputPaths.length}<div class="transaction-review-path-row">
         <dt>
           {translate($locale, 'Input')}
           {translate($locale, inputPaths.length === 1 ? 'path' : 'paths')}
@@ -137,7 +166,7 @@
       <dt>{translate($locale, 'Outputs')}</dt>
       <dd>{proposal.outputCount}</dd>
     </div>
-    {#if recipientPaths.length}<div>
+    {#if recipientPaths.length}<div class="transaction-review-path-row">
         <dt>
           {translate($locale, recipientPaths.length === 1 ? 'Receive path' : 'Receive paths')}
         </dt>
@@ -167,7 +196,7 @@
         </dd>
       </div>
     {/if}
-    {#if changePaths.length}<div>
+    {#if changePaths.length}<div class="transaction-review-path-row">
         <dt>
           {translate($locale, 'Change')}
           {translate($locale, changePaths.length === 1 ? 'path' : 'paths')}
@@ -178,7 +207,12 @@
       </div>{/if}
     <div>
       <dt>{translate($locale, 'Locktime / RBF')}</dt>
-      <dd>{proposal.locktime}{' · '}{translate($locale, proposal.rbf ? 'Enabled' : 'Disabled')}</dd>
+      <dd>
+        {formatInteger(proposal.locktime, $locale)}{' · '}{translate(
+          $locale,
+          proposal.rbf ? 'Enabled' : 'Disabled'
+        )}
+      </dd>
     </div>
     {#if policy}<div>
         <dt>{translate($locale, 'Wallet policy')}</dt>

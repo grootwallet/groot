@@ -14,6 +14,6 @@
   document.documentElement.dataset.theme = theme;
   const themeColor = document.createElement('meta');
   themeColor.name = 'theme-color';
-  themeColor.content = theme === 'light' ? '#f4f1e9' : '#0d1118';
+  themeColor.content = theme === 'light' ? '#fbfbfa' : '#091625';
   document.head.append(themeColor);
 })();

@@ -1,6 +1,6 @@
 # ADR 0052: First mainnet software and hardware wallet scope
 
-- Status: accepted as a release-scope constraint; distribution remains blocked
+- Status: accepted and released in v0.4.96; remote-Core exclusion superseded by ADR 0061
 - Date: 2026-09-02
 - Extends: ADR 0012, ADR 0026, ADR 0037
 
@@ -29,13 +29,13 @@ The first limited mainnet candidate includes:
 - standard BIP48 hardware-backed multisig using only approved signers.
 
 Guided delayed/recovery Miniscript policies, Payjoin, compact-filter sync,
-remote Core, public Esplora, Tor/onion Core, mobile, Windows, and batch spending
+public Esplora, Tor/onion Core, mobile, Windows, and batch spending
 are not included unless a later explicit release-scope ADR adds them with their
 own evidence.
 
 Every included wallet type uses the same trusted mainnet constraints: exact
-mainnet genesis verification before database opening, user-controlled
-loopback-only Bitcoin Core, exactly one external recipient, a positive amount,
+mainnet genesis verification before database opening, user-controlled Bitcoin
+Core over loopback HTTP or direct HTTPS, exactly one external recipient, a positive amount,
 and the 1,000,000-satoshi per-transaction ceiling. The ceiling is a loss limiter,
 not a recommended test amount or readiness claim.
 
@@ -56,8 +56,24 @@ wallet classes consistently in Rust, UI, packaging, tests, and release notes.
 A reviewer must assess host-key custody and offline credential guessing, not
 only external-signer isolation.
 
-ADR 0055 permits this scope in one isolated certification build. The mainnet candidate remains blocked from distribution under ADR 0012 until every applicable checklist row has exact, independent evidence and ADR 0053 is accepted.
+ADR 0055 permitted this scope in one isolated certification build. ADR 0053 now authorizes the certified scope in public v0.4.96.
 
 ## Implementation clarification — 2026-09-03
 
 Exact-model approval is enforced in the trusted HWI discovery boundary, not inferred from display copy. New mainnet single-key and multisig hardware wallets also require recent in-memory live-HWI admission bound to the exact fingerprint, account xpub, derivation path, and device family; renderer-supplied QR, file, manual, or replayed metadata cannot substitute for that proof. HWI 3.2.0 provides adequate distinct model identifiers for the approved Ledger Nano S Plus, Trezor Model One/Safe 3, and Bitcoin-only BitBox02 variants. It exposes only family-level identities for Coldcard and Jade. ADR 0054 explicitly accepts those two exact family records for the limited-mainnet runtime while retaining model-specific certification and disclosure. Firmware versions remain exact release-evidence assertions; HWI does not securely attest them at runtime.
+
+ADR 0065 supersedes the sentence above only for standard multisig coordinator
+creation: a saved public draft may become an offline watch-only profile after
+restart, while Rust gates new Mainnet receive addresses on durable hardware
+policy/first-address evidence. External-signer creation and recovery admission
+are unchanged.
+
+HWI's Trezor model identifier is normally derived from the device protocol code.
+For the accepted scope, Model One is `trezor_1`; Safe 3 revision A is
+`trezor_t2b1` and revision B is `trezor_t3b1`. A later physical Mainnet probe
+with the same pinned HWI 3.2.0 returned the exact model string `trezor_safe 3`
+for an initialized Safe 3. The trusted boundary therefore admits that exact
+retail-string representation as an alias for the already-approved Safe 3, while
+continuing to reject underscore, hyphen, Safe 5, Model T, and other fuzzy family
+matches. This does not expand the exact-model scope or transfer certification
+evidence between firmware, revisions, or candidates.

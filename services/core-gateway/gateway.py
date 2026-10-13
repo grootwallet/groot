@@ -1,0 +1,957 @@
+#!/usr/bin/env python3
+"""Narrow, authenticated JSON-RPC gateway for Groot's Bitcoin Core calls."""
+
+from __future__ import annotations
+
+import argparse
+import base64
+import binascii
+import hashlib
+import hmac
+import http.client
+import ipaddress
+import json
+import os
+import re
+import secrets
+import socket
+import stat
+import tempfile
+import threading
+import time
+from dataclasses import dataclass
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+from typing import Any, Callable
+
+
+MAX_REQUEST_BYTES = 2 * 1024 * 1024
+MAX_RESPONSE_BYTES = 16 * 1024 * 1024
+MAX_BATCH_SIZE = 256
+MAX_UPSTREAM_CONCURRENCY = 16
+MAX_HANDLER_CONCURRENCY = 16
+MAX_ENROLL_REQUEST_BYTES = 64
+MAX_ENROLLED_PRINCIPALS = 10_000
+MAX_CREDENTIAL_FILE_BYTES = 4 * 1024 * 1024
+MAX_HISTORY_SCRIPTHASHES = 256
+MAX_HISTORY_ENTRIES = 10_000
+MAX_HISTORY_RESPONSE_BYTES = 4 * 1024 * 1024
+BUSY_RESPONSE_BODY = b'{"error":"gateway_busy"}'
+BUSY_RESPONSE = (
+    b"HTTP/1.1 503 Service Unavailable\r\n"
+    b"Content-Type: application/json\r\n"
+    + f"Content-Length: {len(BUSY_RESPONSE_BODY)}\r\n".encode("ascii")
+    + b"Cache-Control: no-store\r\n"
+    b"Connection: close\r\n"
+    b"\r\n"
+    + BUSY_RESPONSE_BODY
+)
+HEX_64 = re.compile(r"^[0-9a-fA-F]{64}$")
+TX_HEX = re.compile(r"^(?:[0-9a-fA-F]{2})+$")
+USERNAME = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
+
+
+class RequestRejected(Exception):
+    def __init__(self, status: int, code: str):
+        super().__init__(code)
+        self.status = status
+        self.code = code
+
+
+@dataclass(frozen=True)
+class Principal:
+    username: str
+    salt: bytes
+    password_scrypt: bytes
+    n: int
+    r: int
+    p: int
+
+
+class CredentialStore:
+    def __init__(self, path: Path | tuple[Path, ...]):
+        self._paths = path if isinstance(path, tuple) else (path,)
+        self._lock = threading.Lock()
+        self._stamp: tuple[tuple[int, int], ...] | None = None
+        self._principals: dict[str, Principal] = {}
+
+    def authenticate(self, authorization: str | None) -> str | None:
+        parsed = parse_basic_authorization(authorization)
+        if parsed is None:
+            return None
+        username, password = parsed
+        self._reload_if_changed()
+        principal = self._principals.get(username)
+        if principal is None:
+            # Match the cost of a real credential check without keeping a shared
+            # fallback secret or revealing whether a username exists.
+            hashlib.scrypt(
+                password,
+                salt=b"groot-unknown-client",
+                n=1 << 14,
+                r=8,
+                p=1,
+                dklen=32,
+            )
+            return None
+        candidate = hashlib.scrypt(
+            password,
+            salt=principal.salt,
+            n=principal.n,
+            r=principal.r,
+            p=principal.p,
+            dklen=len(principal.password_scrypt),
+        )
+        return username if hmac.compare_digest(candidate, principal.password_scrypt) else None
+
+    def _reload_if_changed(self) -> None:
+        files = [read_private_file(path, MAX_CREDENTIAL_FILE_BYTES) for path in self._paths]
+        stamp = tuple(item[0] for item in files)
+        with self._lock:
+            if stamp == self._stamp:
+                return
+            principals: dict[str, Principal] = {}
+            for _, raw in files:
+                document = json.loads(raw)
+                if document.get("version") != 1 or not isinstance(document.get("principals"), list):
+                    raise ValueError("unsupported client credential file")
+                for item in document["principals"]:
+                    username = item.get("username")
+                    n, r, p = item.get("n"), item.get("r"), item.get("p")
+                    if (
+                        not isinstance(username, str)
+                        or USERNAME.fullmatch(username) is None
+                        or username in principals
+                        or not isinstance(n, int)
+                        or n < 1 << 14
+                        or n > 1 << 18
+                        or n & (n - 1)
+                        or r != 8
+                        or p != 1
+                    ):
+                        raise ValueError("invalid client credential record")
+                    salt = decode_b64(item.get("salt"), 16, 64)
+                    password_scrypt = decode_b64(item.get("password_scrypt"), 32, 32)
+                    principals[username] = Principal(username, salt, password_scrypt, n, r, p)
+            if not principals:
+                raise ValueError("at least one client principal is required")
+            self._principals = principals
+            self._stamp = stamp
+
+
+class EnrollmentStore:
+    def __init__(self, path: Path):
+        self._path = path
+        self._lock = threading.Lock()
+        if not path.exists():
+            self._write({"version": 1, "principals": []})
+
+    def issue(self) -> tuple[str, str]:
+        username = f"groot-{secrets.token_hex(12)}"
+        password = secrets.token_urlsafe(32)
+        salt = secrets.token_bytes(16)
+        digest = hashlib.scrypt(
+            password.encode("ascii"), salt=salt, n=1 << 14, r=8, p=1, dklen=32
+        )
+        record = {
+            "username": username,
+            "salt": base64.b64encode(salt).decode("ascii"),
+            "password_scrypt": base64.b64encode(digest).decode("ascii"),
+            "n": 1 << 14,
+            "r": 8,
+            "p": 1,
+        }
+        with self._lock:
+            _, raw = read_private_file(self._path, MAX_CREDENTIAL_FILE_BYTES)
+            document = json.loads(raw)
+            principals = document.get("principals")
+            if document.get("version") != 1 or not isinstance(principals, list):
+                raise ValueError("unsupported enrolled-client file")
+            if len(principals) >= MAX_ENROLLED_PRINCIPALS:
+                raise RequestRejected(503, "enrollment_unavailable")
+            self._write({"version": 1, "principals": principals + [record]})
+        return username, password
+
+    def _write(self, document: dict[str, Any]) -> None:
+        self._path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        descriptor, temporary = tempfile.mkstemp(prefix=f".{self._path.name}.", dir=self._path.parent)
+        try:
+            os.fchmod(descriptor, 0o600)
+            with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+                json.dump(document, handle, separators=(",", ":"), sort_keys=True)
+                handle.write("\n")
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary, self._path)
+        finally:
+            if os.path.exists(temporary):
+                os.unlink(temporary)
+
+
+class CoreCookie:
+    def __init__(self, path: Path):
+        self._path = path
+        self._lock = threading.Lock()
+        self._stamp: tuple[int, int] | None = None
+        self._authorization = ""
+
+    def authorization(self) -> str:
+        stamp, cookie = read_private_file(self._path, 4096)
+        with self._lock:
+            if stamp != self._stamp:
+                if b":" not in cookie:
+                    raise ValueError("invalid Bitcoin Core cookie")
+                cookie = cookie.strip()
+                if not cookie or b"\r" in cookie or b"\n" in cookie:
+                    raise ValueError("invalid Bitcoin Core cookie")
+                self._authorization = "Basic " + base64.b64encode(cookie).decode("ascii")
+                self._stamp = stamp
+            return self._authorization
+
+
+def read_private_file(path: Path, maximum: int) -> tuple[tuple[int, int], bytes]:
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+    descriptor = os.open(path, flags)
+    try:
+        metadata = os.fstat(descriptor)
+        mode = stat.S_IMODE(metadata.st_mode)
+        if not stat.S_ISREG(metadata.st_mode) or mode & 0o027:
+            raise ValueError("private file permissions are unsafe")
+        if metadata.st_size > maximum:
+            raise ValueError("private file is too large")
+        chunks: list[bytes] = []
+        remaining = maximum + 1
+        while remaining:
+            chunk = os.read(descriptor, min(64 * 1024, remaining))
+            if not chunk:
+                break
+            chunks.append(chunk)
+            remaining -= len(chunk)
+        value = b"".join(chunks)
+        if len(value) > maximum:
+            raise ValueError("private file is too large")
+        return (metadata.st_mtime_ns, metadata.st_size), value
+    finally:
+        os.close(descriptor)
+
+
+class TokenBuckets:
+    def __init__(self, rate: float, burst: float):
+        self._rate = rate
+        self._burst = burst
+        self._lock = threading.Lock()
+        self._buckets: dict[str, tuple[float, float]] = {}
+
+    def allow(self, key: str) -> bool:
+        now = time.monotonic()
+        with self._lock:
+            tokens, updated = self._buckets.get(key, (self._burst, now))
+            tokens = min(self._burst, tokens + (now - updated) * self._rate)
+            allowed = tokens >= 1.0
+            if allowed:
+                tokens -= 1.0
+            self._buckets[key] = (tokens, now)
+            if len(self._buckets) > 4096:
+                expiry = now - (self._burst / self._rate) * 2
+                self._buckets = {
+                    item_key: value
+                    for item_key, value in self._buckets.items()
+                    if value[1] >= expiry
+                }
+            return allowed
+
+
+@dataclass(frozen=True)
+class GatewayConfig:
+    clients: CredentialStore
+    core_cookie: CoreCookie
+    enrollment: EnrollmentStore | None = None
+    core_host: str = "127.0.0.1"
+    core_port: int = 8332
+    core_timeout_seconds: float = 10.0
+    scan_timeout_seconds: float = 120.0
+    history_host: str = "127.0.0.1"
+    history_port: int = 50001
+    history_timeout_seconds: float = 10.0
+
+
+class Gateway:
+    def __init__(self, config: GatewayConfig):
+        self.config = config
+        self.ip_limits = TokenBuckets(rate=10.0, burst=20.0)
+        self.principal_limits = TokenBuckets(rate=25.0, burst=100.0)
+        self.enrollment_ip_limits = TokenBuckets(rate=1.0 / 3600.0, burst=8.0)
+        self.upstream_slots = threading.BoundedSemaphore(MAX_UPSTREAM_CONCURRENCY)
+        # Bitcoin Core exposes one process-wide scanblocks worker. Reject a
+        # second indexed scan at the gateway instead of letting it collide
+        # with Core or occupy a handler until the active scan finishes.
+        self.scan_slot = threading.BoundedSemaphore(1)
+        self._id_lock = threading.Lock()
+        self._next_id = 0
+
+    def handle(self, authorization: str | None, client_ip: str, body: bytes) -> bytes:
+        if not self.ip_limits.allow(client_ip):
+            raise RequestRejected(429, "rate_limited")
+        try:
+            principal = self.config.clients.authenticate(authorization)
+        except (OSError, ValueError, json.JSONDecodeError):
+            raise RequestRejected(503, "gateway_unavailable") from None
+        if principal is None:
+            raise RequestRejected(401, "unauthorized")
+        if not self.principal_limits.allow(principal):
+            raise RequestRejected(429, "rate_limited")
+        requests, is_batch = validate_payload(body)
+        history_requests = [request for request in requests if request["method"] == "groot_getscripthistory"]
+        if history_requests:
+            if is_batch or len(requests) != 1:
+                raise RequestRejected(400, "invalid_batch")
+            return self._call_history(history_requests[0])
+        upstream_requests, identities = self._reconstruct(requests, is_batch)
+        response = self._call_core(upstream_requests)
+        return restore_response_identities(response, identities, is_batch)
+
+    def enroll(self, client_ip: str, body: bytes) -> bytes:
+        if self.config.enrollment is None:
+            raise RequestRejected(404, "not_found")
+        try:
+            request = json.loads(body)
+        except (UnicodeDecodeError, json.JSONDecodeError, RecursionError):
+            raise RequestRejected(400, "invalid_request") from None
+        if (
+            not isinstance(request, dict)
+            or set(request) != {"version"}
+            or type(request["version"]) is not int
+            or request["version"] != 1
+        ):
+            raise RequestRejected(400, "invalid_request")
+        if not self.enrollment_ip_limits.allow(client_ip):
+            raise RequestRejected(429, "rate_limited")
+        try:
+            username, password = self.config.enrollment.issue()
+        except RequestRejected:
+            raise
+        except (OSError, ValueError, json.JSONDecodeError):
+            raise RequestRejected(503, "enrollment_unavailable") from None
+        return json.dumps(
+            {"version": 1, "username": username, "password": password},
+            separators=(",", ":"),
+            ensure_ascii=True,
+        ).encode("ascii")
+
+    def _reconstruct(
+        self, requests: list[dict[str, Any]], is_batch: bool
+    ) -> tuple[Any, dict[int, tuple[Any, str | None]]]:
+        rebuilt: list[dict[str, Any]] = []
+        identities: dict[int, tuple[Any, str | None]] = {}
+        with self._id_lock:
+            for request in requests:
+                self._next_id += 1
+                upstream_id = self._next_id
+                identities[upstream_id] = (request["id"], request.get("jsonrpc"))
+                item: dict[str, Any] = {
+                    "id": upstream_id,
+                    "method": request["method"],
+                    "params": request.get("params", []),
+                }
+                if request.get("jsonrpc") is not None:
+                    item["jsonrpc"] = request["jsonrpc"]
+                rebuilt.append(item)
+        return (rebuilt if is_batch else rebuilt[0]), identities
+
+    def _call_core(self, request: Any) -> bytes:
+        encoded = json.dumps(request, separators=(",", ":"), ensure_ascii=True).encode("ascii")
+        requests = request if isinstance(request, list) else [request]
+        indexed_scan = any(item.get("method") == "scanblocks" for item in requests)
+        timeout = (
+            self.config.scan_timeout_seconds
+            if indexed_scan
+            else self.config.core_timeout_seconds
+        )
+        scan_acquired = False
+        if indexed_scan:
+            scan_acquired = self.scan_slot.acquire(blocking=False)
+            if not scan_acquired:
+                raise RequestRejected(503, "gateway_busy")
+        if not self.upstream_slots.acquire(blocking=False):
+            if scan_acquired:
+                self.scan_slot.release()
+            raise RequestRejected(503, "gateway_busy")
+        try:
+            try:
+                authorization = self.config.core_cookie.authorization()
+                connection = http.client.HTTPConnection(
+                    self.config.core_host,
+                    self.config.core_port,
+                    timeout=timeout,
+                )
+                connection.request(
+                    "POST",
+                    "/",
+                    body=encoded,
+                    headers={
+                        "Authorization": authorization,
+                        "Content-Type": "application/json",
+                        "Connection": "close",
+                    },
+                )
+                response = connection.getresponse()
+                response_body = response.read(MAX_RESPONSE_BYTES + 1)
+                connection.close()
+            except (OSError, ValueError, http.client.HTTPException):
+                raise RequestRejected(502, "core_unavailable") from None
+        finally:
+            self.upstream_slots.release()
+            if scan_acquired:
+                self.scan_slot.release()
+        if response.status != 200 or len(response_body) > MAX_RESPONSE_BYTES:
+            raise RequestRejected(502, "core_unavailable")
+        return response_body
+
+    def _call_history(self, request: dict[str, Any]) -> bytes:
+        version, scripthashes = request["params"]
+        messages = [
+            {"id": 0, "method": "server.version", "params": ["Groot", "1.4"]},
+            {"id": 1, "method": "blockchain.headers.subscribe", "params": []},
+        ]
+        messages.extend(
+            {
+                "id": index + 2,
+                "method": "blockchain.scripthash.get_history",
+                "params": [scripthash],
+            }
+            for index, scripthash in enumerate(scripthashes)
+        )
+        encoded = b"".join(
+            json.dumps(message, separators=(",", ":"), ensure_ascii=True).encode("ascii") + b"\n"
+            for message in messages
+        )
+        if not self.upstream_slots.acquire(blocking=False):
+            raise RequestRejected(503, "gateway_busy")
+        connection: socket.socket | None = None
+        reader = None
+        try:
+            try:
+                connection = socket.create_connection(
+                    (self.config.history_host, self.config.history_port),
+                    timeout=self.config.history_timeout_seconds,
+                )
+                connection.settimeout(self.config.history_timeout_seconds)
+                connection.sendall(encoded)
+                reader = connection.makefile("rb")
+                responses: dict[int, Any] = {}
+                consumed = 0
+                while len(responses) < len(messages):
+                    line = reader.readline(MAX_HISTORY_RESPONSE_BYTES + 1)
+                    consumed += len(line)
+                    if not line or len(line) > MAX_HISTORY_RESPONSE_BYTES or consumed > MAX_HISTORY_RESPONSE_BYTES:
+                        raise ValueError("invalid history response")
+                    response = json.loads(line)
+                    if (
+                        not isinstance(response, dict)
+                        or not set(response).issubset({"jsonrpc", "id", "result", "error"})
+                        or not isinstance(response.get("id"), int)
+                        or response["id"] in responses
+                        or response["id"] < 0
+                        or response["id"] >= len(messages)
+                        or response.get("error") is not None
+                    ):
+                        raise ValueError("invalid history response")
+                    responses[response["id"]] = response.get("result")
+            except (OSError, ValueError, json.JSONDecodeError):
+                raise RequestRejected(502, "history_unavailable") from None
+        finally:
+            if reader is not None:
+                reader.close()
+            if connection is not None:
+                connection.close()
+            self.upstream_slots.release()
+
+        server_version = responses.get(0)
+        if (
+            not isinstance(server_version, list)
+            or len(server_version) != 2
+            or not all(isinstance(item, str) and 1 <= len(item) <= 128 for item in server_version)
+            or not server_version[0].startswith("Fulcrum ")
+            or server_version[1] != "1.4"
+        ):
+            raise RequestRejected(502, "invalid_history_response")
+        tip = responses.get(1)
+        if (
+            not isinstance(tip, dict)
+            or not isinstance(tip.get("height"), int)
+            or isinstance(tip.get("height"), bool)
+            or not 0 <= tip["height"] <= 10_000_000
+            or not isinstance(tip.get("hex"), str)
+            or len(tip["hex"]) != 160
+            or TX_HEX.fullmatch(tip["hex"]) is None
+        ):
+            raise RequestRejected(502, "invalid_history_response")
+        histories = []
+        total_entries = 0
+        for index, scripthash in enumerate(scripthashes):
+            raw_entries = responses.get(index + 2)
+            if not isinstance(raw_entries, list):
+                raise RequestRejected(502, "invalid_history_response")
+            entries = []
+            for entry in raw_entries:
+                if (
+                    not isinstance(entry, dict)
+                    or not {"height", "tx_hash"}.issubset(entry)
+                    or not set(entry).issubset({"height", "tx_hash", "fee"})
+                    or not hash_value(entry["tx_hash"])
+                    or not isinstance(entry["height"], int)
+                    or isinstance(entry["height"], bool)
+                    or not -1 <= entry["height"] <= tip["height"]
+                    or (
+                        "fee" in entry
+                        and (
+                            not isinstance(entry["fee"], int)
+                            or isinstance(entry["fee"], bool)
+                            or entry["fee"] < 0
+                        )
+                    )
+                ):
+                    raise RequestRejected(502, "invalid_history_response")
+                entries.append({"txid": entry["tx_hash"].lower(), "height": entry["height"]})
+            total_entries += len(entries)
+            if total_entries > MAX_HISTORY_ENTRIES:
+                raise RequestRejected(502, "history_response_too_large")
+            histories.append({"scripthash": scripthash, "entries": entries})
+        result = {
+            "version": version,
+            "tip_height": tip["height"],
+            "histories": histories,
+        }
+        output: dict[str, Any] = {"result": result, "error": None, "id": request["id"]}
+        if request.get("jsonrpc") == "2.0":
+            output["jsonrpc"] = "2.0"
+        encoded_output = json.dumps(output, separators=(",", ":"), ensure_ascii=True).encode("ascii")
+        if len(encoded_output) > MAX_HISTORY_RESPONSE_BYTES:
+            raise RequestRejected(502, "history_response_too_large")
+        return encoded_output
+
+
+def decode_b64(value: Any, minimum: int, maximum: int) -> bytes:
+    if not isinstance(value, str):
+        raise ValueError("invalid base64 value")
+    try:
+        decoded = base64.b64decode(value, validate=True)
+    except (ValueError, binascii.Error) as error:
+        raise ValueError("invalid base64 value") from error
+    if not minimum <= len(decoded) <= maximum:
+        raise ValueError("invalid decoded length")
+    return decoded
+
+
+def parse_basic_authorization(value: str | None) -> tuple[str, bytes] | None:
+    if not value or not value.startswith("Basic ") or len(value) > 1024:
+        return None
+    try:
+        decoded = base64.b64decode(value[6:], validate=True)
+        username_bytes, password = decoded.split(b":", 1)
+        username = username_bytes.decode("ascii")
+    except (ValueError, UnicodeDecodeError, binascii.Error):
+        return None
+    if USERNAME.fullmatch(username) is None or not 16 <= len(password) <= 256:
+        return None
+    return username, password
+
+
+def validate_payload(body: bytes) -> tuple[list[dict[str, Any]], bool]:
+    if not body or len(body) > MAX_REQUEST_BYTES:
+        raise RequestRejected(413, "request_too_large")
+    try:
+        payload = json.loads(body)
+    except (UnicodeDecodeError, json.JSONDecodeError, RecursionError):
+        raise RequestRejected(400, "invalid_json") from None
+    is_batch = isinstance(payload, list)
+    requests = payload if is_batch else [payload]
+    if not requests or len(requests) > MAX_BATCH_SIZE:
+        raise RequestRejected(400, "invalid_batch")
+    for request in requests:
+        validate_request(request)
+    return requests, is_batch
+
+
+def validate_request(request: Any) -> None:
+    if not isinstance(request, dict) or not set(request).issubset({"jsonrpc", "id", "method", "params"}):
+        raise RequestRejected(400, "invalid_request")
+    if "id" not in request or isinstance(request["id"], (dict, list, bool)):
+        raise RequestRejected(400, "invalid_request")
+    if request.get("jsonrpc") not in (None, "1.0", "2.0"):
+        raise RequestRejected(400, "invalid_request")
+    method = request.get("method")
+    params = request.get("params", [])
+    if not isinstance(method, str) or not isinstance(params, list):
+        raise RequestRejected(400, "invalid_request")
+    validator = METHOD_VALIDATORS.get(method)
+    if validator is None:
+        raise RequestRejected(403, "method_not_allowed")
+    if not validator(params):
+        raise RequestRejected(400, "invalid_params")
+
+
+def no_params(params: list[Any]) -> bool:
+    return not params
+
+
+def hash_value(value: Any) -> bool:
+    return isinstance(value, str) and HEX_64.fullmatch(value) is not None
+
+
+def nonnegative_int(value: Any) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and 0 <= value <= 10_000_000
+
+
+def block_params(params: list[Any]) -> bool:
+    return (
+        len(params) == 2
+        and hash_value(params[0])
+        and isinstance(params[1], int)
+        and not isinstance(params[1], bool)
+        and params[1] in {0, 1}
+    )
+
+
+def block_filter_params(params: list[Any]) -> bool:
+    return (
+        1 <= len(params) <= 2
+        and hash_value(params[0])
+        and (len(params) == 1 or params[1] == "basic")
+    )
+
+
+def raw_scan_object(value: Any) -> bool:
+    if not isinstance(value, str) or not value.startswith("raw(") or not value.endswith(")"):
+        return False
+    script = value[4:-1]
+    return 2 <= len(script) <= 1040 and len(script) % 2 == 0 and TX_HEX.fullmatch(script) is not None
+
+
+def scan_blocks_params(params: list[Any]) -> bool:
+    return (
+        len(params) == 5
+        and params[0] == "start"
+        and isinstance(params[1], list)
+        and 1 <= len(params[1]) <= 4096
+        and all(raw_scan_object(item) for item in params[1])
+        and nonnegative_int(params[2])
+        and nonnegative_int(params[3])
+        and params[2] <= params[3]
+        and params[4] == "basic"
+    )
+
+
+def descriptor_activity_params(params: list[Any]) -> bool:
+    return (
+        len(params) == 3
+        and params[0] == []
+        and isinstance(params[1], list)
+        and 1 <= len(params[1]) <= 4096
+        and all(raw_scan_object(item) for item in params[1])
+        and params[2] is True
+    )
+
+
+def help_params(params: list[Any]) -> bool:
+    return len(params) == 1 and params[0] in {"scanblocks", "getdescriptoractivity"}
+
+
+def raw_transaction_params(params: list[Any]) -> bool:
+    return (
+        2 <= len(params) <= 3
+        and hash_value(params[0])
+        and isinstance(params[1], bool)
+        and (len(params) == 2 or params[2] is None or hash_value(params[2]))
+    )
+
+
+def raw_mempool_params(params: list[Any]) -> bool:
+    return not params
+
+
+def index_info_params(params: list[Any]) -> bool:
+    return not params
+
+
+def smart_fee_params(params: list[Any]) -> bool:
+    return (
+        1 <= len(params) <= 2
+        and isinstance(params[0], int)
+        and not isinstance(params[0], bool)
+        and 1 <= params[0] <= 1008
+        and (
+            len(params) == 1
+            or params[1] is None
+            or (
+                isinstance(params[1], str)
+                and params[1].upper() in {"ECONOMICAL", "CONSERVATIVE"}
+            )
+        )
+    )
+
+
+def send_transaction_params(params: list[Any]) -> bool:
+    return (
+        len(params) == 1
+        and isinstance(params[0], str)
+        and 2 <= len(params[0]) <= 1_000_000
+        and TX_HEX.fullmatch(params[0]) is not None
+    )
+
+
+def script_history_params(params: list[Any]) -> bool:
+    return (
+        len(params) == 2
+        and params[0] == 1
+        and isinstance(params[1], list)
+        and 1 <= len(params[1]) <= MAX_HISTORY_SCRIPTHASHES
+        and len(set(params[1])) == len(params[1])
+        and all(hash_value(item) and item == item.lower() for item in params[1])
+    )
+
+
+METHOD_VALIDATORS: dict[str, Callable[[list[Any]], bool]] = {
+    "getblockchaininfo": no_params,
+    "getblockcount": no_params,
+    "getblockhash": lambda params: len(params) == 1 and nonnegative_int(params[0]),
+    "getblock": block_params,
+    "getblockfilter": block_filter_params,
+    "scanblocks": scan_blocks_params,
+    "getdescriptoractivity": descriptor_activity_params,
+    "help": help_params,
+    "getrawmempool": raw_mempool_params,
+    "getrawtransaction": raw_transaction_params,
+    "getmempoolentry": lambda params: len(params) == 1 and hash_value(params[0]),
+    "getmempoolinfo": no_params,
+    "getindexinfo": index_info_params,
+    "estimatesmartfee": smart_fee_params,
+    "sendrawtransaction": send_transaction_params,
+    "groot_getscripthistory": script_history_params,
+}
+
+
+def restore_response_identities(
+    upstream_body: bytes,
+    identities: dict[int, tuple[Any, str | None]],
+    batch: bool,
+) -> bytes:
+    try:
+        payload = json.loads(upstream_body)
+    except (UnicodeDecodeError, json.JSONDecodeError, RecursionError):
+        raise RequestRejected(502, "invalid_core_response") from None
+    responses = payload if isinstance(payload, list) else [payload]
+    if len(responses) != len(identities):
+        raise RequestRejected(502, "invalid_core_response")
+    restored: dict[int, dict[str, Any]] = {}
+    for response in responses:
+        if not isinstance(response, dict) or not set(response).issubset({"jsonrpc", "id", "result", "error"}):
+            raise RequestRejected(502, "invalid_core_response")
+        upstream_id = response.get("id")
+        if not isinstance(upstream_id, int) or upstream_id not in identities or upstream_id in restored:
+            raise RequestRejected(502, "invalid_core_response")
+        original_id, original_version = identities[upstream_id]
+        item: dict[str, Any] = {"result": response.get("result"), "error": sanitize_core_error(response.get("error")), "id": original_id}
+        if original_version == "2.0":
+            item["jsonrpc"] = "2.0"
+        restored[upstream_id] = item
+    ordered = [restored[item] for item in identities]
+    output: Any = ordered if batch else ordered[0]
+    return json.dumps(output, separators=(",", ":"), ensure_ascii=True).encode("ascii")
+
+
+def sanitize_core_error(error: Any) -> Any:
+    if error is None:
+        return None
+    if not isinstance(error, dict) or not isinstance(error.get("code"), int):
+        raise RequestRejected(502, "invalid_core_response")
+    message = error.get("message")
+    if not isinstance(message, str):
+        message = "Bitcoin Core rejected the request"
+    return {"code": error["code"], "message": message[:512]}
+
+
+class GatewayHandler(BaseHTTPRequestHandler):
+    server_version = "GrootGateway"
+    sys_version = ""
+    protocol_version = "HTTP/1.1"
+
+    @property
+    def gateway(self) -> Gateway:
+        return self.server.gateway  # type: ignore[attr-defined]
+
+    def setup(self) -> None:
+        super().setup()
+        self.connection.settimeout(15)
+
+    def do_POST(self) -> None:
+        content_lengths = self.headers.get_all("Content-Length", [])
+        authorizations = self.headers.get_all("Authorization", [])
+        if (
+            self.path not in {"/", "/enroll"}
+            or self.headers.get("Transfer-Encoding") is not None
+            or len(content_lengths) != 1
+            or len(authorizations) > 1
+        ):
+            self._error(400, "invalid_request")
+            return
+        content_type = self.headers.get_content_type()
+        if content_type != "application/json":
+            self._error(415, "unsupported_media_type")
+            return
+        try:
+            length = int(self.headers.get("Content-Length", ""))
+        except ValueError:
+            self._error(411, "content_length_required")
+            return
+        maximum = MAX_ENROLL_REQUEST_BYTES if self.path == "/enroll" else MAX_REQUEST_BYTES
+        if length <= 0 or length > maximum:
+            self._error(413, "request_too_large")
+            return
+        body = self.rfile.read(length)
+        if len(body) != length:
+            self._error(400, "invalid_request")
+            return
+        try:
+            client_ip = self._client_ip()
+            if self.path == "/enroll":
+                if authorizations:
+                    raise RequestRejected(400, "invalid_request")
+                response = self.gateway.enroll(client_ip, body)
+                status = 201
+            else:
+                response = self.gateway.handle(
+                    self.headers.get("Authorization"), client_ip, body
+                )
+                status = 200
+        except RequestRejected as error:
+            self._error(error.status, error.code)
+            return
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(response)))
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Connection", "close")
+        self.end_headers()
+        self.wfile.write(response)
+
+    def _client_ip(self) -> str:
+        peer = ipaddress.ip_address(self.client_address[0])
+        forwarded = self.headers.get("X-Real-IP")
+        if forwarded is None:
+            return str(peer)
+        if not peer.is_loopback:
+            raise RequestRejected(400, "invalid_request")
+        try:
+            return str(ipaddress.ip_address(forwarded))
+        except ValueError:
+            raise RequestRejected(400, "invalid_request") from None
+
+    def do_GET(self) -> None:
+        self._error(405, "method_not_allowed")
+
+    def do_HEAD(self) -> None:
+        self._error(405, "method_not_allowed", include_body=False)
+
+    def do_PUT(self) -> None:
+        self._error(405, "method_not_allowed")
+
+    def do_DELETE(self) -> None:
+        self._error(405, "method_not_allowed")
+
+    def log_message(self, _format: str, *_args: Any) -> None:
+        # Request paths, bodies, RPC methods, transaction ids, and credentials
+        # must not enter process logs.
+        return
+
+    def _error(self, status: int, code: str, include_body: bool = True) -> None:
+        body = json.dumps({"error": code}, separators=(",", ":")).encode("ascii")
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Allow", "POST")
+        if status == 401:
+            self.send_header("WWW-Authenticate", 'Basic realm="groot-gateway"')
+        self.send_header("Content-Length", str(len(body) if include_body else 0))
+        self.send_header("Connection", "close")
+        self.end_headers()
+        if include_body:
+            self.wfile.write(body)
+
+
+class GatewayServer(ThreadingHTTPServer):
+    daemon_threads = True
+    allow_reuse_address = True
+    request_queue_size = 64
+
+    def __init__(self, address: tuple[str, int], gateway: Gateway):
+        self.gateway = gateway
+        self._handler_slots = threading.BoundedSemaphore(MAX_HANDLER_CONCURRENCY)
+        super().__init__(address, GatewayHandler)
+
+    def process_request(self, request: Any, client_address: Any) -> None:
+        if not self._handler_slots.acquire(blocking=False):
+            # Closing a saturated connection without an HTTP response makes
+            # NGINX surface a misleading 502. Return an explicit bounded busy
+            # response without allocating another handler thread.
+            try:
+                request.settimeout(1)
+                request.sendall(BUSY_RESPONSE)
+            except OSError:
+                pass
+            finally:
+                self.shutdown_request(request)
+            return
+        try:
+            super().process_request(request, client_address)
+        except BaseException:
+            self._handler_slots.release()
+            raise
+
+    def process_request_thread(self, request: Any, client_address: Any) -> None:
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            self._handler_slots.release()
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--listen", default="127.0.0.1")
+    parser.add_argument("--port", type=int, default=8432)
+    parser.add_argument("--clients", type=Path, required=True)
+    parser.add_argument("--enrolled-clients", type=Path)
+    parser.add_argument("--core-cookie", type=Path, required=True)
+    parser.add_argument("--core-port", type=int, default=8332)
+    return parser.parse_args()
+
+
+def main() -> None:
+    args = parse_args()
+    if args.listen not in {"127.0.0.1", "::1"}:
+        raise SystemExit("the gateway must listen on loopback")
+    if not 1 <= args.port <= 65535 or not 1 <= args.core_port <= 65535:
+        raise SystemExit("invalid port")
+    enrollment = EnrollmentStore(args.enrolled_clients) if args.enrolled_clients else None
+    credential_paths = (
+        (args.clients, args.enrolled_clients) if args.enrolled_clients else args.clients
+    )
+    gateway = Gateway(
+        GatewayConfig(
+            clients=CredentialStore(credential_paths),
+            core_cookie=CoreCookie(args.core_cookie),
+            enrollment=enrollment,
+            core_port=args.core_port,
+        )
+    )
+    server = GatewayServer((args.listen, args.port), gateway)
+    try:
+        server.serve_forever(poll_interval=0.5)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        server.server_close()
+
+
+if __name__ == "__main__":
+    main()

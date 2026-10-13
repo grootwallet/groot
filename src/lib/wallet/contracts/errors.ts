@@ -25,6 +25,7 @@ export const WALLET_ERROR_CODES = [
   'invalid_inactivity_timeout',
   'wallet_not_found',
   'wallet_selection_changed',
+  'history_changed',
   'wallet_policy_changed',
   'invalid_mnemonic',
   'invalid_label',
@@ -64,9 +65,13 @@ export const WALLET_ERROR_CODES = [
   'pairing_replay',
   'pairing_incomplete',
   'pairing_in_progress',
+  'network_switch_unavailable',
+  'invalid_network',
+  'unsafe_network_selection',
+  'network_selection_failed',
+  'unsafe_test_root',
   'invalid_node_config',
   'invalid_scan_settings',
-  'invalid_payjoin_uri',
   'invalid_payment_request',
   'hardware_unavailable',
   'hardware_pairing_required',
@@ -78,6 +83,7 @@ export const WALLET_ERROR_CODES = [
   'hardware_busy',
   'hardware_cancelled',
   'hardware_response_too_large',
+  'hardware_wrong_network',
   'invalid_hardware_response',
   'hardware_command_failed',
   'hardware_io_error',
@@ -139,6 +145,14 @@ export const WALLET_ERROR_CODES = [
 
 export type WalletErrorCode = (typeof WALLET_ERROR_CODES)[number];
 
+export type WalletErrorDetails = {
+  retryAfterSeconds?: number;
+  requestedBirthdayBlock?: number;
+  requiredBlock?: number;
+  earliestRetainedBlock?: number;
+  minimumBirthdayBlock?: number;
+};
+
 const walletErrorCodes = new Set<string>(WALLET_ERROR_CODES);
 
 export function walletErrorCode(value: unknown): WalletErrorCode {
@@ -151,7 +165,8 @@ export class WalletError extends Error {
   constructor(
     public readonly code: WalletErrorCode,
     message: string,
-    public readonly existingWalletId: string | null = null
+    public readonly existingWalletId: string | null = null,
+    public readonly details: WalletErrorDetails | null = null
   ) {
     super(message);
     this.name = 'WalletError';

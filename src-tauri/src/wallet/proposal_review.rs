@@ -8,7 +8,7 @@ pub(super) fn proposal_change_details(
 ) -> ApiResult<(u64, Vec<String>)> {
     let recipient_script = Address::from_str(recipient)
         .map_err(|_| internal("The stored proposal recipient is invalid."))?
-        .require_network(NETWORK)
+        .require_network(network())
         .map_err(|_| internal("The stored proposal recipient is on the wrong network."))?
         .script_pubkey();
     let self_spend = amount == 0;
@@ -32,7 +32,7 @@ pub(super) fn proposal_change_details(
                 .checked_add(output.value.to_sat())
                 .ok_or_else(|| internal("The proposal output total overflowed."))?;
             change_addresses.push(
-                Address::from_script(&output.script_pubkey, NETWORK)
+                Address::from_script(&output.script_pubkey, network())
                     .map_err(|_| internal("A proposal change output has no displayable address."))?
                     .to_string(),
             );
@@ -54,17 +54,28 @@ pub(super) fn validate_release_spend(
     amount: u64,
     acceleration: Option<AccelerationMethod>,
 ) -> ApiResult<()> {
+    let recipient_address = Address::from_str(recipient)
+        .map_err(|_| api_error("proposal_mismatch", "The stored recipient is invalid."))?
+        .require_network(network())
+        .map_err(|_| {
+            api_error(
+                "proposal_mismatch",
+                "The stored recipient is on the wrong network.",
+            )
+        })?;
+    validate_supported_payment_destination(&recipient_address)?;
     proposal_change_details(wallet, psbt, recipient, amount)?;
+    let fee = proposal_fee_amount(psbt)?;
     let policy = if matches!(acceleration, Some(AccelerationMethod::Cpfp)) {
-        let wallet_owned_output = if NETWORK == Network::Bitcoin {
+        let wallet_owned_output = if network() == Network::Bitcoin {
             validate_cpfp_output_ownership(wallet, psbt, recipient)?;
             true
         } else {
             false
         };
-        crate::release_policy::validate_cpfp(NETWORK, 0, amount, wallet_owned_output)
+        crate::release_policy::validate_final_cpfp(network(), 0, amount, wallet_owned_output, fee)
     } else {
-        crate::release_policy::validate_spend(NETWORK, 1, amount)
+        crate::release_policy::validate_final_spend(network(), 1, amount, fee)
     };
     policy.map_err(|_| api_error("invalid_amount", "This spend is blocked by release policy."))
 }
@@ -82,7 +93,7 @@ pub(super) fn validate_cpfp_output_ownership(
     }
     let expected_script = Address::from_str(recipient)
         .map_err(|_| internal("The stored fee-child recipient is invalid."))?
-        .require_network(NETWORK)
+        .require_network(network())
         .map_err(|_| internal("The stored fee-child recipient is on the wrong network."))?
         .script_pubkey();
     let output = &psbt.unsigned_tx.output[0];
@@ -137,7 +148,7 @@ pub(super) fn proposal_recipient_wallet_details(
 ) -> ApiResult<(bool, Vec<String>)> {
     let recipient_script = Address::from_str(recipient)
         .map_err(|_| internal("The stored proposal recipient is invalid."))?
-        .require_network(NETWORK)
+        .require_network(network())
         .map_err(|_| internal("The stored proposal recipient is on the wrong network."))?
         .script_pubkey();
     let self_spend = amount == 0;
@@ -205,7 +216,7 @@ pub(super) fn proposal_change_derivation_paths(
         .map(|address| {
             let script = Address::from_str(address)
                 .map_err(|_| internal("A proposal change address is invalid."))?
-                .require_network(NETWORK)
+                .require_network(network())
                 .map_err(|_| internal("A proposal change address is on the wrong network."))?
                 .script_pubkey();
             let output_index = psbt
@@ -244,6 +255,98 @@ pub(super) fn validate_proposal_fee(psbt: &Psbt, expected_fee: u64) -> ApiResult
             "proposal_mismatch",
             "The stored proposal fee does not match the transaction.",
         ));
+    }
+    Ok(())
+}
+
+pub(super) fn bind_psbt_inputs_to_wallet(wallet: &Wallet, psbt: &mut Psbt) -> ApiResult<()> {
+    if psbt.inputs.len() != psbt.unsigned_tx.input.len() {
+        return Err(api_error(
+            "proposal_mismatch",
+            "The proposal has no complete input set.",
+        ));
+    }
+
+    let mut outpoints = HashSet::with_capacity(psbt.inputs.len());
+    let mut hydrated_bytes = 0_usize;
+    let mut canonical_transactions = Vec::with_capacity(psbt.inputs.len());
+    for (txin, input) in psbt.unsigned_tx.input.iter().zip(&psbt.inputs) {
+        if !outpoints.insert(txin.previous_output) {
+            return Err(api_error(
+                "proposal_mismatch",
+                "The proposal spends the same input more than once.",
+            ));
+        }
+        let canonical_tx = wallet
+            .get_tx(txin.previous_output.txid)
+            .ok_or_else(|| {
+                api_error(
+                    "proposal_mismatch",
+                    "A proposal input is not present in the canonical wallet history.",
+                )
+            })?
+            .tx_node
+            .tx;
+        let canonical = canonical_tx.as_ref();
+        if canonical.compute_txid() != txin.previous_output.txid {
+            return Err(api_error(
+                "proposal_mismatch",
+                "A proposal input does not match its canonical previous transaction.",
+            ));
+        }
+        let output = canonical
+            .output
+            .get(txin.previous_output.vout as usize)
+            .ok_or_else(|| {
+                api_error(
+                    "proposal_mismatch",
+                    "A proposal input points outside its canonical previous transaction.",
+                )
+            })?;
+        if wallet
+            .derivation_of_spk(output.script_pubkey.clone())
+            .is_none()
+        {
+            return Err(api_error(
+                "proposal_mismatch",
+                "A proposal input is not controlled by this wallet.",
+            ));
+        }
+        if input
+            .witness_utxo
+            .as_ref()
+            .is_some_and(|candidate| candidate != output)
+        {
+            return Err(api_error(
+                "proposal_mismatch",
+                "A proposal input does not match its canonical previous output.",
+            ));
+        }
+        if input
+            .non_witness_utxo
+            .as_ref()
+            .is_some_and(|candidate| candidate.compute_txid() != txin.previous_output.txid)
+        {
+            return Err(api_error(
+                "proposal_mismatch",
+                "A proposal input does not match its canonical previous transaction.",
+            ));
+        }
+        let canonical_bytes = bdk_wallet::bitcoin::consensus::serialize(canonical).len();
+        hydrated_bytes = hydrated_bytes
+            .checked_add(canonical_bytes)
+            .filter(|bytes| *bytes <= crate::proposal::MAX_PSBT_BYTES)
+            .ok_or_else(|| {
+                api_error(
+                    "proposal_mismatch",
+                    "The proposal's canonical input data exceeds the supported size.",
+                )
+            })?;
+        canonical_transactions.push(canonical.clone());
+    }
+
+    for (input, canonical) in psbt.inputs.iter_mut().zip(canonical_transactions) {
+        input.non_witness_utxo = Some(canonical);
     }
     Ok(())
 }
@@ -381,6 +484,29 @@ pub(super) fn require_reviewed_psbt_unchanged(
     Ok(())
 }
 
+pub(super) fn payment_review_binding(proposal_id: &str, encoded_psbt: &str) -> String {
+    let mut engine = sha256::Hash::engine();
+    engine.input(b"groot/payment-review/v1\0");
+    engine.input(proposal_id.as_bytes());
+    engine.input(b"\0");
+    engine.input(encoded_psbt.as_bytes());
+    sha256::Hash::from_engine(engine).to_string()
+}
+
+pub(super) fn require_payment_review_binding(
+    proposal_id: &str,
+    encoded_psbt: &str,
+    reviewed_binding: &str,
+) -> ApiResult<()> {
+    if payment_review_binding(proposal_id, encoded_psbt) != reviewed_binding {
+        return Err(api_error(
+            "proposal_mismatch",
+            "The payment changed after review. Reload it before signing.",
+        ));
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -395,6 +521,24 @@ mod tests {
         let error = require_reviewed_psbt_unchanged("changed", "reviewed", "mismatch").unwrap_err();
         assert_eq!(error.code, "proposal_mismatch");
         assert_eq!(error.message, "mismatch");
+    }
+
+    #[test]
+    fn payment_review_binding_covers_proposal_identity_and_exact_psbt_bytes() {
+        let binding = payment_review_binding("proposal-a", "psbt-a");
+        assert!(require_payment_review_binding("proposal-a", "psbt-a", &binding).is_ok());
+        assert_eq!(
+            require_payment_review_binding("proposal-a", "psbt-b", &binding)
+                .unwrap_err()
+                .code,
+            "proposal_mismatch"
+        );
+        assert_eq!(
+            require_payment_review_binding("proposal-b", "psbt-a", &binding)
+                .unwrap_err()
+                .code,
+            "proposal_mismatch"
+        );
     }
 
     #[test]

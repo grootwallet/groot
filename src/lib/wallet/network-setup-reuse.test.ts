@@ -5,6 +5,14 @@ const nativeCommands = readFileSync(
   new URL('../../../src-tauri/src/wallet/profile_commands.rs', import.meta.url),
   'utf8'
 );
+const walletCore = readFileSync(
+  new URL('../../../src-tauri/src/wallet.rs', import.meta.url),
+  'utf8'
+);
+const recoveryScan = readFileSync(
+  new URL('../../../src-tauri/src/wallet/recovery_scan.rs', import.meta.url),
+  'utf8'
+);
 const multisigCommands = readFileSync(
   new URL('../../../src-tauri/src/wallet/multisig_proposal_commands.rs', import.meta.url),
   'utf8'
@@ -18,6 +26,8 @@ const directAdoptionRoutes = [
   readFileSync(new URL('../../routes/welcome/+page.svelte', import.meta.url), 'utf8'),
   readFileSync(new URL('../../routes/hardware/new/+page.svelte', import.meta.url), 'utf8')
 ];
+const welcome = directAdoptionRoutes[0];
+const appCss = readFileSync(new URL('../../app.css', import.meta.url), 'utf8');
 const multisigCreationRoute = readFileSync(
   new URL('../../routes/multisig/new/+page.svelte', import.meta.url),
   'utf8'
@@ -35,13 +45,19 @@ function nativeCommand(name: string): string {
 }
 
 describe('protected network setup reuse', () => {
+  it('keeps wallet-choice CTA arrows in a non-overlapping shared footer', () => {
+    expect(welcome.match(/class="wallet-type-footer"/g)).toHaveLength(3);
+    expect(appCss).toContain('.wallet-type-footer {');
+    expect(appCss).toContain('.wallet-type-arrow {\n  flex: 0 0 auto;');
+  });
+
   it('never returns node credentials to the webview', () => {
     const start = runtimeContract.indexOf('export type NetworkSetupSource');
     const end = runtimeContract.indexOf('\n};', start);
     const sourceDto = runtimeContract.slice(start, end);
 
     expect(sourceDto).toContain('walletId');
-    expect(sourceDto).toContain('syncSource');
+    expect(sourceDto).not.toContain('syncSource');
     expect(sourceDto).toContain('ready');
     expect(sourceDto).not.toMatch(/password|credential|nodeConfig/i);
   });
@@ -58,41 +74,94 @@ describe('protected network setup reuse', () => {
     expect(source).toContain('node_secret_path_for(&app, destination)');
     expect(source).toContain('credential.as_str()');
     expect(source).toContain('sync_source_path_for(&app, destination)');
+    expect(
+      source.indexOf('load_node_auth_session(&app, &state, credential.as_str())')
+    ).toBeLessThan(source.indexOf('mark_selected_mainnet_node_verified(&app, &state)'));
   });
 
-  it('offers the same default choice for software, hardware, and multisig creation', () => {
-    for (const route of [...directAdoptionRoutes, multisigCreationRoute]) {
+  it('retains the default choice for software and hardware creation', () => {
+    for (const route of directAdoptionRoutes) {
       expect(route).toContain('let reuseNetworkSetup = $state(true)');
       expect(route).toContain('walletService.networkSetupSources()');
       expect(route).toContain(
         'Copies its node and sync method. This wallet protects its own copy.'
       );
     }
-    for (const route of directAdoptionRoutes) {
-      expect(route).toContain('walletService.adoptNetworkSetup(');
-    }
-    expect(multisigCreationRoute).toContain('networkSetupSourceWalletId');
+    expect(welcome).toContain('networkSetupSource?.walletId');
+    expect(welcome).toContain('creation.networkSetupCopied');
+    expect(directAdoptionRoutes[1]).toContain('walletService.adoptNetworkSetup(');
+    expect(multisigCreationRoute).not.toContain('networkSetupSourceWalletId');
     expect(multisigCreationRoute).not.toContain('walletService.adoptNetworkSetup(');
   });
 
   it('copies multisig network setup before publishing the new profile', () => {
-    const copy = multisigCommands.indexOf('copy_network_setup_before_profile_commit(');
+    const copy = multisigCommands.indexOf(
+      'profile_commands::copy_network_setup_before_profile_commit('
+    );
     const commit = multisigCommands.indexOf('commit_multisig_profile(&app, id, &wallet)?;', copy);
 
     expect(copy).toBeGreaterThan(-1);
     expect(commit).toBeGreaterThan(copy);
   });
 
-  it('creates a multisig wallet offline when a previously offered source is no longer ready', () => {
+  it('finishes software network setup inside native creation before publishing success', () => {
+    const createStart = nativeCommands.indexOf('pub fn wallet_create');
+    const createEnd = nativeCommands.indexOf('#[tauri::command]', createStart);
+    const create = nativeCommands.slice(createStart, createEnd);
+    const nativeCopy = create.indexOf('create_from_mnemonic(');
+    const nativeResult = create.indexOf('Ok(SoftwareWalletCreation {');
+    const successScreen = welcome.indexOf("mode = 'created';");
+    const createCall = welcome.indexOf('await walletService.createWallet(');
+
+    expect(nativeCopy).toBeGreaterThan(-1);
+    expect(nativeResult).toBeGreaterThan(nativeCopy);
+    expect(successScreen).toBeGreaterThan(createCall);
+    expect(create).toContain('network_setup_source_wallet_id.as_deref()');
+    expect(welcome.slice(createCall, successScreen)).not.toContain('adoptNetworkSetup(');
+  });
+
+  it('rolls back a selected multisig copy failure while retaining the explicit offline option', () => {
     const standardCreate = multisigCommands.slice(
       multisigCommands.indexOf('pub async fn multisig_create'),
       multisigCommands.indexOf('pub async fn multisig_recovery_create')
     );
 
-    expect(standardCreate).not.toContain('if network_setup_source_wallet_id.is_some()');
     expect(standardCreate).toContain('copy_network_setup_before_profile_commit(');
-    expect(multisigCommands).toContain('return Ok(true);');
-    expect(multisigCommands).toContain('Ok(false)');
+    expect(standardCreate.indexOf('require_requested_network_setup(')).toBeLessThan(
+      standardCreate.indexOf('commit_multisig_profile(&app, id, &wallet)?;')
+    );
+    expect(nativeCommands).toContain('pub(super) fn copy_network_setup_before_profile_commit(');
+    expect(nativeCommands).toContain('copied: true');
+    expect(nativeCommands).toContain('copied: false');
+    expect(nativeCommands).toContain(
+      'diagnostics::DiagnosticEventKind::NetworkConfigurationChanged'
+    );
+    expect(nativeCommands).toContain('diagnostics::DiagnosticOutcome::Failed');
+  });
+
+  it('persists the verified node tip as the birthday for a generated software wallet', () => {
+    expect(nativeCommands).toContain('birthday_height: Some(birthday_height)');
+    expect(walletCore).toContain('if let Some(birthday_height) = network_setup.birthday_height');
+    expect(walletCore).toContain('persist_initial_recovery_scan_settings(&db, birthday_height)?');
+    expect(recoveryScan).toContain(
+      'INSERT INTO groot_recovery_settings (singleton, birthday_height, gap_limit)'
+    );
+  });
+
+  it('keeps network adoption out of multisig creation without weakening native copy validation', () => {
+    expect(multisigCreationRoute).not.toContain('networkSetupSources()');
+    expect(multisigCreationRoute).not.toContain('reuseNetworkSetup');
+    expect(multisigCreationRoute).toContain('walletService.createMultisig(policy, credential)');
+    expect(multisigCommands).toContain('require_requested_network_setup(');
+    expect(multisigCommands).toContain('commit_multisig_profile(&app, id, &wallet)?;');
+  });
+
+  it('does not mistake an offline policy-status read for a missing hardware signer', () => {
+    expect(multisigPolicyRoute).toContain('Promise.allSettled([');
+    expect(multisigPolicyRoute).toContain(
+      "if (address.status === 'fulfilled') policyAddress = address.value"
+    );
+    expect(multisigPolicyRoute).toContain('policySigner && policyDevice}<div class="device-scan"');
   });
 
   it('leaves multisig refresh ownership with the global live-sync scheduler', () => {
@@ -104,7 +173,64 @@ describe('protected network setup reuse', () => {
     expect(settings).toContain('Use an existing network setup');
     expect(settings).toContain('walletService.adoptNetworkSetup(');
     expect(settings).toContain('Wallet data stays separate.');
-    expect(settings).toContain('Unlock the source wallet first.');
+    expect(settings).toContain('Unlock the source wallet first');
     expect(settings).toContain('source.ready');
+    expect(settings).not.toContain(
+      "defaultConfig.network === 'mainnet'\n        ? Promise.resolve([])"
+    );
+    expect(settings).not.toContain(
+      "defaultConfig.network !== 'mainnet' && reusableNetworkSetups.length > 0"
+    );
+    expect(settings).toContain("page.url.searchParams.get('networkSetup') === '1'");
+    expect(settings).toContain('if (reusableNetworkSetups.length > 0) openNetworkReuse()');
+  });
+
+  it('separates managed, local, and custom node choices without rendering managed credentials', () => {
+    expect(settings).toContain("setNodeLocation('managed')");
+    expect(settings).toContain("setNodeLocation('local_core')");
+    expect(settings).toContain("setNodeLocation('remote_core')");
+    expect(settings).toContain("nodeMode === 'managed'");
+    expect(settings).toContain('Groot managed node');
+    expect(settings).toContain('Custom remote');
+    expect(settings).toContain('Check managed status');
+    expect(settings).toContain('managedRenewalAvailable');
+    expect(settings).toContain('{:else}<label class="field"');
+    expect(settings).toContain('walletService.configureManagedNode(walletCredential)');
+  });
+
+  it('presents Core consistently and separates activity only when compact filters are active', () => {
+    expect(settings).toContain("syncSource.type === 'compact_filters'");
+    expect(settings).toContain('Bitcoin Core connection');
+    expect(settings).toContain('Groot managed · activity, fees, and broadcast');
+    expect(settings).toContain('This Mac · activity, fees, and broadcast');
+    expect(settings).toContain('Custom remote · activity, fees, and broadcast');
+    expect(settings).toContain('Groot managed · fees and broadcast');
+    expect(settings).toContain('This Mac · fees and broadcast');
+    expect(settings).toContain('Custom remote · fees and broadcast');
+    expect(settings).toContain('Use compact filters for wallet activity');
+    expect(settings).not.toContain("translate($locale, 'Fee and broadcast node')");
+    expect(settings).toContain('class="managed-privacy-warning"');
+    expect(settings).toContain('Privacy tradeoff');
+    expect(settings).toContain('Recovery words, private keys, and labels stay on this device.');
+    expect(settings).toContain('class="node-wallet-credential"');
+  });
+
+  it('renews managed access only inside native code after wallet authentication', () => {
+    const source = nativeCommand('managed_node_configure');
+
+    expect(source).toContain('verify_selected_credential(&app, credential.as_str())');
+    expect(source).toContain('managed_mainnet_node_admission(');
+    expect(source).toContain('persist_mainnet_node_admission(');
+    expect(source).not.toContain('password: String');
+  });
+
+  it('keeps the public descriptor behind the standard progressive disclosure', () => {
+    expect(welcome).toContain('class="proposal-review-details created-wallet-details"');
+    expect(welcome).toContain(
+      "createdWalletDetailsOpen ? 'View less details' : 'View more details'"
+    );
+    expect(welcome.indexOf('{#if descriptorCopied}')).toBeGreaterThan(
+      welcome.indexOf('class="proposal-review-details created-wallet-details"')
+    );
   });
 });

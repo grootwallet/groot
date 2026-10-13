@@ -360,7 +360,8 @@ fn parse_records(bytes: &[u8]) -> ApiResult<(Vec<Bip329Record>, usize)> {
             ignored += 1;
             continue;
         };
-        if label.trim().is_empty() || label.chars().count() > 48 || label.contains(['\n', '\r']) {
+        validate_label_formatting(label)?;
+        if label.trim().is_empty() || label.chars().count() > 48 {
             return Err(api_error(
                 "invalid_label",
                 "Imported labels must contain 1 to 48 single-line characters.",
@@ -403,7 +404,7 @@ fn import_records(
                     .map_err(|_| {
                         api_error("label_import_invalid", "An imported address is invalid.")
                     })?
-                    .require_network(NETWORK)
+                    .require_network(network())
                     .map_err(|_| {
                         api_error(
                             "wrong_network",
@@ -709,7 +710,7 @@ mod tests {
             Bip84(master, KeychainKind::External),
             Bip84(master, KeychainKind::Internal),
         )
-        .network(NETWORK)
+        .network(network())
         .create_wallet(&mut db)
         .unwrap();
         let address = wallet
@@ -800,6 +801,24 @@ mod tests {
             .code,
             "private_material_rejected"
         );
+        for label in [
+            "line\nbreak",
+            "zero\u{200b}width",
+            "bidi\u{202e}override",
+            "tag\u{e0020}hidden",
+            "separator\u{2029}hidden",
+            "filler\u{3164}hidden",
+            "variant\u{fe0f}hidden",
+        ] {
+            let input = format!(
+                "{{\"type\":\"addr\",\"ref\":\"tb1qfixture\",\"label\":{}}}\n",
+                serde_json::to_string(label).unwrap()
+            );
+            assert_eq!(
+                parse_records(input.as_bytes()).unwrap_err().code,
+                "invalid_label"
+            );
+        }
     }
 
     #[test]

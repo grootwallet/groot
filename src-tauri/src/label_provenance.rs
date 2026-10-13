@@ -640,33 +640,41 @@ fn source_provenance(
     db: &Connection,
     outpoint: &str,
 ) -> Result<SourceProvenance, bdk_wallet::rusqlite::Error> {
-    let state = db
-        .query_row(
-            "SELECT provenance_state FROM groot_output_lineage WHERE outpoint = ?1",
-            params![outpoint],
-            |row| row.get::<_, String>(0),
-        )
-        .optional()?;
+    // One indexed read with separate row kinds avoids both repeated prepares and
+    // the labels × clusters fan-out of joining two one-to-many relationships.
+    // Missing lineage must still mean unknown, regardless of orphan child rows.
+    let mut statement = db.prepare_cached(
+        "WITH source AS MATERIALIZED (
+           SELECT provenance_state FROM groot_output_lineage WHERE outpoint = ?1
+         )
+         SELECT 0, provenance_state FROM source
+         UNION ALL
+         SELECT 1, label_id FROM groot_output_provenance
+           WHERE outpoint = ?1 AND EXISTS (SELECT 1 FROM source)
+         UNION ALL
+         SELECT 2, cluster_id FROM groot_output_clusters
+           WHERE outpoint = ?1 AND EXISTS (SELECT 1 FROM source)",
+    )?;
+    let mut state = None;
+    let mut labels = BTreeSet::new();
+    let mut clusters = BTreeSet::new();
+    for row in statement.query_map(params![outpoint], |row| {
+        Ok((row.get::<_, u8>(0)?, row.get::<_, String>(1)?))
+    })? {
+        let (kind, value) = row?;
+        match kind {
+            0 => state = Some(value),
+            1 => {
+                labels.insert(value);
+            }
+            2 => {
+                clusters.insert(value);
+            }
+            _ => return Err(bdk_wallet::rusqlite::Error::InvalidQuery),
+        }
+    }
     let Some(state) = state else {
         return Ok(SourceProvenance::unknown());
-    };
-    let labels: BTreeSet<String> = {
-        let mut statement = db.prepare(
-            "SELECT label_id FROM groot_output_provenance WHERE outpoint = ?1 ORDER BY label_id",
-        )?;
-        let values = statement
-            .query_map(params![outpoint], |row| row.get::<_, String>(0))?
-            .collect::<Result<Vec<_>, _>>()?;
-        values.into_iter().collect()
-    };
-    let clusters: BTreeSet<String> = {
-        let mut statement = db.prepare(
-            "SELECT cluster_id FROM groot_output_clusters WHERE outpoint = ?1 ORDER BY cluster_id",
-        )?;
-        let values = statement
-            .query_map(params![outpoint], |row| row.get::<_, String>(0))?
-            .collect::<Result<Vec<_>, _>>()?;
-        values.into_iter().collect()
     };
     if clusters.is_empty() || (state != "unknown" && labels.is_empty()) {
         return Err(bdk_wallet::rusqlite::Error::InvalidQuery);
@@ -783,92 +791,145 @@ pub fn reconcile_wallet_outputs(
     db: &Connection,
     created_at: u64,
 ) -> Result<(), bdk_wallet::rusqlite::Error> {
-    let transaction_count = wallet.transactions().count();
-    for _ in 0..transaction_count.saturating_add(1) {
-        for canonical in wallet.transactions() {
-            let transaction = canonical.tx_node.tx.as_ref();
-            let txid = transaction.compute_txid().to_string();
-            let input_sources = transaction
-                .input
-                .iter()
-                .map(|input| source_provenance(db, &input.previous_output.to_string()))
-                .collect::<Result<Vec<_>, _>>()?;
-            let derived = derive_change_provenance(&input_sources);
-            record_cluster_links(db, &derived.clusters, &txid, created_at)?;
-            for input in &transaction.input {
-                db.execute(
-                    "INSERT OR IGNORE INTO groot_transaction_inputs(txid, outpoint) VALUES(?1, ?2)",
-                    params![txid, input.previous_output.to_string()],
+    let transactions = wallet.transactions().collect::<Vec<_>>();
+    let mut dependents = HashMap::<_, BTreeSet<usize>>::new();
+    let mut received_addresses = HashSet::new();
+    let mut reused_addresses = BTreeSet::new();
+    for (index, canonical) in transactions.iter().enumerate() {
+        // Count canonical outputs once, including spent receipts. Retained lineage
+        // also contains replaced/evicted transactions and is not payment truth.
+        for output in &canonical.tx_node.tx.output {
+            if let Some((KeychainKind::External, address_index)) =
+                wallet.derivation_of_spk(output.script_pubkey.clone())
+            {
+                if !received_addresses.insert(address_index) {
+                    reused_addresses.insert(address_index);
+                }
+            }
+        }
+        for input in &canonical.tx_node.tx.input {
+            dependents
+                .entry(input.previous_output.txid)
+                .or_default()
+                .insert(index);
+        }
+    }
+    // Preserve the old pass/index order, including append-only cluster evidence
+    // produced before a parent's provenance settles. Revisit only consumers of
+    // processed parents, and skip materialization when their sources are unchanged.
+    // All caches are scoped to this reconciliation; every call visits every tx.
+    let mut pending = (0..transactions.len())
+        .map(|index| (0, index))
+        .collect::<BTreeSet<_>>();
+    let mut previous_sources = vec![None; transactions.len()];
+    while let Some((pass, index)) = pending.pop_first() {
+        let canonical = &transactions[index];
+        let transaction = canonical.tx_node.tx.as_ref();
+        let txid = transaction.compute_txid().to_string();
+        let input_sources = transaction
+            .input
+            .iter()
+            .map(|input| source_provenance(db, &input.previous_output.to_string()))
+            .collect::<Result<Vec<_>, _>>()?;
+        if previous_sources[index].as_ref() == Some(&input_sources) {
+            continue;
+        }
+        let derived = derive_change_provenance(&input_sources);
+        previous_sources[index] = Some(input_sources);
+        record_cluster_links(db, &derived.clusters, &txid, created_at)?;
+        for input in &transaction.input {
+            db.execute(
+                "INSERT OR IGNORE INTO groot_transaction_inputs(txid, outpoint) VALUES(?1, ?2)",
+                params![txid, input.previous_output.to_string()],
+            )?;
+        }
+
+        for (vout, output) in transaction.output.iter().enumerate() {
+            let Some((keychain, derivation_index)) =
+                wallet.derivation_of_spk(output.script_pubkey.clone())
+            else {
+                continue;
+            };
+            let outpoint = OutPoint {
+                txid: transaction.compute_txid(),
+                vout: vout as u32,
+            }
+            .to_string();
+            if keychain == KeychainKind::External {
+                let labels = labels_for_subject(db, "address", &derivation_index.to_string())?;
+                let provenance = if labels.is_empty() {
+                    DerivedProvenance {
+                        labels: BTreeSet::new(),
+                        clusters: BTreeSet::new(),
+                        state: ProvenanceState::Unknown,
+                    }
+                } else {
+                    DerivedProvenance {
+                        labels: labels.into_iter().map(|label| label.id).collect(),
+                        clusters: BTreeSet::new(),
+                        state: ProvenanceState::Known,
+                    }
+                };
+                let receive_cluster =
+                    BTreeSet::from([format!("cluster-address-{derivation_index}")]);
+                materialize_output(
+                    db,
+                    OutputMaterialization {
+                        outpoint: &outpoint,
+                        txid: &txid,
+                        context: "received",
+                        address_idx: Some(derivation_index),
+                        provenance: &provenance,
+                        clusters: &receive_cluster,
+                        created_at,
+                    },
+                )?;
+            } else {
+                materialize_output(
+                    db,
+                    OutputMaterialization {
+                        outpoint: &outpoint,
+                        txid: &txid,
+                        context: "change",
+                        address_idx: None,
+                        provenance: &derived,
+                        clusters: &derived.clusters,
+                        created_at,
+                    },
                 )?;
             }
-
-            for (vout, output) in transaction.output.iter().enumerate() {
-                let Some((keychain, derivation_index)) =
-                    wallet.derivation_of_spk(output.script_pubkey.clone())
-                else {
-                    continue;
-                };
-                let outpoint = OutPoint {
-                    txid: transaction.compute_txid(),
-                    vout: vout as u32,
-                }
-                .to_string();
-                if keychain == KeychainKind::External {
-                    let labels = labels_for_subject(db, "address", &derivation_index.to_string())?;
-                    let provenance = if labels.is_empty() {
-                        DerivedProvenance {
-                            labels: BTreeSet::new(),
-                            clusters: BTreeSet::new(),
-                            state: ProvenanceState::Unknown,
-                        }
-                    } else {
-                        DerivedProvenance {
-                            labels: labels.into_iter().map(|label| label.id).collect(),
-                            clusters: BTreeSet::new(),
-                            state: ProvenanceState::Known,
-                        }
-                    };
-                    let receive_cluster =
-                        BTreeSet::from([format!("cluster-address-{derivation_index}")]);
-                    materialize_output(
-                        db,
-                        OutputMaterialization {
-                            outpoint: &outpoint,
-                            txid: &txid,
-                            context: "received",
-                            address_idx: Some(derivation_index),
-                            provenance: &provenance,
-                            clusters: &receive_cluster,
-                            created_at,
-                        },
-                    )?;
-                } else {
-                    materialize_output(
-                        db,
-                        OutputMaterialization {
-                            outpoint: &outpoint,
-                            txid: &txid,
-                            context: "change",
-                            address_idx: None,
-                            provenance: &derived,
-                            clusters: &derived.clusters,
-                            created_at,
-                        },
-                    )?;
+        }
+        if let Some(children) = dependents.get(&canonical.tx_node.txid) {
+            for &child in children {
+                let next_pass = pass + usize::from(child <= index);
+                if next_pass <= transactions.len() {
+                    pending.insert((next_pass, child));
                 }
             }
         }
     }
 
-    db.execute(
-        "UPDATE groot_output_lineage
-         SET address_reused = CASE WHEN address_idx IS NOT NULL AND (
-           SELECT COUNT(*) FROM groot_output_lineage sibling
-           WHERE sibling.address_idx = groot_output_lineage.address_idx
-         ) > 1 THEN 1 ELSE 0 END",
-        [],
-    )?;
+    refresh_address_reuse(db, &reused_addresses)?;
     Ok(())
+}
+
+// Update only derived flags, never remove historical lineage or label evidence.
+// A single bound array avoids SQL parameter limits and per-output sibling scans.
+const REFRESH_ADDRESS_REUSE_SQL: &str =
+    "WITH reused AS MATERIALIZED (
+       SELECT CAST(value AS INTEGER) AS address_idx FROM json_each(?1)
+     )
+     UPDATE groot_output_lineage
+     SET address_reused = CASE WHEN address_idx IN (SELECT address_idx FROM reused) THEN 1 ELSE 0 END
+     WHERE address_reused <> CASE WHEN address_idx IN (SELECT address_idx FROM reused) THEN 1 ELSE 0 END";
+
+fn refresh_address_reuse(
+    db: &Connection,
+    reused_addresses: &BTreeSet<u32>,
+) -> Result<usize, bdk_wallet::rusqlite::Error> {
+    let indices = serde_json::to_string(reused_addresses)
+        .map_err(|error| bdk_wallet::rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?;
+    db.execute(REFRESH_ADDRESS_REUSE_SQL, params![indices])
 }
 
 fn cluster_links(db: &Connection) -> Result<Vec<(String, String)>, bdk_wallet::rusqlite::Error> {
@@ -908,25 +969,21 @@ pub fn output_summary_with_context(
 ) -> Result<ProvenanceSummaryDto, bdk_wallet::rusqlite::Error> {
     let lineage = db
         .query_row(
-            "SELECT context, provenance_state, address_reused FROM groot_output_lineage WHERE outpoint = ?1",
+            "SELECT context, provenance_state, address_reused, source_txid FROM groot_output_lineage WHERE outpoint = ?1",
             params![outpoint],
             |row| {
                 Ok((
                     row.get::<_, String>(0)?,
                     row.get::<_, String>(1)?,
                     row.get::<_, bool>(2)?,
+                    row.get::<_, String>(3)?,
                 ))
             },
         )
         .optional()?;
-    let Some((context, state, address_reused)) = lineage else {
+    let Some((context, state, address_reused, source_transaction_id)) = lineage else {
         return Ok(ProvenanceSummaryDto::unknown("unknown"));
     };
-    let source_transaction_id = db.query_row(
-        "SELECT source_txid FROM groot_output_lineage WHERE outpoint = ?1",
-        params![outpoint],
-        |row| row.get::<_, String>(0),
-    )?;
     let labels = {
         let mut statement = db.prepare(
             "SELECT label.label_id, label.text, 'receive'
@@ -1141,6 +1198,10 @@ pub fn connected_cluster_count(
         .collect::<HashSet<_>>()
         .len()
 }
+
+#[cfg(test)]
+#[path = "label_provenance/tests.rs"]
+mod equivalence_tests;
 
 #[cfg(test)]
 mod tests {

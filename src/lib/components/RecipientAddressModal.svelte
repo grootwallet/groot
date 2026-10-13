@@ -14,7 +14,6 @@
     open,
     title = 'Recipient address',
     description = 'Verify the complete destination before signing.',
-    detail = 'Outgoing payment · label',
     onclose
   } = $props<{
     address: string;
@@ -48,16 +47,8 @@
 <Modal {open} {title} {description} {onclose}>
   <div class="address-detail-view">
     <div class="address-detail-status">
-      <span class="status-dot"></span><span
-        ><PermanentLabelTags labels={visibleLabels} prominent /><small>{detail}</small></span
-      >
+      <PermanentLabelTags labels={visibleLabels} prominent />
     </div>
     <ReadableAddress {address} {copied} oncopy={copy} />
-    <p>
-      {translate(
-        $locale,
-        'The brighter first and last groups are the quickest comparison points. Spaces are visual only;\n      copying uses the exact address.'
-      )}
-    </p>
   </div>
 </Modal>

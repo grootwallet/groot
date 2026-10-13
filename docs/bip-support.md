@@ -1,5 +1,344 @@
 # Bitcoin Improvement Proposal support
 
+The 2026-10-07 send amount input guard changes no BIP support, transaction
+construction, signing, PSBT, descriptor, or persisted format. Comma-decimal BTC
+text is normalized only during exact frontend conversion to integer satoshis.
+
+The 2026-10-07 send and camera presentation follow-up changes no BIP support,
+transaction construction, fee policy, descriptor, PSBT, or persisted format. It
+reuses the existing amount and warning components and only changes how the
+already-authoritative acceleration quote is disclosed.
+
+The 2026-10-07 final acceleration guard and receive-details follow-up has no
+BIP-support, descriptor, PSBT, signing, address, backup, or persisted-format
+change. It adds a configured-node mempool-presence check immediately before
+RBF/CPFP broadcast and reuses existing historical receive evidence in the
+shared address-details presentation.
+
+The 2026-10-07 device-state copy and signed-PSBT disclosure follow-up changes
+no BIP support or evidence, account proof, descriptor, address derivation,
+PSBT encoding, signing rule, or persisted wallet format. A previously verified
+receive fingerprint is displayed only as historical evidence; current device
+identity still requires the existing live BIP32 account-key proof.
+
+The 2026-10-06 internal follow-up changes no BIP support, descriptor or PSBT
+encoding, derivation, recovery, or persisted wallet format. Selected hardware
+send signers receive the existing BIP32/BIP48/BIP84 saved-account proof before
+the UI shows their fingerprint and **Ready**; signature validation remains
+authoritative in Rust. Public-key imports without a saved device type can use
+the same exact-path BIP32 account proof; a model guess alone is insufficient.
+CPFP confirmation-race copy, observed-versus-block time,
+amount feedback, and modal layout are presentation or error-classification
+changes, not protocol changes.
+
+The 2026-10-06 hardware-picker copy and spacing correction does not change BIP32
+identity proof, BIP48 descriptors, address derivation, PSBT handling, signing,
+recovery, interoperability, or persisted formats. It makes the existing passive
+discovery boundary explicit: an eligible fingerprint-less device must be selected
+before Rust can prove its saved account identity.
+
+The 2026-10-05 v0.5.0 release-version preparation changes build metadata only.
+It does not change supported BIPs, descriptors, derivation, transaction policy,
+signing, recovery, sync, or interoperability behavior.
+
+ADR 0082 changes only the v0.5.0 release-authorization binding from a tracked
+commit field to an exact annotated tag matching `origin/main`; it has no BIP,
+wallet-format, signing, recovery, or interoperability impact.
+
+The 2026-10-04 ADR 0081 hardening allows outgoing payments to legacy P2PKH,
+P2SH (including BIP49-compatible nested SegWit), SegWit v0 P2WPKH/P2WSH, and
+BIP350 SegWit-v1 Taproot destinations. P2A and witness v2-v16 are rejected.
+This is destination-script support only: Groot still does not generate Taproot
+receive addresses or claim BIP86/340/341/342/371/386/387 wallet support. The
+same change strengthens BIP174 finalization checks without changing PSBT wire
+encoding, and secure-store v5 has no BIP/interchange impact.
+
+The 2026-10-03 Apache-2.0 adoption and public-release authorization guard have
+no BIP, descriptor, derivation, transaction, PSBT, signing, recovery,
+interoperability, or persisted-format impact. They change licensing,
+attribution, documentation, and production packaging authorization only.
+
+The 2026-10-02 v0.4.96 hardening changes encrypted-envelope KDF metadata and
+migration, trusted-boundary validation, and macOS packaging presentation. It
+does not change BIP39 passphrase semantics, derivation, descriptors, PSBT
+encoding, transactions, recovery, or interoperability. Canonical prevout
+binding verifies existing BIP174 input metadata against the wallet's recorded
+transactions before software signing. Fee/total-debit limits, active-chain
+broadcast proof, multisig quorum-intersection rules, and the post-device stale-
+input recheck add fail-closed policy without changing protocol formats.
+
+The 2026-09-30 saved-wallet device-membership and cancellation-copy follow-up has
+no BIP, descriptor, derivation, transaction, PSBT, signing, recovery,
+interoperability, or persisted-format impact. It disables a fingerprint-less
+device when its HWI family is absent from the saved BIP84/BIP48 wallet and keeps
+same-family devices unidentified until the existing native account proof. The
+owner reports that exact internal multi-network candidate `c4a3070c` completed
+BIP84 and BIP48 positive and negative hardware flows across Regtest, Testnet4,
+and Mainnet for the seven approved device models, including Model One blind-PIN
+unlock, sign/broadcast, and restart accounting; original BitBox02 sign/broadcast
+and accounting; and Nova rejection, interruption, unplug/replug, sign/broadcast,
+and accounting. The owner likewise reports Coldcard Mk4, Ledger Nano S Plus,
+Jade Classic, and Safe 3 passing their exercised rows. These are owner-operated
+candidate observations, not firmware capture, independent review, or signed-
+artifact certification, and they do not transfer to the changed replacement
+candidate.
+
+The 2026-09-30 hardware-pipeline correction has no BIP, descriptor, derivation,
+transaction-construction, PSBT, signing, backup, interoperability, or
+persisted-format impact. It replaces macOS picker HWI enumeration with passive
+host inventory, narrows HWI transport selection after an explicit device choice,
+fixes discovery capability lifecycle, and keeps health review active across the
+existing bounded operation. Exact-pinned `hidapi`, `nusb`, and `serialport`
+dependencies are transport inventory only; they do not parse or construct wallet
+protocol data. BIP32/BIP48/BIP84 identity proof and BIP174 signature validation
+are unchanged. Fixture coverage is not physical hardware evidence and adds no
+support claim.
+
+The 2026-09-30 signer-layout, Trezor PIN, modal-backdrop, acceleration-requote,
+and concise-copy correction changes no descriptor, derivation, transaction,
+PSBT, signing, recovery, dependency, or persisted format. It restores the
+existing blind PIN-matrix flow before a selected locked single-key Trezor can
+sign and changes only renderer orchestration around the same native HWI
+commands. Owner-reported Mainnet BIP84 evidence on the `87fab724` candidate is
+scoped to Coldcard Mk4 CPFP completion with correct accounting after restart,
+BitBox02 Nova CPFP signing, and Jade Classic and Trezor Safe 3 CPFP signing and
+broadcast. Trezor Model One remained blocked at unlock, and no result is inferred
+for original BitBox02, transaction confirmation, firmware binding, negative
+paths, clean recovery, or the replacement package.
+
+The 2026-09-30 acceleration and modal-containment correction changes no BIP,
+descriptor, derivation, transaction construction, PSBT, signing, backup, or
+persisted format. RBF/CPFP quote failures now remain visibly fail-closed, and the
+single-key Coldcard signing surface explains the device's documented maximum-fee
+check without weakening it. Contextual translation of HWI code `-7` changes only
+the safe message returned for single-key versus multisig signing.
+
+The owner identifies Multi B exactly as Jade Classic, original BitBox02, and
+Trezor Safe 3. The earlier statement naming Jade plus BitBox02 Nova in Multi B is
+withdrawn as a wallet-label/model mismatch and is not hardware evidence. The
+owner still declares the positive Mainnet BIP48 campaign complete based on the
+remaining recorded pairs; frozen-package negative, recovery, version-binding,
+confirmation/restart, and independent-review rows remain separate release work.
+
+The owner also reports exact Mainnet BIP84 receive-address comparison and first
+unconfirmed deposit for Coldcard Mk4, Trezor Model One, Trezor Safe 3, Jade
+Classic, original BitBox02, and BitBox02 Nova while all six were connected. This
+is receive/funding evidence only: it does not imply confirmation, transaction
+signing, broadcast, restart accounting, rejection, disconnect/retry, or recovery.
+
+The 2026-09-30 mobile-layout and post-broadcast-navigation correction changes no
+BIP, descriptor, derivation, transaction construction, PSBT, signing, backup, or
+persisted format. The owner reports successful Mainnet BIP48 signing and broadcast
+for original BitBox02 plus Trezor Safe 3 in Multi B, Jade plus BitBox02 Nova in
+Multi C, and BitBox02 Nova plus Trezor Model One in Multi C, and states that the
+remaining positive BIP48 campaign is complete.
+
+The 2026-09-29 viewport-density follow-up changes only shared modal containment,
+Ledger policy-review spacing, and Send-page presentation. It changes no BIP,
+descriptor, derivation, transaction construction, PSBT, signing, backup, or
+persisted format. The owner-reported Multi A Coldcard Mk4 plus Ledger Nano S Plus
+Mainnet BIP48 signing and broadcast is scoped positive evidence; it does not
+transfer to a replacement package or close negative, recovery, firmware, or
+independent-review rows. A mixed-input Ledger payment also reproduced two policy
+and transaction approval rounds inside one pinned HWI 3.2.0 `signtx` command.
+Source audit attributes that behavior to HWI inferring more than one policy ID
+when BIP67-derived signer ordering differs across inputs. Groot still dispatches
+one native signing command; this is an unresolved pinned-dependency defect, not
+a new BIP48 behavior or a passed regression.
+
+The 2026-09-29 signing-flow presentation and activity correction has no BIP,
+descriptor, derivation, transaction-construction, PSBT, signing, backup, or
+persisted-format impact. Signing pickers now use transaction-readiness states
+such as **Ready** instead of reusing policy-registration evidence, and a bounded
+native hardware operation suspends only inactivity expiry while it is active.
+The owner-reported Mainnet Safe 3, Model One, and Jade outcomes below add scoped
+physical BIP48 evidence; they do not expand supported models or infer an
+unreported signer pair.
+
+The 2026-09-28 compact hardware-review boundary cleanup and renderer re-entry
+guard have no BIP, descriptor, derivation, transaction-construction, PSBT,
+signing, dependency, backup, or persisted-format impact. The guard prevents a
+second Groot signing dispatch while the first remains active; it does not alter
+the pinned HWI 3.2.0 Ledger adapter's internal wallet-policy registration or
+transaction-review sequence.
+
+The 2026-09-28 hardware-review harmonization has no BIP, descriptor, derivation,
+transaction-construction, PSBT, signing, backup, or persisted-format impact. It
+reuses the authoritative proposal data in a separated compact review, removes a
+Ledger pre-sign first-address reference that the device does not display during
+that authorization step, and changes only the automatic-strategy selection
+outline. New-wallet Ledger policy registration retains its first-address proof.
+The owner's reported Model One PIN unlock and standard BIP48 partial signing on
+the exact `a5df75ee` Mainnet package is candidate-specific physical evidence; it
+does not by itself add BIP support, prove threshold broadcast or confirmation,
+or transfer to the replacement build.
+
+Sep 28 expired-acceleration review/discard is a presentation/lifecycle correction
+with no BIP support or persisted-format change. Native replacement and stale-input
+validation remain authoritative; browser coverage is not physical signing evidence.
+
+Sep 28 receive-picker/discard presentation has no BIP or persisted-format impact.
+Owner-reported original BitBox02/Nova policy, address, rejection and reconnect
+retests and Model One address success add scoped hardware observations only;
+they do not expand model, transport, or spending-policy support.
+
+The earlier 2026-09-26 owner report adds limited Mainnet device evidence for
+BIP84 receive-address checks on seven exact target models and a BitBox02-family
+BIP48 wallet-policy registration after USB reconnect. It does not change BIP32,
+BIP48, BIP84, descriptor, address, PSBT, or signing support. The BitBox exact
+model and frozen package were not supplied; no BIP48 first-address comparison
+or transaction result is inferred, and no result transfers between original
+BitBox02 and Nova.
+
+Sep 27 address-reuse correction has no BIP support, dependency, or persisted-format
+impact. BIP125 replacement history remains retained; only the derived privacy
+flag excludes noncanonical outputs. No Mainnet/device certification is inferred
+from fixture coverage.
+
+The HWI performance/reconnect follow-up has no BIP or persisted-format impact.
+BitBox policy display changes only its post-proof connection selector, matching
+receive display. BIP32/BIP48 identity, address comparison, and signing rules are
+unchanged; physical evidence is not inferred from the regression test.
+
+Additional owner evidence on f7855a45: Multi B BIP125 replacement signing with
+Jade/original BitBox02 passed; Multi C received its first confirmed BIP48 deposit
+and Model One displayed its address only after a refreshed discovery retry.
+The revised standard-multisig label changes no descriptor or Miniscript support.
+See the Mainnet certification record; the unlock handoff remains a physical retest.
+
+The later Sep 26 Multi B follow-up records owner-reported BIP48 receive display,
+Jade/BitBox02 CPFP signing, BIP129 in-memory reconstruction, and local pruned-node
+scanning on f7855a45. Confirmation and clean-profile recovery are not inferred.
+See the [Mainnet record](hardware-certification-mainnet-2026-09-12.md#later-multi-b-payment-and-recovery-follow-up).
+Picker membership hints and file-padding changes do not alter any BIP, descriptor,
+persisted format, or native identity/signature validation rule.
+
+The 2026-09-26 A/B/C setup checkpoint adds owner-reported BIP48 creation and
+policy observations in the [Mainnet evidence record](hardware-certification-mainnet-2026-09-12.md#2026-09-26-abc-setup-checkpoint).
+It does not establish new transaction, firmware, or GA certification passes.
+Setup presentation and removal of one redundant device lookup do not change
+BIP32/BIP48/BIP84 derivation, descriptors, PSBTs, or persisted formats.
+
+The pruned-rescan checkpoint and retained-range guidance fix has no BIP-support
+impact: descriptors, derivation, signing, scan bounds, and persisted formats are
+unchanged. Only active-chain checkpoint lookup and public node-status presentation
+change; automated evidence does not establish a pass on the owner's node.
+
+The 2026-09-26 Multisig B follow-up changes capability refresh, setup-availability
+DTOs, duplicate-check ordering, and presentation only. BIP32/BIP48 identity proofs,
+descriptors, signing, backups, and persisted formats are unchanged. The owner's
+reported key-import/health and Jade-policy successes on `8cc12222` are scoped
+observations, not new model certification; original BitBox02 policy verification
+failed there and requires replacement-package retesting.
+
+The 2026-09-21 Safe 3 discovery correction has no BIP or persisted-format
+impact. A physical Mainnet probe showed the pinned HWI 3.2.0 returning the exact
+model string `trezor_safe 3`; the trusted boundary now treats only that spelling
+as the same already-approved Safe 3 model alongside its protocol-code revision
+identifiers. BIP32/BIP84 derivation, account keys, descriptors, addresses, PSBTs,
+signing, and HWI chain selection are unchanged. The failing `a2588f4d` physical
+result does not transfer to the replacement package.
+
+The 2026-09-21 Trezor and initial-history follow-up has no BIP support or
+evidence impact. It replaces stale aggregate-discovery presentation with the
+shared exact-device PIN/loading state and adds an idempotent Overview request to
+the existing native full-history scan single-flight. BIP32/BIP84 identity,
+descriptors, addresses, HWI key extraction, Core `scanblocks`, gap-limit
+discovery, recovery correctness, and persisted formats are unchanged. Physical
+timing on the replacement package remains required and is not inferred from UI
+or automated tests.
+
+The 2026-09-19 transaction-detail refresh and Network Services presentation
+follow-up has no BIP support or evidence impact. An open detail modal now
+re-resolves its selected transaction from each authoritative wallet snapshot,
+including an RBF replacement lineage, so a newly confirmed payment cannot keep
+showing stale mempool state. The settings change only restores row spacing and
+shortens explanatory copy. Transaction accounting, BIP125 replacement logic,
+descriptors, PSBTs, signing, sync, and persisted formats are unchanged.
+
+The application-wide readability and copy-density follow-up has no BIP support or
+evidence impact. It changes shared typography, semantic color tokens, optional
+disclosure presentation, concise page copy, and selected-wallet visibility only;
+descriptors, derivation, signing, transactions, labels, backups, recovery, sync,
+and network behavior are unchanged.
+
+ADR 0068's restart-bound internal network selection changes network availability
+and storage routing, not BIP semantics or evidence. Regtest, Testnet4, and Mainnet
+continue to use their existing BIP84/BIP48 derivations, address validation, BIP174
+review/signing checks, exact-genesis backend checks, and HWI chain arguments. No
+descriptor, PSBT, backup, registry, wallet database, or secret-envelope format
+changes, and no migration or new interoperability evidence, are implied.
+
+ADR 0069 changes the intended GA artifact from a fixed Mainnet build to that
+restart-bound multi-network identity. It adds release evidence for selector
+integrity, restart teardown, and cross-network isolation, but changes no BIP
+derivation, address, descriptor, PSBT, backup, signer, or interoperability
+semantics. Evidence on one selected network does not transfer to another.
+
+The 2026-09-14 stale-multisig-proposal safeguard changes no descriptor, BIP48
+key, PSBT serialization or signature verification, backup format, or persisted
+schema. It checks a saved proposal's selected outpoints against the current BDK
+unspent set before further signing/import/broadcast; accelerator replacements
+continue under their separate original-transaction validation. The owner's
+reported Sparrow recovery of this exact Mainnet 2-of-3 descriptor, Nova and
+Coldcard Mk4 signing, and successful external broadcast adds limited
+owner-operated interoperability evidence, not general BIP support or a release
+certification pass. Async command dispatch and fee-quote debounce are UI
+responsiveness changes only.
+
+The 2026-09-14 presentation follow-up changes no BIP support or evidence:
+standard multisig hides the Miniscript-only lab for a native-null recovery
+template, public BSMS/Groot export copy is format-specific, and Receive/Send
+loading acknowledgement changes no descriptor, address, signer, PSBT,
+transaction, or persisted format.
+
+The 2026-09-13 policy-review copy and shared loading-indicator adjustment have
+no BIP, descriptor, key-derivation, HWI, PSBT, persisted-format, or protocol
+impact. The owner-reported exact `4630bf95` Mainnet policy and Ledger receive
+checks are candidate-specific physical UI/device evidence, not new BIP support
+or an interoperability-status change.
+
+ADR 0066 changes only Mainnet multisig setup-copy failure handling, in-memory
+Core admission order after existing-wallet adoption, and Policy/Coldcard
+presentation. It does not change BIP48 keys, descriptors, policy, PSBTs,
+interchange, recovery, or supported signer identities. It adds no BIP support
+or interoperability evidence; physical retesting remains required.
+
+ADR 0065 changes the timing of BIP48 standard multisig Mainnet admission in the
+isolated candidate: an offline public draft may become a watch-only coordinator
+after restart, but native address issuance requires a threshold of durable
+descriptor-matching policy/first-address proofs plus each Coldcard policy-file
+acknowledgement. It changes no BIP48 derivation, descriptor, PSBT, or backup
+format and adds no interoperability evidence. Trezor and Coldcard do not count
+as interactive-quorum proof in this HWI build, so affected combinations remain
+receive-blocked pending certification. The rejected coordinator-PIN signer
+checklist remains removed; sequential scans still preserve other unexpired
+initial-import admissions. No physical evidence transfers to this candidate.
+
+The 2026-09-12 hardware correction changes no BIP, descriptor, PSBT, backup, or
+persisted-wallet semantics. It corrects the HWI 3.2.0 Trezor Safe 3 protocol
+model identifiers used by the existing Mainnet BIP84/BIP48 admission gate and
+prevents saved-signer scans from erasing other exact, time-bounded admissions in
+one BIP48 draft. The old-build physical results remain candidate-specific and do
+not raise an implementation or interoperability status.
+
+The approved 2026-09-08 application design refresh has no BIP support or protocol
+evidence impact: only local presentation assets/tokens change. Rust, WalletPort,
+transaction facts, integer-satoshi formatting, recovery and signer validation,
+transport policies and all persisted formats remain unchanged by this refresh.
+
+The 2026-09-08 provenance-query follow-up has no BIP support or evidence-level
+impact. It preserves the existing labels, privacy clusters, address-reuse history,
+transaction accounting and database format while reducing query work. Protocol,
+PSBT, derivation, network and signer behavior are unchanged.
+
+The 2026-09-08 notification/navigation changes have no BIP support-level impact:
+wallet/session-bound delivery, worker scheduling, and paged public history DTOs
+change neither derivation nor PSBT, RBF/CPFP, recovery, or transport semantics.
+Full native wallet state remains authoritative regardless of UI page size.
+Existing BIP125/BIP174 regression coverage exercises the shared transaction logic;
+no new physical, public-network, Tor, or mobile evidence is implied.
+
 The 2026-09-03 independent-review remediation and isolated mainnet preparation
 change evidence, not supported BIP families. BIP84/BIP48 hardware admission is
 narrowed for a future mainnet build to trusted hardware identifiers. ADR 0054
@@ -14,6 +353,12 @@ proposal format and no upstream BIP status changed. See
 The subsequent pre-wallet Core-admission interlock changes only backend/storage
 authorization order. It does not change descriptors, derivation, PSBT semantics,
 backup interchange, or support for any BIP.
+ADR 0064 permits creation of an empty descriptor-bound profile before node setup,
+but preserves exact-node admission before any Mainnet wallet-data open. Automatic
+first-scan defaults, Mainnet setup reuse, and sub-sat/vB fee presentation change
+no descriptor, derivation, PSBT, backup, transaction, or interoperability semantics.
+The follow-up Mainnet setup-reuse UI, actionable sanitized setup diagnostics, and
+collapsed descriptor presentation likewise change no BIP implementation or evidence.
 ADR 0055 makes the already reviewed BIP84/BIP48 mainnet parameter row reachable
 only in an isolated certification build. This changes network availability, not
 BIP semantics or the evidence status of any wallet, signer, or recovery path.
@@ -62,30 +407,30 @@ that Groot implements the BIP.
 
 ## Implemented and in-progress BIPs
 
-| BIP                                                                                                                                                                                                                     | Upstream status | Groot status                           | Exact Groot scope and limitation                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------- | -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [32](https://github.com/bitcoin/bips/blob/master/bip-0032.mediawiki)                                                                                                                                                    | Deployed        | **Complete**                           | Hierarchical master/child keys, account xpubs, origins, derivation paths, and fingerprints for software and multisig wallets.                                                                                                                                                                                                                                                                                                                                                                |
-| [39](https://github.com/bitcoin/bips/blob/master/bip-0039.mediawiki)                                                                                                                                                    | Deployed        | **Complete**                           | Exactly 256 bits of native OS entropy produce 24 words. The wallet passphrase is also the BIP39 passphrase. Generation, native recovery entry, descriptor re-derivation, and secret zeroization are implemented.                                                                                                                                                                                                                                                                             |
-| [43](https://github.com/bitcoin/bips/blob/master/bip-0043.mediawiki) and [44](https://github.com/bitcoin/bips/blob/master/bip-0044.mediawiki)                                                                           | Deployed        | **Bounded structural subset**          | Groot follows the purpose/coin/account/change/index hierarchy through BIP84 and BIP48. It does not implement general BIP44 legacy-P2PKH accounts or multi-account discovery.                                                                                                                                                                                                                                                                                                                 |
-| [48](https://github.com/bitcoin/bips/blob/master/bip-0048.mediawiki)                                                                                                                                                    | Deployed        | **Complete**                           | Native-SegWit multisig account origins use `m/48'/coin'/0'/2'`, with receive and change branches in checksummed P2WSH descriptors.                                                                                                                                                                                                                                                                                                                                                           |
-| [68](https://github.com/bitcoin/bips/blob/master/bip-0068.mediawiki) and [112](https://github.com/bitcoin/bips/blob/master/bip-0112.mediawiki)                                                                          | Deployed        | **Complete for recovery policy**       | Recovery and compatible legacy Inheritance wallets use block-relative `older(n)` Miniscript branches, per-coin maturity tracking, and actual delayed-path spending. Groot does not currently expose general absolute or time-based lock policies.                                                                                                                                                                                                                                            |
-| [77](https://github.com/bitcoin/bips/blob/master/bip-0077.md)                                                                                                                                                           | Draft           | **Phase 0**                            | Payjoin Dev Kit 1.0 is pinned with V2 only. Trusted Rust performs bounded network-checked Payjoin URI inspection, but no sender/receiver UI, protocol traffic, encrypted session persistence, OHTTP transport, fallback workflow, or interoperability claim exists.                                                                                                                                                                                                                          |
-| [84](https://github.com/bitcoin/bips/blob/master/bip-0084.mediawiki)                                                                                                                                                    | Deployed        | **Complete**                           | Software and external-signer wallets use `m/84'/coin'/0'` `wpkh()` receive/change descriptors.                                                                                                                                                                                                                                                                                                                                                                                               |
-| [94](https://github.com/bitcoin/bips/blob/master/bip-0094.mediawiki)                                                                                                                                                    | Deployed        | **Complete as a build target**         | Testnet4 has a compile-time-isolated native identity, address/key parameters, exact chain checks, Core integration, and HWI selection. This does not enable mainnet.                                                                                                                                                                                                                                                                                                                         |
-| [125](https://github.com/bitcoin/bips/blob/master/bip-0125.mediawiki)                                                                                                                                                   | Deployed        | **Complete**                           | New transactions opt in to replacement. Groot constructs, reviews, signs, persists, broadcasts, and reconciles RBF replacements and their transaction lineage.                                                                                                                                                                                                                                                                                                                               |
-| [129](https://github.com/bitcoin/bips/blob/master/bip-0129.mediawiki)                                                                                                                                                   | Complete        | **Bounded subset**                     | Bounded public four-line BSMS 1.0 descriptor-record import/export, network checks, descriptor parsing, and first-address verification are implemented. Encrypted coordinator/signer setup rounds are not implemented.                                                                                                                                                                                                                                                                        |
-| [141](https://github.com/bitcoin/bips/blob/master/bip-0141.mediawiki), [143](https://github.com/bitcoin/bips/blob/master/bip-0143.mediawiki), and [173](https://github.com/bitcoin/bips/blob/master/bip-0173.mediawiki) | Deployed        | **Complete/inherited**                 | P2WPKH, P2WSH, SegWit-v0 transaction signing, and Bech32 addresses are exercised through rust-bitcoin, BDK, Groot descriptors, and Groot PSBT flows.                                                                                                                                                                                                                                                                                                                                         |
-| [157](https://github.com/bitcoin/bips/blob/master/bip-0157.mediawiki) and [158](https://github.com/bitcoin/bips/blob/master/bip-0158.mediawiki)                                                                         | Deployed        | **Work in progress**                   | The optional test-network backend performs confirmed-only discovery with verified headers, filter headers, filters, matching blocks, bounded execution, and atomic BDK application. The public index is memory-only; Core still owns fees, mempool operations, recovery, and broadcast. Adversarial, public-network, real-Tor, packaged, and mobile evidence remains open.                                                                                                                   |
-| [174](https://github.com/bitcoin/bips/blob/master/bip-0174.mediawiki)                                                                                                                                                   | Deployed        | **Complete (PSBT v0)**                 | Creation, Rust-derived review, persistence, partial-signature verification/merge/removal, software and HWI signing, finalization, broadcast, Base64/file exchange, and bounded `crypto-psbt` UR v2 transport are implemented. PSBTv2 is not claimed.                                                                                                                                                                                                                                         |
-| [21](https://github.com/bitcoin/bips/blob/master/bip-0021.mediawiki)                                                                                                                                                    | Closed          | **Complete for in-app QR scanning**    | Receive QR codes emit `bitcoin:<address>`. Single-key and multisig Send scan plain addresses or bounded BIP21 URIs in Rust, enforce the compiled address network, reject unknown required parameters, preserve integer satoshi precision, and prefill supported amount/label/message fields for review. Payjoin-bearing requests remain blocked from silent fallback until the separate BIP77 gates pass. Groot has no operating-system URI handler, and BIP321 has replaced BIP21 upstream. |
-| [325](https://github.com/bitcoin/bips/blob/master/bip-0325.mediawiki)                                                                                                                                                   | Complete        | **Complete as a build target**         | Signet has a compile-time-isolated identity and exact-chain Core integration. Public-network evidence remains distinct from implementation.                                                                                                                                                                                                                                                                                                                                                  |
-| [329](https://github.com/bitcoin/bips/blob/master/bip-0329.mediawiki)                                                                                                                                                   | Draft           | **Complete for applicable types**      | Native JSONL import/export covers Groot-owned `addr`, `tx`, `output`, and `xpub` subjects with bounded atomic validation. Groot-only intent, policy, provenance, cluster, and replacement history are deliberately not encoded as proprietary records.                                                                                                                                                                                                                                       |
-| [379](https://github.com/bitcoin/bips/blob/master/bip-0379.md)                                                                                                                                                          | Draft           | **Bounded subset**                     | Rust compiles, type-checks, sanity-checks, analyzes, persists, reviews, and spends reviewed WSH key/threshold/block-relative recovery policies. Arbitrary user policy text and delayed-policy USB hardware flows are not supported.                                                                                                                                                                                                                                                          |
-| [380](https://github.com/bitcoin/bips/blob/master/bip-0380.mediawiki)                                                                                                                                                   | Deployed        | **Complete for supported descriptors** | Canonical public descriptors, key origins, wildcards, checksums, descriptor identity, parsing, export, and recovery are central wallet boundaries. Unsupported descriptor families are not accepted merely because the dependency can parse them.                                                                                                                                                                                                                                            |
-| [382](https://github.com/bitcoin/bips/blob/master/bip-0382.mediawiki)                                                                                                                                                   | Deployed        | **Complete**                           | `wpkh()` owns BIP84 singlesig and `wsh()` owns standard multisig and recovery policies.                                                                                                                                                                                                                                                                                                                                                                                                      |
-| [383](https://github.com/bitcoin/bips/blob/master/bip-0383.mediawiki)                                                                                                                                                   | Deployed        | **Complete for `sortedmulti()`**       | Standard multisig uses checksummed `wsh(sortedmulti(...))`. BIP383, rather than the P2SH-specific BIP67, owns the descriptor-level lexicographic key ordering Groot uses.                                                                                                                                                                                                                                                                                                                    |
-| [388](https://github.com/bitcoin/bips/blob/master/bip-0388.mediawiki)                                                                                                                                                   | Complete        | **Partial/indirect**                   | Groot coordinates device-specific policy registration, repeat authorization, and first-address verification through HWI for supported standard multisig devices. It does not natively import/export a BIP388 descriptor template plus key-information vector.                                                                                                                                                                                                                                |
-| [389](https://github.com/bitcoin/bips/blob/master/bip-0389.mediawiki)                                                                                                                                                   | Draft           | **Complete bounded subset**            | Public descriptor recovery accepts and exports the conventional receive/change `/<0;1>/*` multipath form and verifies it against explicit branches. Groot does not expose arbitrary multipath alternatives.                                                                                                                                                                                                                                                                                  |
+| BIP                                                                                                                                                                                                                     | Upstream status | Groot status                           | Exact Groot scope and limitation                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [32](https://github.com/bitcoin/bips/blob/master/bip-0032.mediawiki)                                                                                                                                                    | Deployed        | **Complete**                           | Hierarchical master/child keys, account xpubs, origins, derivation paths, and fingerprints for software and multisig wallets. Software creation presents the Rust-derived master fingerprint as copyable recovery identity metadata.                                                                                                                                                                                                                                                                          |
+| [39](https://github.com/bitcoin/bips/blob/master/bip-0039.mediawiki)                                                                                                                                                    | Deployed        | **Complete**                           | Exactly 256 bits of native OS entropy produce 24 words. The wallet passphrase is also the BIP39 passphrase. Generation, native recovery entry, descriptor re-derivation, and secret zeroization are implemented. A reviewer successfully restored the exact packaged v0.4.94 Mainnet software wallet from commit `a735fb19` in Sparrow 2.5.4 with matching history and balance; that is reviewer-operated interoperability evidence for this exact wallet and candidate, not a general release certification. |
+| [43](https://github.com/bitcoin/bips/blob/master/bip-0043.mediawiki) and [44](https://github.com/bitcoin/bips/blob/master/bip-0044.mediawiki)                                                                           | Deployed        | **Bounded structural subset**          | Groot follows the purpose/coin/account/change/index hierarchy through BIP84 and BIP48. It does not implement general BIP44 legacy-P2PKH accounts or multi-account discovery.                                                                                                                                                                                                                                                                                                                                  |
+| [48](https://github.com/bitcoin/bips/blob/master/bip-0048.mediawiki)                                                                                                                                                    | Deployed        | **Complete**                           | Native-SegWit multisig account origins use `m/48'/coin'/0'/2'`, with receive and change branches in checksummed P2WSH descriptors.                                                                                                                                                                                                                                                                                                                                                                            |
+| [68](https://github.com/bitcoin/bips/blob/master/bip-0068.mediawiki) and [112](https://github.com/bitcoin/bips/blob/master/bip-0112.mediawiki)                                                                          | Deployed        | **Complete for recovery policy**       | Recovery and compatible legacy Inheritance wallets use block-relative `older(n)` Miniscript branches, per-coin maturity tracking, and actual delayed-path spending. Groot does not currently expose general absolute or time-based lock policies.                                                                                                                                                                                                                                                             |
+| [77](https://github.com/bitcoin/bips/blob/master/bip-0077.md)                                                                                                                                                           | Draft           | **Phase 0**                            | Payjoin Dev Kit 1.0 is pinned with V2 only. Trusted Rust performs bounded network-checked Payjoin URI inspection, but no sender/receiver UI, protocol traffic, encrypted session persistence, OHTTP transport, fallback workflow, or interoperability claim exists.                                                                                                                                                                                                                                           |
+| [84](https://github.com/bitcoin/bips/blob/master/bip-0084.mediawiki)                                                                                                                                                    | Deployed        | **Complete**                           | Software and external-signer wallets use `m/84'/coin'/0'` `wpkh()` receive/change descriptors.                                                                                                                                                                                                                                                                                                                                                                                                                |
+| [94](https://github.com/bitcoin/bips/blob/master/bip-0094.mediawiki)                                                                                                                                                    | Deployed        | **Complete as a build target**         | Testnet4 has a compile-time-isolated native identity, address/key parameters, exact chain checks, Core integration, and HWI selection. This does not enable mainnet.                                                                                                                                                                                                                                                                                                                                          |
+| [125](https://github.com/bitcoin/bips/blob/master/bip-0125.mediawiki)                                                                                                                                                   | Deployed        | **Complete**                           | New transactions opt in to replacement. Groot constructs, reviews, signs, persists, broadcasts, and reconciles RBF replacements and their transaction lineage.                                                                                                                                                                                                                                                                                                                                                |
+| [129](https://github.com/bitcoin/bips/blob/master/bip-0129.mediawiki)                                                                                                                                                   | Complete        | **Bounded subset**                     | Bounded public four-line BSMS 1.0 descriptor-record import/export, network checks, descriptor parsing, and first-address verification are implemented. Encrypted coordinator/signer setup rounds are not implemented.                                                                                                                                                                                                                                                                                         |
+| [141](https://github.com/bitcoin/bips/blob/master/bip-0141.mediawiki), [143](https://github.com/bitcoin/bips/blob/master/bip-0143.mediawiki), and [173](https://github.com/bitcoin/bips/blob/master/bip-0173.mediawiki) | Deployed        | **Complete/inherited**                 | P2WPKH, P2WSH, SegWit-v0 transaction signing, and Bech32 addresses are exercised through rust-bitcoin, BDK, Groot descriptors, and Groot PSBT flows.                                                                                                                                                                                                                                                                                                                                                          |
+| [157](https://github.com/bitcoin/bips/blob/master/bip-0157.mediawiki) and [158](https://github.com/bitcoin/bips/blob/master/bip-0158.mediawiki)                                                                         | Deployed        | **Work in progress**                   | The optional test-network backend performs confirmed-only discovery with verified headers, filter headers, filters, matching blocks, bounded execution, and atomic BDK application. The public index is memory-only; Core still owns fees, mempool operations, recovery, and broadcast. Adversarial, public-network, real-Tor, packaged, and mobile evidence remains open.                                                                                                                                    |
+| [174](https://github.com/bitcoin/bips/blob/master/bip-0174.mediawiki)                                                                                                                                                   | Deployed        | **Complete (PSBT v0)**                 | Creation, Rust-derived review, persistence, partial-signature verification/merge/removal, software and HWI signing, finalization, broadcast, Base64/file exchange, and bounded `crypto-psbt` UR v2 transport are implemented. PSBTv2 is not claimed.                                                                                                                                                                                                                                                          |
+| [21](https://github.com/bitcoin/bips/blob/master/bip-0021.mediawiki)                                                                                                                                                    | Closed          | **Complete for in-app QR scanning**    | Receive QR codes emit `bitcoin:<address>`. Single-key and multisig Send scan plain addresses or bounded BIP21 URIs in Rust, enforce the compiled address network, reject unknown required parameters, preserve integer satoshi precision, and prefill supported amount/label/message fields for review. Payjoin-bearing requests remain blocked from silent fallback until the separate BIP77 gates pass. Groot has no operating-system URI handler, and BIP321 has replaced BIP21 upstream.                  |
+| [325](https://github.com/bitcoin/bips/blob/master/bip-0325.mediawiki)                                                                                                                                                   | Complete        | **Complete as a build target**         | Signet has a compile-time-isolated identity and exact-chain Core integration. Public-network evidence remains distinct from implementation.                                                                                                                                                                                                                                                                                                                                                                   |
+| [329](https://github.com/bitcoin/bips/blob/master/bip-0329.mediawiki)                                                                                                                                                   | Draft           | **Complete for applicable types**      | Native JSONL import/export covers Groot-owned `addr`, `tx`, `output`, and `xpub` subjects with bounded atomic validation. Groot-only intent, policy, provenance, cluster, and replacement history are deliberately not encoded as proprietary records.                                                                                                                                                                                                                                                        |
+| [379](https://github.com/bitcoin/bips/blob/master/bip-0379.md)                                                                                                                                                          | Draft           | **Bounded subset**                     | Rust compiles, type-checks, sanity-checks, analyzes, persists, reviews, and spends reviewed WSH key/threshold/block-relative recovery policies. Arbitrary user policy text and delayed-policy USB hardware flows are not supported.                                                                                                                                                                                                                                                                           |
+| [380](https://github.com/bitcoin/bips/blob/master/bip-0380.mediawiki)                                                                                                                                                   | Deployed        | **Complete for supported descriptors** | Canonical public descriptors, key origins, wildcards, checksums, descriptor identity, parsing, export, and recovery are central wallet boundaries. Software creation now exposes its authenticated public watch-only descriptor through an explicit copy action with a privacy warning. Unsupported descriptor families are not accepted merely because the dependency can parse them.                                                                                                                        |
+| [382](https://github.com/bitcoin/bips/blob/master/bip-0382.mediawiki)                                                                                                                                                   | Deployed        | **Complete**                           | `wpkh()` owns BIP84 singlesig and `wsh()` owns standard multisig and recovery policies.                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| [383](https://github.com/bitcoin/bips/blob/master/bip-0383.mediawiki)                                                                                                                                                   | Deployed        | **Complete for `sortedmulti()`**       | Standard multisig uses checksummed `wsh(sortedmulti(...))`. BIP383, rather than the P2SH-specific BIP67, owns the descriptor-level lexicographic key ordering Groot uses.                                                                                                                                                                                                                                                                                                                                     |
+| [388](https://github.com/bitcoin/bips/blob/master/bip-0388.mediawiki)                                                                                                                                                   | Complete        | **Partial/indirect**                   | Groot coordinates device-specific policy registration, repeat authorization, and first-address verification through HWI for supported standard multisig devices. It does not natively import/export a BIP388 descriptor template plus key-information vector.                                                                                                                                                                                                                                                 |
+| [389](https://github.com/bitcoin/bips/blob/master/bip-0389.mediawiki)                                                                                                                                                   | Draft           | **Complete bounded subset**            | Public descriptor recovery accepts and exports the conventional receive/change `/<0;1>/*` multipath form and verifies it against explicit branches. The software-wallet success screen combines its authenticated receive/change branches into the same checksummed public multipath form. Groot does not expose arbitrary multipath alternatives.                                                                                                                                                            |
 
 ## Dependency-level P2P BIPs
 
@@ -170,6 +515,12 @@ The internal mainnet RC Receive refresh follow-up has no BIP impact. It exposes 
 explicit UI trigger for the existing authoritative sync operation without changing
 address derivation, mempool interpretation, descriptors, or interoperability.
 
+The multi-network sync-lifecycle follow-up has no BIP impact. It changes the
+automatic refresh cadence to 35 seconds, avoids repeating Mainnet admission when
+Overview remounts, preserves a manual sync across read-only navigation, and exposes
+the existing manual refresh on multisig Receive. Descriptor discovery, transaction
+interpretation, address derivation, and interoperability evidence are unchanged.
+
 The internal mainnet RC sync-coordination, recovery-status scheduling, and Mainnet
 explorer follow-up has no BIP impact. It serializes existing sync triggers, moves an
 existing read off the native UI thread, and permits an explicit txid-only explorer
@@ -200,7 +551,26 @@ The maximum-spend clarification has no BIP support impact. It adds durable inlin
 and toast feedback for the existing rule that frozen outputs remain excluded from
 transaction construction; no transaction, fee, descriptor, or protocol behavior changes.
 
+The 2026-09-09 RC legibility, transaction-detail, bounded-zoom, recovery-result,
+locked saved-network-summary, and direct-HTTPS Mainnet Core changes have no BIP support
+impact. The remote service uses the same Bitcoin Core RPC discovery, exact-chain
+checks, descriptors, transactions, and recovery semantics as loopback Core. This
+widens a transport release policy only; it does not change BIP support or promote
+the still-pending remote-endpoint evidence.
+
+The locked public-network-observation cache and transaction-disclosure copy have no
+BIP support impact. They persist and render only a previously verified fee rate and
+chain height; transaction construction, descriptors, recovery, signing, broadcast,
+and protocol interoperability are unchanged.
+
 ## Maintenance rule
+
+The 2026-09-08 command-surface and export-validation maintenance has no BIP impact.
+The active bounded BIP21 payment-request parser retains its V2-only Payjoin detection
+and no-fallback test; an uncalled Payjoin-specific IPC wrapper and its now-dead
+specialized parser, DTO, error enum, and duplicate tests are removed. Sharing the
+unchanged export filename rules does not alter BSMS, PSBT, descriptor, backup,
+transaction, recovery, or interoperability behavior or evidence.
 
 The v0.4.92 sanitized diagnostic event log has no BIP impact. It records only
 allowlisted operation categories, outcomes, build/platform context, and coarse sync
@@ -208,7 +578,213 @@ metadata; it does not change descriptors, PSBTs, transaction construction,
 recovery/backup interoperability, sync protocols, network policy, or supporting
 evidence for any BIP. Adding a sanitized receive-address discard category, exposing
 only the permanent-label count on generation, and relocating the navigation entry
-to Settings likewise have no BIP impact.
+to Settings likewise have no BIP impact. Renaming the viewer to App logs, retaining
+the ordinary shell, and adding renderer-local search, filtering, ordering, raw JSON,
+and explicit sanitized-log copy change presentation only and likewise have no BIP
+impact. Adding outcome filtering, fixed sanitized failure explanations, structured
+pruned-history block heights, and the matching recovery-error presentation does not
+change descriptor derivation, recovery inputs, scanning semantics, transaction data,
+or any BIP support/evidence and therefore likewise has no BIP impact.
+The warning-copy hierarchy, optional privacy/security insight, credential spacing,
+and shape-matched App Logs loading skeletons are renderer-only changes. They do not
+alter BIP329 records, recovery material, descriptors, scanning, native diagnostic
+records, or interoperability evidence and therefore have no BIP impact.
+
+The 2026-09-13 Mainnet send-responsiveness and review-spacing follow-up has no
+BIP support or interoperability impact. It moves existing PSBT preparation,
+maximum-spend quoting, and coin-selection previews off the native UI thread,
+coalesces renderer preview requests during amount edits, and changes only
+review-row presentation. PSBT construction, fee selection rules, descriptors,
+signing, and protocol data are unchanged.
+
+The subsequent spinner, Policy loading-state, BSMS/Groot JSON export-switching,
+and receive-descriptor QR presentation follow-up has no BIP support impact.
+Both already-supported public backup commands run under the same app PIN once;
+their bytes, parsers, descriptor semantics, recovery checks, and BIP129/BIP380/
+BIP389 interoperability evidence are unchanged. The observed Mainnet spend and
+confirmation are exact-build owner reports, not new standards certification.
+
+Restoring the already-admitted Mainnet direct-HTTPS Core selector has no BIP
+support impact. It changes only Settings presentation of the existing Core RPC
+transport; chain identity, wallet discovery, descriptors, and transaction
+standards remain unchanged. A browser fixture is not real-node evidence.
+
+The 2026-09-14 remote-Core rescan responsiveness and Activity manual-sync
+follow-up has no BIP support impact. The scan still reconciles confirmed blocks
+and pending transactions before reporting completion; cancellation and native
+command scheduling change without changing descriptors, transaction semantics,
+wallet formats, node admission, or interoperability evidence. The owner's
+connected-node report is not evidence of a completed remote wallet rescan.
+
+The subsequent remote-Core 99% follow-up also has no BIP support impact. It
+batches existing `getrawtransaction` reads during the same full mempool
+reconciliation and exposes only the last committed wallet state through
+read-only snapshots while that reconciliation runs. It changes no descriptor,
+transaction, recovery, node-admission, or standards behavior; the remote-node
+completion and packaged-user-interface outcome still require physical retest.
+
+The later saved-node outage handling has no BIP support impact. It bounds the
+selected-wallet Core health check and clarifies offline presentation; it does
+not relax Mainnet admission, change the chain or descriptor rules, alter wallet
+data or interoperability formats, or establish new remote-node evidence.
+
+The ADR 0067 narrow Core gateway has no BIP support impact. It preserves the
+existing client-side Core scan, exact-chain admission, descriptors, PSBTs,
+transaction construction, fee handling, and broadcasts while replacing a
+shared service's direct public Core parser with a deny-by-default authenticated
+transport boundary. Esplora remains unwired, and no interoperability evidence
+is added by the gateway's local integration tests.
+
+The 2026-09-16 Core refresh optimization uses Core's authenticated BIP158 basic
+block filters only as an optional local matching accelerator. Groot still
+verifies the active Core chain, downloads every filter from the configured
+exact-chain node, downloads each matching raw block, and atomically applies the
+complete checkpoint with relevant transactions. An unavailable or unsynced
+filter index retains the full-block Core scan. This strengthens the existing
+BIP158 implementation evidence but is not BIP157 peer-protocol certification,
+does not change descriptors or discovery semantics, and makes no new public
+interoperability claim until exact-build live timing is recorded.
+
+The 2026-09-17 filter transport correction has no BIP support impact. It keeps
+the same authenticated BIP158 matching and full-block fallback, but separates
+small block-hash batches from variable-size filter batches and probes one
+bounded filter response before batching. This prevents a short Mainnet
+catch-up from approaching the RPC response-body limit without changing the
+verified chain, discovery range, matching rules, or persisted wallet format.
+
+ADR 0070 changes the remote-Core privacy and transport boundary without
+changing BIP support. The trusted server now performs the BIP158 match through
+Bitcoin Core `scanblocks` and mempool-only `getdescriptoractivity` against
+bounded public `raw(script)` scan objects; Groot still verifies the active hash
+range, downloads matching full blocks and pending transactions, and interprets
+them through the same BDK wallet. This discloses the
+queried public scripts to the remote operator but sends no private descriptor,
+key, label, PSBT, or signing material. It is not BIP157 peer-protocol evidence,
+does not change descriptors or wallet formats, and remains pending live gateway
+and exact-package timing evidence.
+
+The follow-up timeout, capability-preflight, error-classification, and multisig
+retry-routing corrections have no additional BIP impact. They do not change
+descriptor derivation, script matching, transaction interpretation, signing,
+or persisted wallet data; they make the already selected trusted remote-Core
+transport fail fast when its deployed gateway is incompatible and allow its
+synchronous indexed scan enough time to return.
+
+The subsequent remote-refresh performance and single-flight presentation fix
+has no BIP support impact. Increasing the already-bounded raw-transaction batch,
+observing an active native refresh instead of invoking a duplicate, and reusing
+the established loading/error presentation do not change descriptors, discovery,
+transaction interpretation, PSBTs, signing, recovery, or interoperability
+evidence.
+
+The wallet-scoped warm-mempool delta follow-up has no BIP support impact. It
+changes which already-inspected public mempool transaction ids are requested
+again during the same process lifetime while preserving the complete initial
+pass, wallet-pending rechecks, eviction handling, confirmed-chain scan,
+descriptors, transaction interpretation, recovery semantics, and persisted
+formats. It adds no interoperability evidence.
+
+The fixed live-sync cadence, explicit-cancellation reset, rescan-modal guidance,
+and indexed remote full-rescan follow-up have no BIP support impact. Remote
+birthday/genesis scans reuse the already documented bounded `scanblocks`
+BIP158-index query and mempool-only `getdescriptoractivity` transport, download
+only matching full blocks, and retain the same BDK descriptor and transaction
+interpretation. The sparse verified target checkpoint and removal of the
+per-height HTTPS walk change transport performance only. Descriptor derivation,
+address discovery bounds, PSBTs, signing, wallet formats, and interoperability
+claims are unchanged.
+
+The repeat-rescan checkpoint-continuity and terminal-state cleanup correction has
+no BIP support impact. It connects a new birthday anchor to the highest retained
+Core-verified BDK checkpoint and discards failed, cancelled, or interrupted
+progress presentation before an authoritative retry. Descriptor derivation,
+address discovery, BIP158 matching, transaction interpretation, PSBTs, signing,
+wallet formats, and interoperability claims are unchanged.
+
+The remote full-history range-bounding and progress correction has no BIP support
+impact. It submits the same bounded public scripts to Core's indexed BIP158
+`scanblocks` operation over sequential height ranges, unions the same relevant
+block hashes, and preserves the same descriptor derivation, matching, transaction
+interpretation, PSBT, signing, wallet-format, and interoperability behavior.
+
+The outer-proxy timeout and gateway scan-serialization correction has no BIP
+support impact. It preserves those exact BIP158 queries and wallet semantics,
+while ensuring the HTTPS proxy outlives the bounded upstream operation and a
+concurrent caller cannot collide with Core's process-wide indexed scanner.
+
+The hardware-policy and address-modal copy/layout follow-up has no BIP support
+impact. It removes duplicated presentation text and keeps the existing signer
+identity, BIP48 policy values, complete public keys, exact address, PSBT,
+trusted-display review, and signing boundaries unchanged.
+
+The passive Safe 3 and unidentified-device badge correction has no BIP support
+impact. It changes only the reported pre-identification status and its visual
+treatment; selected-device fingerprint verification, address display, PSBT,
+signing, and interoperability rules are unchanged.
+
+The one-item remote-Core batch correction has no BIP support impact. It preserves
+JSON-RPC request/response framing when an indexed match resolves to exactly one
+block; descriptor derivation, BIP158 matching, transaction interpretation,
+wallet formats, signing, recovery, and interoperability claims are unchanged.
+
+The 2026-09-19 manual-sync failure presentation follow-up has no BIP support
+impact. It only standardizes concise retry feedback and spacing across existing
+Overview, Activity, and Receive sync controls; no descriptor, transaction,
+address-discovery, signing, broadcast, or interoperability behavior changes.
+
+ADR 0071 managed-gateway enrollment and the locked Settings continuity fix have
+no BIP support impact. They provision a unique native-only RPC credential through
+the existing protected node-auth envelope and keep app-global controls reachable
+without changing descriptors, derivation, BIP158 matching, PSBTs, signing,
+broadcast, recovery, wallet formats, or interoperability evidence. Enrollment
+failure is explicit offline state and never a backend or fee fallback.
+
+The managed-node mode separation, explicit credential renewal, and
+route-independent initial-scan wake-up have no BIP support impact. They preserve
+the same protected RPC envelope, exact Core/BIP158 scan operations, descriptor
+derivation, address discovery, PSBTs, signing, broadcast, recovery, wallet
+formats, and interoperability evidence; no alternate backend or fee source is
+introduced.
+
+Persisting the verified creation-tip birthday for a newly generated software wallet and
+reattaching its compact progress UI have no BIP support impact. The same BIP158
+matching, BIP84 descriptors, gap discovery, PSBT, signing, and recovery paths
+remain in use; recovered/imported wallets still require an explicit history
+choice and existing database schemas remain compatible.
+
+The portaled insight-tooltip correction, concise managed-node privacy copy, and
+shared App Logs navigation/loading skeleton have no BIP support impact. They
+change presentation only; descriptors, derivation, scanning, PSBTs, signing,
+broadcast, recovery, persistence, and interoperability remain unchanged.
+
+Filtering out-of-scope HWI discovery rows before capability issuance has no BIP
+support impact. Approved signers retain the same BIP84/BIP48 derivations and
+live fingerprint/account-key proof; no descriptor, PSBT, signing, recovery, or
+interoperability claim changes.
+
+Classifying Jade's persisted-network mismatch as a dedicated presentation error
+has no BIP support impact. Network derivation, account-key validation,
+descriptors, PSBTs, signing, and interoperability behavior are unchanged.
+
+Automatically starting a new external-hardware wallet's existing full-history
+scan has no BIP support impact. It changes only the persisted initial birthday
+choice and scheduler wake-up; the same BIP84 descriptors, BIP158 matching, gap
+discovery, PSBT, signing, and recovery paths remain authoritative.
+
+The BitBox02 unlock and public-identity copy correction has no BIP support or
+interoperability-evidence impact. It changes only error and review presentation;
+the pinned HWI discovery call count, BIP84 derivation, complete live
+fingerprint/account-key validation, first-address proof, descriptors, PSBTs,
+signing, and persisted formats are unchanged.
+
+The Trezor Model One PIN-session and continuation corrections have no BIP support
+or interoperability-evidence impact. They remove redundant aggregate discovery
+after a successful PIN challenge across single-key import, receive verification,
+multisig import and signing, and signer health checks, and classify only HWI's
+explicit PIN-invalid failure as a rejected PIN. The same BIP84/BIP48 paths, live
+fingerprint/account-key binding, descriptor construction, first-address proof,
+PSBT, signing, sync, and persisted formats remain authoritative; physical
+replacement-build evidence is still required.
 
 Every feature, interoperability, signer, descriptor, transaction, payment request,
 backup/recovery, sync/backend, network, or dependency change must assess BIP impact.
@@ -222,6 +798,61 @@ If it adds, removes, expands, narrows, or changes evidence for a BIP:
    inherited through a dependency; and
 5. never promote fixture, dependency, Regtest, or physical-device evidence into a
    stronger release claim.
+
+ADR 0073's managed-history acceleration has no descriptor, derivation, address,
+transaction, PSBT, signing, recovery-format, or interoperability BIP impact.
+Electrum protocol script hashes are a private transport/index lookup detail, not
+a new wallet standard claim. BIP84/BIP48 scripts remain locally derived, Core
+full blocks remain authoritative for every claimed transaction, and BDK retains
+wallet accounting. Custom remote Core keeps ADR 0070's BIP158 `scanblocks` path;
+the explicit BIP157/BIP158 peer source is unchanged.
+
+The 2026-09-30 exact-tip Fulcrum restart and authenticated gateway probes add
+deployment evidence only and no BIP support claim. Indexing is complete, but
+wallet-level full-block reconciliation, stale-index failure, no-fallback,
+broadcast sourcing, frozen-package hardware tests, and independent review remain
+separate open gates.
+
+The subsequent authenticated HTTPS/NGINX method probes, gateway restart, and
+bounded malformed-response integration suite are also transport evidence only.
+They close no descriptor, transaction, signing, recovery, or interoperability
+BIP row; wallet-level stale-index/no-fallback and broadcast-source evidence
+remain open.
+
+The local-Core sparse-checkpoint confirmation repair has no BIP support impact.
+It reactivates an already persisted BDK transaction anchor only after Bitcoin Core
+confirms the exact active-chain height/hash and the retained full block contains the
+exact transaction. It changes no descriptor, derivation, transaction, PSBT, signing,
+recovery, wallet format, or interoperability claim; unavailable pruned history and
+inconsistent anchors fail closed.
+
+The cross-flow tooltip, label, modal, Send layout, locked-wallet navigation, and
+Coins selection refinement has no BIP support impact. It changes only renderer
+presentation and navigation; descriptor, address, transaction, PSBT, signing,
+recovery, and interoperability behavior are unchanged.
+
+The single-title page headers, inverted tooltip contrast, light-blue completed
+steps, compact fee attribution, hidden payment-label counter, and interactive
+Coins summary amounts have no BIP support impact. They change only renderer
+presentation and the existing global denomination preference; integer-satoshi
+accounting, descriptors, addresses, transactions, PSBTs, signing, recovery, and
+interoperability remain unchanged.
+
+The copy-confirmation glyph, discard-address disclosure divider removal, and
+case-exact derivation-path presentation have no BIP support or interoperability
+impact. Clipboard payloads, derivation data, descriptors, addresses, transactions,
+PSBTs, signing, recovery, and persisted formats are unchanged.
+
+The 2026-10-04 Mainnet documentation reconciliation changes evidence status, not
+protocol behavior. The owner confirms the supported BIP84 single-key and BIP48
+multisig hardware matrix, signer permutations, recovery, local/managed Core,
+network switching, and two-machine release reproduction passed for v0.4.96.
+No derivation, descriptor, address, PSBT, signing, or persisted format changed.
+
+The post-certification responsiveness and presentation fixes have no BIP impact.
+They move existing address and rename work off the UI thread, coordinate it with
+sync, avoid a duplicate acceleration quote, clarify signer state and backup copy,
+and correct responsive controls. Wallet formats and protocol behavior are unchanged.
 
 If a change has no BIP impact, its pull request records that explicit assessment.
 Upstream status changes alone may update this document without changing Groot's

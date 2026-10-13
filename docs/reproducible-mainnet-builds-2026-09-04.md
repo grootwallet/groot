@@ -13,7 +13,7 @@ node, or hardware device.
 
 ## Frozen source and inputs
 
-- Repository: `thibistaken/groot`
+- Repository: `grootwallet/groot`
 - Branch at build time: `codex/mainnet-final-enablement`
 - Detached source commit:
   `2110eaf0afd0339754c1b9bbba31011c66aa3d69`
@@ -60,8 +60,8 @@ Each build used a fresh GitHub clone, detached checkout, Cargo home, Cargo
 target, pnpm store, HWI download/extraction/staging area, and evidence
 destination. Machine A's first dependency installation downloaded all 144
 packages with zero reuse; Machine B independently reported the same isolation.
-The owner-local absolute evidence paths are retained in private coordination
-issue [#79](https://github.com/thibistaken/groot/issues/79), while this sanitized
+The owner-local absolute evidence paths are retained in coordination issue
+[#79](https://github.com/grootwallet/groot/issues/79), while this sanitized
 record uses only the Build A and Build B labels.
 
 ## Reproducibility correction
@@ -148,3 +148,41 @@ sealed and unchanged. Any later application source, dependency, build-tool, or
 release-configuration change creates a new executable candidate and requires
 fresh independent builds. The remaining checklist, review, physical testing,
 signing/notarization, update, recovery, and distribution-ADR gates stay open.
+
+## 2026-10-01 fixed-Mainnet supporting campaign
+
+Public coordination issue [#89](https://github.com/grootwallet/groot/issues/89)
+froze commit `76fb54e8bf2203a5355149c404ae05db57556843`. Two clean Apple-silicon
+machines independently cloned the detached commit, used isolated source,
+pnpm-store, Cargo-home/target, HWI, temporary, and evidence paths, and sealed
+their output before comparison. Both builder validations and required second
+validations passed with 26 Core-gateway tests and 92 Vitest files / 694 tests.
+The exact-tip frontend and Rust CI jobs also passed.
+
+| Evidence file    | Machine A SHA-256                                                  | Machine B SHA-256                                                  | Result |
+| ---------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------ | ------ |
+| `BUILD-INFO`     | `9103421e634a41f45ebd252ffd0e33e94e4c00f422dcf543adb46747a20b41a1` | `9103421e634a41f45ebd252ffd0e33e94e4c00f422dcf543adb46747a20b41a1` | Match  |
+| `Groot`          | `ead0985177eafdcbb6ec4886269527751d851d95ecabbc268f986f342e1954e0` | `ead0985177eafdcbb6ec4886269527751d851d95ecabbc268f986f342e1954e0` | Match  |
+| `SHA256SUMS`     | `e43c24e2eda12042f91433d2824330a313dbf8c9d5f4917abc46ff43a54e7374` | `e43c24e2eda12042f91433d2824330a313dbf8c9d5f4917abc46ff43a54e7374` | Match  |
+| `groot.cdx.json` | `44f449fc66dbe73c9afb516ee8153faf034c0d520b9afba71deaca7b26d878aa` | `44f449fc66dbe73c9afb516ee8153faf034c0d520b9afba71deaca7b26d878aa` | Match  |
+
+Both executables retained UUID `5A8D9670-8A4B-3E9B-B94D-DCFA8930B31D`.
+Each evidence audit passed the exact four-file shape, recorded checksums, thin
+arm64 Mach-O identity, strict-valid ad hoc signature with no signing team,
+Mainnet/version/bundle bindings, 549-component CycloneDX closure and executable
+binding, physical-path rejection, and clean detached source.
+
+The machines used the same existing native Codex Python 3.12.14 / OpenSSL 3.5.8
+runtime for validation because Machine B's system LibreSSL Python lacks
+`hashlib.scrypt`. Machine B's first post-build validation was denied localhost
+`socket.bind` by the Codex application sandbox; evidence remained unchanged,
+and one coordinator-authorized validation-only rerun outside that sandbox
+passed. The builder ran exactly once. No identity signing, notarization,
+packaging, application launch, wallet/node/device access, or credential access
+occurred.
+
+This campaign compiled `mainnet` with bundle identity
+`app.groot.wallet.mainnet`. It is byte-for-byte fixed-Mainnet supporting evidence
+and proof that the current deterministic builder works; ADR 0069 still requires
+the final `multi` / `app.groot.wallet` artifact to reproduce independently
+against the frozen production-signed HWI input before packaging and GA.

@@ -8,7 +8,7 @@ Groot is a deliberately small, non-custodial, onchain Bitcoin wallet for desktop
 
 ## Repository boundary
 
-- [`thibistaken/groot`](https://github.com/thibistaken/groot) is the wallet application: the Tauri desktop/mobile application and its browser-based wallet prototype.
+- [`grootwallet/groot`](https://github.com/grootwallet/groot) is the wallet application: the Tauri desktop/mobile application and its browser-based wallet prototype.
 - [`thibistaken/groot-site`](https://github.com/thibistaken/groot-site) is the only marketing website and the canonical source for public-site code, copy, screenshots, brand presentation, SEO, and deployment.
 - Do not add marketing routes, marketing-site assets, public-site metadata, or marketing deployment configuration to this repository. Product facts originate here; public presentation belongs in `groot-site`.
 

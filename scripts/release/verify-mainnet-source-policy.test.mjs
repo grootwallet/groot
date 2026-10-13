@@ -26,15 +26,32 @@ fn main() {
 
 test('pins every reviewed mainnet-critical source byte', () => {
   const read = (path) => readFileSync(`${repoRoot}${path}`, 'utf8');
-  assert.doesNotThrow(() => validateMainnetSourcePolicy(read));
+  const readBytes = (path) => readFileSync(`${repoRoot}${path}`);
+  assert.doesNotThrow(() => validateMainnetSourcePolicy(read, readBytes));
+  assert.throws(() => validateMainnetSourcePolicy(read), /requires a binary-safe source reader/);
+  for (const target of [
+    'src/lib/config.ts',
+    'src-tauri/src/secure_store.rs',
+    'src-tauri/src/native_backup/macos.rs',
+    'src-tauri/src/proposal.rs'
+  ]) {
+    assert.throws(
+      () =>
+        validateMainnetSourcePolicy(
+          (path) => (path === target ? `${read(path)}\n// unauthorized mutation` : read(path)),
+          readBytes
+        ),
+      /changed after the mainnet-candidate policy snapshot/
+    );
+  }
   assert.throws(
     () =>
-      validateMainnetSourcePolicy((path) =>
-        path === 'src/lib/config.ts'
-          ? `${read(path)}\nSUPPORTED_NETWORKS.push(hidden);`
-          : read(path)
+      validateMainnetSourcePolicy(read, (path) =>
+        path === 'scripts/release/assets/groot-dmg-background.png'
+          ? Buffer.concat([readBytes(path), Buffer.from([0])])
+          : readBytes(path)
       ),
-    /changed after the mainnet-candidate policy snapshot/
+    /groot-dmg-background\.png changed after the mainnet-candidate policy snapshot/
   );
 });
 
@@ -65,7 +82,7 @@ export const SUPPORTED_NETWORKS = ['mainnet'] as const;`),
   );
 });
 
-test('native build gate rejects a mainnet match arm', () => {
+test('native build gate rejects an unreviewed mainnet match arm', () => {
   const source = buildFixture(`
     "regtest" | "signet" | "testnet4" => {}
     "mainnet" => enable_without_the_reviewed_single_arm()
@@ -73,10 +90,10 @@ test('native build gate rejects a mainnet match arm', () => {
   assert.throws(() => validateBuildScriptSource(source), /exact reviewed match/);
 });
 
-test('trusted release gate requires the dedicated compile-time mainnet identity', () => {
+test('trusted release gate permits mainnet only in reviewed mainnet-capable identities', () => {
   validateReleasePolicySource(`
 pub fn ensure_runtime_network_enabled(_network: Network) -> Result<(), ReleasePolicyError> {
-  #[cfg(not(groot_network = "mainnet"))]
+  #[cfg(not(any(groot_network = "mainnet", groot_network = "multi")))]
   if _network == Network::Bitcoin {
     return Err(ReleasePolicyError::MainnetDisabled);
   }
@@ -100,7 +117,7 @@ pub fn ensure_runtime_network_enabled(_network: Network) -> Result<(), ReleasePo
       validateReleasePolicySource(`
 #[cfg(any())]
 pub fn ensure_runtime_network_enabled(_network: Network) -> Result<(), ReleasePolicyError> {
-  #[cfg(not(groot_network = "mainnet"))]
+  #[cfg(not(any(groot_network = "mainnet", groot_network = "multi")))]
   if _network == Network::Bitcoin { return Err(ReleasePolicyError::MainnetDisabled); }
   Ok(())
 }
@@ -127,7 +144,7 @@ export const SUPPORTED_NETWORKS = ['mainnet'] as const;`),
   assert.throws(
     () =>
       validateReleasePolicySource(`
-// #[cfg(not(groot_network = "mainnet"))]
+// #[cfg(not(any(groot_network = "mainnet", groot_network = "multi")))]
 pub fn ensure_runtime_network_enabled(network: Network) -> Result<(), ReleasePolicyError> { Ok(()) }`),
     /exact fail-closed implementation/
   );
@@ -137,7 +154,7 @@ test('indirection and decoy safe snippets cannot bypass native network checks', 
   assert.throws(
     () =>
       validateBuildScriptSource(`
-${buildFixture('"regtest" | "signet" | "testnet4" | "mainnet" => {} _ => panic!("GROOT_BUILD_NETWORK must be exactly regtest, signet, testnet4, or mainnet"),')}
+${buildFixture('"regtest" | "signet" | "testnet4" | "mainnet" | "multi" => {} _ => panic!("GROOT_BUILD_NETWORK must be exactly regtest, signet, testnet4, mainnet, or multi"),')}
 match network.as_str() { "mainnet" => enable(), _ => {} }`),
     /exact reviewed match|not uniquely recognizable/
   );
@@ -145,8 +162,8 @@ match network.as_str() { "mainnet" => enable(), _ => {} }`),
     () =>
       validateBuildScriptSource(
         buildFixture(`
-  "regtest" | "signet" | "testnet4" | "mainnet" => {}
-  _ => panic!("GROOT_BUILD_NETWORK must be exactly regtest, signet, testnet4, or mainnet"),
+  "regtest" | "signet" | "testnet4" | "mainnet" | "multi" => {}
+  _ => panic!("GROOT_BUILD_NETWORK must be exactly regtest, signet, testnet4, mainnet, or multi"),
 `) + '\nprintln!("cargo:rustc-cfg=groot_network=\\"mainnet\\"");'
       ),
     /not bound/

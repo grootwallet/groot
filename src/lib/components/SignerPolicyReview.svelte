@@ -29,6 +29,7 @@
     busy = false,
     error = '',
     action = 'verify',
+    showAddressReference = true,
     onverify,
     oncontinue,
     onshowtransaction,
@@ -41,6 +42,7 @@
     busy?: boolean;
     error?: string;
     action?: 'verify' | 'sign';
+    showAddressReference?: boolean;
     onverify?: () => void;
     oncontinue?: () => void;
     onshowtransaction?: () => void;
@@ -92,19 +94,15 @@
               })
         )}</strong
       >
-      <small
-        >{#if verification}{translate(
-            $locale,
-            kind === 'ledger' ? 'Previously compared' : 'Verified'
-          )}
-          <LocalTimestamp value={verification.verifiedAt} />
-          {translate($locale, 'with signer')}
-          <code>{verification.signerFingerprint}</code>.{:else}{translate(
-            $locale,
-            'Reject if any value differs on'
-          )}
-          {deviceName}.{/if}</small
-      >
+      {#if verification}<small
+          >{#if verification && action === 'sign'}{translate($locale, 'Signer')}
+            <code>{verification.signerFingerprint}</code>{:else if verification}{translate(
+              $locale,
+              kind === 'ledger' ? 'Previously compared' : 'Verified'
+            )}
+            <LocalTimestamp value={verification.verifiedAt} /> ·
+            <code>{verification.signerFingerprint}</code>{/if}</small
+        >{/if}
     </div>
   </header>
 
@@ -125,30 +123,14 @@
           </dd>
         </div>
       </dl>
-      <p>
-        {translate($locale, 'Ledger may label the keys @0 through @')}{wallet.cosigners.length - 1}
-        {translate(
-          $locale,
-          'in a different order. Match\n        the complete values, not the position.'
-        )}
-      </p>
-      {#if verification}<p class="policy-repeat-note">
-          {translate(
-            $locale,
-            "Groot's current Ledger connection must authorize this policy again for each signing\n          request. Keep this reference open until Ledger reaches the transaction."
-          )}
-        </p>{/if}
-      {#if action === 'sign'}<p>
-          {translate($locale, 'Open the signer key reference below while Ledger shows each key.')}
-        </p>{/if}
     </div>
   {:else if isBitBox}
-    <div class="policy-device-warning">
+    <div class="policy-device-expectation">
       <strong>{translate($locale, 'Review on BitBox')}</strong>
       <p>
         {translate(
           $locale,
-          'Enter a new device-local account name. BitBox shows the script type, account path, every account xpub, and the first address; signer fingerprints remain a Groot reference.'
+          'Enter a new device-local account name. Review the details on your device.'
         )}
       </p>
     </div>
@@ -171,11 +153,8 @@
     }}
   >
     <summary
-      ><span
-        ><strong>{translate($locale, 'Signer key reference')}</strong><small
-          >{translate($locale, 'Open while reviewing the values shown by the device.')}</small
-        ></span
-      ><span class="policy-signer-details-state"
+      ><span><strong>{translate($locale, 'Signer keys to compare')}</strong></span><span
+        class="policy-signer-details-state"
         ><em
           >{translate(
             $locale,
@@ -187,45 +166,48 @@
     <PolicySignerList signers={wallet.cosigners} currentFingerprint={signer.fingerprint} />
   </details>
 
-  <section class="policy-address-check" aria-label={translate($locale, 'First address to verify')}>
-    <div>
-      <strong
-        >{translate(
-          $locale,
-          isBitBox ? 'Address shown after registration' : 'First address reference'
-        )}</strong
-      ><small
-        >{isBitBox
-          ? translate($locale, '{device} shows this after policy approval.', {
-              device: deviceName
-            })
-          : translate($locale, 'Compare this when it appears on the device.')}</small
-      >
-    </div>
-    <button
-      type="button"
-      class="policy-address-summary"
-      aria-expanded={addressExpanded}
-      onclick={() => (addressExpanded = !addressExpanded)}
-      ><code>{compactAddress(displayedAddress)}</code><span
-        >{translate($locale, addressExpanded ? 'Hide full address' : 'Show full address')}</span
-      ></button
+  {#if showAddressReference}<section
+      class="policy-address-check"
+      aria-label={translate($locale, 'First address to verify')}
     >
-    {#if addressExpanded}<ReadableAddress
-        address={displayedAddress}
-        copied={addressCopied}
-        oncopy={copyAddress}
-      />{/if}
-    <small class="policy-address-purpose">
-      {translate($locale, 'Reference only. After setup, use Receive for payments.')}
-    </small>
-    {#if testnetAddressDevice}<small
-        >{testnetAddressDevice}
-        {translate($locale, 'displays the Regtest script with a')}
-        <code>{translate($locale, 'tb1')}</code>
-        {translate($locale, 'prefix for the same Bitcoin script.')}</small
-      >{/if}
-  </section>
+      <div>
+        <strong
+          >{translate(
+            $locale,
+            isBitBox ? 'Address shown after registration' : 'First address reference'
+          )}</strong
+        >{#if action !== 'sign'}<small
+            >{isBitBox
+              ? translate($locale, '{device} shows this after policy approval.', {
+                  device: deviceName
+                })
+              : translate($locale, 'Compare this when it appears on the device.')}</small
+          >{/if}
+      </div>
+      <button
+        type="button"
+        class="policy-address-summary"
+        aria-expanded={addressExpanded}
+        onclick={() => (addressExpanded = !addressExpanded)}
+        ><code>{compactAddress(displayedAddress)}</code><span
+          >{translate($locale, addressExpanded ? 'Hide full address' : 'Show full address')}</span
+        ></button
+      >
+      {#if addressExpanded}<ReadableAddress
+          address={displayedAddress}
+          copied={addressCopied}
+          oncopy={copyAddress}
+        />{/if}
+      {#if testnetAddressDevice}<small
+          >{testnetAddressDevice}
+          {translate($locale, 'displays the Regtest script with a')}
+          <code>{translate($locale, 'tb1')}</code>
+          {translate(
+            $locale,
+            'prefix. Rust verified\n        that it decodes to the identical Bitcoin output script.'
+          )}</small
+        >{/if}
+    </section>{/if}
 
   {#if error}<div class="hardware-inline-error" role="alert" aria-live="polite">
       <AlertTriangle size={18} /><span
@@ -248,7 +230,7 @@
         >{translate($locale, 'Wallet policy reviewed. Show transaction')}</Button
       >
     {:else}<Button onclick={oncontinue}
-        >{translate($locale, 'Start')} {deviceName} {translate($locale, 'review & signing')}</Button
+        >{translate($locale, 'Review & sign on {device}', { device: deviceName })}</Button
       >{/if}
   </div>
 </section>

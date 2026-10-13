@@ -18,8 +18,16 @@ pub struct WalletProfileCompatibility {
 pub struct NetworkSetupSource {
     wallet_id: String,
     wallet_name: String,
-    sync_source: WalletSyncSource,
     ready: bool,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SoftwareWalletCreation {
+    master_fingerprint: String,
+    external_descriptor: String,
+    internal_descriptor: String,
+    network_setup_copied: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -111,14 +119,17 @@ pub fn network_setup_sources(
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> ApiResult<Vec<NetworkSetupSource>> {
-    if NETWORK == Network::Bitcoin {
-        return Err(api_error(
-            "unsupported_wallet_policy",
-            "Mainnet wallets must verify and retain their own local Bitcoin Core setup.",
-        ));
-    }
-    require_unlocked(&app, &state)?;
+    // This is public source availability, not access to a selected wallet's
+    // protected connection. Adoption separately authorizes the exact source.
     let registry = load_registry(&app)?;
+    for profile in &registry.wallets {
+        authorize_wallet_session(
+            &state,
+            profile.id,
+            false,
+            registry.inactivity_timeout_minutes,
+        )?;
+    }
     let unlocked = state.unlocked_wallets.lock().map_err(internal)?;
     let node_auth = state.node_auth.lock().map_err(internal)?;
     Ok(registry
@@ -142,7 +153,6 @@ pub fn network_setup_sources(
             Some(NetworkSetupSource {
                 wallet_id: profile.id.to_string(),
                 wallet_name: profile.name,
-                sync_source,
                 ready,
             })
         })
@@ -150,19 +160,20 @@ pub fn network_setup_sources(
 }
 
 #[tauri::command]
-pub fn wallet_rename(
-    app: AppHandle,
-    state: State<'_, AppState>,
-    name: String,
-) -> ApiResult<WalletProfile> {
-    let _operation = operation_guard(&state)?;
-    require_unlocked(&app, &state)?;
-    let mut registry = load_registry(&app)?;
-    let renamed = registry
-        .rename_selected(&name)
-        .map_err(registry_api_error)?;
-    save_registry(&app, &registry)?;
-    Ok(renamed)
+pub async fn wallet_rename(app: AppHandle, name: String) -> ApiResult<WalletProfile> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let wallet_id = require_unlocked(&app, &state)?;
+        let _operation = metadata_operation_guard(&state, wallet_id)?;
+        let mut registry = load_registry(&app)?;
+        let renamed = registry
+            .rename_selected(&name)
+            .map_err(registry_api_error)?;
+        save_registry(&app, &registry)?;
+        Ok(renamed)
+    })
+    .await
+    .map_err(internal)?
 }
 
 #[tauri::command]
@@ -204,6 +215,7 @@ pub async fn wallet_select(app: AppHandle, wallet_id: String) -> ApiResult<Walle
         let state = app.state::<AppState>();
         cancel_foreground_sync(&state)?;
         let _operation = operation_guard(&state)?;
+        state.pending_mnemonic.lock().map_err(internal)?.take();
         let id = Uuid::parse_str(&wallet_id)
             .map_err(|_| api_error("wallet_not_found", "The selected wallet does not exist."))?;
         let mut registry = load_registry(&app)?;
@@ -274,7 +286,8 @@ pub fn wallet_create(
     state: State<'_, AppState>,
     name: String,
     credential: String,
-) -> ApiResult<()> {
+    network_setup_source_wallet_id: Option<String>,
+) -> ApiResult<SoftwareWalletCreation> {
     let credential = Zeroizing::new(credential);
     let _operation = operation_guard(&state)?;
     let _admission_cleanup = clear_new_wallet_admission_on_exit(&state);
@@ -297,24 +310,29 @@ pub fn wallet_create(
         ));
     }
     let mnemonic = Mnemonic::parse(pending.words.as_str()).map_err(internal)?;
+    let master_fingerprint = software_wallet_master_fingerprint(&mnemonic, credential.as_str())?;
     let authenticated_descriptors = software_wallet_descriptors(&mnemonic, credential.as_str())?;
-    if let Err(error) = create_from_mnemonic(
+    let network_setup_copied = match create_from_mnemonic(
         &app,
         &state,
         name,
         mnemonic,
         credential.as_str(),
         pending.backup_verified,
+        network_setup_source_wallet_id.as_deref(),
     ) {
-        *state.pending_mnemonic.lock().map_err(internal)? = Some(pending);
-        return Err(error);
-    }
+        Ok(network_setup_copied) => network_setup_copied,
+        Err(error) => {
+            *state.pending_mnemonic.lock().map_err(internal)? = Some(pending);
+            return Err(error);
+        }
+    };
     let selected = selected_profile_of_kind(&app, WalletKind::SingleKey)?.id;
     state
         .authenticated_software_descriptors
         .lock()
         .map_err(internal)?
-        .insert(selected, authenticated_descriptors);
+        .insert(selected, authenticated_descriptors.clone());
     unlock_selected(&app, &state)?;
     diagnostics::record(
         &app,
@@ -327,7 +345,12 @@ pub fn wallet_create(
         },
         None,
     );
-    Ok(())
+    Ok(SoftwareWalletCreation {
+        master_fingerprint,
+        external_descriptor: authenticated_descriptors.0,
+        internal_descriptor: authenticated_descriptors.1,
+        network_setup_copied,
+    })
 }
 
 #[tauri::command]
@@ -359,7 +382,15 @@ pub fn wallet_recover(
         ));
     }
     let authenticated_descriptors = software_wallet_descriptors(&mnemonic, credential.as_str())?;
-    create_from_mnemonic(&app, &state, name, mnemonic, credential.as_str(), true)?;
+    create_from_mnemonic(
+        &app,
+        &state,
+        name,
+        mnemonic,
+        credential.as_str(),
+        true,
+        None,
+    )?;
     let selected = selected_profile_of_kind(&app, WalletKind::SingleKey)?.id;
     state
         .authenticated_software_descriptors
@@ -472,51 +503,55 @@ pub fn wallet_reveal_and_verify_backup(
 }
 
 #[tauri::command]
-pub fn wallet_unlock(
-    app: AppHandle,
-    state: State<'_, AppState>,
-    credential: String,
-) -> ApiResult<()> {
+pub async fn wallet_unlock(app: AppHandle, credential: String) -> ApiResult<()> {
     let credential = Zeroizing::new(credential);
-    let _operation = operation_guard(&state)?;
-    check_auth_throttle(&app, &state)?;
-    let result = match selected_profile(&app)?.kind {
-        WalletKind::SingleKey => decrypt_mnemonic(&app, credential.as_str()).and_then(|mnemonic| {
-            software_wallet_descriptors(&mnemonic, credential.as_str()).map(Some)
-        }),
-        WalletKind::Multisig => {
-            verify_multisig_credential(&app, credential.as_str()).map(|()| None)
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let _operation = operation_guard(&state)?;
+        check_auth_throttle(&app, &state)?;
+        let result = match selected_profile(&app)?.kind {
+            WalletKind::SingleKey => {
+                decrypt_mnemonic(&app, credential.as_str()).and_then(|mnemonic| {
+                    software_wallet_descriptors(&mnemonic, credential.as_str()).map(Some)
+                })
+            }
+            WalletKind::Multisig => {
+                verify_multisig_credential(&app, credential.as_str()).map(|()| None)
+            }
+            WalletKind::WatchOnly => {
+                verify_external_signer_credential(&app, credential.as_str()).map(|()| None)
+            }
+        };
+        record_auth_result(&app, &state, &result)?;
+        let authenticated_descriptors = result?;
+        provision_managed_mainnet_node_if_missing(&app, &state, credential.as_str())?;
+        load_node_auth_session(&app, &state, credential.as_str())?;
+        if let Some(descriptors) = authenticated_descriptors {
+            let selected = selected_profile_of_kind(&app, WalletKind::SingleKey)?.id;
+            state
+                .authenticated_software_descriptors
+                .lock()
+                .map_err(internal)?
+                .insert(selected, descriptors);
         }
-        WalletKind::WatchOnly => {
-            verify_external_signer_credential(&app, credential.as_str()).map(|()| None)
-        }
-    };
-    record_auth_result(&app, &state, &result)?;
-    let authenticated_descriptors = result?;
-    load_node_auth_session(&app, &state, credential.as_str())?;
-    if let Some(descriptors) = authenticated_descriptors {
-        let selected = selected_profile_of_kind(&app, WalletKind::SingleKey)?.id;
-        state
-            .authenticated_software_descriptors
-            .lock()
-            .map_err(internal)?
-            .insert(selected, descriptors);
-    }
-    unlock_selected(&app, &state)?;
-    clear_mainnet_node_admission(&state)?;
-    let kind = diagnostics::wallet_kind(selected_profile(&app)?.kind);
-    diagnostics::record(
-        &app,
-        &state,
-        diagnostics::DiagnosticEventKind::WalletUnlocked,
-        diagnostics::DiagnosticOutcome::Succeeded,
-        diagnostics::DiagnosticContext {
-            wallet_kind: Some(kind),
-            ..Default::default()
-        },
-        None,
-    );
-    Ok(())
+        unlock_selected(&app, &state)?;
+        clear_mainnet_node_admission(&state)?;
+        let kind = diagnostics::wallet_kind(selected_profile(&app)?.kind);
+        diagnostics::record(
+            &app,
+            &state,
+            diagnostics::DiagnosticEventKind::WalletUnlocked,
+            diagnostics::DiagnosticOutcome::Succeeded,
+            diagnostics::DiagnosticContext {
+                wallet_kind: Some(kind),
+                ..Default::default()
+            },
+            None,
+        );
+        Ok(())
+    })
+    .await
+    .map_err(internal)?
 }
 
 #[tauri::command]
@@ -525,6 +560,7 @@ pub async fn wallet_lock(app: AppHandle) -> ApiResult<()> {
         let state = app.state::<AppState>();
         cancel_foreground_sync(&state)?;
         let _operation = operation_guard(&state)?;
+        state.pending_mnemonic.lock().map_err(internal)?.take();
         state.proposals.lock().map_err(internal)?.clear();
         let profile = selected_profile(&app)?;
         lock_wallet(&state, profile.id)?;
@@ -579,11 +615,24 @@ pub fn wallet_lock_all(state: State<'_, AppState>) -> ApiResult<()> {
 pub async fn wallet_snapshot(app: AppHandle) -> ApiResult<WalletSnapshotDto> {
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<AppState>();
-        let _operation = operation_guard(&state)?;
-        require_unlocked(&app, &state)?;
-        let mut db = open_db(&app)?;
+        let wallet_id = require_unlocked(&app, &state)?;
+        let _persisted_guard = foreground_persisted_read_guard(&state, wallet_id)?;
+        let persisted_read = _persisted_guard.is_some();
+        let _operation = if persisted_read {
+            None
+        } else {
+            Some(operation_guard(&state)?)
+        };
+        require_wallet_read_context(&app, &state, wallet_id, None)?;
+        let mut db = if persisted_read {
+            open_selected_db_for_persisted_read(&app, false)?
+        } else {
+            open_db(&app)?
+        };
         let wallet = load_wallet(&mut db)?;
-        snapshot_from(&wallet, &db, None, false, None)
+        let snapshot = snapshot_for_view(&wallet, &db, None, false, None, false, !persisted_read)?;
+        require_wallet_read_context(&app, &state, wallet_id, None)?;
+        Ok(snapshot)
     })
     .await
     .map_err(internal)?
@@ -624,7 +673,10 @@ pub async fn wallet_sync(app: AppHandle, automatic: Option<bool>) -> ApiResult<W
             },
             None,
         );
-        let result = run_foreground_sync(&app, &state, false);
+        let result = run_foreground_sync(&app, &state, false).and_then(|snapshot| {
+            update_public_network_status(&app, None, Some(snapshot.chain_tip.height.into()))?;
+            Ok(snapshot)
+        });
         diagnostics::record_result(
             &app,
             &state,
@@ -656,21 +708,32 @@ pub fn wallet_sync_status(
         .cloned())
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NotificationPage {
+    session_id: Uuid,
+    envelopes: Vec<notifications::NotificationEnvelope>,
+}
+
 #[tauri::command]
 pub async fn wallet_notifications(
     app: AppHandle,
+    wallet_id: Uuid,
     multisig: bool,
-) -> ApiResult<Vec<notifications::NotificationEnvelope>> {
+) -> ApiResult<NotificationPage> {
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<AppState>();
         let _operation = operation_guard(&state)?;
-        require_unlocked_for_background_sync(&app, &state)?;
+        let session_id = require_wallet_read_context(&app, &state, wallet_id, None)?;
         let db = if multisig {
             open_multisig_db(&app)?
         } else {
             open_db(&app)?
         };
-        notifications::pending(&db).map_err(internal)
+        Ok(NotificationPage {
+            session_id,
+            envelopes: notifications::pending(&db).map_err(internal)?,
+        })
     })
     .await
     .map_err(internal)?
@@ -679,13 +742,15 @@ pub async fn wallet_notifications(
 #[tauri::command]
 pub async fn wallet_notifications_ack(
     app: AppHandle,
+    wallet_id: Uuid,
+    session_id: Uuid,
     multisig: bool,
     ids: Vec<String>,
 ) -> ApiResult<()> {
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<AppState>();
         let _operation = operation_guard(&state)?;
-        require_unlocked_for_background_sync(&app, &state)?;
+        require_wallet_read_context(&app, &state, wallet_id, Some(session_id))?;
         validate_notification_acknowledgements(&ids)?;
         let mut db = if multisig {
             open_multisig_db(&app)?
@@ -710,67 +775,69 @@ pub(crate) fn validate_notification_acknowledgements(ids: &[String]) -> ApiResul
 }
 
 #[tauri::command]
-pub fn address_create(
-    app: AppHandle,
-    state: State<'_, AppState>,
-    labels: Vec<String>,
-) -> ApiResult<ReceiveAddressDto> {
-    let _operation = operation_guard(&state)?;
-    require_unlocked(&app, &state)?;
-    let labels = normalize_labels(labels)?;
-    let label = labels[0].clone();
-    let mut db = open_db(&app)?;
-    let mut transaction = db.transaction().map_err(internal)?;
-    let mut wallet = Wallet::load()
-        .check_network(NETWORK)
-        .load_wallet(&mut transaction)
-        .map_err(internal)?
-        .ok_or_else(|| api_error("wallet_not_found", "Wallet database is empty."))?;
-    let info = wallet.reveal_next_address(KeychainKind::External);
-    enforce_recovery_gap(&transaction, info.index)?;
-    let created = now();
-    transaction
-        .execute(
-            "INSERT INTO groot_addresses (idx, address, label, created_at, state) VALUES (?1, ?2, ?3, ?4, 'awaiting')",
-            params![info.index, info.address.to_string(), label, created],
+pub async fn address_create(app: AppHandle, labels: Vec<String>) -> ApiResult<ReceiveAddressDto> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let _operation = operation_guard(&state)?;
+        let wallet_id = require_unlocked(&app, &state)?;
+        let labels = normalize_labels(labels)?;
+        let label = labels[0].clone();
+        let mut db = open_db(&app)?;
+        let mut transaction = db.transaction().map_err(internal)?;
+        let mut wallet = Wallet::load()
+            .check_network(network())
+            .load_wallet(&mut transaction)
+            .map_err(internal)?
+            .ok_or_else(|| api_error("wallet_not_found", "Wallet database is empty."))?;
+        let info = wallet.reveal_next_address(KeychainKind::External);
+        enforce_recovery_gap(&transaction, info.index)?;
+        let created = now();
+        transaction
+            .execute(
+                "INSERT INTO groot_addresses (idx, address, label, created_at, state) VALUES (?1, ?2, ?3, ?4, 'awaiting')",
+                params![info.index, info.address.to_string(), label, created],
+            )
+            .map_err(internal)?;
+        label_provenance::assign_labels(
+            &transaction,
+            &labels,
+            LabelOrigin::Receive,
+            "address",
+            &info.index.to_string(),
+            created,
         )
         .map_err(internal)?;
-    label_provenance::assign_labels(
-        &transaction,
-        &labels,
-        LabelOrigin::Receive,
-        "address",
-        &info.index.to_string(),
-        created,
-    )
-    .map_err(internal)?;
-    wallet.persist(&mut transaction).map_err(internal)?;
-    transaction.commit().map_err(internal)?;
-    let response = ReceiveAddressDto {
-        id: info.index,
-        testnet_alias: regtest_testnet_address_alias(&info.address.to_string()),
-        address: info.address.to_string(),
-        label,
-        labels,
-        created: created.to_string(),
-        status: "awaiting".to_owned(),
-        derivation_path: format!("{SINGLESIG_ACCOUNT_PATH}/0/{}", info.index),
-        hardware_verified_at: None,
-        hardware_verified_by: None,
-    };
-    diagnostics::record(
-        &app,
-        &state,
-        diagnostics::DiagnosticEventKind::ReceiveAddressGenerated,
-        diagnostics::DiagnosticOutcome::Succeeded,
-        diagnostics::DiagnosticContext {
-            wallet_kind: Some(diagnostics::wallet_kind(selected_profile(&app)?.kind)),
-            item_count: u32::try_from(response.labels.len()).ok(),
-            ..Default::default()
-        },
-        None,
-    );
-    Ok(response)
+        wallet.persist(&mut transaction).map_err(internal)?;
+        transaction.commit().map_err(internal)?;
+        forget_core_mempool_snapshot(&state, wallet_id);
+        let response = ReceiveAddressDto {
+            id: info.index,
+            testnet_alias: regtest_testnet_address_alias(&info.address.to_string()),
+            address: info.address.to_string(),
+            label,
+            labels,
+            created: created.to_string(),
+            status: "awaiting".to_owned(),
+            derivation_path: format!("{}/0/{}", singlesig_account_path(), info.index),
+            hardware_verified_at: None,
+            hardware_verified_by: None,
+        };
+        diagnostics::record(
+            &app,
+            &state,
+            diagnostics::DiagnosticEventKind::ReceiveAddressGenerated,
+            diagnostics::DiagnosticOutcome::Succeeded,
+            diagnostics::DiagnosticContext {
+                wallet_kind: Some(diagnostics::wallet_kind(selected_profile(&app)?.kind)),
+                item_count: u32::try_from(response.labels.len()).ok(),
+                ..Default::default()
+            },
+            None,
+        );
+        Ok(response)
+    })
+    .await
+    .map_err(internal)?
 }
 
 #[tauri::command]
@@ -902,14 +969,14 @@ pub(crate) fn core_fee_rate(fee_rate: Option<Amount>) -> ApiResult<f64> {
                 "Bitcoin Core does not have a fee estimate for this target yet. Enter a custom sat/vB rate or try again later.",
             )
         })?;
-    let sats_per_vbyte = sats_per_kvb.div_ceil(1_000);
-    if sats_per_vbyte > 10_000 {
+    let sats_per_vbyte = sats_per_kvb as f64 / 1_000.0;
+    if sats_per_vbyte > 10_000.0 {
         return Err(api_error(
             "fee_estimate_unavailable",
             "Bitcoin Core returned a fee estimate outside Groot's safe range. Enter a custom sat/vB rate or try again later.",
         ));
     }
-    Ok(sats_per_vbyte as f64)
+    Ok(sats_per_vbyte)
 }
 
 pub(crate) fn estimate_core_fee(
@@ -935,6 +1002,7 @@ pub(crate) fn ordered_fee_estimates(economy: f64, standard: f64, priority: f64) 
 }
 
 pub(crate) const SPARSE_MEMPOOL_LIMIT_VBYTES: u64 = 900_000;
+pub(crate) const MAX_BACKEND_FEE_RATE_SAT_VB: u64 = 1_000;
 
 pub(crate) fn sparse_mempool_fee_rate(
     entries: impl IntoIterator<Item = (u64, u64)>,
@@ -950,6 +1018,9 @@ pub(crate) fn sparse_mempool_fee_rate(
             return None;
         }
         let rate = modified_fee_sats.div_ceil(vsize).max(1);
+        if rate > MAX_BACKEND_FEE_RATE_SAT_VB {
+            return None;
+        }
         lowest_rate = Some(lowest_rate.map_or(rate, |current: u64| current.min(rate)));
     }
     lowest_rate.map(|rate| rate as f64)
@@ -968,13 +1039,15 @@ pub(crate) fn current_mempool_fee_rate(
 
 #[tauri::command]
 pub fn fees_estimate(app: AppHandle, state: State<'_, AppState>) -> ApiResult<FeeEstimatesDto> {
-    if IS_REGTEST {
-        return Ok(FeeEstimatesDto {
+    if is_regtest() {
+        let estimates = FeeEstimatesDto {
             economy: 1.0,
             standard: 2.0,
             priority: 5.0,
             source: "Regtest policy",
-        });
+        };
+        update_public_network_status(&app, Some(estimates.priority), None)?;
+        return Ok(estimates);
     }
     require_unlocked(&app, &state)?;
     let client = rpc_client(&app, &state)?;
@@ -995,18 +1068,80 @@ pub fn fees_estimate(app: AppHandle, state: State<'_, AppState>) -> ApiResult<Fe
     let (economy, standard, priority) = current_mempool_rate
         .map(|rate| (rate, rate, rate))
         .unwrap_or(historical);
-    Ok(FeeEstimatesDto {
+    let estimates = FeeEstimatesDto {
         economy,
         standard,
         priority,
         source: "Bitcoin Core",
-    })
+    };
+    update_public_network_status(&app, Some(estimates.priority), None)?;
+    Ok(estimates)
 }
 
 #[tauri::command]
-pub fn node_config(app: AppHandle, state: State<'_, AppState>) -> ApiResult<CoreNodeConfig> {
-    require_unlocked(&app, &state)?;
+pub fn node_config(app: AppHandle) -> ApiResult<CoreNodeConfig> {
     read_node_config(&app)
+}
+
+#[tauri::command]
+pub async fn managed_node_configure(
+    app: AppHandle,
+    credential: String,
+) -> ApiResult<NodeStatusDto> {
+    let credential = Zeroizing::new(credential);
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        cancel_foreground_sync(&state)?;
+        let _operation = operation_guard(&state)?;
+        require_unlocked(&app, &state)?;
+        if network() != Network::Bitcoin {
+            return Err(api_error(
+                "invalid_node_config",
+                "The Groot managed node is available only on Mainnet.",
+            ));
+        }
+        check_auth_throttle(&app, &state)?;
+        let verified = verify_selected_credential(&app, credential.as_str());
+        record_auth_result(&app, &state, &verified)?;
+        verified?;
+        let destination = selected_profile(&app)?.id;
+        let pending = managed_mainnet_node_admission(
+            MainnetNodeAdmissionScope::ExistingWallet(destination),
+        )
+        .ok_or_else(|| {
+            api_error(
+                "network_unavailable",
+                "Groot could not provision managed-node access. Check the connection and try again.",
+            )
+        })?;
+        persist_mainnet_node_admission(
+            &app,
+            &state,
+            destination,
+            credential.as_str(),
+            pending,
+        )?;
+        let status = node_test(&app, &state)?;
+        diagnostics::record(
+            &app,
+            &state,
+            diagnostics::DiagnosticEventKind::NetworkConfigurationChanged,
+            diagnostics::DiagnosticOutcome::Succeeded,
+            diagnostics::DiagnosticContext {
+                sync_source: Some(diagnostics::DiagnosticSyncSource::BitcoinCore),
+                ..Default::default()
+            },
+            None,
+        );
+        Ok(status)
+    })
+    .await
+    .map_err(internal)?
+}
+
+#[tauri::command]
+pub fn network_public_status(app: AppHandle) -> ApiResult<PublicNetworkStatusDto> {
+    read_public_network_status(&app)
 }
 
 #[tauri::command]
@@ -1021,20 +1156,20 @@ pub async fn mainnet_core_admit(
         let state = app.state::<AppState>();
         let _operation = operation_guard(&state)?;
         clear_mainnet_node_admission(&state)?;
-        crate::release_policy::ensure_runtime_network_enabled(NETWORK).map_err(|_| {
+        crate::release_policy::ensure_runtime_network_enabled(network()).map_err(|_| {
             api_error(
                 "mainnet_disabled",
                 "This Groot build is not authorized to connect a mainnet wallet.",
             )
         })?;
-        if NETWORK != Network::Bitcoin
+        if network() != Network::Bitcoin
             || config.auth != RpcAuthMode::UserPass
             || password.is_empty()
             || password.len() > 1024
         {
             return Err(api_error(
                 "invalid_node_config",
-                "The first mainnet release requires protected RPC credentials for a local Bitcoin Core node.",
+                "Mainnet requires protected RPC credentials for an admitted Bitcoin Core node.",
             ));
         }
         config.validate().map_err(network_config_api_error)?;
@@ -1075,34 +1210,95 @@ pub async fn mainnet_core_admit(
     .map_err(internal)?
 }
 
-#[tauri::command]
-pub fn mainnet_core_admission_clear(state: State<'_, AppState>) -> ApiResult<()> {
-    let _operation = operation_guard(&state)?;
-    clear_mainnet_node_admission(&state)
-}
-
 pub(super) fn persist_mainnet_node_admission_for_new_profile(
     app: &AppHandle,
     state: &State<'_, AppState>,
     destination: Uuid,
     credential: &str,
-) -> ApiResult<bool> {
-    if NETWORK != Network::Bitcoin {
-        return Ok(false);
+) -> ApiResult<Option<u32>> {
+    if network() != Network::Bitcoin {
+        return Ok(None);
     }
-    crate::release_policy::ensure_database_open_enabled(NETWORK, true).map_err(|_| {
+    crate::release_policy::ensure_database_open_enabled(network(), true).map_err(|_| {
         api_error(
             "node_admission_required",
-            "Connect and verify the approved local Bitcoin Core node before creating a mainnet wallet.",
+            "Connect and verify an approved Bitcoin Core node before creating a mainnet wallet.",
         )
     })?;
-    let pending = current_mainnet_node_admission(state)?;
+    let pending = match current_mainnet_node_admission(state) {
+        Ok(pending) => pending,
+        Err(error) if error.code == "node_admission_required" => {
+            let Some(pending) =
+                managed_mainnet_node_admission(MainnetNodeAdmissionScope::NewWallet)
+            else {
+                return Ok(None);
+            };
+            pending
+        }
+        Err(error) => return Err(error),
+    };
     if pending.scope != MainnetNodeAdmissionScope::NewWallet {
         return Err(api_error(
             "node_admission_required",
-            "Verify the local Bitcoin Core node specifically for new mainnet wallet creation.",
+            "Verify the Bitcoin Core node specifically for new mainnet wallet creation.",
         ));
     }
+    let birthday_height = u32::try_from(checked_block_height(&candidate_rpc_client(
+        &pending.config,
+        pending.password.as_str(),
+    )?)?)
+    .map_err(internal)?;
+    persist_mainnet_node_admission(app, state, destination, credential, pending)?;
+    Ok(Some(birthday_height))
+}
+
+fn provision_managed_mainnet_node_if_missing(
+    app: &AppHandle,
+    state: &State<'_, AppState>,
+    credential: &str,
+) -> ApiResult<bool> {
+    if network() != Network::Bitcoin {
+        return Ok(false);
+    }
+    let destination = selected_profile(app)?.id;
+    if node_config_path_for(app, destination)?.exists() {
+        return Ok(false);
+    }
+    let Some(pending) =
+        managed_mainnet_node_admission(MainnetNodeAdmissionScope::ExistingWallet(destination))
+    else {
+        return Ok(false);
+    };
+    persist_mainnet_node_admission(app, state, destination, credential, pending)?;
+    Ok(true)
+}
+
+fn managed_mainnet_node_admission(
+    scope: MainnetNodeAdmissionScope,
+) -> Option<PendingMainnetNodeAdmission> {
+    let managed = crate::managed_gateway::enroll().ok()?;
+    if !crate::managed_gateway::is_managed_config(&managed.config) {
+        return None;
+    }
+    let client = candidate_rpc_client(&managed.config, managed.password.as_str()).ok()?;
+    let status = checked_node_status(&client, managed.config.clone()).ok()?;
+    ensure_mainnet_core_ready_for_admission(status.initial_block_download).ok()?;
+    ensure_remote_core_sync_capabilities(&client, true).ok()?;
+    Some(PendingMainnetNodeAdmission {
+        config: managed.config,
+        password: managed.password,
+        created_at: Instant::now(),
+        scope,
+    })
+}
+
+fn persist_mainnet_node_admission(
+    app: &AppHandle,
+    state: &State<'_, AppState>,
+    destination: Uuid,
+    credential: &str,
+    pending: PendingMainnetNodeAdmission,
+) -> ApiResult<()> {
     let protected = Zeroizing::new(
         serde_json::to_vec(&ProtectedNodeAuthRef {
             version: PROTECTED_NODE_AUTH_VERSION,
@@ -1115,6 +1311,7 @@ pub(super) fn persist_mainnet_node_admission_for_new_profile(
         &node_secret_path_for(app, destination)?,
         protected.as_slice(),
         credential,
+        node_auth_context(destination),
     )
     .map_err(secure_store_error)?;
     write_private_json(&node_config_path_for(app, destination)?, &pending.config)?;
@@ -1130,15 +1327,11 @@ pub(super) fn persist_mainnet_node_admission_for_new_profile(
             mainnet_node_verified: true,
         },
     );
-    Ok(true)
+    Ok(())
 }
 
 #[tauri::command]
-pub fn wallet_sync_source(
-    app: AppHandle,
-    state: State<'_, AppState>,
-) -> ApiResult<WalletSyncSource> {
-    require_unlocked(&app, &state)?;
+pub fn wallet_sync_source(app: AppHandle) -> ApiResult<WalletSyncSource> {
     read_sync_source(&app)
 }
 
@@ -1153,7 +1346,9 @@ pub fn wallet_sync_source_save(
     let _operation = operation_guard(&state)?;
     require_unlocked(&app, &state)?;
     ensure_sync_source_supported_on_platform(&source)?;
-    source.validate(NETWORK).map_err(network_config_api_error)?;
+    source
+        .validate(network())
+        .map_err(network_config_api_error)?;
     check_auth_throttle(&app, &state)?;
     let verified = verify_selected_credential(&app, credential.as_str());
     record_auth_result(&app, &state, &verified)?;
@@ -1174,68 +1369,84 @@ pub fn wallet_sync_source_save(
 }
 
 #[tauri::command]
-pub fn recovery_scan_settings(
-    app: AppHandle,
-    state: State<'_, AppState>,
-) -> ApiResult<RecoveryScanSettingsDto> {
-    require_unlocked(&app, &state)?;
-    let profile = selected_profile(&app)?;
-    let db = match profile.kind {
-        WalletKind::Multisig => open_multisig_db(&app)?,
-        WalletKind::SingleKey | WalletKind::WatchOnly => open_db(&app)?,
-    };
-    load_recovery_scan_settings(&db)
+pub async fn recovery_scan_settings(app: AppHandle) -> ApiResult<RecoveryScanSettingsDto> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        require_unlocked(&app, &state)?;
+        let profile = selected_profile(&app)?;
+        let db = match profile.kind {
+            WalletKind::Multisig => open_multisig_db(&app)?,
+            WalletKind::SingleKey | WalletKind::WatchOnly => open_db(&app)?,
+        };
+        load_recovery_scan_settings(&db)
+    })
+    .await
+    .map_err(internal)?
 }
 
 #[tauri::command]
-pub fn recovery_scan_settings_save(
+pub async fn recovery_scan_settings_save(
     app: AppHandle,
-    state: State<'_, AppState>,
     birthday_height: u32,
     gap_limit: u32,
     credential: String,
 ) -> ApiResult<RecoveryScanSettingsDto> {
     let credential = Zeroizing::new(credential);
-    let _operation = operation_guard(&state)?;
-    require_unlocked(&app, &state)?;
-    validate_recovery_gap_limit(gap_limit)?;
-    let tip = checked_block_height(&rpc_client(&app, &state)?)?;
-    validate_recovery_birthday(birthday_height, tip)?;
-    check_auth_throttle(&app, &state)?;
-    let verified = verify_selected_credential(&app, credential.as_str());
-    record_auth_result(&app, &state, &verified)?;
-    verified?;
-    let profile = selected_profile(&app)?;
-    let mut db = match profile.kind {
-        WalletKind::Multisig => open_multisig_db(&app)?,
-        WalletKind::SingleKey | WalletKind::WatchOnly => open_db(&app)?,
-    };
-    let external_required = required_recovery_gap(&db, None)?;
-    let wallet = load_wallet(&mut db)?;
-    let internal_required = wallet
-        .derivation_index(KeychainKind::Internal)
-        .map(|index| required_keychain_gap(&wallet, KeychainKind::Internal, index))
-        .transpose()?
-        .unwrap_or(0);
-    let required = external_required.max(internal_required);
-    if gap_limit < required {
-        return Err(api_error(
-            "invalid_scan_settings",
-            format!(
-                "This wallet has revealed addresses that require a gap limit of at least {required}."
-            ),
-        ));
-    }
-    db.execute(
-        "INSERT INTO groot_recovery_settings (singleton, birthday_height, gap_limit) VALUES (1, ?1, ?2)
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        cancel_foreground_sync(&state)?;
+        let _operation = operation_guard(&state)?;
+        require_unlocked(&app, &state)?;
+        validate_recovery_gap_limit(gap_limit)?;
+        let tip = checked_block_height(&rpc_client(&app, &state)?)?;
+        validate_recovery_birthday(birthday_height, tip)?;
+        let profile = selected_profile(&app)?;
+        let mut db = match profile.kind {
+            WalletKind::Multisig => open_multisig_db(&app)?,
+            WalletKind::SingleKey | WalletKind::WatchOnly => open_db(&app)?,
+        };
+        if credential.is_empty() {
+            if has_completed_sync(&db)? {
+                return Err(api_error(
+                    "invalid_credential",
+                    "Enter the wallet credential before changing recovery-scan settings.",
+                ));
+            }
+        } else {
+            check_auth_throttle(&app, &state)?;
+            let verified = verify_selected_credential(&app, credential.as_str());
+            record_auth_result(&app, &state, &verified)?;
+            verified?;
+        }
+        let external_required = required_recovery_gap(&db, None)?;
+        let wallet = load_wallet(&mut db)?;
+        let internal_required = wallet
+            .derivation_index(KeychainKind::Internal)
+            .map(|index| required_keychain_gap(&wallet, KeychainKind::Internal, index))
+            .transpose()?
+            .unwrap_or(0);
+        let required = external_required.max(internal_required);
+        if gap_limit < required {
+            return Err(api_error(
+                "invalid_scan_settings",
+                format!(
+                    "This wallet has revealed addresses that require a gap limit of at least {required}."
+                ),
+            ));
+        }
+        db.execute(
+            "INSERT INTO groot_recovery_settings (singleton, birthday_height, gap_limit) VALUES (1, ?1, ?2)
          ON CONFLICT(singleton) DO UPDATE SET birthday_height = excluded.birthday_height, gap_limit = excluded.gap_limit",
-        params![birthday_height, gap_limit],
-    )
-    .map_err(internal)?;
-    Ok(RecoveryScanSettingsDto {
-        birthday_height,
-        gap_limit,
+            params![birthday_height, gap_limit],
+        )
+        .map_err(internal)?;
+        Ok(RecoveryScanSettingsDto {
+            birthday_height,
+            gap_limit,
+        })
     })
+    .await
+    .map_err(internal)?
 }
 
 pub(crate) fn validate_recovery_gap_limit(gap_limit: u32) -> ApiResult<()> {
@@ -1285,36 +1496,38 @@ pub async fn recovery_scan_status(app: AppHandle) -> ApiResult<RecoveryScanStatu
 }
 
 #[tauri::command]
-pub fn wallet_full_rescan_cancel(
-    app: AppHandle,
-    state: State<'_, AppState>,
-) -> ApiResult<RecoveryScanStatusDto> {
-    require_unlocked(&app, &state)?;
-    let profile = selected_profile(&app)?;
-    let (run_id, cancel) = {
-        let scans = state.recovery_scans.lock().map_err(internal)?;
-        let active = scans.get(&profile.id).ok_or_else(|| {
-            api_error(
-                "scan_not_running",
-                "There is no active recovery scan to cancel.",
-            )
-        })?;
-        (active.run_id.clone(), Arc::clone(&active.cancel))
-    };
-    cancel.store(true, Ordering::Release);
-    let db = match profile.kind {
-        WalletKind::Multisig => open_multisig_db(&app)?,
-        WalletKind::SingleKey | WalletKind::WatchOnly => open_db(&app)?,
-    };
-    db.execute(
-        "UPDATE groot_recovery_scans SET status = 'cancelling', updated_at = ?1
+pub async fn wallet_full_rescan_cancel(app: AppHandle) -> ApiResult<RecoveryScanStatusDto> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        require_unlocked(&app, &state)?;
+        let profile = selected_profile(&app)?;
+        let (run_id, cancel) = {
+            let scans = state.recovery_scans.lock().map_err(internal)?;
+            let active = scans.get(&profile.id).ok_or_else(|| {
+                api_error(
+                    "scan_not_running",
+                    "There is no active recovery scan to cancel.",
+                )
+            })?;
+            (active.run_id.clone(), Arc::clone(&active.cancel))
+        };
+        cancel.store(true, Ordering::Release);
+        let db = match profile.kind {
+            WalletKind::Multisig => open_multisig_db(&app)?,
+            WalletKind::SingleKey | WalletKind::WatchOnly => open_db(&app)?,
+        };
+        db.execute(
+            "UPDATE groot_recovery_scans SET status = 'cancelling', updated_at = ?1
          WHERE singleton = 1 AND run_id = ?2 AND status = 'running'",
-        params![now(), run_id],
-    )
-    .map_err(internal)?;
-    load_recovery_scan_record(&db)?
-        .map(|record| record.status)
-        .ok_or_else(|| internal("The recovery scan status is unavailable."))
+            params![now(), run_id],
+        )
+        .map_err(internal)?;
+        load_recovery_scan_record(&db)?
+            .map(|record| record.status)
+            .ok_or_else(|| internal("The recovery scan status is unavailable."))
+    })
+    .await
+    .map_err(internal)?
 }
 
 #[tauri::command]
@@ -1359,23 +1572,56 @@ pub async fn wallet_full_rescan(
             run_id,
             cancel,
             rpc,
+            remote_scan_rpc,
+            managed_history,
             delayed_policy,
         ) = {
             let _operation = operation_guard(&state)?;
             require_unlocked(&app, &state)?;
-            check_auth_throttle(&app, &state)?;
-            let verified = verify_selected_credential(&app, credential.as_str());
-            record_auth_result(&app, &state, &verified)?;
-            verified?;
             let profile = selected_profile(&app)?;
             let (mut db, is_multisig) = match profile.kind {
                 WalletKind::Multisig => (open_multisig_db(&app)?, true),
                 WalletKind::SingleKey | WalletKind::WatchOnly => (open_db(&app)?, false),
             };
+            if credential.is_empty() {
+                if has_completed_sync(&db)? {
+                    return Err(api_error(
+                        "invalid_credential",
+                        "Enter the wallet credential before starting another full rescan.",
+                    ));
+                }
+                if !has_saved_recovery_scan_settings(&db)? {
+                    return Err(api_error(
+                        "initial_scan_required",
+                        "Choose where wallet history begins before starting the first scan.",
+                    ));
+                }
+            } else {
+                check_auth_throttle(&app, &state)?;
+                let verified = verify_selected_credential(&app, credential.as_str());
+                record_auth_result(&app, &state, &verified)?;
+                verified?;
+            }
             let settings = load_recovery_scan_settings(&db)?;
             let run_id = Uuid::new_v4().to_string();
             let cancel = Arc::new(AtomicBool::new(false));
             let rpc = Arc::new(rpc_client(&app, &state)?);
+            let node_config = read_node_config(&app)?;
+            let remote_core = matches!(&node_config.backend, ChainBackend::RemoteCore { .. });
+            let managed_history =
+                remote_core && crate::managed_gateway::is_managed_config(&node_config);
+            if remote_core {
+                ensure_remote_core_sync_capabilities(rpc.as_ref(), managed_history)?;
+            }
+            let remote_scan_rpc = if remote_core {
+                Some(rpc_client_with_timeout(
+                    &app,
+                    &state,
+                    REMOTE_CORE_SCAN_RPC_TIMEOUT,
+                )?)
+            } else {
+                None
+            };
             let wallet = load_wallet(&mut db)?;
             let delayed_policy = if is_multisig {
                 selected_delayed_policy_context(&app)?
@@ -1407,11 +1653,34 @@ pub async fn wallet_full_rescan(
                 run_id,
                 cancel,
                 rpc,
+                remote_scan_rpc,
+                managed_history,
                 delayed_policy,
             )
         };
         let scan_result: ApiResult<WalletSnapshotDto> = (|| {
-            full_rescan_loaded_wallet(rpc, &mut wallet, &mut db, &settings, &run_id, &cancel)?;
+            let remote_core = remote_scan_rpc.is_some();
+            let remote_history = remote_scan_rpc.as_ref().map(|scan_rpc| {
+                if managed_history {
+                    RemoteHistorySource::Managed
+                } else {
+                    RemoteHistorySource::CoreScan(scan_rpc)
+                }
+            });
+            let mempool_snapshot = full_rescan_loaded_wallet(
+                rpc,
+                remote_history,
+                &mut wallet,
+                &mut db,
+                &settings,
+                &run_id,
+                &cancel,
+            )?;
+            if remote_core {
+                forget_core_mempool_snapshot(&state, profile.id);
+            } else {
+                remember_core_mempool_snapshot(&state, profile.id, Some(mempool_snapshot));
+            }
             let snapshot = snapshot_from(
                 &wallet,
                 &db,
@@ -1422,14 +1691,12 @@ pub async fn wallet_full_rescan(
             enqueue_snapshot_notifications(&db, &snapshot)?;
             Ok(snapshot)
         })();
-        let terminal_status = match &scan_result {
-            Ok(_) => "completed",
-            Err(error) if error.code == "scan_cancelled" => "cancelled",
-            Err(_) => "failed",
-        };
         let finish_result = load_recovery_scan_record(&db).and_then(|record| {
             if record.is_some_and(|record| record.run_id == run_id) {
-                finish_recovery_scan_record(&db, &run_id, terminal_status)
+                match &scan_result {
+                    Ok(_) => finish_recovery_scan_record(&db, &run_id, "completed"),
+                    Err(_) => discard_recovery_scan_record(&db, &run_id),
+                }
             } else {
                 Ok(())
             }
@@ -1506,6 +1773,7 @@ pub async fn node_config_save(
             &candidate_rpc_client(&config, password.as_str())?,
             config.clone(),
         )?;
+        let wallet_id = selected_profile(&app)?.id;
         if config.auth == RpcAuthMode::UserPass {
             let protected = Zeroizing::new(
                 serde_json::to_vec(&ProtectedNodeAuthRef {
@@ -1519,6 +1787,7 @@ pub async fn node_config_save(
                 &node_secret_path(&app)?,
                 protected.as_slice(),
                 credential.as_str(),
+                node_auth_context(wallet_id),
             )
             .map_err(secure_store_error)?;
         } else {
@@ -1530,6 +1799,7 @@ pub async fn node_config_save(
         write_private_json(&node_config_path(&app)?, &config)?;
         load_node_auth_session(&app, &state, credential.as_str())?;
         mark_selected_mainnet_node_verified(&app, &state)?;
+        replace_public_network_status(&app, None, Some(status.blocks))?;
         diagnostics::record(
             &app,
             &state,
@@ -1554,12 +1824,6 @@ pub async fn network_setup_adopt(
     credential: String,
 ) -> ApiResult<NodeStatusDto> {
     let credential = Zeroizing::new(credential);
-    if NETWORK == Network::Bitcoin {
-        return Err(api_error(
-            "unsupported_wallet_policy",
-            "Mainnet wallets cannot copy another wallet's Bitcoin Core setup.",
-        ));
-    }
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<AppState>();
         cancel_foreground_sync(&state)?;
@@ -1648,6 +1912,7 @@ pub async fn network_setup_adopt(
                 &node_secret_path_for(&app, destination)?,
                 protected.as_slice(),
                 credential.as_str(),
+                node_auth_context(destination),
             )
             .map_err(secure_store_error)?;
         } else {
@@ -1659,6 +1924,8 @@ pub async fn network_setup_adopt(
         write_private_json(&node_config_path_for(&app, destination)?, &config)?;
         write_private_json(&sync_source_path_for(&app, destination)?, &sync_source)?;
         load_node_auth_session(&app, &state, credential.as_str())?;
+        mark_selected_mainnet_node_verified(&app, &state)?;
+        replace_public_network_status(&app, None, Some(status.blocks))?;
         Ok(status)
     })
     .await
@@ -1671,7 +1938,7 @@ pub(super) fn adopt_network_setup_for_new_profile(
     source_wallet_id: &str,
     destination: Uuid,
     credential: &str,
-) -> ApiResult<()> {
+) -> ApiResult<u32> {
     let source = Uuid::parse_str(source_wallet_id).map_err(|_| {
         api_error(
             "wallet_not_found",
@@ -1707,10 +1974,10 @@ pub(super) fn adopt_network_setup_for_new_profile(
     let config = read_node_config_for(app, source)?;
     let sync_source = read_sync_source_for(app, source)?;
     ensure_sync_source_supported_on_platform(&sync_source)?;
-    let password = match config.auth {
+    let (password, status) = match config.auth {
         RpcAuthMode::Cookie => {
-            checked_node_status(&candidate_rpc_client(&config, "")?, config.clone())?;
-            None
+            let status = checked_node_status(&candidate_rpc_client(&config, "")?, config.clone())?;
+            (None, status)
         }
         RpcAuthMode::UserPass => {
             let password = {
@@ -1729,11 +1996,11 @@ pub(super) fn adopt_network_setup_for_new_profile(
                 }
                 Zeroizing::new(session.password.to_string())
             };
-            checked_node_status(
+            let status = checked_node_status(
                 &candidate_rpc_client(&config, password.as_str())?,
                 config.clone(),
             )?;
-            Some(password)
+            (Some(password), status)
         }
     };
 
@@ -1750,6 +2017,7 @@ pub(super) fn adopt_network_setup_for_new_profile(
             &node_secret_path_for(app, destination)?,
             protected.as_slice(),
             credential,
+            node_auth_context(destination),
         )
         .map_err(secure_store_error)?;
     }
@@ -1769,13 +2037,94 @@ pub(super) fn adopt_network_setup_for_new_profile(
     } else {
         sessions.remove(&destination);
     }
-    Ok(())
+    u32::try_from(status.blocks).map_err(internal)
+}
+
+pub(super) struct NewProfileNetworkSetup {
+    pub(super) copied: bool,
+    pub(super) birthday_height: Option<u32>,
+}
+
+pub(super) fn copy_network_setup_before_profile_commit(
+    app: &AppHandle,
+    state: &State<'_, AppState>,
+    source_wallet_id: Option<&str>,
+    destination: Uuid,
+    credential: &str,
+) -> ApiResult<NewProfileNetworkSetup> {
+    if let Some(source_wallet_id) = source_wallet_id {
+        let adoption = adopt_network_setup_for_new_profile(
+            app,
+            state,
+            source_wallet_id,
+            destination,
+            credential,
+        );
+        if let Ok(birthday_height) = adoption {
+            return Ok(NewProfileNetworkSetup {
+                copied: true,
+                birthday_height: Some(birthday_height),
+            });
+        }
+        diagnostics::record(
+            app,
+            state,
+            diagnostics::DiagnosticEventKind::NetworkConfigurationChanged,
+            diagnostics::DiagnosticOutcome::Failed,
+            diagnostics::DiagnosticContext {
+                sync_source: Some(diagnostics::DiagnosticSyncSource::BitcoinCore),
+                ..Default::default()
+            },
+            adoption.as_ref().err(),
+        );
+        for path in [
+            node_config_path_for(app, destination)?,
+            node_secret_path_for(app, destination)?,
+            sync_source_path_for(app, destination)?,
+        ] {
+            if path.exists() {
+                fs::remove_file(path).map_err(internal)?;
+            }
+        }
+        state
+            .node_auth
+            .lock()
+            .map_err(internal)?
+            .remove(&destination);
+        return Ok(NewProfileNetworkSetup {
+            copied: false,
+            birthday_height: None,
+        });
+    }
+
+    if network() == Network::Bitcoin {
+        let birthday_height =
+            persist_mainnet_node_admission_for_new_profile(app, state, destination, credential)?;
+        return Ok(NewProfileNetworkSetup {
+            copied: birthday_height.is_some(),
+            birthday_height,
+        });
+    }
+    Ok(NewProfileNetworkSetup {
+        copied: true,
+        birthday_height: None,
+    })
 }
 
 pub(crate) fn node_test(app: &AppHandle, state: &State<'_, AppState>) -> ApiResult<NodeStatusDto> {
     let config = read_node_config(app)?;
-    let status = checked_node_status(&rpc_client(app, state)?, config)?;
+    let client = rpc_client_with_timeout(app, state, NODE_HEALTH_RPC_TIMEOUT)?;
+    let status = checked_node_status(&client, config.clone())?;
+    if matches!(&config.backend, ChainBackend::RemoteCore { .. })
+        && matches!(read_sync_source(app)?, WalletSyncSource::BitcoinCore)
+    {
+        ensure_remote_core_sync_capabilities(
+            &client,
+            crate::managed_gateway::is_managed_config(&config),
+        )?;
+    }
     mark_selected_mainnet_node_verified(app, state)?;
+    update_public_network_status(app, None, Some(status.blocks))?;
     Ok(status)
 }
 
@@ -1783,7 +2132,7 @@ fn mark_selected_mainnet_node_verified(
     app: &AppHandle,
     state: &State<'_, AppState>,
 ) -> ApiResult<()> {
-    if NETWORK != Network::Bitcoin {
+    if network() != Network::Bitcoin {
         return Ok(());
     }
     let profile = selected_profile(app)?;

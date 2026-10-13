@@ -3,6 +3,12 @@ import type { Sats, WalletSnapshot } from './transactions';
 
 export type MnemonicPresentation =
   { mode: 'native'; backupVerified: boolean } | { mode: 'fixture'; words: string[] };
+export type SoftwareWalletCreation = {
+  masterFingerprint: string;
+  externalDescriptor: string;
+  internalDescriptor: string;
+  networkSetupCopied: boolean;
+};
 export type WalletProfile = {
   id: string;
   name: string;
@@ -29,6 +35,7 @@ export type RuntimePlatform = {
   platform: 'ios' | 'android' | 'macos' | 'windows' | 'linux' | 'browser';
   mobile: boolean;
   network: SupportedNetwork;
+  networkSwitching: boolean;
   version: string;
   commit: string;
 };
@@ -66,6 +73,8 @@ export type DiagnosticRecord = {
   itemCount?: number;
   exportFormat?: 'json' | 'csv';
   errorCode?: string;
+  errorMessage?: string;
+  errorDetails?: import('./errors').WalletErrorDetails;
   appVersion: string;
   buildCommit: string;
   compiledNetwork: SupportedNetwork;
@@ -87,6 +96,10 @@ export type NodeStatus = {
   sizeOnDisk: number;
   blockFilterIndex: 'synced' | 'building' | 'disabled' | 'unknown';
 };
+export type PublicNetworkStatus = {
+  priorityFee: number | null;
+  networkTip: number | null;
+};
 export type WalletSyncSource =
   | { type: 'bitcoin_core' }
   | {
@@ -99,7 +112,6 @@ export type WalletSyncSource =
 export type NetworkSetupSource = {
   walletId: string;
   walletName: string;
-  syncSource: WalletSyncSource;
   ready: boolean;
 };
 export type WalletSyncStatus = {
@@ -108,6 +120,7 @@ export type WalletSyncStatus = {
   state:
     | 'connecting'
     | 'syncing'
+    | 'checking_pending'
     | 'checking_matches'
     | 'applying'
     | 'completed'
@@ -120,14 +133,6 @@ export type WalletSyncStatus = {
   requiredPeers: number | null;
   failureCode: string | null;
   updatedAt: number;
-};
-export type PayjoinUriInspection = {
-  address: string;
-  amount: number | null;
-  label: string | null;
-  message: string | null;
-  endpoint: string;
-  version: 'v2';
 };
 export type PaymentRequestInspection = {
   address: string;

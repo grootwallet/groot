@@ -16,6 +16,8 @@
   import QRCode from 'qrcode';
   import { onMount, tick } from 'svelte';
   import Button from '$lib/components/Button.svelte';
+  import LoadFailure from '$lib/components/LoadFailure.svelte';
+  import WalletSkeleton from '$lib/components/WalletSkeleton.svelte';
   import PermanentLabelEditor from '$lib/components/PermanentLabelEditor.svelte';
   import Modal from '$lib/components/Modal.svelte';
   import ReadableAddress from '$lib/components/ReadableAddress.svelte';
@@ -48,13 +50,17 @@
   );
   let submissionLabels = $derived(permanentLabelsForSubmission(selectedLabels, label));
   let qrDataUrl = $state('');
+  let loading = $state(true);
+  let loadError = $state('');
   let busy = $state(false);
   let syncing = $state(false);
+  let syncError = $state('');
   let showGenerate = $state(false);
   let showDiscard = $state(false);
   let showQr = $state(false);
   let showDetails = $state(false);
   let copied = $state(false);
+  let discardAddressCopied = $state(false);
   let qrGeneration = 0;
   let discardTarget = $state<ReceiveAddress | null>(null);
   let detailAddress = $state<ReceiveAddress | null>(null);
@@ -72,14 +78,11 @@
   onMount(load);
   onMount(() =>
     walletService.subscribe((event) => {
-      if (
-        event.type !== 'wallet_updated' ||
-        event.walletKind !== 'single_key' ||
-        event.walletId !== walletShell.selectedWalletId()
-      )
+      if (event.type !== 'wallet_updated' || event.walletId !== walletShell.selectedWalletId())
         return;
       applyAddresses(event.snapshot.receiveAddresses);
       labelSuggestions = event.snapshot.labelSuggestions;
+      syncError = '';
     })
   );
   $effect(() => {
@@ -101,10 +104,13 @@
         });
   });
   async function load() {
+    loading = true;
+    loadError = '';
     try {
       const snapshot = await walletService.snapshot();
       applyAddresses(snapshot.receiveAddresses);
       labelSuggestions = snapshot.labelSuggestions;
+      loading = false;
       const shellWallets = walletShell.profiles();
       const shellSelectedWalletId = walletShell.selectedWalletId();
       const registry =
@@ -121,9 +127,11 @@
         savedSignerLabel = savedSigner.label;
       }
     } catch (cause) {
+      loadError = localizedError(cause, $locale);
+      loading = false;
       toast({
         title: 'Could not load addresses',
-        description: localizedError(cause, $locale),
+        description: loadError,
         tone: 'danger'
       });
     }
@@ -131,7 +139,9 @@
   async function syncNow() {
     if (syncing || busy) return;
     syncing = true;
+    syncError = '';
     try {
+      await walletShell.pauseAutomaticSync();
       const [snapshot] = await Promise.all([
         walletService.sync(),
         new Promise((resolve) => setTimeout(resolve, 1_200))
@@ -149,13 +159,15 @@
         await goto('/unlock?next=/receive');
         return;
       }
+      syncError = localizedError(cause, $locale);
       toast({
         title: 'Sync failed',
-        description: localizedError(cause, $locale),
+        description: syncError,
         tone: 'danger'
       });
     } finally {
       syncing = false;
+      walletShell.resumeAutomaticSync();
     }
   }
   function applyAddresses(nextAddresses: ReceiveAddress[]) {
@@ -166,7 +178,10 @@
   const generate = async () => {
     if (!submissionLabels.length) return;
     busy = true;
+    let automaticSyncPaused = false;
     try {
+      await walletShell.pauseAutomaticSync();
+      automaticSyncPaused = true;
       current = await walletService.createAddress(submissionLabels);
       addresses = [current, ...addresses];
       try {
@@ -205,6 +220,7 @@
       });
     } finally {
       busy = false;
+      if (automaticSyncPaused) walletShell.resumeAutomaticSync();
     }
   };
   const copy = async () => {
@@ -222,6 +238,17 @@
       });
     }
   };
+  async function copyDiscardAddress() {
+    if (!discardTarget) return;
+    try {
+      await copyText(discardTarget.address, 'bitcoin-address');
+      discardAddressCopied = true;
+      toast({ title: 'Address copied', tone: 'success' });
+      setTimeout(() => (discardAddressCopied = false), 1500);
+    } catch {
+      toast({ title: 'Copy failed', tone: 'danger' });
+    }
+  }
   const discard = async () => {
     if (!discardTarget) return;
     busy = true;
@@ -249,6 +276,7 @@
     }
   };
   const requestDiscard = (address: ReceiveAddress) => {
+    discardAddressCopied = false;
     discardTarget = address;
     showDiscard = true;
   };
@@ -261,9 +289,7 @@
 <div class="page narrow-page receive-page">
   <header class="page-header">
     <div>
-      <p class="eyebrow">{translate($locale, 'RECEIVE')}</p>
       <h1>{translate($locale, 'Receive bitcoin')}</h1>
-      <p class="subtitle">{translate($locale, 'Create a labeled address for one payment.')}</p>
     </div>
     <button class="sync-button" disabled={syncing || busy} onclick={syncNow}
       ><RefreshCw size={15} class={syncing ? 'spin' : ''} />{translate(
@@ -272,7 +298,24 @@
       )}</button
     >
   </header>
-  {#if current}
+  {#if syncError}
+    <div class="sync-failure-banner">
+      <LoadFailure
+        title={translate($locale, 'Sync failed')}
+        description={syncError}
+        onretry={syncNow}
+      />
+    </div>
+  {/if}
+  {#if loadError}
+    <section class="empty-state" role="alert">
+      <h2>{translate($locale, 'Could not load addresses')}</h2>
+      <p>{loadError}</p>
+      <Button variant="secondary" onclick={load}>{translate($locale, 'Try again')}</Button>
+    </section>
+  {:else if loading}
+    <WalletSkeleton variant="balance" />
+  {:else if current}
     <section class="receive-card" bind:this={receiveCard}>
       <button
         class="qr-placeholder qr-button"
@@ -299,7 +342,10 @@
       >
       <div class="receive-actions">
         <Button variant="secondary" onclick={copy}
-          ><Copy size={16} />{translate($locale, 'Copy address')}</Button
+          >{#if copied}<Check size={16} />{:else}<Copy size={16} />{/if}{translate(
+            $locale,
+            'Copy address'
+          )}</Button
         >{#if externalSigner}<HardwareReceiveVerification
             address={current}
             walletKind="single_key"
@@ -307,7 +353,13 @@
             eligibleDeviceTypes={savedSignerDeviceType ? [savedSignerDeviceType] : []}
             eligibleFingerprints={savedSignerFingerprint ? [savedSignerFingerprint] : []}
             savedSigners={savedSignerFingerprint && savedSignerLabel
-              ? [{ fingerprint: savedSignerFingerprint, label: savedSignerLabel }]
+              ? [
+                  {
+                    fingerprint: savedSignerFingerprint,
+                    label: savedSignerLabel,
+                    deviceType: savedSignerDeviceType
+                  }
+                ]
               : []}
             onverified={applyVerifiedAddress}
           />{/if}<Button variant="ghost-danger" onclick={() => requestDiscard(current!)}
@@ -358,92 +410,93 @@
       >
     </section>
   {/if}
-  <div class="section-heading compact">
-    <div>
-      <h2>{translate($locale, 'Awaiting payment')}</h2>
-      <p>
-        {awaiting.length}
-        {translate($locale, 'active')}
-        {translate($locale, awaiting.length === 1 ? 'address' : 'addresses')}
-      </p>
+  {#if !loading && !loadError}<div class="section-heading compact">
+      <div>
+        <h2>{translate($locale, 'Awaiting payment')}</h2>
+        <p>
+          {awaiting.length}
+          {translate($locale, 'active')}
+          {translate($locale, awaiting.length === 1 ? 'address' : 'addresses')}
+        </p>
+      </div>
+      <Button
+        variant="secondary"
+        size="small"
+        onclick={() => (showGenerate = true)}
+        ariaLabel="New receive address"><Plus size={15} />{translate($locale, 'New')}</Button
+      >
     </div>
-    <Button
-      variant="secondary"
-      size="small"
-      onclick={() => (showGenerate = true)}
-      ariaLabel="New receive address"><Plus size={15} />{translate($locale, 'New')}</Button
-    >
-  </div>
-  <div class="awaiting-addresses">
-    {#each awaiting as address}
-      <article class:active={current?.id === address.id}>
+    <div class="awaiting-addresses">
+      {#each awaiting as address}
+        <article class:active={current?.id === address.id}>
+          <button
+            class="awaiting-select"
+            aria-label={`${translate($locale, 'View {label}', { label: address.label })}${
+              externalSigner
+                ? `. ${translate(
+                    $locale,
+                    address.hardwareVerifiedAt ? 'Hardware verified' : 'Hardware not verified'
+                  )}`
+                : ''
+            }`}
+            onclick={() => {
+              current = address;
+              showDetails = false;
+            }}
+            ><span class="status-dot"></span><span
+              ><PermanentLabelTags labels={address.labels ?? [address.label]} prominent /><small
+                >{compactAddress(address.address)}</small
+              ></span
+            ><span class="right-meta"
+              >{#if externalSigner}<span
+                  class="address-verification-state"
+                  class:verified={Boolean(address.hardwareVerifiedAt)}
+                  >{#if address.hardwareVerifiedAt}<ShieldCheck size={12} />{translate(
+                      $locale,
+                      'Hardware verified'
+                    )}{:else}<Shield size={12} />{translate(
+                      $locale,
+                      'Hardware not verified'
+                    )}{/if}</span
+                >{:else}{translate($locale, 'Awaiting')}{/if}<small
+                ><LocalTimestamp value={address.created} /></small
+              ></span
+            ></button
+          >
+          <button
+            class="awaiting-discard"
+            aria-label={translate($locale, 'Discard {label}', { label: address.label })}
+            onclick={() => requestDiscard(address)}><Trash2 size={15} /></button
+          >
+        </article>
+      {:else}
+        <p class="list-empty">{translate($locale, 'No active payment requests.')}</p>
+      {/each}
+    </div>{:else if loading}<WalletSkeleton variant="transactions" count={2} />{/if}
+  {#if !loading && !loadError}
+    <div class="section-heading compact">
+      <div>
+        <h2>{translate($locale, 'Address history')}</h2>
+        <p>{translate($locale, 'Used and discarded addresses remain monitored.')}</p>
+      </div>
+    </div>
+    <div class="address-history">
+      {#each history as address}
         <button
-          class="awaiting-select"
-          aria-label={`${translate($locale, 'View {label}', { label: address.label })}${
-            externalSigner
-              ? `. ${translate(
-                  $locale,
-                  address.hardwareVerifiedAt ? 'Hardware verified' : 'Hardware not verified'
-                )}`
-              : ''
-          }`}
-          onclick={() => {
-            current = address;
-            showDetails = false;
-          }}
-          ><span class="status-dot"></span><span
+          class="address-history-row"
+          aria-label={translate($locale, 'View details for {label}', { label: address.label })}
+          onclick={() => (detailAddress = address)}
+          ><span class="status-dot" class:used={address.status === 'used'}></span><span
             ><PermanentLabelTags labels={address.labels ?? [address.label]} prominent /><small
               >{compactAddress(address.address)}</small
             ></span
           ><span class="right-meta"
-            >{#if externalSigner}<span
-                class="address-verification-state"
-                class:verified={Boolean(address.hardwareVerifiedAt)}
-                >{#if address.hardwareVerifiedAt}<ShieldCheck size={12} />{translate(
-                    $locale,
-                    'Hardware verified'
-                  )}{:else}<Shield size={12} />{translate(
-                    $locale,
-                    'Hardware not verified'
-                  )}{/if}</span
-              >{:else}{translate($locale, 'Awaiting')}{/if}<small
-              ><LocalTimestamp value={address.created} /></small
-            ></span
-          ></button
+            >{address.status}<small><LocalTimestamp value={address.created} /></small></span
+          ><ChevronRight size={15} /></button
         >
-        <button
-          class="awaiting-discard"
-          aria-label={translate($locale, 'Discard {label}', { label: address.label })}
-          onclick={() => requestDiscard(address)}><Trash2 size={15} /></button
-        >
-      </article>
-    {:else}
-      <p class="list-empty">{translate($locale, 'No active payment requests.')}</p>
-    {/each}
-  </div>
-  <div class="section-heading compact">
-    <div>
-      <h2>{translate($locale, 'Address history')}</h2>
-      <p>{translate($locale, 'Used and discarded addresses remain monitored.')}</p>
-    </div>
-  </div>
-  <div class="address-history">
-    {#each history as address}
-      <button
-        class="address-history-row"
-        aria-label={translate($locale, 'View details for {label}', { label: address.label })}
-        onclick={() => (detailAddress = address)}
-        ><span class="status-dot" class:used={address.status === 'used'}></span><span
-          ><PermanentLabelTags labels={address.labels ?? [address.label]} prominent /><small
-            >{compactAddress(address.address)}</small
-          ></span
-        ><span class="right-meta"
-          >{address.status}<small><LocalTimestamp value={address.created} /></small></span
-        ><ChevronRight size={15} /></button
-      >
-    {:else}<p class="list-empty">{translate($locale, 'No past addresses yet.')}</p>
-    {/each}
-  </div>
+      {:else}<p class="list-empty">{translate($locale, 'No past addresses yet.')}</p>
+      {/each}
+    </div>{/if}
 </div>
 
 <Modal
@@ -508,15 +561,44 @@
   })}
   description={translate($locale, 'It will be retired and never shown for payment again.')}
   onclose={() => {
+    discardAddressCopied = false;
     showDiscard = false;
     discardTarget = null;
   }}
 >
-  <div class="warning-box">{translate($locale, 'Discarded addresses remain monitored.')}</div>
+  {#if discardTarget}
+    <div class="address-detail-view discard-address-detail">
+      <div class="address-detail-status">
+        <PermanentLabelTags
+          labels={discardTarget.labels?.length ? discardTarget.labels : [discardTarget.label]}
+          prominent
+        />
+      </div>
+      <ReadableAddress
+        address={discardTarget.address}
+        copied={discardAddressCopied}
+        oncopy={copyDiscardAddress}
+      />
+      <details class="verification-details">
+        <summary>{translate($locale, 'Show address details')}<ChevronDown size={16} /></summary>
+        <dl class="optional-details">
+          <div>
+            <dt>{translate($locale, 'Derivation path')}</dt>
+            <dd><code>{discardTarget.derivationPath}</code></dd>
+          </div>
+          <div>
+            <dt>{translate($locale, 'Address type')}</dt>
+            <dd>{translate($locale, 'Native SegWit')}</dd>
+          </div>
+        </dl>
+      </details>
+    </div>
+  {/if}
   <div class="modal-footer">
     <Button
       variant="secondary"
       onclick={() => {
+        discardAddressCopied = false;
         showDiscard = false;
         discardTarget = null;
       }}>{translate($locale, 'Keep address')}</Button

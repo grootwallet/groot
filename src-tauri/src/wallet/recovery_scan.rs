@@ -21,6 +21,28 @@ pub(super) fn load_recovery_scan_settings(db: &Connection) -> ApiResult<Recovery
     })
 }
 
+pub(super) fn has_saved_recovery_scan_settings(db: &Connection) -> ApiResult<bool> {
+    db.query_row(
+        "SELECT EXISTS(SELECT 1 FROM groot_recovery_settings WHERE singleton = 1)",
+        [],
+        |row| row.get(0),
+    )
+    .map_err(internal)
+}
+
+pub(super) fn persist_initial_recovery_scan_settings(
+    db: &Connection,
+    birthday_height: u32,
+) -> ApiResult<()> {
+    db.execute(
+        "INSERT INTO groot_recovery_settings (singleton, birthday_height, gap_limit)
+         VALUES (1, ?1, ?2)",
+        params![birthday_height, MIN_RECOVERY_GAP_LIMIT],
+    )
+    .map_err(internal)?;
+    Ok(())
+}
+
 pub(super) fn has_completed_sync(db: &Connection) -> ApiResult<bool> {
     db.query_row(
         "SELECT EXISTS(SELECT 1 FROM groot_chain_observation WHERE singleton = 1)",
@@ -82,23 +104,35 @@ pub(super) fn reconcile_recovery_scan_record(
     db: &Connection,
     active_run_id: Option<&str>,
 ) -> ApiResult<Option<RecoveryScanRecord>> {
-    let Some(mut record) = load_recovery_scan_record(db)? else {
+    let Some(record) = load_recovery_scan_record(db)? else {
         return Ok(None);
     };
+    // An incomplete explicit scan is never a trusted continuation point. Clear
+    // terminal state left by older builds so every retry starts authoritatively
+    // from the saved birthday and the UI cannot present stale progress.
+    if matches!(
+        record.status.status.as_str(),
+        "cancelled" | "failed" | "interrupted"
+    ) {
+        db.execute(
+            "DELETE FROM groot_recovery_scans WHERE singleton = 1 AND run_id = ?1",
+            params![record.run_id],
+        )
+        .map_err(internal)?;
+        return Ok(None);
+    }
     if matches!(record.status.status.as_str(), "running" | "cancelling")
         && active_run_id != Some(record.run_id.as_str())
     {
-        let updated_at = now();
         let changed = db
             .execute(
-                "UPDATE groot_recovery_scans SET status = 'interrupted', updated_at = ?1
-                 WHERE singleton = 1 AND run_id = ?2 AND status IN ('running', 'cancelling')",
-                params![updated_at, record.run_id],
+                "DELETE FROM groot_recovery_scans
+                 WHERE singleton = 1 AND run_id = ?1 AND status IN ('running', 'cancelling')",
+                params![record.run_id],
             )
             .map_err(internal)?;
         if changed == 1 {
-            record.status.status = "interrupted".to_owned();
-            record.status.updated_at = updated_at;
+            return Ok(None);
         } else {
             return load_recovery_scan_record(db);
         }
@@ -152,50 +186,6 @@ pub(super) fn start_recovery_scan_record(
     Ok(status)
 }
 
-pub(super) fn resume_recovery_scan_record(
-    db: &Connection,
-    run_id: &str,
-    previous: &RecoveryScanStatusDto,
-    target_height: u32,
-) -> ApiResult<RecoveryScanStatusDto> {
-    let updated_at = now();
-    let status = RecoveryScanStatusDto {
-        status: "running".to_owned(),
-        birthday_height: previous.birthday_height,
-        gap_limit: previous.gap_limit,
-        current_height: previous.current_height,
-        target_height,
-        processed_blocks: previous.processed_blocks,
-        total_blocks: target_height
-            .saturating_sub(previous.birthday_height)
-            .saturating_add(1),
-        started_at: previous.started_at,
-        updated_at,
-    };
-    let changed = db
-        .execute(
-            "UPDATE groot_recovery_scans SET
-               run_id = ?1, status = 'running', target_height = ?2,
-               total_blocks = ?3, updated_at = ?4
-             WHERE singleton = 1 AND status IN ('cancelled', 'interrupted', 'failed')",
-            params![
-                run_id,
-                status.target_height,
-                status.total_blocks,
-                updated_at
-            ],
-        )
-        .map_err(internal)?;
-    if changed == 1 {
-        Ok(status)
-    } else {
-        Err(api_error(
-            "scan_interrupted",
-            "Recovery scan state changed unexpectedly. Review its status before continuing.",
-        ))
-    }
-}
-
 pub(super) fn update_recovery_scan_progress(
     db: &Connection,
     run_id: &str,
@@ -238,6 +228,25 @@ pub(super) fn finish_recovery_scan_record(
         Err(api_error(
             "scan_interrupted",
             "Recovery scan state changed unexpectedly. Start the scan again.",
+        ))
+    }
+}
+
+pub(super) fn discard_recovery_scan_record(db: &Connection, run_id: &str) -> ApiResult<()> {
+    let changed = db
+        .execute(
+            "DELETE FROM groot_recovery_scans
+             WHERE singleton = 1 AND run_id = ?1
+               AND status IN ('running', 'cancelling', 'cancelled', 'failed', 'interrupted')",
+            params![run_id],
+        )
+        .map_err(internal)?;
+    if changed == 1 {
+        Ok(())
+    } else {
+        Err(api_error(
+            "scan_interrupted",
+            "Recovery scan state changed unexpectedly. Start a new scan.",
         ))
     }
 }

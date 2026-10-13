@@ -1,5 +1,17 @@
 # Hardware wallet policy readiness
 
+Latest setup progress: [2026-09-26 A/B/C checkpoint](hardware-certification-mainnet-2026-09-12.md#2026-09-26-abc-setup-checkpoint). All three groups now exist; these owner-reported setup results do not establish transaction, recovery, exact-firmware, or GA certification.
+
+The 2026-09-12 Mainnet checkpoint on older internal build `27f821be` passed
+policy registration for a Coldcard Mk4 + Ledger Nano S Plus + BitBox02 Nova
+2-of-3 draft but failed before durable wallet creation because saved-signer
+rescans cleared prior exact Mainnet admissions. The corrected source preserves
+other identity-bound, time-bounded draft admissions and renews the signer proven
+by a successful live policy/address check. This is implementation evidence only;
+the corrected exact build must repeat creation, restart, sync, address proof,
+signing, and recovery. See
+[`hardware-certification-mainnet-2026-09-12.md`](hardware-certification-mainnet-2026-09-12.md).
+
 This matrix is the canonical product and implementation reference for multisig policy registration. It separates device connectivity from policy readiness: a connected and healthy signer may still require wallet-policy setup before it can safely sign.
 
 ## Release matrix

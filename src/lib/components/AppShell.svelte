@@ -20,16 +20,32 @@
   import ThemeToggle from './ThemeToggle.svelte';
   import DiscreetModeToggle from './DiscreetModeToggle.svelte';
   import ResumeSetupNotice from './ResumeSetupNotice.svelte';
-  import { APP_VERSION, defaultConfig } from '$lib/config';
+  import WalletSkeleton from './WalletSkeleton.svelte';
+  import {
+    APP_VERSION,
+    applyRuntimeNetwork,
+    defaultConfig,
+    networkSwitchingBuild
+  } from '$lib/config';
+  import { applyMultisigNetwork } from '$lib/multisig/policy';
   import { onMount } from 'svelte';
   import { afterNavigate, beforeNavigate, goto } from '$app/navigation';
   import { isPrototypeWallet, walletService, WalletError } from '$lib/wallet';
-  import { createLiveSync, type LiveSyncController } from '$lib/wallet/live-sync';
+  import {
+    createLiveSync,
+    LIVE_SYNC_INTERVAL_MS,
+    type LiveSyncController
+  } from '$lib/wallet/live-sync';
   import { createSessionMonitor, type SessionMonitorController } from '$lib/wallet/session-monitor';
   import { toast } from '$lib/stores/toasts';
   import { denomination, initDenomination } from '$lib/denomination';
   import { fade } from 'svelte/transition';
-  import type { MultisigSetupDraft, RuntimePlatform, WalletProfile } from '$lib/wallet/contracts';
+  import type {
+    MultisigSetupDraft,
+    RuntimePlatform,
+    WalletProfile,
+    WalletSelection
+  } from '$lib/wallet/contracts';
   import { formatWalletCount, locale, t, type MessageKey } from '$lib/i18n';
   import { provideWalletShellContext } from '$lib/wallet/shell-context';
   import { multisigSetupSignerTarget, multisigSetupStageLabel } from '$lib/wallet/multisig-setup';
@@ -37,8 +53,10 @@
   import {
     isDesktopPlatform,
     matchKeyboardShortcut,
+    matchZoomShortcut,
     usesCommandModifier
   } from '$lib/keyboard-shortcuts';
+  import { applyZoom, changeZoom, initZoom } from '$lib/zoom';
   let { children } = $props();
   const nav: Array<{ href: string; label: MessageKey; icon: typeof LayoutGrid }> = [
     { href: '/', label: 'overview', icon: LayoutGrid },
@@ -52,26 +70,19 @@
     '/multisig/new',
     '/multisig/recover'
   ]);
-  const foregroundWalletRoutes = new Set([
-    '/receive',
-    '/send',
-    '/multisig/receive',
-    '/multisig/send'
-  ]);
   const routeCancelsSync = (pathname: string) =>
-    walletSetupRoutes.has(pathname) ||
-    pathname === '/unlock' ||
-    pathname === '/settings' ||
-    pathname === '/diagnostics' ||
-    foregroundWalletRoutes.has(pathname);
+    walletSetupRoutes.has(pathname) || pathname === '/unlock' || pathname === '/diagnostics';
   const active = (href: string) =>
-    href === '/multisig'
-      ? page.url.pathname === href ||
-        page.url.pathname.startsWith('/multisig/policy') ||
-        page.url.pathname.startsWith('/multisig/backup')
-      : page.url.pathname === href;
+    href === '/settings'
+      ? page.url.pathname === href || page.url.pathname === '/diagnostics'
+      : href === '/multisig'
+        ? page.url.pathname === href ||
+          page.url.pathname.startsWith('/multisig/policy') ||
+          page.url.pathname.startsWith('/multisig/backup')
+        : page.url.pathname === href;
   let profiles = $state<WalletProfile[]>([]);
   let selectedWalletId = $state<string | null>(null);
+  let selectedWalletUnlocked = $state(false);
   let multisigSetupDraft = $state<MultisigSetupDraft | null>(null);
   let discardSetupOpen = $state(false);
   let discardingSetup = $state(false);
@@ -79,14 +90,16 @@
   let setupDraftReadGeneration = 0;
   let profileReadGeneration = 0;
   let liveSync: LiveSyncController | undefined;
+  let automaticSyncPauseCount = 0;
+  let automaticSyncPauseTask: Promise<void> | undefined;
   let sessionMonitor: SessionMonitorController | undefined;
   let activeHardwareReviews = 0;
   let startupState = $state<'checking' | 'ready' | 'failed'>('checking');
-  const startupStartedAt = Date.now();
-  const minimumStartupGateMs = isPrototypeWallet ? 0 : 1_800;
   let navigationPending = $state(false);
+  let pendingDestination = $state('');
   let commandModifier = false;
   let desktopPlatform = false;
+  let currentZoom = 1;
   let shortcutLockPending = false;
   let walletSelectionTask: Promise<void> | undefined;
   let mobileRuntime = false;
@@ -108,15 +121,14 @@
       page.url.pathname === '/mobile/recover'
   );
   let lockedRoute = $derived(page.url.pathname === '/unlock');
+  let settingsRoute = $derived(page.url.pathname === '/settings');
   let diagnosticsRoute = $derived(page.url.pathname === '/diagnostics');
-  let restrictedUtilityRoute = $derived(lockedRoute || diagnosticsRoute);
+  let walletLocked = $derived(!selectedWalletUnlocked);
+  let restrictedUtilityRoute = $derived(
+    lockedRoute || ((settingsRoute || diagnosticsRoute) && walletLocked)
+  );
   let syncPausedRoute = $derived(
-    onboardingRoute ||
-      mobileSetupRoute ||
-      lockedRoute ||
-      diagnosticsRoute ||
-      page.url.pathname === '/settings' ||
-      foregroundWalletRoutes.has(page.url.pathname)
+    onboardingRoute || lockedRoute || diagnosticsRoute || walletLocked || mobileSetupRoute
   );
   const showQuickActions = $derived(
     !restrictedUtilityRoute && (page.url.pathname === '/' || page.url.pathname === '/coins')
@@ -133,10 +145,23 @@
       ? event.metaKey && !event.ctrlKey
       : event.ctrlKey && !event.metaKey;
     const target = event.target as HTMLElement | null;
+    const zoomShortcut = matchZoomShortcut(event);
+    if (
+      desktopPlatform &&
+      !event.defaultPrevented &&
+      !event.repeat &&
+      !event.altKey &&
+      primaryModifier &&
+      zoomShortcut
+    ) {
+      event.preventDefault();
+      currentZoom = applyZoom(changeZoom(currentZoom, zoomShortcut));
+      return;
+    }
     if (
       startupState !== 'ready' ||
       onboardingRoute ||
-      lockedRoute ||
+      walletLocked ||
       diagnosticsRoute ||
       event.defaultPrevented ||
       event.repeat ||
@@ -149,6 +174,9 @@
 
     const shortcut = matchKeyboardShortcut(event);
     if (!shortcut) return;
+
+    if (shortcut.id === 'zoom_in' || shortcut.id === 'zoom_out' || shortcut.id === 'zoom_reset')
+      return;
 
     if (shortcut.id === 'lock') {
       if (isPrototypeWallet || !desktopPlatform || navigationPending || shortcutLockPending) return;
@@ -266,33 +294,81 @@
     '/mobile/recover'
   ]);
 
+  async function resumeAfterWalletCreation(profileRefresh: Promise<void>) {
+    await profileRefresh;
+    let selection: WalletSelection;
+    try {
+      selection = await walletService.session();
+      selectedWalletUnlocked = selection.unlocked;
+    } catch {
+      selectedWalletUnlocked = false;
+      return;
+    }
+    if (
+      !selection.unlocked ||
+      !liveSync ||
+      routeCancelsSync(page.url.pathname) ||
+      automaticSyncPauseCount > 0
+    )
+      return;
+    liveSync.start();
+    await liveSync.runNow();
+  }
+
   beforeNavigate(({ to }) => {
     navigationPending = Boolean(to && to.url.href !== page.url.href);
+    pendingDestination = navigationPending && to ? to.url.pathname : '';
     const preserveMainnetAdmission = Boolean(
       defaultConfig.network === 'mainnet' && to && walletSetupRoutes.has(to.url.pathname)
     );
     void walletService.cancelHardwareOperations(preserveMainnetAdmission);
     if (navigationPending && to && routeCancelsSync(to.url.pathname) && !isPrototypeWallet)
       void walletService.cancelSync().catch(() => undefined);
-    if (to && foregroundWalletRoutes.has(to.url.pathname)) liveSync?.stop();
   });
 
   afterNavigate(({ from }) => {
     navigationPending = false;
+    pendingDestination = '';
     const previousPath = from?.url?.pathname;
     // Routine navigation must not repeat registry and setup-draft reads that
     // every destination performs independently. Refresh only after a flow that
     // can actually mutate those shell-level records.
-    if (previousPath && profileMutatingRoutes.has(previousPath)) void refreshProfiles();
+    const profileRefresh =
+      previousPath && profileMutatingRoutes.has(previousPath)
+        ? refreshProfiles()
+        : Promise.resolve();
     if (previousPath === '/multisig/new') void refreshSetupDraft();
-    if (!liveSync || isPrototypeWallet) return;
+    if (previousPath === '/unlock') {
+      void walletService
+        .session()
+        .then((selection) => (selectedWalletUnlocked = selection.unlocked))
+        .catch(() => (selectedWalletUnlocked = false));
+    }
+    if (!liveSync) return;
+    if (previousPath === '/welcome' || previousPath === '/hardware/new') {
+      void resumeAfterWalletCreation(profileRefresh);
+      return;
+    }
+    if (isPrototypeWallet) return;
     if (syncPausedRoute) liveSync.stop();
-    else liveSync.start();
+    else if (automaticSyncPauseCount === 0) {
+      liveSync.start();
+      // Unlock is an explicit foreground wake-up. Start the selected wallet's
+      // first or routine sync even when the user returns to Settings instead
+      // of waiting for Overview to mount or for the steady-state interval.
+      // A genuine credential unlock should refresh immediately. Wallet selection
+      // can also leave /unlock when the target wallet already has a live session;
+      // in that case let its cached Overview paint before the normal sync timer.
+      if (previousPath === '/unlock' && !walletSelectionTask) void liveSync.runNow();
+    }
   });
 
   async function selectWallet(walletId: string) {
-    if (shortcutLockPending || walletSelectionTask || !walletId || walletId === selectedWalletId)
+    if (shortcutLockPending || walletSelectionTask || !walletId) return;
+    if (walletId === selectedWalletId) {
+      if (!selectedWalletUnlocked && page.url.pathname !== '/unlock') await goto('/unlock');
       return;
+    }
     const task = performWalletSelection(walletId);
     walletSelectionTask = task;
     try {
@@ -310,13 +386,15 @@
     liveSync?.stop();
     ++profileReadGeneration;
     try {
+      await walletService.cancelSync().catch(() => undefined);
       await walletService.cancelHardwareOperations();
       const selection = await walletService.selectWallet(walletId);
       // Change the routed wallet context only after Rust has atomically selected
       // the same profile. The keyed route then reloads against one wallet kind.
       selectedWalletId = selection.profile.id;
+      selectedWalletUnlocked = selection.unlocked;
       await goto(selection.unlocked ? '/' : '/unlock');
-      if (!isPrototypeWallet && selection.unlocked) {
+      if (!isPrototypeWallet && selection.unlocked && automaticSyncPauseCount === 0) {
         liveSync?.restart();
       } else {
         liveSync?.stop();
@@ -348,10 +426,22 @@
     return true;
   }
   async function pauseAutomaticSync() {
-    await liveSync?.stopAndWait();
+    automaticSyncPauseCount += 1;
+    if (!automaticSyncPauseTask) {
+      const task = liveSync?.stopAndWait() ?? Promise.resolve();
+      automaticSyncPauseTask = task;
+      try {
+        await task;
+      } finally {
+        if (automaticSyncPauseTask === task) automaticSyncPauseTask = undefined;
+      }
+      return;
+    }
+    await automaticSyncPauseTask;
   }
   function resumeAutomaticSync() {
-    if (!isPrototypeWallet && !syncPausedRoute) liveSync?.start();
+    automaticSyncPauseCount = Math.max(0, automaticSyncPauseCount - 1);
+    if (automaticSyncPauseCount === 0 && !isPrototypeWallet && !syncPausedRoute) liveSync?.start();
   }
   provideWalletShellContext({
     profiles: () => profiles,
@@ -375,7 +465,7 @@
         !runtime.network ||
         !runtime.version ||
         !runtime.commit ||
-        !['regtest', 'signet', 'testnet4'].includes(runtime.network)
+        !['regtest', 'signet', 'testnet4', 'mainnet'].includes(runtime.network)
       ) {
         startupFailure = translate(
           $locale,
@@ -390,6 +480,17 @@
         await enforceMobileBackgroundLock();
         return;
       }
+      if (runtime.networkSwitching !== networkSwitchingBuild) {
+        startupFailure = translate(
+          $locale,
+          'The native and web app builds do not match. Restart Groot with the correct build.'
+        );
+        throw new Error('native/web build mismatch');
+      }
+      if (runtime.networkSwitching) {
+        applyRuntimeNetwork(runtime.network);
+        applyMultisigNetwork(runtime.network);
+      }
       if (runtime.network !== defaultConfig.network || runtime.version !== APP_VERSION) {
         startupFailure = translate(
           $locale,
@@ -401,20 +502,26 @@
       await refreshSetupDraft();
       if (!(await walletService.exists())) {
         if (!diagnosticsRoute) await goto('/welcome');
-        await holdStartupGate();
         startupState = 'ready';
         return;
       }
       await refreshProfiles();
       const selection = await walletService.session();
-      if (!selection.unlocked && !onboardingRoute && !lockedRoute && !diagnosticsRoute) {
+      selectedWalletUnlocked = selection.unlocked;
+      if (
+        !selection.unlocked &&
+        !onboardingRoute &&
+        !lockedRoute &&
+        !settingsRoute &&
+        !diagnosticsRoute
+      ) {
         await goto('/unlock');
       } else if (selection.unlocked && lockedRoute) {
         await goto('/');
       }
-      await holdStartupGate();
       startupState = 'ready';
-      if (!syncPausedRoute && !isPrototypeWallet) liveSync?.start();
+      if (!syncPausedRoute && !isPrototypeWallet && automaticSyncPauseCount === 0)
+        liveSync?.start();
     } catch {
       if (!startupFailure) {
         startupFailure = translate(
@@ -426,11 +533,6 @@
       }
       startupState = 'failed';
     }
-  }
-
-  async function holdStartupGate() {
-    const remaining = minimumStartupGateMs - (Date.now() - startupStartedAt);
-    if (remaining > 0) await new Promise((resolve) => setTimeout(resolve, remaining));
   }
 
   function centerMobileField(event: FocusEvent) {
@@ -477,6 +579,7 @@
       navigator.userAgent,
       navigator.maxTouchPoints
     );
+    if (desktopPlatform) currentZoom = initZoom();
     const unsubscribe = walletService.subscribe((event) => {
       const presentation = walletEventPresentation(event, $locale, $denomination, goto);
       if (presentation) toast(presentation);
@@ -488,16 +591,28 @@
         selectedWalletId = event.profile.id;
       }
     });
-    liveSync = createLiveSync(walletService, 10_000, (cause) => {
-      if (cause instanceof WalletError && cause.code === 'wallet_locked') {
-        liveSync?.stop();
-        void goto('/unlock');
+    liveSync = createLiveSync(
+      walletService,
+      () => selectedProfile?.kind ?? null,
+      LIVE_SYNC_INTERVAL_MS,
+      (cause) => {
+        if (cause instanceof WalletError && cause.code === 'wallet_locked') {
+          liveSync?.stop();
+          void goto('/unlock');
+        }
       }
-    });
+    );
     sessionMonitor = createSessionMonitor(
       walletService,
       async (selection) => {
-        if (selection.profile.id !== selectedWalletId || lockedRoute) return;
+        if (
+          selection.profile.id !== selectedWalletId ||
+          lockedRoute ||
+          settingsRoute ||
+          diagnosticsRoute
+        )
+          return;
+        selectedWalletUnlocked = false;
         liveSync?.stop();
         await walletService.cancelSync().catch(() => undefined);
         await goto('/unlock');
@@ -590,19 +705,16 @@
         </nav>
       {/if}
       <div class="sidebar-bottom">
-        {#if !restrictedUtilityRoute}<a
-            href="/settings"
-            class:active={active('/settings')}
-            aria-current={active('/settings') ? 'page' : undefined}
-            ><Settings size={17} /><span>{t('settings', $locale)}</span></a
-          >{/if}
+        <a
+          href="/settings"
+          class:active={active('/settings')}
+          aria-current={active('/settings') ? 'page' : undefined}
+          ><Settings size={17} /><span>{t('settings', $locale)}</span></a
+        >
         <div class="preference-toggles">
           <ThemeToggle /><DiscreetModeToggle />
         </div>
-        <NetworkStatus
-          network={runtimeIdentity?.network ?? defaultConfig.network}
-          locked={restrictedUtilityRoute}
-        />
+        <NetworkStatus network={defaultConfig.network} locked={walletLocked} />
         <BuildIdentity runtime={runtimeIdentity} placement="sidebar" />
       </div>
     </aside>
@@ -642,11 +754,17 @@
           }}
         />
       {/if}
-      {#key `${selectedWalletId ?? 'none'}:${page.url.pathname}`}
-        <div class="route-transition" in:fade={{ duration: 180 }}>
-          {@render children?.()}
+      {#if navigationPending && pendingDestination === '/diagnostics'}
+        <div class="page diagnostics-navigation-skeleton">
+          <WalletSkeleton variant="diagnostics" count={4} header />
         </div>
-      {/key}
+      {:else}
+        {#key `${selectedWalletId ?? 'none'}:${page.url.pathname}`}
+          <div class="route-transition" in:fade={{ duration: 180 }}>
+            {@render children?.()}
+          </div>
+        {/key}
+      {/if}
     </main>
 
     {#if onboardingRoute}<BuildIdentity runtime={runtimeIdentity} placement="onboarding" />{/if}
@@ -672,9 +790,13 @@
       </nav>{/if}
 
     {#if restrictedUtilityRoute}<div class="locked-mobile-utilities">
-        <ThemeToggle /><DiscreetModeToggle /><NetworkStatus
-          network={runtimeIdentity?.network ?? defaultConfig.network}
-          locked
+        {#if lockedRoute}<a
+            class="locked-settings-link"
+            href="/settings"
+            aria-label={t('settings', $locale)}><Settings size={20} /></a
+          >{/if}<ThemeToggle /><DiscreetModeToggle /><NetworkStatus
+          network={defaultConfig.network}
+          locked={walletLocked}
         />
       </div>{/if}
 

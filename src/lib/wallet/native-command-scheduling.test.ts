@@ -27,25 +27,83 @@ const walletCore = readFileSync(
 );
 
 function commandSource(source: string, command: string): string {
-  const start = source.indexOf(`pub async fn ${command}`);
+  const start = source.indexOf(`pub async fn ${command}(`);
   expect(start, `${command} must remain an asynchronous native command`).toBeGreaterThan(-1);
   const nextCommand = source.indexOf('#[tauri::command]', start);
   return source.slice(start, nextCommand === -1 ? source.length : nextCommand);
 }
 
+function synchronousCommandSource(source: string, command: string): string {
+  const start = source.indexOf(`pub fn ${command}`);
+  expect(start, `${command} must remain a native command`).toBeGreaterThan(-1);
+  const nextCommand = source.indexOf('#[tauri::command]', start);
+  return source.slice(start, nextCommand === -1 ? source.length : nextCommand);
+}
+
 describe('native command scheduling', () => {
+  it('lists only public setup availability independently of the selected wallet lock', () => {
+    const source = synchronousCommandSource(profileCommands, 'network_setup_sources');
+    expect(source).not.toContain('require_unlocked');
+    expect(source).toContain('unlocked.is_unlocked(profile.id)');
+    expect(source).toContain('session.config == config');
+    expect(source).not.toContain('read_sync_source_for');
+    const dto = profileCommands.slice(
+      profileCommands.indexOf('pub struct NetworkSetupSource'),
+      profileCommands.indexOf('pub struct SoftwareWalletCreation')
+    );
+    expect(dto).not.toContain('sync_source');
+    expect(dto).not.toContain('password');
+    expect(profileCommands).toContain(
+      'authorize_wallet_session(state, source, false, registry.inactivity_timeout_minutes)?'
+    );
+  });
+
+  it.each(['multisig_create', 'multisig_recovery_create'])(
+    '%s rejects duplicates before any protected network copy',
+    (command) => {
+      const source = commandSource(multisigProposalCommands, command);
+      const duplicateCheck = source.indexOf('find_exact_descriptor_profile(');
+      expect(duplicateCheck).toBeGreaterThan(-1);
+      expect(duplicateCheck).toBeLessThan(source.indexOf('prepare_profile_directory('));
+      expect(source).toContain('require_requested_network_setup(');
+    }
+  );
+  it.each(['node_config', 'wallet_sync_source'])(
+    '%s exposes only saved non-secret network configuration while locked',
+    (command) => {
+      const source = synchronousCommandSource(profileCommands, command);
+      expect(source).not.toContain('require_unlocked');
+      expect(source).toMatch(/read_(node_config|sync_source)\(&app\)/);
+    }
+  );
+
   it.each([
     ['wallet_lock', profileCommands],
+    ['wallet_rename', profileCommands],
     ['wallet_select', profileCommands],
+    ['address_create', profileCommands],
     ['wallet_sync', profileCommands],
     ['recovery_scan_status', profileCommands],
+    ['recovery_scan_settings', profileCommands],
+    ['recovery_scan_settings_save', profileCommands],
+    ['wallet_full_rescan_cancel', profileCommands],
     ['coin_set_frozen', profileCommands],
     ['multisig_coin_set_frozen', profileCommands],
     ['wallet_full_rescan', profileCommands],
     ['wallet_notifications', profileCommands],
     ['wallet_notifications_ack', profileCommands],
     ['multisig_sync', multisigCommands],
+    ['multisig_address_create', multisigCommands],
     ['tx_proposals', transactionCommands],
+    ['tx_prepare', transactionCommands],
+    ['tx_acceleration_prepare', transactionCommands],
+    ['multisig_acceleration_prepare', transactionCommands],
+    ['tx_max_spend', transactionCommands],
+    ['coin_selection_preview', walletCore],
+    ['multisig_coin_selection_preview', walletCore],
+    ['rbf_acceleration_quote', transactionCommands],
+    ['cpfp_acceleration_quote', transactionCommands],
+    ['external_signer_wallet', hardwareCommands],
     ['tx_sign_and_broadcast', transactionCommands],
     ['multisig_proposals', multisigProposalCommands],
     ['multisig_proposal_broadcast', multisigProposalCommands],
@@ -70,6 +128,21 @@ describe('native command scheduling', () => {
       source.indexOf('operation_guard(&state)?')
     );
   });
+
+  it.each(['wallet_notifications', 'wallet_notifications_ack'])(
+    '%s binds identity before opening the database',
+    (command) => {
+      const source = commandSource(profileCommands, command);
+      expect(source).toContain('wallet_id: Uuid');
+      expect(source.indexOf('require_wallet_read_context')).toBeGreaterThan(
+        source.indexOf('operation_guard(&state)?')
+      );
+      expect(source.indexOf('require_wallet_read_context')).toBeLessThan(
+        source.indexOf('open_multisig_db')
+      );
+      if (command.endsWith('_ack')) expect(source).toContain('Some(session_id)');
+    }
+  );
 
   it('node saving cancels automatic sync before waiting for the wallet-operation lock', () => {
     const source = commandSource(profileCommands, 'node_config_save');
@@ -111,5 +184,14 @@ describe('native command scheduling', () => {
     expect(guard).toBeGreaterThan(-1);
     expect(setupScopeEnd).toBeGreaterThan(guard);
     expect(scan).toBeGreaterThan(setupScopeEnd);
+  });
+
+  it('keeps remote birthday validation off the native UI thread and cancels ordinary sync first', () => {
+    const source = commandSource(profileCommands, 'recovery_scan_settings_save');
+    expect(source.indexOf('spawn_blocking(move ||')).toBeGreaterThan(-1);
+    expect(source.indexOf('cancel_foreground_sync(&state)?')).toBeLessThan(
+      source.indexOf('operation_guard(&state)?')
+    );
+    expect(source.indexOf('checked_block_height(&rpc_client(')).toBeGreaterThan(-1);
   });
 });

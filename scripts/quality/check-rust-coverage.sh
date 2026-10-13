@@ -24,13 +24,13 @@ core_modules=(
 )
 
 adapter_modules=(
-  airgap.rs
   compact_filters.rs
   direct_rpc.rs
   hardware.rs
   label_provenance.rs
   lib.rs
   main.rs
+  managed_gateway.rs
   native_backup.rs
   network.rs
   process_lock.rs
@@ -39,6 +39,13 @@ adapter_modules=(
   tor_rpc.rs
   wallet.rs
 )
+
+for module in "${core_modules[@]}" "${adapter_modules[@]}"; do
+  if [[ ! -f "src-tauri/src/$module" ]]; then
+    echo "Rust coverage scope failed: classified src-tauri/src/$module does not exist." >&2
+    exit 1
+  fi
+done
 
 contains_module() {
   local candidate="$1"
@@ -63,7 +70,7 @@ echo "Reporting adapters separately through whole-library coverage: ${adapter_mo
 
 # Nested files under `wallet/` and `native_backup/` are extracted pieces of
 # those already-classified orchestration/platform adapters, not new core scope.
-adapter_pattern="src/(airgap|compact_filters|direct_rpc|hardware|label_provenance|lib|main|native_backup|network|process_lock|registry|secure_store|tor_rpc|wallet)(\\.rs|/.*\\.rs)$"
+adapter_pattern="src/(compact_filters|direct_rpc|hardware|label_provenance|lib|main|managed_gateway|native_backup|network|process_lock|registry|secure_store|tor_rpc|wallet)(\\.rs|/.*\\.rs)$"
 cargo llvm-cov \
   --locked \
   --manifest-path src-tauri/Cargo.toml \

@@ -2,25 +2,55 @@ use bdk_wallet::bitcoin::{constants::genesis_block, BlockHash, Network};
 
 use crate::network::ChainBackend;
 
-// Mainnet is reachable only in the separately configured, compile-time mainnet
-// candidate. A frontend preference or environment change at runtime cannot
-// activate it in any rehearsal build.
-#[cfg_attr(not(groot_network = "mainnet"), allow(dead_code))]
+// Mainnet is reachable only in the separately configured mainnet candidate or
+// internal multi-network build. Fixed rehearsal builds cannot activate it from
+// a frontend preference or runtime environment change.
+#[cfg_attr(
+    not(any(groot_network = "mainnet", groot_network = "multi")),
+    allow(dead_code)
+)]
 pub const FIRST_MAINNET_MAX_SEND_SATS: u64 = 1_000_000;
+/// A second, independent loss limit for the fee paid by one candidate
+/// transaction. The total debit must still fit inside `FIRST_MAINNET_MAX_SEND_SATS`.
+#[cfg_attr(
+    not(any(groot_network = "mainnet", groot_network = "multi")),
+    allow(dead_code)
+)]
+pub const FIRST_MAINNET_MAX_FEE_SATS: u64 = 100_000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ReleasePolicyError {
-    #[cfg_attr(groot_network = "mainnet", allow(dead_code))]
+    #[cfg_attr(
+        any(groot_network = "mainnet", groot_network = "multi"),
+        allow(dead_code)
+    )]
     MainnetDisabled,
-    #[cfg_attr(not(groot_network = "mainnet"), allow(dead_code))]
+    #[cfg_attr(
+        not(any(groot_network = "mainnet", groot_network = "multi")),
+        allow(dead_code)
+    )]
     BackendAdmissionRequired,
     WrongGenesis,
     UnsupportedBackend,
-    #[cfg_attr(not(groot_network = "mainnet"), allow(dead_code))]
+    #[cfg_attr(
+        not(any(groot_network = "mainnet", groot_network = "multi")),
+        allow(dead_code)
+    )]
     InvalidAmount,
-    #[cfg_attr(not(groot_network = "mainnet"), allow(dead_code))]
+    #[cfg_attr(
+        not(any(groot_network = "mainnet", groot_network = "multi")),
+        allow(dead_code)
+    )]
     AmountCapExceeded,
-    #[cfg_attr(not(groot_network = "mainnet"), allow(dead_code))]
+    #[cfg_attr(
+        not(any(groot_network = "mainnet", groot_network = "multi")),
+        allow(dead_code)
+    )]
+    FeeCapExceeded,
+    #[cfg_attr(
+        not(any(groot_network = "mainnet", groot_network = "multi")),
+        allow(dead_code)
+    )]
     BatchSpendingDisabled,
     UnsupportedWalletPolicy,
 }
@@ -28,18 +58,20 @@ pub enum ReleasePolicyError {
 pub fn validate_first_mainnet_backend_endpoint(
     backend: &ChainBackend,
 ) -> Result<(), ReleasePolicyError> {
-    let ChainBackend::LocalCore { url } = backend else {
-        return Err(ReleasePolicyError::UnsupportedBackend);
+    let (url, required_scheme) = match backend {
+        ChainBackend::LocalCore { url } => (url, "http"),
+        ChainBackend::RemoteCore { url } => (url, "https"),
+        ChainBackend::Esplora { .. } => return Err(ReleasePolicyError::UnsupportedBackend),
     };
     let parsed = url::Url::parse(url).map_err(|_| ReleasePolicyError::UnsupportedBackend)?;
-    if parsed.scheme() != "http" || backend.validate().is_err() {
+    if parsed.scheme() != required_scheme || backend.validate().is_err() {
         return Err(ReleasePolicyError::UnsupportedBackend);
     }
     Ok(())
 }
 
 pub fn ensure_runtime_network_enabled(_network: Network) -> Result<(), ReleasePolicyError> {
-    #[cfg(not(groot_network = "mainnet"))]
+    #[cfg(not(any(groot_network = "mainnet", groot_network = "multi")))]
     if _network == Network::Bitcoin {
         return Err(ReleasePolicyError::MainnetDisabled);
     }
@@ -51,7 +83,7 @@ pub fn ensure_database_open_enabled(
     _has_current_backend_admission: bool,
 ) -> Result<(), ReleasePolicyError> {
     ensure_runtime_network_enabled(network)?;
-    #[cfg(groot_network = "mainnet")]
+    #[cfg(any(groot_network = "mainnet", groot_network = "multi"))]
     if network == Network::Bitcoin && !_has_current_backend_admission {
         return Err(ReleasePolicyError::BackendAdmissionRequired);
     }
@@ -94,15 +126,42 @@ pub fn validate_spend(
     if network != Network::Bitcoin {
         return Ok(());
     }
-    #[cfg(groot_network = "mainnet")]
+    #[cfg(any(groot_network = "mainnet", groot_network = "multi"))]
     {
         validate_first_mainnet_spend(recipient_count, total_sats)
     }
-    #[cfg(not(groot_network = "mainnet"))]
+    #[cfg(not(any(groot_network = "mainnet", groot_network = "multi")))]
     {
         let _ = (recipient_count, total_sats);
         Err(ReleasePolicyError::MainnetDisabled)
     }
+}
+
+pub fn validate_final_spend(
+    network: Network,
+    recipient_count: usize,
+    amount_sats: u64,
+    fee_sats: u64,
+) -> Result<(), ReleasePolicyError> {
+    validate_spend(network, recipient_count, amount_sats)?;
+    if network != Network::Bitcoin {
+        return Ok(());
+    }
+    #[cfg(not(any(groot_network = "mainnet", groot_network = "multi")))]
+    let _ = fee_sats;
+    #[cfg(any(groot_network = "mainnet", groot_network = "multi"))]
+    {
+        if fee_sats > FIRST_MAINNET_MAX_FEE_SATS {
+            return Err(ReleasePolicyError::FeeCapExceeded);
+        }
+        let total_debit = amount_sats
+            .checked_add(fee_sats)
+            .ok_or(ReleasePolicyError::AmountCapExceeded)?;
+        if total_debit > FIRST_MAINNET_MAX_SEND_SATS {
+            return Err(ReleasePolicyError::AmountCapExceeded);
+        }
+    }
+    Ok(())
 }
 
 pub fn validate_cpfp(
@@ -114,18 +173,41 @@ pub fn validate_cpfp(
     if network != Network::Bitcoin {
         return Ok(());
     }
-    #[cfg(groot_network = "mainnet")]
+    #[cfg(any(groot_network = "mainnet", groot_network = "multi"))]
     {
         validate_first_mainnet_cpfp(recipient_count, total_sats, wallet_owned_output)
     }
-    #[cfg(not(groot_network = "mainnet"))]
+    #[cfg(not(any(groot_network = "mainnet", groot_network = "multi")))]
     {
         let _ = (recipient_count, total_sats, wallet_owned_output);
         Err(ReleasePolicyError::MainnetDisabled)
     }
 }
 
-#[cfg_attr(not(groot_network = "mainnet"), allow(dead_code))]
+pub fn validate_final_cpfp(
+    network: Network,
+    recipient_count: usize,
+    total_sats: u64,
+    wallet_owned_output: bool,
+    fee_sats: u64,
+) -> Result<(), ReleasePolicyError> {
+    validate_cpfp(network, recipient_count, total_sats, wallet_owned_output)?;
+    if network != Network::Bitcoin {
+        return Ok(());
+    }
+    #[cfg(not(any(groot_network = "mainnet", groot_network = "multi")))]
+    let _ = fee_sats;
+    #[cfg(any(groot_network = "mainnet", groot_network = "multi"))]
+    if fee_sats > FIRST_MAINNET_MAX_FEE_SATS {
+        return Err(ReleasePolicyError::FeeCapExceeded);
+    }
+    Ok(())
+}
+
+#[cfg_attr(
+    not(any(groot_network = "mainnet", groot_network = "multi")),
+    allow(dead_code)
+)]
 fn validate_first_mainnet_cpfp(
     recipient_count: usize,
     total_sats: u64,
@@ -137,7 +219,10 @@ fn validate_first_mainnet_cpfp(
     Ok(())
 }
 
-#[cfg_attr(not(groot_network = "mainnet"), allow(dead_code))]
+#[cfg_attr(
+    not(any(groot_network = "mainnet", groot_network = "multi")),
+    allow(dead_code)
+)]
 fn validate_first_mainnet_spend(
     recipient_count: usize,
     total_sats: u64,
@@ -159,8 +244,8 @@ mod tests {
     use super::*;
 
     #[test]
-    #[cfg(groot_network = "mainnet")]
-    fn mainnet_is_compile_time_scoped_while_test_networks_are_unchanged() {
+    #[cfg(any(groot_network = "mainnet", groot_network = "multi"))]
+    fn mainnet_is_confined_to_mainnet_capable_builds_while_test_networks_are_unchanged() {
         assert_eq!(ensure_runtime_network_enabled(Network::Bitcoin), Ok(()));
         assert_eq!(
             ensure_database_open_enabled(Network::Bitcoin, false),
@@ -175,8 +260,8 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(groot_network = "mainnet"))]
-    fn mainnet_is_compile_time_scoped_while_test_networks_are_unchanged() {
+    #[cfg(not(any(groot_network = "mainnet", groot_network = "multi")))]
+    fn mainnet_is_confined_to_mainnet_capable_builds_while_test_networks_are_unchanged() {
         assert_eq!(
             ensure_runtime_network_enabled(Network::Bitcoin),
             Err(ReleasePolicyError::MainnetDisabled)
@@ -217,7 +302,7 @@ mod tests {
     }
 
     #[test]
-    fn candidate_backend_requires_exact_mainnet_genesis_and_local_core() {
+    fn candidate_backend_requires_exact_mainnet_genesis_and_an_admitted_core_transport() {
         let local = ChainBackend::LocalCore {
             url: "http://127.0.0.1:8332".into(),
         };
@@ -229,6 +314,13 @@ mod tests {
         assert_eq!(
             validate_first_mainnet_backend(&local, genesis_block(Network::Testnet).block_hash()),
             Err(ReleasePolicyError::WrongGenesis)
+        );
+        let remote = ChainBackend::RemoteCore {
+            url: "https://node.example:8332".into(),
+        };
+        assert_eq!(
+            validate_first_mainnet_backend(&remote, mainnet_genesis),
+            Ok(())
         );
         for backend in [
             ChainBackend::LocalCore {
@@ -244,7 +336,11 @@ mod tests {
                 url: "not-a-url".into(),
             },
             ChainBackend::RemoteCore {
-                url: "https://node.example".into(),
+                url: "http://node.example:8332".into(),
+            },
+            ChainBackend::RemoteCore {
+                url: "http://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.onion:8332"
+                    .into(),
             },
             ChainBackend::Esplora {
                 url: "https://mempool.space/api".into(),
@@ -267,6 +363,7 @@ mod tests {
         // The live gate is intentionally checked first. These constants and
         // invariants remain reviewable before that gate can ever be enabled.
         assert_eq!(FIRST_MAINNET_MAX_SEND_SATS, 1_000_000);
+        assert_eq!(FIRST_MAINNET_MAX_FEE_SATS, 100_000);
         assert_eq!(
             validate_first_mainnet_spend(1, FIRST_MAINNET_MAX_SEND_SATS),
             Ok(())
@@ -286,13 +383,50 @@ mod tests {
     }
 
     #[test]
+    fn final_mainnet_policy_caps_fee_and_total_debit() {
+        for network in [Network::Regtest, Network::Signet, Network::Testnet] {
+            assert_eq!(validate_final_spend(network, 1, u64::MAX, u64::MAX), Ok(()));
+            assert_eq!(validate_final_cpfp(network, 0, 0, true, u64::MAX), Ok(()));
+        }
+        #[cfg(any(groot_network = "mainnet", groot_network = "multi"))]
+        {
+            assert_eq!(
+                validate_final_spend(
+                    Network::Bitcoin,
+                    1,
+                    FIRST_MAINNET_MAX_SEND_SATS - FIRST_MAINNET_MAX_FEE_SATS,
+                    FIRST_MAINNET_MAX_FEE_SATS,
+                ),
+                Ok(())
+            );
+            assert_eq!(
+                validate_final_spend(
+                    Network::Bitcoin,
+                    1,
+                    FIRST_MAINNET_MAX_SEND_SATS - FIRST_MAINNET_MAX_FEE_SATS + 1,
+                    FIRST_MAINNET_MAX_FEE_SATS,
+                ),
+                Err(ReleasePolicyError::AmountCapExceeded)
+            );
+            assert_eq!(
+                validate_final_spend(Network::Bitcoin, 1, 1, FIRST_MAINNET_MAX_FEE_SATS + 1,),
+                Err(ReleasePolicyError::FeeCapExceeded)
+            );
+            assert_eq!(
+                validate_final_cpfp(Network::Bitcoin, 0, 0, true, FIRST_MAINNET_MAX_FEE_SATS + 1,),
+                Err(ReleasePolicyError::FeeCapExceeded)
+            );
+        }
+    }
+
+    #[test]
     fn dormant_cpfp_policy_allows_only_a_wallet_owned_fee_child() {
         assert_eq!(validate_cpfp(Network::Regtest, 99, u64::MAX, false), Ok(()));
-        #[cfg(groot_network = "mainnet")]
+        #[cfg(any(groot_network = "mainnet", groot_network = "multi"))]
         {
             assert_eq!(validate_cpfp(Network::Bitcoin, 0, 0, true), Ok(()));
         }
-        #[cfg(not(groot_network = "mainnet"))]
+        #[cfg(not(any(groot_network = "mainnet", groot_network = "multi")))]
         {
             assert_eq!(
                 validate_cpfp(Network::Bitcoin, 0, 0, true),

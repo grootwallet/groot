@@ -109,11 +109,20 @@ describe('locale preferences', () => {
     expect(localizedError({ code: 'hardware_pairing_required' }, 'es')).toBe(
       'Empareja esta BitBox en BitBoxApp y comprueba que BitBoxApp puede abrirla. Después, cierra BitBoxApp por completo y vuelve a buscar en Groot.'
     );
+    expect(localizedError({ code: 'hardware_wrong_network' }, 'fr')).toContain(
+      'autre réseau Bitcoin'
+    );
     expect(localizedError({ code: 'node_syncing' }, 'fr')).toContain(
       'Bitcoin Core est encore en cours de synchronisation'
     );
     expect(localizedError({ code: 'node_history_unavailable' }, 'es')).toContain(
       'ya no conserva los bloques necesarios'
+    );
+    expect(localizedError({ code: 'network_unavailable' }, 'fr')).toBe(
+      'Bitcoin Core est indisponible. Vérifiez la connexion dans Réglages.'
+    );
+    expect(localizedError({ code: 'network_unavailable' }, 'es')).toBe(
+      'Bitcoin Core no está disponible. Comprueba la conexión en Ajustes.'
     );
     expect(localizedError(new Error('Uncatalogued native detail'), 'fr')).toBe(
       'Une erreur est survenue. Réessayez.'
@@ -126,9 +135,7 @@ describe('locale preferences', () => {
         { code: 'network_unavailable', message: 'JSON-RPC transport exposed private detail' },
         'en'
       )
-    ).toBe(
-      'Could not connect to Bitcoin Core. Check that the node is running and review the RPC address, authentication, and network settings.'
-    );
+    ).toBe('Bitcoin Core is unavailable. Check the connection in Settings.');
     expect(
       localizedError(
         { code: 'internal_error', message: 'JSON-RPC transport exposed private detail' },
@@ -136,6 +143,24 @@ describe('locale preferences', () => {
         'Wallet sync failed.'
       )
     ).toBe('Wallet sync failed.');
+  });
+
+  it('uses a complete English sentence for rejected payment QR codes', () => {
+    expect(
+      localizedError(
+        { code: 'invalid_payment_request', message: 'the QR code is not a valid Bitcoin address' },
+        'en'
+      )
+    ).toBe('This QR code is not a valid Bitcoin payment request for this network.');
+  });
+
+  it('translates every send progress step', () => {
+    expect(
+      ['Intent', 'Amount & fee', 'Review & sign'].map((step) => translate('fr', step))
+    ).toEqual(['Intention', 'Montant et frais', 'Vérifier et signer']);
+    expect(
+      ['Intent', 'Amount & fee', 'Review & sign'].map((step) => translate('es', step))
+    ).toEqual(['Intención', 'Importe y comisión', 'Revisar y firmar']);
   });
 
   it('translates security and privacy tooltip copy', () => {

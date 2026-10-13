@@ -1,5 +1,6 @@
 use super::{
-    api_error, diagnostics, internal, proposal_api_error, selected_profile, ApiResult, AppState,
+    api_error, diagnostics, internal, proposal_api_error, require_unlocked, selected_profile,
+    ApiResult, AppState,
 };
 use crate::proposal::decode_psbt;
 use serde::Serialize;
@@ -55,52 +56,39 @@ pub(super) struct SavedFileReveal {
     pub(super) saved_at: Instant,
 }
 
-pub(super) fn validate_public_backup_filename(value: &str) -> ApiResult<&str> {
+fn validate_export_filename<'a>(
+    value: &'a str,
+    extensions: &[&str],
+    message: &'static str,
+) -> ApiResult<&'a str> {
     let trimmed = value.trim();
-    let valid_extension =
-        trimmed.ends_with(".bsms") || trimmed.ends_with(".json") || trimmed.ends_with(".txt");
     if trimmed.is_empty()
         || trimmed.len() > 128
         || trimmed.contains(['/', '\\', '\0'])
-        || !valid_extension
+        || !extensions
+            .iter()
+            .any(|extension| trimmed.ends_with(extension))
     {
-        return Err(api_error(
-            "invalid_backup",
-            "Choose a valid .bsms, .json, or .txt backup name.",
-        ));
+        return Err(api_error("invalid_backup", message));
     }
     Ok(trimmed)
+}
+
+pub(super) fn validate_public_backup_filename(value: &str) -> ApiResult<&str> {
+    validate_export_filename(
+        value,
+        &[".bsms", ".json", ".txt"],
+        "Choose a valid .bsms, .json, or .txt backup name.",
+    )
 }
 
 #[cfg(any(target_os = "macos", test))]
 pub(super) fn validate_public_backup_pdf_filename(value: &str) -> ApiResult<&str> {
-    let trimmed = value.trim();
-    if trimmed.is_empty()
-        || trimmed.len() > 128
-        || trimmed.contains(['/', '\\', '\0'])
-        || !trimmed.ends_with(".pdf")
-    {
-        return Err(api_error(
-            "invalid_backup",
-            "Choose a valid .pdf backup name.",
-        ));
-    }
-    Ok(trimmed)
+    validate_export_filename(value, &[".pdf"], "Choose a valid .pdf backup name.")
 }
 
 pub(super) fn validate_psbt_filename(value: &str) -> ApiResult<&str> {
-    let trimmed = value.trim();
-    if trimmed.is_empty()
-        || trimmed.len() > 128
-        || trimmed.contains(['/', '\\', '\0'])
-        || !trimmed.ends_with(".psbt")
-    {
-        return Err(api_error(
-            "invalid_backup",
-            "Choose a valid .psbt filename.",
-        ));
-    }
-    Ok(trimmed)
+    validate_export_filename(value, &[".psbt"], "Choose a valid .psbt filename.")
 }
 
 pub(super) fn write_public_export(path: &Path, content: &[u8]) -> ApiResult<()> {
@@ -542,6 +530,7 @@ pub async fn public_backup_pdf_prepare(
     state: State<'_, AppState>,
     suggested_filename: String,
 ) -> ApiResult<PendingPdfExportDto> {
+    require_unlocked(&app, &state)?;
     let filename = validate_public_backup_pdf_filename(&suggested_filename)?.to_owned();
     let selected_path = tauri::async_runtime::spawn_blocking(move || {
         let selected = app
@@ -591,6 +580,7 @@ pub async fn public_backup_pdf_save(
     save_token: String,
     markup: String,
 ) -> ApiResult<SavedFileDto> {
+    require_unlocked(&app, &state)?;
     let pending = state
         .pending_pdf_exports
         .lock()
@@ -617,9 +607,12 @@ pub async fn public_backup_pdf_save(
 
 #[cfg(any(target_os = "linux", target_os = "windows"))]
 pub fn public_backup_pdf_prepare(
+    app: AppHandle,
+    state: State<'_, AppState>,
     window: WebviewWindow,
     _suggested_filename: String,
 ) -> ApiResult<PendingPdfExportDto> {
+    require_unlocked(&app, &state)?;
     window.print().map_err(internal)?;
     Ok(PendingPdfExportDto {
         prepared: false,
@@ -636,7 +629,13 @@ pub fn public_backup_pdf_prepare(_suggested_filename: String) -> ApiResult<Pendi
 }
 
 #[cfg(not(target_os = "macos"))]
-pub fn public_backup_pdf_save(_save_token: String, _markup: String) -> ApiResult<SavedFileDto> {
+pub fn public_backup_pdf_save(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    _save_token: String,
+    _markup: String,
+) -> ApiResult<SavedFileDto> {
+    require_unlocked(&app, &state)?;
     Err(api_error(
         "backup_export_failed",
         "Native PDF saving is not available on this platform.",

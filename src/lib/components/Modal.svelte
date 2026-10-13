@@ -13,14 +13,24 @@
     attentionSignal = 0,
     dismissible = true,
     wide = false,
+    upper = false,
+    fixedViewport = false,
     children
   } = $props();
   let dialog = $state<HTMLDivElement>();
-  let documentTop = $state(-32);
   let attentionActive = $state(false);
   let attentionRunning = false;
   let attentionFrame: number | null = null;
   let attentionTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function portal(node: HTMLElement) {
+    document.body.appendChild(node);
+    return {
+      destroy() {
+        node.remove();
+      }
+    };
+  }
 
   function clearAttentionSchedule() {
     if (attentionFrame !== null) cancelAnimationFrame(attentionFrame);
@@ -89,7 +99,7 @@
     if (!open || typeof document === 'undefined') return;
     const previousFocus =
       document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    documentTop = modalDocumentTop(document, window.scrollY - 32);
+    const documentTop = modalDocumentTop(document, window.scrollY - 32);
     const releaseScrollLock = lockModalScroll(document, documentTop);
     queueMicrotask(() => {
       const first = dialog?.querySelector<HTMLElement>(
@@ -135,7 +145,8 @@
 {#if open}
   <div
     class="modal-layer"
-    style:--modal-document-top={`${documentTop}px`}
+    class:modal-layer-upper={upper}
+    use:portal
     role="presentation"
     onclick={(e) => e.target === e.currentTarget && requestClose()}
   >
@@ -143,6 +154,7 @@
       bind:this={dialog}
       class="modal"
       class:modal-wide={wide}
+      class:modal-fixed-viewport={fixedViewport}
       class:modal-attention={attentionActive}
       role="dialog"
       aria-modal="true"

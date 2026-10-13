@@ -8,89 +8,188 @@ import { stripSourceComments } from '../quality/source-lexing.mjs';
 
 const repoRoot = resolve(fileURLToPath(new URL('../../', import.meta.url)));
 const pinnedPolicySources = new Map([
+  [
+    'src-tauri/src/wallet/activity.rs',
+    '03508eec340547946202d186aa38257e44084c65680f8ac84a9095815fc58705'
+  ],
+  ['src-tauri/src/session.rs', '82da6d3a2643710aaa0974f69f0fb7c932172a401ecf33c186e440c8170f35e0'],
   ['.env.mainnet', '1623f3f97de588daea2bbeae1f9c56ebc896b6bc2c22ac238563b46b688ced85'],
-  ['package.json', '41daa643f2c41c283aefe3045d53892be6abf7f423b211266655982700d21fa9'],
-  ['src-tauri/src/lib.rs', 'e4e282cb477d5ef4c1b087ec84b63c56aba11802a36c6f08f49aff73db71608c'],
+  ['.env.multi', '33fc3d5022968d9eaa25bfe749c0b01691c0570611a65255100718d2c50df723'],
+  ['package.json', '5a676beee268ddb8a752914b91c857a021c792b2566795570df9a6cf602b521f'],
+  ['src-tauri/Cargo.toml', '9d8628de6c1b75f34a704879c4116663a510da9ad4c6e6a80a16716b6bd33e65'],
+  ['src-tauri/tauri.conf.json', '9e2c1d166c5ae7def18053931abc67abc3214e8b60d4f57dab30ce6d2fe27931'],
+  ['LICENSE', 'c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4'],
+  ['NOTICE', 'b39c98ac4d5186a7418ee71e1a8a7a29fb574ada3a7c58184c00125dda8d511d'],
+  ['THIRD_PARTY_NOTICES.md', 'a181753f36eb3e475cddf31a69d2e75f01a86a79c70de252abb1e73a059407db'],
+  [
+    'docs/mainnet-release-authorization.json',
+    '1af74a51167285b70812c16c4300e8a61b3e114245d0c7ad15755017dc3e5b2e'
+  ],
+  ['src-tauri/src/lib.rs', '19dbeaae0dc6de6e8690f656aa78f149e109b6a2e616cc75d280dbd3cfc2e089'],
+  [
+    'src-tauri/src/managed_gateway.rs',
+    '7e5bf0ab7c25346448e4423bab2e748de96684612230c38b797a075fef5866d0'
+  ],
   [
     'scripts/network/check-native-builds.sh',
-    '82b8b5de52c786b2c6d18fb8da90fd32f32a8c4714a3ed02866e923c9e81db36'
+    '3a984ab7ef5f0d7c29d689d2ab39e114d61f1db0efd29a632cea980d7284bef4'
   ],
-  ['src/lib/config.ts', 'f5878ed621a14e06f490bdc200baf9aea46aae958ba76d8c2c43a40b93991414'],
-  ['src-tauri/build.rs', '7ea3e5710b9362c28ee7f5fa12bbbcafbb5262f6f3726850f14611e1425bd46c'],
+  ['src/lib/config.ts', 'f32c494bcc72879a6d3f554c322f272d04cdc61d5f668b7b36bbd1a7133ab4be'],
+  ['src-tauri/build.rs', 'ed1866cf57502e61199d75df9ff407b5ed0be54043ad94525ef6579ad98dfcb7'],
   [
     'src-tauri/src/release_policy.rs',
-    'b9f8a7f5f1fbf21b4546808e595419b7ec076cd388884e8cf2578644d89e3de1'
+    '704afcc72ef43f3d51baafd12993c2f3f912c2ca7b45eceadc648474aa1f9c1c'
   ],
   [
     'src-tauri/src/build_network.rs',
-    'e24f8ae8ceb7dda0f1094abbc1b4600b933e88b8bf830af2ff954bd6188364e5'
+    'caa8b1d04204424207d41c2d67c6baaf35fadc4b42b4c7440e1aee61e264cfcc'
   ],
+  [
+    'src-tauri/src/process_lock.rs',
+    '9343fd11d26d51ccdc0fb1aece9d23bc96f8bfc3f533b2016be8f2ed1e9c8b0a'
+  ],
+  [
+    'src-tauri/src/external_signer.rs',
+    '5d280e028554b943f1d3c9e9addd0fe552ef30a80aaf1693f3728d0c8619a369'
+  ],
+  ['src-tauri/src/hardware.rs', '9557af47b7a5cbb0571b34e3721983bd5a4dd94d38c1866f9597cfd9435eab9a'],
+  ['src-tauri/src/multisig.rs', 'f28d3422dff868c3afc458259ffd5a6e36f56b67b2924ce11e84098c0cba9e8d'],
+  [
+    'src-tauri/src/payjoin_support.rs',
+    '7bbd7fcca836ed2cee535c5cafe7281344ce66174346f88cac1d325a104789dc'
+  ],
+  ['src-tauri/src/recovery.rs', '96eba2aaea0461d8ed067513c044f85f8845837dbf584eb3f93e6969ec5670dc'],
   ['src-tauri/src/network.rs', 'dcf011fb789a0b690b1832a9245df5fc0199318f03a820d10f9a3b1c90f5d76b'],
   ['src-tauri/src/registry.rs', '343aea20f5d09df6abd5c9fdba3b093efc6729c9ece8f180b27a150061753a18'],
-  ['src-tauri/src/wallet.rs', '8d7548ed436600c9d3b076e652e76c1446f6e5d331c26028be7e06e55818cb47'],
+  [
+    'src-tauri/src/secure_store.rs',
+    'b53f36c03bbc5cb6e3d993f8ebd7a00b4f6e5711b7dec6e1c235297262877ddf'
+  ],
+  [
+    'src-tauri/src/native_backup/macos.rs',
+    'bd019caa540dcf49428c3665c3ceb1e6c6699b2d53e33f4a6a51899194bb69ed'
+  ],
+  ['src-tauri/src/proposal.rs', 'b450b07613edad8922bb54756d0152f551d714937a66065611124bcd80ecdc86'],
+  ['src-tauri/src/wallet.rs', '1c76fe79177ccae21c2adc522177f57607460431516945b82634e8d87be536ed'],
   [
     'src-tauri/src/wallet/diagnostics.rs',
-    '1fe820d31763ff091c6f8183cb89db1cc89cf92befe17ed2674d132b23def557'
+    'e531480fd53ffa5db664d7a80c1bdf806351e648c0f09727cdde32fc0d24158a'
   ],
   [
     'src-tauri/src/wallet/error_translation.rs',
-    'fb7189be7f8756eab6d5c83bae48732337f1a03efa679f06d89a6568a6a957ca'
+    '99427e7b78f6fe43ed2148f56c5fef70652406dd90e874288d53c230e9ef1d7d'
   ],
   [
     'src-tauri/src/wallet/explorer_commands.rs',
-    'bade6574ef1c2ec1acfacf89a9fb5c11a368b6f289030e8b371ed26064b035d3'
+    '9baf9b2b5976c2199af4fec27c73c5d40e0e5233e219eeac114dfdb03aa20cd0'
   ],
   [
     'src-tauri/src/wallet/export_commands.rs',
-    '2b39c8f0bbd97f92de4787a319086ed140c9a8ec77cc4dd77a359ff6f0aa7c42'
+    'df58ff8095a3db9b51fa7d857aaea4d4317f1d5432783247a0074070afdebd21'
   ],
   [
     'src-tauri/src/wallet/hardware_commands.rs',
-    'bf2f98fb65703e6a990077452f70bc68356586799ad8a9bb40cec799b25a65d6'
+    'f8371154b46ab25e544584f49f582c5885432f1d9e083e6a9f85523ad320a380'
   ],
   [
     'src-tauri/src/wallet/label_interchange.rs',
-    '6a986cdc1efb02ca810450bc78aa6fbdcd7d4aaee10d971042e6e4919e16e360'
+    '104ec552d91c45caacdfe97ef73bf3479793d1973aa93783d77593822d8d76c5'
   ],
   [
     'src-tauri/src/wallet/multisig_setup_commands.rs',
-    'f41ecd39745512f1a800515d6628c5f4fb26154e7a741c03deeb8d8254a5f57d'
+    'bd324a59434f11f8c448c8358d8a4a7dde280d27b4b137a9d246ae823c239076'
   ],
   [
     'src-tauri/src/wallet/multisig_proposal_commands.rs',
-    'c83ef1cef7672ac91c7799559feaeab405082819f822d9bc3505492e525983ee'
+    '95170e65fbfab6492b59a73b0e7b1c502e6a0fc2f726d9b35a29ce6ea7d6417e'
   ],
   [
     'src-tauri/src/wallet/profile_commands.rs',
-    '820d0e4d1f6b3bf63040d6b5986593dbf846a60c2f418d290335e4cdffc400f8'
+    '43801d0a506847e7ba58b734cda59757e90c46b8bb5bbfc59b41ea5f28c69026'
   ],
   [
     'src-tauri/src/wallet/payment_draft_commands.rs',
-    '8e6bd4e3436d45c45e19ee505920e5b22f105694738b212a8ee4c1e975074af1'
+    'a4784bb865410eb90ddce8ab5f439f7e68ac7456657f1ffb588eae0245b1490e'
   ],
   [
     'src-tauri/src/wallet/proposal_review.rs',
-    '7e64749dd5285a2f5197bba84f326303f15428a5887c80dcdb8608b8aa6752b6'
+    '53b3065c9478d6c78f88891d73afee6533bd3d45db1e86c36d90ff94573bd5bb'
   ],
   [
     'src-tauri/src/wallet/recovery_scan.rs',
-    '07157225f51b532610513c07eba251798d5c95bdc902095ea1d03d24b00c2ec6'
+    '71e80492e276b775b48767e0b35a38aa2d3b924de79ed3dd8e6dd6edcb831cdb'
   ],
   [
     'src-tauri/src/wallet/transaction_commands.rs',
-    'd1b7347fa21990cdfcc61e6b42d4672b3d328d83bf2530a2c8d69f1f1d45f7d7'
+    'b390ce6d1f76e12a4ed96236a8245fcb5ca5e879e5e0ae080f810217db508bb0'
   ],
   [
     'src-tauri/src/wallet/verification_evidence.rs',
-    '174dcb84686f4e4c7ae8707f9c79b659177ddc18851e4797fed5d1ca9b640b7c'
+    '4ef0f98bc226851269cbdb5c41afed5031c6da150dff872b2a870d685e8670b6'
   ],
   [
     'src-tauri/tauri.mainnet.conf.json',
     '4f77b92faa441dbb75e5401b9dc7644ab28a5b98fb3ddb3e2b44e51e91caa58e'
   ],
   [
+    'src-tauri/tauri.multi.conf.json',
+    'd35e0895c5a0dcb18b6c2df28ec3a58725018781dee270bbfea903f45d5d82db'
+  ],
+  [
     'scripts/release/build-unsigned-mainnet.sh',
     '35b13554ff2de5ff9e7fa5a43d28338502fadbda23a9f0e4a41b688a830ed160'
+  ],
+  [
+    'scripts/release/build-unsigned-multi.sh',
+    '2b41651abb9e67ce8239a915a897f0d2513f5280c47e890b450417b788cf031f'
+  ],
+  [
+    'scripts/release/verify-native-frontend-output.mjs',
+    '955510f1a602d0fd8d64c4930e3ee0487827d641bac506f9c3e451a1dfb40eec'
+  ],
+  [
+    'scripts/release/prepare-signed-hwi.mjs',
+    '2a2d9d33c49f6bdb057a17910548aa53f3b6066fdef5b477290fb0b1cfaecfe2'
+  ],
+  [
+    'scripts/release/verify-signed-hwi.mjs',
+    '9502a15c634fc6d2254e562158b4f9fa9ef6f8b415ef3b598ad293394653be95'
+  ],
+  [
+    'scripts/release/package-macos-ga.mjs',
+    '3fd43a61e515ace8eaf29b292187f52cd0fdfaa40c3ac013e8f0a671bfca238d'
+  ],
+  [
+    'scripts/release/assert-public-release-authorized.mjs',
+    '4394809d263a540f2d13dbfa56f7e7c48738531153e80e0217a29f46db720c11'
+  ],
+  [
+    'scripts/release/check-mainnet-gate.sh',
+    '6bd211e3ee92044c70c49d9d84fa5cd3e197f900fb83fc8b5c9d4fc614225027'
+  ],
+  [
+    'scripts/release/generate-sbom.mjs',
+    '906d23f8b2e5b151d60fd00ba2abebe19d35b4c3d66540b8e79fafd48487f32c'
+  ],
+  [
+    'scripts/release/create-macos-dmg.mjs',
+    'e67d4a578a5862453d9870443f1256b0853bcbba359197bed95c78f45e975d9b'
+  ],
+  [
+    'scripts/release/assets/groot-dmg-background.svg',
+    '6dd2ade8c4028b33122020efaf41d1fb1399dd0f7f8f7c69af4ac7f6afeebadd'
+  ],
+  [
+    'scripts/release/build-packaged-macos-app.sh',
+    'cd8e3d2b1c26e5caec7dedaffc3b044c629e3fdc369f234120623649f29ecd3b'
+  ],
+  [
+    'scripts/release/verify-packaged-hwi.mjs',
+    'e0e571de9307ebba1e1a070d329eb94eb4f70af577b97470a70b3b0dc24e6061'
+  ],
+  [
+    'scripts/release/hwi-entitlements.plist',
+    '7dfc81db3e5e4a8337b49aa59b01820abcaef80bd74bada5b489e32473e17a54'
   ],
   [
     'scripts/release/reproducible-rust-env.sh',
@@ -102,36 +201,89 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src/lib/components/AppShell.svelte',
-    '2622522159c39bc190655db67b95c970d76acc4a1fc2f3d4a8dd3a839fa4ca39'
+    '189d2685397973da0fa763036ff43449841da90ae0b4c4fb95e8bd3960b0f3a4'
+  ],
+  [
+    'src/lib/wallet/live-sync.ts',
+    'a5c477820a08a6fda433fbf8c7ac9b0a2d36ede2e16593f0f0c3aebd6538a33c'
+  ],
+  ['src/lib/wallet/tauri.ts', '30802302cd851cda5bf4cee6967be47a48dcb30e98b1dc528c4e7ebc7ee535c0'],
+  [
+    'src/lib/wallet/contracts/errors.ts',
+    'd5f7120ca3ea63a9f7f95c9e14b01b27dbcfb1dc52ac4974d6271963e8eff15f'
+  ],
+  [
+    'src/lib/wallet/contracts/port.ts',
+    '761dcdb5a73c91e5e61bd819b15104df2ee70287bf54940f9803bb0ca85fa73c'
+  ],
+  [
+    'src/lib/wallet/contracts/runtime.ts',
+    '491fbeab7417b02cd0f3725327a3c7c64f39e6d05a901359f96d43226fedd203'
   ],
   [
     'src/routes/diagnostics/+page.svelte',
-    '8fa85e4c881b6544ebbaf80e517e87a7177ab1b566c4b078eb449cb1c6b9820d'
+    'be8fe09c53d785cf5b5bff4ed1da3fd5b305f1cc99158838633550a1e5059c74'
   ],
   [
     'src/routes/welcome/+page.svelte',
-    'ef078a98ce4201f5f24640b9f5855145600764ac95e5787b582fd4ceabdd5095'
+    '032001a48d335a533746861e874f34df9518b5097596e9cc502af01b1e60bce0'
   ],
   [
     'src/routes/unlock/+page.svelte',
-    '75fdc1bd5bb356bb98ab090a500fb0345876f2934d05a70f3030a83b060c5c44'
+    'c54b2083ad8e8d968e509eb4c17bd4977b81cbd10c6af12c101a72b7caa9b28f'
   ],
-  ['src/routes/+page.svelte', '52bf56962283ab5c5279b782b3d946bbd3970f8378e2fd3faa7b741a16614d28'],
+  ['src/routes/+page.svelte', '46f1a0064d27e93b8646952d379dfdef217db213b69ccbf00ac70de76f5ee54d'],
+  [
+    'src/routes/activity/+page.svelte',
+    'e9139fabf8456f5c7bb692cf91a612c49dcb875a715acafcd5ec9420e5e692f6'
+  ],
+  [
+    'src/routes/receive/+page.svelte',
+    '7b4d0c088617c8cf5805bde622ff32e4e2c7b8cec2426a1c17aa06eec688e2c7'
+  ],
+  [
+    'src/routes/multisig/receive/+page.svelte',
+    '71c483c9658003ca4e130fb0fd09320beedc4f1bf3ecb91ed4ee2534264edd69'
+  ],
   [
     'src/routes/settings/+page.svelte',
-    '6454a414e4ea73bc0ea3f47d90d6d027948a6a177caa3c60a0d9f6c1443b473d'
+    '93ca9da3a672fed3a2d07ebc355885ebc8e13fba1bafb3fab518144110b4d7e5'
+  ],
+  [
+    'services/core-gateway/gateway.py',
+    '2ee659f71725cc15d1d12df28fe366c8374f288c30a15569eadf648e4daca118'
+  ],
+  [
+    'services/core-gateway/provision_client.py',
+    '558882823d43889c3e4fc161bcbebdf11fdd410364bc2ca0489c92dc6ebf559a'
+  ],
+  [
+    'services/core-gateway/deploy/groot-core-gateway.service',
+    '44e821ba98de16e5ff7012fef1c5bf931d4c977a24e58800dd4c13d1c9a7aa0e'
+  ],
+  [
+    'services/core-gateway/deploy/nginx-location.conf',
+    'b40671954640759ff978d0e1e179a8bbb3b0a19dd0e4d2870be4096c23c16359'
+  ],
+  [
+    'services/core-gateway/deploy/nginx-rate-limit.conf',
+    'f5c7487c81fd341a2e5d239124a1241330c6ec51e9a5c298d377a6c1500044e2'
+  ],
+  [
+    'services/core-gateway/deploy/nginx-site.conf',
+    'a3c9727be8119714f08ec03c3a6c13d0d13aa5221121a903d11fd52af6ec8a2e'
   ],
   [
     'src/routes/hardware/new/+page.svelte',
-    '2a27f247b716ca02eb5edb912ea5a997ea1f1562bf7f687d628f9e9baa13440c'
+    'fdc998607fdd6abf2a3fc297f3dfa9f84ffaa59b11e851e4f13f93753bbf3cbf'
   ],
   [
     'src/routes/multisig/new/+page.svelte',
-    '52b0349734b464e4e7c46cdd2d9f3f6b44a88cc048429509926371891e83cf55'
+    '7f64640a98b12a86b84187e65bc4abd98e963921c6c169f6fcf7f61038cf4200'
   ],
   [
     'src/lib/multisig/policy.ts',
-    '57443ea81683864945851b91fe42a2339416fd1c328d19e97acd8f8be10f0633'
+    '6508181d1d3b460f80f036e51df67691d78ec7155a048cd4e6dafe1566e3f449'
   ],
   [
     'src/lib/multisig/cosigner-import.ts',
@@ -139,17 +291,37 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src/lib/locales/onboarding.ts',
-    'f691be84382ed9db19c6069cc1cca3e3484bb91a55e794bf0ec53ed5eff1e7ab'
+    'f09d3a9be306a96d0605bd0490ad4a897ba436d8e9e01793b35d23731334467b'
   ],
   [
     'scripts/release/build-mainnet-internal-rc.mjs',
-    'f1ce7f4e1ba6798f8fb56e63fc2df05042025a80ab0faa18c19c4ea95d4c4055'
+    'f18dea025bff665a3e7c4da895184a843eea54f90cfeb7f810c021744953f8a4'
+  ],
+  [
+    'docs/adr/0068-restart-bound-multi-network-settings.md',
+    '0165f21d27f60dfaa56bcf7567a85289a90b478c0964fd3e34344bdd5d84ed1f'
   ]
 ]);
 
-export function validatePinnedPolicySources(read) {
+const pinnedBinaryPolicySources = new Map([
+  [
+    'scripts/release/assets/groot-dmg-background.png',
+    'a6360c8591eb889ebfbd07cf185db40b8d46e438baa6ae09efc6daf54c941cd0'
+  ]
+]);
+
+export function validatePinnedPolicySources(read, readBytes) {
+  if (typeof readBytes !== 'function') {
+    throw new Error('the mainnet source policy requires a binary-safe source reader');
+  }
   for (const [path, expected] of pinnedPolicySources) {
     const actual = createHash('sha256').update(read(path)).digest('hex');
+    if (actual !== expected) {
+      throw new Error(`${path} changed after the mainnet-candidate policy snapshot was reviewed`);
+    }
+  }
+  for (const [path, expected] of pinnedBinaryPolicySources) {
+    const actual = createHash('sha256').update(readBytes(path)).digest('hex');
     if (actual !== expected) {
       throw new Error(`${path} changed after the mainnet-candidate policy snapshot was reviewed`);
     }
@@ -202,7 +374,7 @@ export function validateBuildScriptSource(source) {
     .replace(/\s+/g, ' ')
     .trim();
   if (
-    !/^"regtest" \| "signet" \| "testnet4" \| "mainnet" => \{\} _ => panic!\(\s*"GROOT_BUILD_NETWORK must be exactly regtest, signet, testnet4, or mainnet"\s*\),?$/.test(
+    !/^"regtest" \| "signet" \| "testnet4" \| "mainnet" \| "multi" => \{\} _ => panic!\(\s*"GROOT_BUILD_NETWORK must be exactly regtest, signet, testnet4, mainnet, or multi"\s*\),?$/.test(
       body
     )
   ) {
@@ -227,7 +399,7 @@ export function validateReleasePolicySource(source) {
     .body.replace(/\s+/g, '')
     .replace(/,$/, '');
   const expected =
-    '#[cfg(not(groot_network="mainnet"))]if_network==Network::Bitcoin{returnErr(ReleasePolicyError::MainnetDisabled);}Ok(())';
+    '#[cfg(not(any(groot_network="mainnet",groot_network="multi")))]if_network==Network::Bitcoin{returnErr(ReleasePolicyError::MainnetDisabled);}Ok(())';
   if (guard !== expected) {
     throw new Error('trusted-boundary mainnet guard is not the exact fail-closed implementation');
   }
@@ -237,28 +409,32 @@ export function validateCompiledNetworkSource(source) {
   source = stripSourceComments(source, { rust: true });
   const code = stripSourceComments(source, { rust: true, maskStrings: true });
   rejectGeneratedPolicyCode(code, 'compiled network source');
+  const normalized = source.replace(/\s+/g, '');
   const declarations = [
-    ...source.matchAll(
-      /#\s*\[\s*cfg\s*\(\s*groot_network\s*=\s*"([^"]+)"\s*\)\s*\]\s*pub\s+const\s+NETWORK\s*:\s*Network\s*=\s*Network::(Signet|Testnet4|Regtest|Bitcoin)\s*;/g
-    )
+    '#[cfg(groot_network="signet")]constCOMPILED_NETWORK:Network=Network::Signet;',
+    '#[cfg(groot_network="testnet4")]constCOMPILED_NETWORK:Network=Network::Testnet4;',
+    '#[cfg(any(groot_network="regtest",groot_network="multi"))]constCOMPILED_NETWORK:Network=Network::Regtest;',
+    '#[cfg(groot_network="mainnet")]constCOMPILED_NETWORK:Network=Network::Bitcoin;'
   ];
-  const assignments = [
-    ...code.matchAll(/\b(?:pub\s+)?(?:const|static)\s+NETWORK\s*:\s*Network\s*=/g)
-  ];
-  const expected = ['Signet', 'Testnet4', 'Regtest', 'Bitcoin'];
-  if (declarations.length !== 4 || assignments.length !== 4) {
+  if (
+    declarations.some((declaration) => normalized.split(declaration).length !== 2) ||
+    [...code.matchAll(/\bconst\s+COMPILED_NETWORK\s*:\s*Network\s*=/g)].length !== 4
+  ) {
     throw new Error('compiled wallet network declarations are not the exact reviewed set');
   }
-  for (const declaration of declarations) {
-    const cfg = declaration[1];
-    const selected = declaration[2];
-    const expectedCfg = selected === 'Bitcoin' ? 'mainnet' : selected.toLowerCase();
-    if (cfg !== expectedCfg || !expected.includes(selected)) {
-      throw new Error(`compiled wallet network declaration is unsafe: ${cfg ?? 'missing'}`);
-    }
+  const active = 'staticACTIVE_NETWORK:AtomicU8=AtomicU8::new(network_code(COMPILED_NETWORK));';
+  if (normalized.split(active).length !== 2) {
+    throw new Error('runtime network is not initialized from the reviewed compiled identity');
   }
-  if (/\b(?:pub\s+)?use\b[^;]*\bas\s+NETWORK\b/.test(code)) {
-    throw new Error('compiled network source aliases another value as NETWORK');
+  const switchBody = rustFunction(source, 'switching_enabled').body.replace(/\s+/g, '');
+  if (switchBody !== 'cfg!(groot_network="multi")') {
+    throw new Error('runtime switching is not confined to the reviewed multi build');
+  }
+  const selectionBody = rustFunction(source, 'parse_selectable').body.replace(/\s+/g, '');
+  const expectedSelection =
+    'matchvalue{"regtest"=>Ok(Network::Regtest),"testnet4"=>Ok(Network::Testnet4),"mainnet"=>Ok(Network::Bitcoin),_=>Err(NetworkSelectionError::Unsupported),}';
+  if (selectionBody !== expectedSelection) {
+    throw new Error('runtime network selection is not the exact reviewed closed set');
   }
 }
 
@@ -406,8 +582,8 @@ function crateRustSources() {
   return sources;
 }
 
-export function validateMainnetSourcePolicy(read) {
-  validatePinnedPolicySources(read);
+export function validateMainnetSourcePolicy(read, readBytes) {
+  validatePinnedPolicySources(read, readBytes);
   validateBrowserNetworkSource(read('src/lib/config.ts'));
   validateBuildScriptSource(read('src-tauri/build.rs'));
   validateReleasePolicySource(read('src-tauri/src/release_policy.rs'));
@@ -418,9 +594,12 @@ export function validateMainnetSourcePolicy(read) {
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
-    validateMainnetSourcePolicy((path) => readFileSync(resolve(repoRoot, path), 'utf8'));
+    validateMainnetSourcePolicy(
+      (path) => readFileSync(resolve(repoRoot, path), 'utf8'),
+      (path) => readFileSync(resolve(repoRoot, path))
+    );
     console.log(
-      'Mainnet source policy: activation is confined to the dedicated compile-time build.'
+      'Mainnet source policy: activation is confined to fixed builds and the approved restart-bound multi-network identity.'
     );
   } catch (error) {
     console.error(

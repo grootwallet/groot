@@ -1,4 +1,4 @@
-import type { WalletProfilesPort, WalletSnapshotPort } from './contracts';
+import type { WalletProfile, WalletSnapshotPort, WalletSyncStatus } from './contracts';
 
 export type LiveSyncController = {
   start(): void;
@@ -8,8 +8,22 @@ export type LiveSyncController = {
   runNow(): Promise<void>;
 };
 
-type LiveSyncPort = Pick<WalletProfilesPort, 'exists' | 'profiles'> &
-  Pick<WalletSnapshotPort, 'sync' | 'cancelSync' | 'syncMultisig'>;
+export const LIVE_SYNC_INTERVAL_MS = 35_000;
+
+type LiveSyncPort = Pick<WalletSnapshotPort, 'sync' | 'cancelSync' | 'syncMultisig'> & {
+  fullRescan?: (credential: string) => Promise<unknown>;
+  testNodeConnection?: () => Promise<unknown>;
+  syncStatus?: () => Promise<WalletSyncStatus | null>;
+};
+
+export function isWalletSyncActive(status: WalletSyncStatus | null): boolean {
+  return Boolean(
+    status &&
+    ['connecting', 'syncing', 'checking_pending', 'checking_matches', 'applying'].includes(
+      status.state
+    )
+  );
+}
 
 /**
  * Runs one bounded wallet sync at a time. Repeated wake-ups are coalesced so a
@@ -17,13 +31,14 @@ type LiveSyncPort = Pick<WalletProfilesPort, 'exists' | 'profiles'> &
  */
 export function createLiveSync(
   wallet: LiveSyncPort,
-  intervalMs = 10_000,
+  selectedWalletKind: () => WalletProfile['kind'] | null,
+  intervalMs = LIVE_SYNC_INTERVAL_MS,
   onError: (cause: unknown) => void = () => undefined
 ): LiveSyncController {
   let enabled = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
-  let active: Promise<boolean> | undefined;
-  let consecutiveFailures = 0;
+  let active: Promise<void> | undefined;
+  let generation = 0;
 
   const clearTimer = () => {
     if (timer !== undefined) clearTimeout(timer);
@@ -32,34 +47,84 @@ export function createLiveSync(
 
   const schedule = () => {
     clearTimer();
-    const backoff = Math.min(2 ** consecutiveFailures, 30);
-    if (enabled) timer = setTimeout(() => void runNow(), intervalMs * backoff);
+    if (enabled) timer = setTimeout(() => void runNow(), intervalMs);
   };
 
-  const perform = async (): Promise<boolean> => {
-    try {
-      if (!(await wallet.exists())) return true;
-      const registry = await wallet.profiles();
-      const selected = registry.wallets.find((profile) => profile.id === registry.selectedWalletId);
-      if (!selected) return true;
-      if (selected.kind === 'multisig') await wallet.syncMultisig(true);
-      else await wallet.sync(true);
-      return true;
-    } catch (cause) {
-      if (
-        typeof cause === 'object' &&
-        cause !== null &&
-        'code' in cause &&
-        ['sync_cancelled', 'scan_in_progress', 'initial_scan_required'].includes(String(cause.code))
-      ) {
-        return true;
-      }
+  const perform = async (startedGeneration: number): Promise<void> => {
+    const report = (cause: unknown) => {
       try {
         onError(cause);
       } catch {
         /* Error reporting must never disable future wallet syncs. */
       }
-      return false;
+    };
+    try {
+      const kind = selectedWalletKind();
+      if (!kind) return;
+      // A route-owned refresh survives read-only navigation. Observe that
+      // native single-flight operation instead of repeatedly invoking a second
+      // sync and filling diagnostics with expected sync_in_progress failures.
+      if (wallet.syncStatus) {
+        try {
+          if (isWalletSyncActive(await wallet.syncStatus())) return;
+        } catch {
+          // The sync call remains authoritative when status polling is unavailable.
+        }
+      }
+      if (kind === 'multisig') await wallet.syncMultisig(true);
+      else await wallet.sync(true);
+    } catch (cause) {
+      if (!enabled || startedGeneration !== generation) return;
+      let failure = cause;
+      if (
+        typeof failure === 'object' &&
+        failure !== null &&
+        'code' in failure &&
+        String(failure.code) === 'node_admission_required' &&
+        wallet.testNodeConnection
+      ) {
+        try {
+          await wallet.testNodeConnection();
+          const kind = selectedWalletKind();
+          if (!kind) return;
+          if (kind === 'multisig') await wallet.syncMultisig(true);
+          else await wallet.sync(true);
+          return;
+        } catch (retryCause) {
+          failure = retryCause;
+        }
+      }
+      if (
+        typeof failure === 'object' &&
+        failure !== null &&
+        'code' in failure &&
+        String(failure.code) === 'initial_scan_required'
+      ) {
+        try {
+          await wallet.fullRescan?.('');
+        } catch (scanCause) {
+          if (
+            typeof scanCause === 'object' &&
+            scanCause !== null &&
+            'code' in scanCause &&
+            ['sync_cancelled', 'sync_in_progress', 'scan_in_progress'].includes(
+              String(scanCause.code)
+            )
+          )
+            return;
+          report(scanCause);
+        }
+        return;
+      }
+      if (
+        typeof failure === 'object' &&
+        failure !== null &&
+        'code' in failure &&
+        ['sync_cancelled', 'sync_in_progress', 'scan_in_progress'].includes(String(failure.code))
+      ) {
+        return;
+      }
+      report(failure);
     }
   };
 
@@ -70,10 +135,11 @@ export function createLiveSync(
       await active;
       return;
     }
-    const pending = perform();
+    const startedGeneration = generation;
+    const pending = perform(startedGeneration);
     active = pending;
     try {
-      consecutiveFailures = (await pending) ? 0 : consecutiveFailures + 1;
+      await pending;
     } finally {
       if (active === pending) active = undefined;
       if (enabled) schedule();
@@ -89,19 +155,21 @@ export function createLiveSync(
       if (!active) schedule();
     },
     restart() {
+      generation += 1;
       enabled = true;
-      consecutiveFailures = 0;
       clearTimer();
       // A selection change cancels the previous sync. Once it drains, wait for
       // the normal interval so the target wallet can paint cached state first.
       if (!active) schedule();
     },
     stop() {
+      generation += 1;
       enabled = false;
       clearTimer();
       if (active) void wallet.cancelSync().catch(() => undefined);
     },
     async stopAndWait() {
+      generation += 1;
       enabled = false;
       clearTimer();
       const pending = active;

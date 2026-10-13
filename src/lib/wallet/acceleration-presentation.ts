@@ -1,9 +1,38 @@
 import { localizedError, translate } from '$lib/i18n-catalog';
 import type { Locale } from '$lib/i18n';
 import { WalletError, type AccelerationMethod } from './contracts';
+import type { Transaction } from '$lib/types';
+
+export function accelerationOriginalConfirmed(
+  originalTxid: string | null | undefined,
+  transactions: readonly Pick<Transaction, 'id' | 'status'>[]
+) {
+  return Boolean(
+    originalTxid &&
+    transactions.some(
+      (transaction) => transaction.id === originalTxid && transaction.status === 'confirmed'
+    )
+  );
+}
 
 export const RBF_FUNDING_SHORTFALL_MESSAGE =
   'Not enough bitcoin to raise the fee. Receive more and wait for it to confirm, or wait for this transaction to confirm.';
+
+export function coldcardDefaultFeeLimitExceededPercent(
+  feeSats: number,
+  outputValueSats: number
+): number | null {
+  if (
+    !Number.isSafeInteger(feeSats) ||
+    feeSats < 0 ||
+    !Number.isSafeInteger(outputValueSats) ||
+    outputValueSats <= 0
+  ) {
+    return null;
+  }
+  const percent = (feeSats / outputValueSats) * 100;
+  return percent > 10 ? Math.round(percent * 10) / 10 : null;
+}
 
 export function accelerationUnavailableTitle(method: AccelerationMethod): string {
   return method === 'cpfp' ? 'CPFP unavailable' : 'Can’t speed up transaction';

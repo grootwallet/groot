@@ -13,6 +13,22 @@ const discardModal = readFileSync(
 );
 
 describe('resumable multisig setup', () => {
+  it('refreshes policy device capabilities instead of reusing stale import rows', () => {
+    const open = setup.slice(
+      setup.indexOf('function openDraftPolicyVerification'),
+      setup.indexOf('function closeDraftPolicyVerification')
+    );
+    expect(open).not.toContain('hardware.find(');
+    expect(open).not.toContain('walletService.findSavedHardwareDevice');
+    const verify = setup.slice(
+      setup.indexOf('async function verifyDraftPolicy'),
+      setup.indexOf('async function create()', setup.indexOf('async function verifyDraftPolicy'))
+    );
+    expect(verify).toContain('if (generation !== policyLookupGeneration) return');
+    expect(verify.indexOf('walletService.findSavedHardwareDevice(signer)')).toBeLessThan(
+      verify.indexOf('walletService.verifyMultisigDraftSignerPolicy(')
+    );
+  });
   it('separates policy choice from wallet configuration before signer enrollment', () => {
     expect(setup).toContain("let policyStep = $state<'choose' | 'configure'>('choose')");
     expect(setup).toContain('Choose how this wallet spends');
@@ -20,8 +36,9 @@ describe('resumable multisig setup', () => {
     expect(setup).toContain('The backup key stays separate from the primary 2-of-3.');
     expect(setup).toContain('The wait starts separately for each received coin.');
     expect(setup).toContain('Recovery key spending authority');
-    expect(setup).toContain('Assisted signing');
-    expect(setup).toContain('the helper never signs alone');
+    expect(setup).not.toContain('Assisted signing');
+    expect(setup).not.toContain('assisted signing:');
+    expect(setup).toContain('No single key can spend alone.');
     expect(setup).toContain("'Heir-only signer'");
     expect(setup.indexOf("{#if policyStep === 'choose'}")).toBeLessThan(
       setup.search(
@@ -49,6 +66,13 @@ describe('resumable multisig setup', () => {
     expect(draftBuilder).not.toContain('confirmation');
     expect(draftBuilder).not.toContain('pinChallenge');
     expect(draftBuilder).not.toContain('device.id');
+  });
+
+  it('does not add another signer-check step before the coordinator PIN', () => {
+    expect(setup).not.toContain('walletService.multisigDraftMissingAdmissions()');
+    expect(setup).not.toContain('walletService.reapproveMultisigDraftSigner(signer.id, device.id)');
+    expect(setup).toContain('saved && policyReadinessAcknowledged');
+    expect(setup).not.toContain('Check each saved signer on its device before setting the PIN');
   });
 
   it('surfaces unfinished setup from the app shell with a direct app-level resume action', () => {

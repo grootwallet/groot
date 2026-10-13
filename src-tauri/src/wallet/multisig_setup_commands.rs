@@ -277,12 +277,22 @@ fn validate_multisig_setup_draft(
     Ok(Some(preview))
 }
 
+fn validate_new_multisig_setup_draft(
+    draft: &MultisigSetupDraft,
+) -> ApiResult<Option<MultisigPreviewDto>> {
+    for cosigner in &draft.cosigners {
+        validate_label_formatting(&cosigner.label)?;
+    }
+    validate_multisig_setup_draft(draft)
+}
+
 fn rename_cosigner_label(
     cosigners: &mut [CosignerInput],
     signer_id: &str,
     label: &str,
 ) -> ApiResult<()> {
-    let normalized = label.split_whitespace().collect::<Vec<_>>().join(" ");
+    validate_label_formatting(label)?;
+    let normalized = normalize_label_text(label);
     if normalized.is_empty() || normalized.chars().count() > 48 {
         return Err(api_error(
             "invalid_label",
@@ -454,7 +464,7 @@ pub fn multisig_setup_draft_save(
     let _operation = operation_guard(&state)?;
     draft.version = MULTISIG_SETUP_DRAFT_VERSION;
     draft.updated_at = now();
-    let preview = validate_multisig_setup_draft(&draft)?;
+    let preview = validate_new_multisig_setup_draft(&draft)?;
     {
         let pending = state
             .pending_policy_verifications
@@ -491,7 +501,7 @@ mod setup_draft_tests {
 
     fn cosigners(count: u8) -> Vec<CosignerInput> {
         let secp = Secp256k1::new();
-        let path = DerivationPath::from_str(MULTISIG_ACCOUNT_PATH).unwrap();
+        let path = DerivationPath::from_str(multisig_account_path()).unwrap();
         (1_u8..=count)
             .map(|index| {
                 let master = Xpriv::new_master(NetworkKind::Test, &[index; 32]).unwrap();
@@ -501,7 +511,7 @@ mod setup_draft_tests {
                     label: format!("Signer {index}"),
                     fingerprint: master.fingerprint(&secp).to_string(),
                     xpub: Xpub::from_priv(&secp, &account).to_string(),
-                    derivation_path: MULTISIG_ACCOUNT_PATH.to_owned(),
+                    derivation_path: multisig_account_path().to_owned(),
                     source: CosignerSource::Manual,
                     device_type: None,
                 }
@@ -609,6 +619,16 @@ mod setup_draft_tests {
         assert_eq!(
             validate_multisig_setup_draft(&incomplete).unwrap_err().code,
             "wallet_corrupt"
+        );
+
+        let mut hidden_label = draft();
+        hidden_label.cosigners[0].label = "Signer\u{e0020}hidden".to_owned();
+        assert!(validate_multisig_setup_draft(&hidden_label).is_ok());
+        assert_eq!(
+            validate_new_multisig_setup_draft(&hidden_label)
+                .unwrap_err()
+                .code,
+            "invalid_label"
         );
 
         let mut duplicate = draft();
@@ -733,6 +753,9 @@ mod setup_draft_tests {
 #[tauri::command]
 pub fn multisig_preview(policy: PolicyInput) -> ApiResult<MultisigPreviewDto> {
     reject_virtual_cosigners(&policy.cosigners)?;
+    for cosigner in &policy.cosigners {
+        validate_label_formatting(&cosigner.label)?;
+    }
     policy.preview().map_err(policy_api_error)
 }
 
@@ -742,6 +765,9 @@ pub fn recovery_policy_analyze(
     cosigners: Vec<crate::multisig::CosignerInput>,
 ) -> ApiResult<PolicyAnalysis> {
     reject_virtual_cosigners(&cosigners)?;
+    for cosigner in &cosigners {
+        validate_label_formatting(&cosigner.label)?;
+    }
     analyze_template(&template, &cosigners).map_err(recovery_api_error)
 }
 
@@ -798,7 +824,7 @@ pub fn multisig_export(
     authorize_multisig_operation(&app, &state, credential.as_str())?;
     let backup = MultisigBackupDto {
         version: 1,
-        network: NETWORK_NAME.to_owned(),
+        network: network_name().to_owned(),
         wallet: read_multisig_metadata(&app)?,
     };
     let encoded = serde_json::to_string_pretty(&backup).map_err(internal)?;
@@ -857,7 +883,7 @@ pub(crate) fn parse_public_descriptor_record(encoded: &str) -> ApiResult<Descrip
         pair.external_descriptor.clone(),
         pair.internal_descriptor.clone(),
     )
-    .network(NETWORK)
+    .network(network())
     .create_wallet_no_persist()
     .map_err(|_| {
         api_error(
@@ -887,7 +913,7 @@ pub fn multisig_bsms_inspect(
     let (external_descriptor, internal_descriptor) =
         record.descriptor_pair().map_err(bsms_api_error)?;
     let mut derived = Wallet::create(external_descriptor.clone(), internal_descriptor.clone())
-        .network(NETWORK)
+        .network(network())
         .create_wallet_no_persist()
         .map_err(|_| {
             api_error(
@@ -1005,7 +1031,7 @@ pub fn multisig_recover_bsms(
             wallet.external_descriptor.clone(),
             wallet.internal_descriptor.clone(),
         )
-        .network(NETWORK)
+        .network(network())
         .create_wallet(&mut db)
         .map_err(internal)?;
 
@@ -1014,6 +1040,7 @@ pub fn multisig_recover_bsms(
             &dir.join("secret.json"),
             marker.as_bytes(),
             credential.as_str(),
+            wallet_secret_context(id),
         )
         .map_err(secure_store_error)?;
         write_private_json(&dir.join("wallet.json"), &wallet)?;
@@ -1126,7 +1153,7 @@ pub fn multisig_recover(
     let mut backup = validate_multisig_backup(&encoded_backup)?;
     let standard_policy = backup.wallet.recovery_template.is_none()
         && matches!(backup.wallet.policy_type.as_str(), "" | "standard");
-    crate::release_policy::ensure_recovered_wallet_policy_enabled(NETWORK, standard_policy)
+    crate::release_policy::ensure_recovered_wallet_policy_enabled(network(), standard_policy)
         .map_err(|_| {
             api_error(
                 "unsupported_wallet_policy",
@@ -1144,7 +1171,7 @@ pub fn multisig_recover(
             backup.wallet.external_descriptor.clone(),
             backup.wallet.internal_descriptor.clone(),
         )
-        .network(NETWORK)
+        .network(network())
         .create_wallet(&mut db)
         .map_err(internal)?;
         let marker = format!("groot-multisig:{}", backup.wallet.external_descriptor);
@@ -1152,6 +1179,7 @@ pub fn multisig_recover(
             &dir.join("secret.json"),
             marker.as_bytes(),
             credential.as_str(),
+            wallet_secret_context(id),
         )
         .map_err(secure_store_error)?;
         write_private_json(&dir.join("wallet.json"), &backup.wallet)?;
@@ -1230,6 +1258,7 @@ pub fn multisig_delete(
     verified?;
     let dir = profile_directory(&app, wallet_id)?;
     delete_registered_wallet(&app, wallet_id, &dir)?;
+    forget_core_mempool_snapshot(&state, wallet_id);
     state
         .verified_recovery
         .lock()
@@ -1254,12 +1283,33 @@ pub fn multisig_delete(
 pub async fn multisig_snapshot(app: AppHandle) -> ApiResult<WalletSnapshotDto> {
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<AppState>();
-        let _operation = operation_guard(&state)?;
-        require_unlocked(&app, &state)?;
-        let mut db = open_multisig_db(&app)?;
+        let wallet_id = require_unlocked(&app, &state)?;
+        let _persisted_guard = foreground_persisted_read_guard(&state, wallet_id)?;
+        let persisted_read = _persisted_guard.is_some();
+        let _operation = if persisted_read {
+            None
+        } else {
+            Some(operation_guard(&state)?)
+        };
+        require_wallet_read_context(&app, &state, wallet_id, None)?;
+        let mut db = if persisted_read {
+            open_selected_db_for_persisted_read(&app, true)?
+        } else {
+            open_multisig_db(&app)?
+        };
         let wallet = load_wallet(&mut db)?;
         let delayed_policy = selected_delayed_policy_context(&app)?;
-        snapshot_from(&wallet, &db, None, true, delayed_policy.as_ref())
+        let snapshot = snapshot_for_view(
+            &wallet,
+            &db,
+            None,
+            true,
+            delayed_policy.as_ref(),
+            false,
+            !persisted_read,
+        )?;
+        require_wallet_read_context(&app, &state, wallet_id, None)?;
+        Ok(snapshot)
     })
     .await
     .map_err(internal)?
@@ -1317,19 +1367,25 @@ pub async fn multisig_sync(
 }
 
 #[tauri::command]
-pub fn multisig_address_create(
+pub async fn multisig_address_create(
     app: AppHandle,
-    state: State<'_, AppState>,
     labels: Vec<String>,
 ) -> ApiResult<ReceiveAddressDto> {
+    tauri::async_runtime::spawn_blocking(move || {
+    let state = app.state::<AppState>();
     let _operation = operation_guard(&state)?;
-    require_unlocked(&app, &state)?;
+    let wallet_id = require_unlocked(&app, &state)?;
     let labels = normalize_labels(labels)?;
+    let metadata = read_multisig_metadata(&app)?;
+    let db = open_multisig_db(&app)?;
+    let verifications = signer_policy_verification_rows(&db)?;
+    require_multisig_receive_readiness(network(), &metadata, &verifications)?;
+    drop(db);
     let label = labels[0].clone();
     let mut db = open_multisig_db(&app)?;
     let mut transaction = db.transaction().map_err(internal)?;
     let mut wallet = Wallet::load()
-        .check_network(NETWORK)
+        .check_network(network())
         .load_wallet(&mut transaction)
         .map_err(internal)?
         .ok_or_else(|| api_error("wallet_not_found", "Multisig wallet database is empty."))?;
@@ -1353,6 +1409,7 @@ pub fn multisig_address_create(
     .map_err(internal)?;
     wallet.persist(&mut transaction).map_err(internal)?;
     transaction.commit().map_err(internal)?;
+    forget_core_mempool_snapshot(&state, wallet_id);
     let response = ReceiveAddressDto {
         id: info.index,
         testnet_alias: regtest_testnet_address_alias(&info.address.to_string()),
@@ -1361,7 +1418,7 @@ pub fn multisig_address_create(
         labels,
         created: created.to_string(),
         status: "awaiting".to_owned(),
-        derivation_path: format!("{MULTISIG_ACCOUNT_PATH}/0/{}", info.index),
+        derivation_path: format!("{}/0/{}", multisig_account_path(), info.index),
         hardware_verified_at: None,
         hardware_verified_by: None,
     };
@@ -1378,6 +1435,9 @@ pub fn multisig_address_create(
         None,
     );
     Ok(response)
+    })
+    .await
+    .map_err(internal)?
 }
 
 pub(crate) fn claim_observed_receive_output(
@@ -1408,7 +1468,7 @@ pub(crate) fn claim_observed_receive_output(
             "Only an unlabeled received output can receive its first permanent label.",
         ));
     }
-    let address = Address::from_script(&output.txout.script_pubkey, NETWORK)
+    let address = Address::from_script(&output.txout.script_pubkey, network())
         .map_err(|_| internal("The received output does not have a valid wallet address."))?;
     let index = output.derivation_index;
     let created = now();
@@ -1458,7 +1518,7 @@ pub(crate) fn claim_observed_receive_output(
         label,
         created: created.to_string(),
         status: "used".to_owned(),
-        derivation_path: format!("{MULTISIG_ACCOUNT_PATH}/0/{index}"),
+        derivation_path: format!("{}/0/{index}", multisig_account_path()),
         hardware_verified_at: None,
         hardware_verified_by: None,
     })

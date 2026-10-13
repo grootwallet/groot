@@ -4,6 +4,62 @@ import type { CatalogSection } from './types';
 // These keys are intentionally explicit so uncommon recovery/error paths cannot
 // silently fall back to English in a non-English session.
 export const dynamicCopy = {
+  'Proposal discarded': { fr: 'Proposition supprimée', es: 'Propuesta descartada' },
+  'Discard proposal': { fr: 'Supprimer la proposition', es: 'Descartar propuesta' },
+  'Discard proposal?': { fr: 'Supprimer la proposition ?', es: '¿Descartar propuesta?' },
+  'The original transaction is confirmed. Discard this obsolete proposal; your confirmed payment is unchanged.':
+    {
+      fr: 'La transaction initiale est confirmée. Supprimez cette proposition obsolète ; votre paiement confirmé reste inchangé.',
+      es: 'La transacción original está confirmada. Descarta esta propuesta obsoleta; tu pago confirmado no cambia.'
+    },
+  'Your confirmed payment is unchanged. Only this proposal and its signatures will be removed.': {
+    fr: 'Votre paiement confirmé reste inchangé. Seules cette proposition et ses signatures seront supprimées.',
+    es: 'Tu pago confirmado no cambia. Solo se eliminarán esta propuesta y sus firmas.'
+  },
+  'Native SegWit · standard multisig': {
+    fr: 'SegWit natif · multisig standard',
+    es: 'SegWit nativo · multifirma estándar'
+  },
+  'Refreshing device identity. Select the signer to verify.': {
+    fr: 'Actualisation de l’identité. Sélectionnez le signataire pour vérifier.',
+    es: 'Actualizando la identidad. Selecciona el firmante para verificar.'
+  },
+  'Transaction already confirmed': {
+    fr: 'Transaction déjà confirmée',
+    es: 'Transacción ya confirmada'
+  },
+  'No fee increase is needed. You can return to Overview.': {
+    fr: 'Aucune augmentation des frais nécessaire. Vous pouvez revenir à l’aperçu.',
+    es: 'No es necesario aumentar la comisión. Puedes volver al resumen.'
+  },
+  'Not part of this wallet': {
+    fr: 'Ne fait pas partie de ce portefeuille',
+    es: 'No forma parte de esta cartera'
+  },
+  'Select to identify': {
+    fr: 'Sélectionnez pour identifier',
+    es: 'Selecciona para identificar'
+  },
+  'Unlock to identify': {
+    fr: 'Déverrouillez pour identifier',
+    es: 'Desbloquea para identificar'
+  },
+  'Show address details': {
+    fr: 'Afficher les détails de l’adresse',
+    es: 'Mostrar detalles de la dirección'
+  },
+  'Policy unverified': {
+    fr: 'Politique non vérifiée',
+    es: 'Política sin verificar'
+  },
+  'Choose a signer for this wallet.': {
+    fr: 'Choisissez un signataire de ce portefeuille.',
+    es: 'Elige un firmante de esta cartera.'
+  },
+  'Use a BSMS or JSON backup. PDF cannot be imported or tested.': {
+    fr: 'Utilisez une sauvegarde BSMS ou JSON. Un PDF ne peut pas être importé ni testé.',
+    es: 'Usa una copia BSMS o JSON. No se puede importar ni probar un PDF.'
+  },
   '203.0.113.10:38333 [2001:db8::10]:38333': {
     fr: '203.0.113.10:38333 [2001:db8::10]:38333',
     es: '203.0.113.10:38333 [2001:db8::10]:38333'
@@ -349,6 +405,38 @@ export const dynamicCopy = {
     fr: 'L’appareil requiert votre attention',
     es: 'El dispositivo requiere atención'
   },
+  'Hardware scan failed': {
+    fr: 'Échec de la recherche de matériel',
+    es: 'Error al buscar dispositivos'
+  },
+  'Hardware verification failed': {
+    fr: 'Échec de la vérification matérielle',
+    es: 'Error en la verificación física'
+  },
+  'Signer is not part of this wallet': {
+    fr: 'Le signataire ne fait pas partie de ce portefeuille',
+    es: 'El firmante no forma parte de esta cartera'
+  },
+  'Choose one signer': {
+    fr: 'Choisissez un signataire',
+    es: 'Elige un firmante'
+  },
+  'Network switch failed': {
+    fr: 'Échec du changement de réseau',
+    es: 'Error al cambiar de red'
+  },
+  'Ready for this wallet': {
+    fr: 'Prêt pour ce portefeuille',
+    es: 'Listo para esta cartera'
+  },
+  'Unlock required': {
+    fr: 'Déverrouillage requis',
+    es: 'Se requiere desbloqueo'
+  },
+  'Attention required': {
+    fr: 'Attention requise',
+    es: 'Se requiere atención'
+  },
   Disabled: { fr: 'Désactivé', es: 'Desactivado' },
   'Downloading and checking compact filters': {
     fr: 'Téléchargement et vérification des filtres compacts',
@@ -567,6 +655,18 @@ export const dynamicCopy = {
   'Review the recipient, amount, fee, and change, then approve the transaction on the device.': {
     fr: 'Vérifiez le destinataire, le montant, les frais et la monnaie, puis approuvez la transaction sur l’appareil.',
     es: 'Revisa el destinatario, el importe, la comisión y el cambio; luego aprueba la transacción en el dispositivo.'
+  },
+  'Review and approve on the device.': {
+    fr: 'Vérifiez et approuvez sur l’appareil.',
+    es: 'Revisa y aprueba en el dispositivo.'
+  },
+  'Keep the signer connected and follow its prompts.': {
+    fr: 'Gardez le signataire connecté et suivez ses instructions.',
+    es: 'Mantén el firmante conectado y sigue sus indicaciones.'
+  },
+  'Keep each signer connected and follow its prompts.': {
+    fr: 'Gardez chaque signataire connecté et suivez ses instructions.',
+    es: 'Mantén cada firmante conectado y sigue sus indicaciones.'
   },
   'Review the recipient, amount, fee, change, and wallet policy, then approve on the device.': {
     fr: 'Vérifiez le destinataire, le montant, les frais, la monnaie et la politique du portefeuille, puis approuvez sur l’appareil.',

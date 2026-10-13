@@ -1,6 +1,48 @@
 import type { CatalogSection } from './types';
 
 export const multisigCopy = {
+  '{walletName} Review': {
+    fr: 'Vérification de {walletName}',
+    es: 'Revisión de {walletName}'
+  },
+  'Back up {walletName} Wallet': {
+    fr: 'Sauvegarder le portefeuille {walletName}',
+    es: 'Respaldar la cartera {walletName}'
+  },
+  'Payment inputs unavailable': {
+    fr: 'Les fonds de ce paiement ne sont plus disponibles',
+    es: 'Los fondos de este pago ya no están disponibles'
+  },
+  'Sync and cancel this payment; its coins were spent elsewhere.': {
+    fr: 'Synchronisez puis annulez ce paiement ; ses fonds ont été dépensés ailleurs.',
+    es: 'Sincroniza y cancela este pago; sus fondos se gastaron en otra aplicación.'
+  },
+  'This proposal uses coins no longer available in this wallet. Sync, then cancel it and prepare a new payment. Do not sign or broadcast this PSBT.':
+    {
+      fr: 'Cette proposition utilise des fonds qui ne sont plus disponibles dans ce portefeuille. Synchronisez, annulez-la et préparez un nouveau paiement. Ne signez ni ne diffusez ce PSBT.',
+      es: 'Esta propuesta usa fondos que ya no están disponibles en esta cartera. Sincroniza, cancélala y prepara un pago nuevo. No firmes ni difundas este PSBT.'
+    },
+  'Updating the maximum spendable amount for this fee…': {
+    fr: 'Mise à jour du montant maximal disponible pour ces frais…',
+    es: 'Actualizando el importe máximo disponible con esta comisión…'
+  },
+  'Check each saved signer on its device before setting the PIN. Live checks expire after 15 minutes and are not saved with the draft.':
+    {
+      fr: 'Vérifiez chaque signataire enregistré sur son appareil avant de définir le code PIN. Les vérifications expirent après 15 minutes et ne sont pas enregistrées avec le brouillon.',
+      es: 'Comprueba cada firmante guardado en su dispositivo antes de establecer el PIN. Las comprobaciones caducan a los 15 minutos y no se guardan con el borrador.'
+    },
+  'Live account key matches': {
+    fr: 'La clé de compte de l’appareil correspond',
+    es: 'La clave de cuenta del dispositivo coincide'
+  },
+  'Live check required': {
+    fr: 'Vérification de l’appareil requise',
+    es: 'Se requiere comprobar el dispositivo'
+  },
+  'The coordinator PIN becomes available after each saved signer passes a fresh device check.': {
+    fr: 'Le code PIN du coordinateur sera disponible après une nouvelle vérification de chaque signataire enregistré sur son appareil.',
+    es: 'El PIN del coordinador estará disponible cuando cada firmante guardado supere una nueva comprobación en su dispositivo.'
+  },
   'When the extra key can spend': {
     fr: 'Quand la clé supplémentaire peut dépenser',
     es: 'Cuándo puede gastar la clave adicional'
@@ -93,11 +135,10 @@ export const multisigCopy = {
     fr: 'Fonctionnement de l’héritage',
     es: 'Cómo funciona la herencia'
   },
-  'Standard 2-of-3 can also support assisted signing: the owners keep two keys and a trusted helper keeps one. Either owner plus the helper can sign, or the two owner keys can sign together. The helper can never spend alone.':
-    {
-      fr: 'Le standard 2 sur 3 permet aussi la signature assistée : les propriétaires conservent deux clés et une personne de confiance en conserve une. Un propriétaire et cette personne peuvent signer ensemble, ou les deux clés des propriétaires peuvent signer. La personne aidante ne peut jamais dépenser seule.',
-      es: 'El estándar 2 de 3 también permite la firma asistida: los propietarios conservan dos claves y una persona de confianza conserva una. Un propietario y esa persona pueden firmar juntos, o pueden firmar las dos claves de los propietarios. La persona asistente nunca puede gastar por sí sola.'
-    },
+  'Choose how many independent keys must sign each payment. No single key can spend alone.': {
+    fr: 'Choisissez combien de clés indépendantes doivent signer chaque paiement. Aucune clé ne peut dépenser seule.',
+    es: 'Elige cuántas claves independientes deben firmar cada pago. Ninguna clave puede gastar por sí sola.'
+  },
   'The recovery key is a separate spending path. After each coin has aged 4,320 blocks, that key can spend the matured coin alone. Every new deposit starts its own delay.':
     {
       fr: 'La clé de récupération est un chemin de dépense distinct. Après que chaque pièce a atteint 4 320 blocs, cette clé peut dépenser seule la pièce arrivée à maturité. Chaque nouveau dépôt démarre son propre délai.',
@@ -107,20 +148,6 @@ export const multisigCopy = {
     {
       fr: 'La clé d’héritier est un chemin de dépense distinct. Après que chaque pièce a atteint 52 560 blocs, cette clé peut dépenser seule la pièce arrivée à maturité. Chaque nouveau dépôt démarre son propre délai.',
       es: 'La clave del heredero es una ruta de gasto independiente. Cuando cada moneda alcanza 52.560 bloques, esa clave puede gastar por sí sola la moneda vencida. Cada nuevo depósito inicia su propio plazo.'
-    },
-  'Assisted signing': { fr: 'Signature assistée', es: 'Firma asistida' },
-  'Two owner keys + one helper key. Any two sign; the helper never signs alone.': {
-    fr: 'Deux clés de propriétaire + une clé d’aide. Deux clés signent ; la personne aidante ne signe jamais seule.',
-    es: 'Dos claves de propietario + una clave de ayuda. Firman dos; la persona asistente nunca firma sola.'
-  },
-  'About assisted signing': {
-    fr: 'À propos de la signature assistée',
-    es: 'Acerca de la firma asistida'
-  },
-  'This uses the same standard 2-of-3 policy. Keep the two owner keys independent. A trusted helper can co-sign with either owner, while the owners can always sign together without the helper.':
-    {
-      fr: 'Cette configuration utilise la même politique standard 2 sur 3. Conservez les deux clés des propriétaires séparément. Une personne de confiance peut cosigner avec l’un des propriétaires, tandis que les propriétaires peuvent toujours signer ensemble sans elle.',
-      es: 'Esta configuración usa la misma política estándar 2 de 3. Mantén separadas las dos claves de los propietarios. Una persona de confianza puede firmar junto con cualquiera de ellos, mientras que los propietarios siempre pueden firmar juntos sin su ayuda.'
     },
   'Recovery key spending authority': {
     fr: 'Pouvoir de dépense de la clé de récupération',
@@ -236,13 +263,13 @@ export const multisigCopy = {
     fr: 'Une différence signifie qu’il ne s’agit pas du portefeuille que vous souhaitiez récupérer.',
     es: 'Una diferencia significa que no es la cartera que querías recuperar.'
   },
-  'A public descriptor backup reconstructs this wallet without exposing signing keys.': {
-    fr: 'Une sauvegarde du descripteur public reconstruit ce portefeuille sans exposer les clés de signature.',
-    es: 'Una copia del descriptor público reconstruye esta cartera sin exponer las claves de firma.'
+  'Export a public, watch-only wallet backup.': {
+    fr: 'Exportez une sauvegarde publique et d’observation du portefeuille.',
+    es: 'Exporta una copia pública y de solo lectura de la cartera.'
   },
-  'A watch-only wallet whose spending policy is enforced by independent keys.': {
-    fr: 'Un portefeuille d’observation dont la politique de dépense est imposée par des clés indépendantes.',
-    es: 'Una cartera de solo lectura cuya política de gasto se aplica mediante claves independientes.'
+  'Independent keys enforce this wallet’s spending policy.': {
+    fr: 'Des clés indépendantes appliquent la politique de dépense de ce portefeuille.',
+    es: 'Claves independientes aplican la política de gasto de esta cartera.'
   },
   'Active path requires': { fr: 'Le chemin actif requiert', es: 'La ruta activa requiere' },
   'Add another wallet': { fr: 'Ajouter un autre portefeuille', es: 'Añadir otra cartera' },
@@ -328,11 +355,10 @@ export const multisigCopy = {
     fr: 'Analyse expérimentale uniquement',
     es: 'Solo análisis experimental'
   },
-  'Compare reviewed Miniscript paths using this wallet’s public signers. Analysis never changes the selected wallet.':
-    {
-      fr: 'Comparez des chemins Miniscript vérifiés avec les signataires publics de ce portefeuille. L’analyse ne modifie jamais le portefeuille sélectionné.',
-      es: 'Compara rutas Miniscript revisadas usando los firmantes públicos de esta cartera. El análisis nunca cambia la cartera seleccionada.'
-    },
+  'Explore recovery paths without changing this wallet.': {
+    fr: 'Explorez les chemins de récupération sans modifier ce portefeuille.',
+    es: 'Explora rutas de recuperación sin cambiar esta cartera.'
+  },
   'Explore guided Miniscript paths': {
     fr: 'Explorer les chemins Miniscript guidés',
     es: 'Explorar rutas guiadas de Miniscript'
@@ -432,6 +458,16 @@ export const multisigCopy = {
     fr: 'Saisissez le code PIN de ce portefeuille. La sauvegarde ne peut pas dépenser, mais elle révèle toutes les adresses du portefeuille.',
     es: 'Introduce el PIN de esta cartera. La copia no puede gastar, pero revela todas las direcciones de la cartera.'
   },
+  'BSMS is an unencrypted public descriptor: it cannot spend, but reveals wallet addresses. Enter the app PIN and keep the export private.':
+    {
+      fr: 'BSMS est un descripteur public non chiffré : il ne peut pas dépenser, mais révèle les adresses du portefeuille. Saisissez le PIN de l’application et gardez cet export privé.',
+      es: 'BSMS es un descriptor público sin cifrar: no puede gastar, pero revela las direcciones de la cartera. Introduce el PIN de la aplicación y mantén privada esta exportación.'
+    },
+  'Groot JSON includes public descriptors and wallet metadata. It cannot spend, but reveals wallet activity. Enter the app PIN and keep the export private.':
+    {
+      fr: 'Le JSON Groot contient des descripteurs publics et des métadonnées du portefeuille. Il ne peut pas dépenser, mais révèle l’activité du portefeuille. Saisissez le PIN de l’application et gardez cet export privé.',
+      es: 'El JSON de Groot incluye descriptores públicos y metadatos de la cartera. No puede gastar, pero revela la actividad de la cartera. Introduce el PIN de la aplicación y mantén privada esta exportación.'
+    },
   'Ready-to-test demo wallet': {
     fr: 'Portefeuille de démonstration prêt à tester',
     es: 'Cartera de demostración lista para probar'
@@ -439,6 +475,26 @@ export const multisigCopy = {
   'Receive descriptor QR': {
     fr: 'QR du descripteur de réception',
     es: 'QR del descriptor de recepción'
+  },
+  'Enlarge receive descriptor QR': {
+    fr: 'Agrandir le QR du descripteur de réception',
+    es: 'Ampliar el QR del descriptor de recepción'
+  },
+  'Large QR code for the receive descriptor': {
+    fr: 'Grand code QR du descripteur de réception',
+    es: 'Código QR grande del descriptor de recepción'
+  },
+  'Loading wallet policy': {
+    fr: 'Chargement de la politique du portefeuille',
+    es: 'Cargando la política de la cartera'
+  },
+  'Wallet policy unavailable': {
+    fr: 'Politique du portefeuille indisponible',
+    es: 'Política de la cartera no disponible'
+  },
+  'Public watch-only descriptor. Anyone who sees it can follow this wallet’s addresses.': {
+    fr: 'Descripteur public en lecture seule. Toute personne qui le voit peut suivre les adresses de ce portefeuille.',
+    es: 'Descriptor público de solo lectura. Quien lo vea puede seguir las direcciones de esta cartera.'
   },
   'Recover multisig wallet': {
     fr: 'Récupérer un portefeuille multisignature',
@@ -469,9 +525,9 @@ export const multisigCopy = {
       fr: 'Les délais relatifs démarrent indépendamment à la confirmation de chaque UTXO. Les estimations calendaires sont approximatives et ne déterminent jamais la possibilité de dépenser.',
       es: 'Los bloqueos temporales relativos empiezan por separado cuando se confirma cada UTXO. Las estimaciones de calendario son aproximadas y nunca determinan si se puede gastar.'
     },
-  'Remove this watch-only wallet from Groot on this device.': {
-    fr: 'Supprimez de Groot ce portefeuille d’observation sur cet appareil.',
-    es: 'Elimina de Groot esta cartera de solo lectura en este dispositivo.'
+  'Remove this wallet from Groot on this device.': {
+    fr: 'Supprimez ce portefeuille de Groot sur cet appareil.',
+    es: 'Elimina esta cartera de Groot en este dispositivo.'
   },
   'Return to settings': { fr: 'Retour aux réglages', es: 'Volver a ajustes' },
   'Sanity checked': { fr: 'Cohérence vérifiée', es: 'Coherencia verificada' },
@@ -543,9 +599,9 @@ export const multisigCopy = {
   'Timelocked recovery': { fr: 'Récupération différée', es: 'Recuperación con bloqueo temporal' },
   'V2 POLICY LAB': { fr: 'LABORATOIRE DE POLITIQUE V2', es: 'LABORATORIO DE POLÍTICAS V2' },
   'Validate backup': { fr: 'Valider la sauvegarde', es: 'Validar copia de seguridad' },
-  'Validate BSMS or public descriptor text, or restore complete Groot recovery metadata.': {
-    fr: 'Validez un texte BSMS ou un descripteur public, ou restaurez toutes les métadonnées de récupération Groot.',
-    es: 'Valida texto BSMS o un descriptor público, o restaura todos los metadatos de recuperación de Groot.'
+  'Restore this wallet from a public backup.': {
+    fr: 'Restaurez ce portefeuille depuis une sauvegarde publique.',
+    es: 'Restaura esta cartera desde una copia pública.'
   },
   'Verify on a wallet signer before sharing this address.': {
     fr: 'Vérifiez sur un signataire du portefeuille avant de communiquer cette adresse.',
@@ -584,6 +640,11 @@ export const multisigCopy = {
   Add: { fr: 'Ajouter', es: 'Añadir' },
   'Add key': { fr: 'Ajouter une clé', es: 'Añadir clave' },
   'Back to policy': { fr: 'Retour à la politique', es: 'Volver a la política' },
+  'Open Policy': { fr: 'Ouvrir la politique', es: 'Abrir la política' },
+  'Verify the signer policies, then return to create this labeled address.': {
+    fr: 'Vérifiez les politiques des signataires, puis revenez créer cette adresse étiquetée.',
+    es: 'Verifica las políticas de los firmantes y vuelve para crear esta dirección etiquetada.'
+  },
   'Back to signers': { fr: 'Retour aux signataires', es: 'Volver a los firmantes' },
   'Back to verification': { fr: 'Retour à la vérification', es: 'Volver a la verificación' },
   'BACK UP': { fr: 'SAUVEGARDE', es: 'COPIA DE SEGURIDAD' },
@@ -699,6 +760,10 @@ export const multisigCopy = {
   'Could not read the account key': {
     fr: 'Impossible de lire la clé du compte',
     es: 'No se pudo leer la clave de la cuenta'
+  },
+  'Jade is on a different network': {
+    fr: 'Jade utilise un autre réseau',
+    es: 'Jade usa otra red'
   },
   'Create a multisig wallet': {
     fr: 'Créer un portefeuille multisignature',
@@ -839,6 +904,23 @@ export const multisigCopy = {
   'Saved signer not found': {
     fr: 'Signataire enregistré introuvable',
     es: 'No se encontró el firmante guardado'
+  },
+  'Policy reference unavailable': {
+    fr: 'Référence de politique indisponible',
+    es: 'Referencia de política no disponible'
+  },
+  'Groot found the signer, but could not load this wallet’s first address. Check the wallet connection and try again.':
+    {
+      fr: 'Groot a trouvé le signataire, mais ne peut pas charger la première adresse de ce portefeuille. Vérifiez la connexion et réessayez.',
+      es: 'Groot encontró el firmante, pero no pudo cargar la primera dirección de esta cartera. Comprueba la conexión e inténtalo de nuevo.'
+    },
+  'Unlock this wallet first, then resume setup. Or uncheck to create offline.': {
+    fr: 'Déverrouillez d’abord ce portefeuille, puis reprenez la configuration. Ou décochez pour créer hors ligne.',
+    es: 'Desbloquea primero esta cartera y reanuda la configuración. O desmarca para crear sin conexión.'
+  },
+  'Open network settings': {
+    fr: 'Ouvrir les réglages réseau',
+    es: 'Abrir ajustes de red'
   },
   'Scan for devices': { fr: 'Rechercher des appareils', es: 'Buscar dispositivos' },
   'Settings → Multisig Wallets → Import': {

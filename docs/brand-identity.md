@@ -126,11 +126,11 @@ The wallet's existing semantic surface and status tokens remain canonical in [`s
 
 The selected brand direction is **Unified Craft**:
 
-- **Source Serif 4:** expressive brand and marketing headlines in the separate `thibistaken/groot-site` repository.
-- **Source Sans 3:** brand body copy, navigation, captions, and explanatory text in `thibistaken/groot-site`.
+- **Source Serif 4:** deliberate emphasis fragments in the separate `thibistaken/groot-site` repository; the latest site no longer uses it for complete headings.
+- **Source Sans 3:** headings, brand body copy, navigation, captions, and explanatory text in `thibistaken/groot-site`, and the approved application UI described below.
 - **System monospace or IBM Plex Mono:** identifiers and technical notation only.
 
-The wallet UI keeps its current system-sans and Iowan/Baskerville/Georgia stacks for V1 unless a later screen-by-screen audit demonstrates a clear improvement. Marketing typography and runtime font files live only in [`thibistaken/groot-site`](https://github.com/thibistaken/groot-site). This does not authorize Source-font adoption in the wallet, which still requires a separate screen-by-screen, payload, rendering, and cross-platform review. Network fonts are not permitted in the wallet.
+The approved 2026-09-08 wallet refresh adopts one locally bundled, unmodified Source Sans 3.052R variable face for application headings and UI, with system fallback and system-monospace identifiers. The outlined Manrope wordmark is unchanged. This supersedes the initial wallet system-sans/serif-heading restriction following the separate Overview concept approval and application-wide review. Product tokens, screen checks, payload accounting and remaining physical-webview requirements are owned by [`design-system.md`](design-system.md) and [`design-refresh-2026-09-08.md`](design-refresh-2026-09-08.md). Marketing implementation remains exclusively in [`thibistaken/groot-site`](https://github.com/thibistaken/groot-site); the wallet does not import marketing routes or imagery. Network fonts are not permitted in the wallet.
 
 ### Wordmark
 
@@ -271,7 +271,7 @@ Every word must earn its place.
 
 ### Separately gated
 
-- Bundled Source-font adoption inside the wallet UI. Marketing-only bundling is complete.
+- Physical packaged-webview acceptance of the approved bundled Source Sans wallet refresh. Browser checks do not establish native mobile certification.
 - Marketing imagery and motion details.
 
 ### Next

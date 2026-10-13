@@ -6,7 +6,8 @@ import {
   pendingBalanceBreakdown,
   sortCoins,
   sortTransactions,
-  sortTransactionsNewestFirst
+  sortTransactionsNewestFirst,
+  transactionForSelection
 } from './presentation';
 
 function transaction(id: string, date: string): Transaction {
@@ -129,6 +130,35 @@ describe('pendingBalanceBreakdown', () => {
       change: 39_890,
       outgoing: 110
     });
+  });
+});
+
+describe('transactionForSelection', () => {
+  it('resolves the refreshed authoritative transaction instead of a stale modal object', () => {
+    const pending = transaction('payment', '2026-09-19T10:39:00Z');
+    const confirmed = { ...pending, status: 'confirmed', confirmations: 1 } satisfies Transaction;
+
+    expect(transactionForSelection([confirmed], pending.id)).toBe(confirmed);
+  });
+
+  it('follows a selected original payment to its canonical RBF replacement', () => {
+    const replacement = transaction('replacement', '2026-09-19T10:40:00Z');
+    replacement.direction = 'sent';
+    replacement.replaces = 'original';
+    replacement.rbfHistory = {
+      originalTxid: 'original',
+      replacementTxid: 'replacement',
+      outcome: 'replacement_broadcast'
+    };
+
+    expect(transactionForSelection([replacement], 'original')).toBe(replacement);
+  });
+
+  it('returns no selection when the modal is closed or the transaction is absent', () => {
+    const item = transaction('payment', '2026-09-19T10:39:00Z');
+
+    expect(transactionForSelection([item], null)).toBeNull();
+    expect(transactionForSelection([item], 'missing')).toBeNull();
   });
 });
 

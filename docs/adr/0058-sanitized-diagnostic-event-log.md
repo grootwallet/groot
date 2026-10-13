@@ -1,6 +1,6 @@
 # ADR 0058: Sanitized diagnostic event log
 
-- Status: accepted
+- Status: accepted; shell presentation partially superseded by ADR 0059
 - Date: 2026-09-06
 
 ## Context

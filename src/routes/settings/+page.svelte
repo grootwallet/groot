@@ -22,6 +22,7 @@
     ScrollText,
     ShieldCheck,
     Sun,
+    TriangleAlert,
     Trash2,
     Upload,
     WalletCards
@@ -32,17 +33,26 @@
   import FieldCounter from '$lib/components/FieldCounter.svelte';
   import Modal from '$lib/components/Modal.svelte';
   import PasswordField from '$lib/components/PasswordField.svelte';
+  import WarningNotice from '$lib/components/WarningNotice.svelte';
   import LanguageToggle from '$lib/components/LanguageToggle.svelte';
   import IdentifierDetailsModal from '$lib/components/IdentifierDetailsModal.svelte';
   import DeviceDetailsModal from '$lib/components/DeviceDetailsModal.svelte';
+  import InsightTip from '$lib/components/InsightTip.svelte';
   import LocalTimestamp from '$lib/components/LocalTimestamp.svelte';
   import { toast } from '$lib/stores/toasts';
   import { formatInteger, locale, t } from '$lib/i18n';
-  import { defaultConfig, networkName } from '$lib/config';
+  import {
+    defaultConfig,
+    networkName,
+    SWITCHABLE_NETWORKS,
+    type SwitchableNetwork
+  } from '$lib/config';
   import { isPrototypeWallet, walletService, WalletError } from '$lib/wallet';
-  import { goto } from '$app/navigation';
+  import { goto, replaceState } from '$app/navigation';
+  import { page } from '$app/state';
   import { onDestroy, onMount } from 'svelte';
   import { useWalletShellContext } from '$lib/wallet/shell-context';
+  import { isWalletSyncActive } from '$lib/wallet/live-sync';
   import type {
     CoreNodeConfig,
     CosignerHealthCheck,
@@ -51,8 +61,11 @@
     NodeStatus,
     RecoveryScanSettings,
     RecoveryScanStatus,
+    RuntimePlatform,
+    WalletErrorDetails,
     WalletProfile,
-    WalletSyncSource
+    WalletSyncSource,
+    WalletSyncStatus
   } from '$lib/wallet/contracts';
   import type { CosignerDraft } from '$lib/multisig/policy';
   import { matchingDeviceForHealthCheck } from '$lib/hardware/health-check';
@@ -89,6 +102,10 @@
   let mobileRuntime = $state(false);
   let profiles = $state<WalletProfile[]>([]);
   let selectedWalletId = $state<string | null>(null);
+  let walletUnlocked = $state(false);
+  let syncStatus = $state<WalletSyncStatus | null>(null);
+  let syncStatusPoll: ReturnType<typeof setTimeout> | undefined;
+  let settingsSyncActive = $derived(isWalletSyncActive(syncStatus));
   let profileReadGeneration = 0;
   let inactivityTimeoutMinutes = $state(5);
   let savingInactivityTimeout = $state(false);
@@ -104,9 +121,9 @@
     translate(
       $locale,
       selectedProfile?.kind === 'multisig'
-        ? 'Policy and signer backups'
+        ? 'Signer backups'
         : selectedProfile?.kind === 'watch_only'
-          ? 'Hardware signer backup'
+          ? 'Signer backup'
           : 'Recovery words + wallet passphrase'
     )
   );
@@ -114,9 +131,9 @@
     translate(
       $locale,
       selectedProfile?.kind === 'multisig'
-        ? 'Keep the public descriptor and enough signer backups to restore access.'
+        ? 'Completed when each signer was initialized.'
         : selectedProfile?.kind === 'watch_only'
-          ? 'Recovery words remain on the signer. The app PIN only protects local Groot data.'
+          ? 'Completed when the signer was initialized.'
           : 'Keep both together. Recovery words can be re-presented only in the authenticated native backup flow; the wallet passphrase cannot be displayed or reset.'
     )
   );
@@ -138,6 +155,11 @@
     nodePassword = $state(''),
     walletCredential = $state(''),
     nodeError = $state('');
+  let runtime = $state<RuntimePlatform | null>(null);
+  let networkSwitchOpen = $state(false),
+    networkSwitchTarget = $state<SwitchableNetwork | null>(null),
+    networkSwitchError = $state(''),
+    networkSwitching = $state(false);
   const localRpcUrl =
     defaultConfig.network === 'regtest'
       ? 'http://127.0.0.1:18443'
@@ -152,7 +174,20 @@
     username: null,
     torProxy: null
   });
+  const managedNodeUrl = 'https://bitcoin-rpc.usegroot.com/';
+  const isManagedNodeConfig = (config: CoreNodeConfig) =>
+    defaultConfig.network === 'mainnet' &&
+    config.backend.type === 'remote_core' &&
+    config.backend.url === managedNodeUrl &&
+    config.auth === 'user_pass' &&
+    /^groot-[0-9a-f]{24}$/.test(config.username ?? '') &&
+    !config.torProxy;
   let node = $state<CoreNodeConfig>(localNodeConfig());
+  let nodeMode = $state<'managed' | 'local_core' | 'remote_core' | 'tor'>('local_core');
+  let managedNodeConfigured = $derived(isManagedNodeConfig(node));
+  let managedRenewalAvailable = $derived(
+    nodeMode === 'managed' && (!managedNodeConfigured || connected === false)
+  );
   let networkSetupSources = $state<NetworkSetupSource[]>([]);
   let networkReuseOpen = $state(false),
     networkReuseSourceId = $state(''),
@@ -162,8 +197,7 @@
   let reusableNetworkSetups = $derived(
     networkSetupSources.filter(
       (source) =>
-        source.walletId !== selectedWalletId &&
-        (!mobileRuntime || source.syncSource.type === 'bitcoin_core')
+        source.walletId !== selectedWalletId
     )
   );
   let selectedNetworkReuseSource = $derived(
@@ -182,6 +216,8 @@
   let scanOpen = $state(false),
     scanCredential = $state(''),
     scanError = $state(''),
+    scanErrorCode = $state(''),
+    scanErrorDetails = $state<WalletErrorDetails | null>(null),
     scan = $state<RecoveryScanSettings>({ birthdayHeight: 0, gapLimit: 20 }),
     scanDraft = $state<RecoveryScanSettings>({ birthdayHeight: 0, gapLimit: 20 });
   let scanStatus = $state<RecoveryScanStatus>({
@@ -198,12 +234,54 @@
   let scanning = $state(false),
     cancellingScan = $state(false),
     scanPoll: ReturnType<typeof setTimeout> | undefined;
+  let scanOptionsOpen = $state(false),
+    scanTip = $state<number | null>(null),
+    scanNodeStatus = $state<NodeStatus | null>(null),
+    scanTipLoading = $state(false);
+  let scanBirthdayAboveTip = $derived(
+    scanTip !== null && Number(scanDraft.birthdayHeight) > scanTip
+  );
   let destroyed = false;
   let scanPercent = $derived(
     scanStatus.totalBlocks > 0
-      ? Math.min(100, Math.round((scanStatus.processedBlocks / scanStatus.totalBlocks) * 100))
+      ? Math.min(
+          scanning && scanStatus.status === 'running' ? 99 : 100,
+          Math.round((scanStatus.processedBlocks / scanStatus.totalBlocks) * 100)
+        )
       : 0
   );
+  let scanCheckingPending = $derived(
+    scanning &&
+      scanStatus.status === 'running' &&
+      scanStatus.totalBlocks > 0 &&
+      scanStatus.processedBlocks >= scanStatus.totalBlocks
+  );
+  function idleScanStatus(): RecoveryScanStatus {
+    return {
+      status: 'idle',
+      ...scan,
+      currentHeight: 0,
+      targetHeight: 0,
+      processedBlocks: 0,
+      totalBlocks: 0,
+      startedAt: 0,
+      updatedAt: 0
+    };
+  }
+  function runningScanStatus(settings: RecoveryScanSettings): RecoveryScanStatus {
+    const targetHeight = Math.max(scanTip ?? settings.birthdayHeight, settings.birthdayHeight);
+    const timestamp = Math.floor(Date.now() / 1000);
+    return {
+      status: 'running',
+      ...settings,
+      currentHeight: Math.max(settings.birthdayHeight - 1, 0),
+      targetHeight,
+      processedBlocks: 0,
+      totalBlocks: targetHeight - settings.birthdayHeight + 1,
+      startedAt: timestamp,
+      updatedAt: timestamp
+    };
+  }
   let verifyOpen = $state(false),
     verifyCredential = $state(''),
     verifyError = $state(''),
@@ -246,6 +324,17 @@
     labelInterchangeBusy = $state(false),
     labelInterchangeResult = $state(''),
     labelInterchangeError = $state('');
+
+  async function pollSyncStatus() {
+    if (destroyed || !walletUnlocked) return;
+    try {
+      syncStatus = await walletService.syncStatus();
+    } catch {
+      syncStatus = null;
+    }
+    if (!destroyed) syncStatusPoll = setTimeout(pollSyncStatus, settingsSyncActive ? 500 : 2_000);
+  }
+
   onMount(async () => {
     commandModifier = usesCommandModifier(navigator.platform);
     desktopPlatform = isDesktopPlatform(
@@ -255,39 +344,78 @@
     );
     const generation = ++profileReadGeneration;
     theme = currentTheme();
-    const [registry, runtime] = await Promise.all([
-      walletService.profiles(),
-      walletService.runtimePlatform()
+    const [nextRuntime, registry] = await Promise.all([
+      walletService.runtimePlatform(),
+      walletService.profiles()
     ]);
     if (generation !== profileReadGeneration) return;
-    mobileRuntime = runtime.mobile;
+    runtime = nextRuntime;
+    mobileRuntime = nextRuntime.mobile;
     profiles = registry.wallets;
     selectedWalletId = registry.selectedWalletId;
+    const session = registry.selectedWalletId ? await walletService.session() : null;
+    if (generation !== profileReadGeneration) return;
+    walletUnlocked = session?.unlocked ?? false;
+    if (walletUnlocked) void pollSyncStatus();
     inactivityTimeoutMinutes = registry.inactivityTimeoutMinutes;
     const activeProfile = registry.wallets.find(
       (wallet) => wallet.id === registry.selectedWalletId
     );
-    if (activeProfile?.kind === 'watch_only') {
-      const [nextHardwareSignerWallet, nextHealthChecks] = await Promise.all([
-        walletService.externalSignerWallet(),
-        walletService.hardwareHealthChecks()
-      ]);
-      hardwareSignerWallet = nextHardwareSignerWallet;
-      setHardwareHealthChecks(nextHealthChecks);
+    if (walletUnlocked && activeProfile?.kind === 'watch_only') {
+      hardwareSignerWallet = await walletService.externalSignerWallet();
+      setHardwareHealthChecks(await walletService.hardwareHealthChecks());
     } else {
       setHardwareHealthChecks([]);
     }
-    [node, syncSource, networkSetupSources] = await Promise.all([
-      walletService.nodeConfig(),
-      walletService.syncSource(),
-      defaultConfig.network === 'mainnet'
-        ? Promise.resolve([])
-        : walletService.networkSetupSources()
-    ]);
-    scan = await walletService.recoveryScanSettings();
-    scanDraft = { ...scan };
-    scanStatus = await walletService.recoveryScanStatus();
+    if (walletUnlocked) {
+      [node, syncSource, networkSetupSources] = await Promise.all([
+        walletService.nodeConfig(),
+        walletService.syncSource(),
+        walletService.networkSetupSources()
+      ]);
+      nodeMode = isManagedNodeConfig(node) ? 'managed' : node.torProxy ? 'tor' : node.backend.type;
+      scan = await walletService.recoveryScanSettings();
+      scanDraft = { ...scan };
+      scanStatus = await walletService.recoveryScanStatus();
+      if (page.url.searchParams.get('networkSetup') === '1') {
+        if (reusableNetworkSetups.length > 0) openNetworkReuse();
+        else openNodeSettings();
+        replaceState('/settings', {});
+      }
+    }
   });
+
+  function openNetworkSwitch(target: SwitchableNetwork) {
+    if (!runtime?.networkSwitching || target === defaultConfig.network) return;
+    networkSwitchTarget = target;
+    networkSwitchError = '';
+    networkSwitchOpen = true;
+  }
+
+  async function confirmNetworkSwitch() {
+    if (!networkSwitchTarget || networkSwitching) return;
+    networkSwitching = true;
+    networkSwitchError = '';
+    let syncPaused = false;
+    try {
+      await walletShell.pauseAutomaticSync();
+      syncPaused = true;
+      await walletService.switchNetwork(networkSwitchTarget);
+    } catch (cause) {
+      networkSwitchError = localizedError(
+        cause,
+        $locale,
+        'Groot could not save the Bitcoin network selection.'
+      );
+      toast({
+        title: 'Network not changed',
+        description: networkSwitchError,
+        tone: 'danger'
+      });
+      if (syncPaused) walletShell.resumeAutomaticSync();
+      networkSwitching = false;
+    }
+  }
 
   async function exportLabels() {
     labelInterchangeBusy = true;
@@ -375,6 +503,7 @@
     hardwareBackupContent = '';
     hardwareBackupFrames = [];
     signerRenameDraft = '';
+    if (syncStatusPoll) clearTimeout(syncStatusPoll);
     if (scanPoll) clearTimeout(scanPoll);
   });
   onMount(() => {
@@ -441,8 +570,14 @@
       checking = false;
     }
   }
-  function setNodeLocation(type: 'local_core' | 'remote_core' | 'tor') {
-    if (defaultConfig.network === 'mainnet' && type !== 'local_core') return;
+  function setNodeLocation(type: 'managed' | 'local_core' | 'remote_core' | 'tor') {
+    if (defaultConfig.network === 'mainnet' && type === 'tor') return;
+    nodeMode = type;
+    if (type === 'managed') {
+      nodePassword = '';
+      nodeError = '';
+      return;
+    }
     node =
       type === 'local_core'
         ? localNodeConfig()
@@ -469,12 +604,23 @@
   }
   function openNodeSettings() {
     clearNodeCredentials();
-    if (mobileRuntime && node.backend.type === 'local_core') setNodeLocation('remote_core');
+    nodeMode = isManagedNodeConfig(node) ? 'managed' : node.torProxy ? 'tor' : node.backend.type;
     nodeOpen = true;
   }
   function closeNodeSettings() {
     clearNodeCredentials();
     nodeOpen = false;
+  }
+  function openSyncSourceFromNode() {
+    closeNodeSettings();
+    openSyncSource();
+  }
+  function nodeSaveLabel() {
+    if (nodeMode !== 'managed') return translate($locale, 'Save & test');
+    return translate(
+      $locale,
+      managedNodeConfigured ? 'Renew managed access' : 'Use Groot managed node'
+    );
   }
   async function saveNode() {
     busy = true;
@@ -502,6 +648,31 @@
       nodeError = localizedError(cause, $locale, 'Could not save this node.');
     } finally {
       nodePassword = '';
+      walletCredential = '';
+      busy = false;
+    }
+  }
+  async function configureManagedNode() {
+    busy = true;
+    nodeError = '';
+    const renewing = managedNodeConfigured;
+    try {
+      const result = await walletService.configureManagedNode(walletCredential);
+      node = result.backend;
+      nodeMode = 'managed';
+      connected = true;
+      nodeStatus = result;
+      nodeOpen = false;
+      clearNodeCredentials();
+      toast({
+        title: renewing ? 'Managed-node access renewed' : 'Groot node connected',
+        description: 'Groot provisioned new wallet-specific access without exposing credentials.',
+        tone: 'success'
+      });
+    } catch (cause) {
+      connected = false;
+      nodeError = localizedError(cause, $locale, 'Could not provision Groot managed-node access.');
+    } finally {
       walletCredential = '';
       busy = false;
     }
@@ -753,18 +924,33 @@
   }
   async function runFullRescan() {
     scanning = true;
+    scanStatus = runningScanStatus({
+      birthdayHeight: Number(scanDraft.birthdayHeight),
+      gapLimit: Number(scanDraft.gapLimit)
+    });
     scanError = '';
+    scanErrorCode = '';
+    scanErrorDetails = null;
+    let automaticSyncPaused = false;
     try {
+      await walletShell.pauseAutomaticSync();
+      automaticSyncPaused = true;
       scan = await walletService.saveRecoveryScanSettings(
         Number(scanDraft.birthdayHeight),
         Number(scanDraft.gapLimit),
         scanCredential
       );
       scanDraft = { ...scan };
+      scanStatus = runningScanStatus(scan);
       const rescan = walletService.fullRescan(scanCredential);
       void pollFullRescan();
       const snapshot = await rescan;
-      scanStatus = await walletService.recoveryScanStatus();
+      try {
+        scanStatus = await walletService.recoveryScanStatus();
+      } catch {
+        // A status refresh is observational. It must not relabel a completed
+        // foreground rescan as failed.
+      }
       scanOpen = false;
       toast({
         title: 'Full rescan complete',
@@ -775,23 +961,33 @@
         tone: 'success'
       });
     } catch (cause) {
-      scanError = localizedError(cause, $locale, 'The full rescan failed.');
-      try {
-        scanStatus = await walletService.recoveryScanStatus();
-      } catch {
-        /* Keep the original failure. */
+      if (cause instanceof WalletError && cause.code === 'scan_cancelled') {
+        scanStatus = idleScanStatus();
+        scanOpen = false;
+        toast({
+          title: 'Full rescan cancelled',
+          description: 'No scan progress was kept. The next full rescan will start fresh.',
+          tone: 'success'
+        });
+        return;
       }
+      scanError = localizedError(cause, $locale, 'The full rescan failed.');
+      scanErrorCode = cause instanceof WalletError ? cause.code : 'internal_error';
+      scanErrorDetails = cause instanceof WalletError ? cause.details : null;
+      scanStatus = idleScanStatus();
     } finally {
       if (scanPoll) clearTimeout(scanPoll);
       scanPoll = undefined;
       scanCredential = '';
       scanning = false;
       cancellingScan = false;
+      if (automaticSyncPaused) walletShell.resumeAutomaticSync();
     }
   }
   async function pollFullRescan() {
     try {
-      scanStatus = await walletService.recoveryScanStatus();
+      const status = await walletService.recoveryScanStatus();
+      if (status.status === 'running' || status.status === 'cancelling') scanStatus = status;
     } catch {
       /* The foreground result remains authoritative. */
     } finally {
@@ -801,6 +997,8 @@
   async function cancelFullRescan() {
     cancellingScan = true;
     scanError = '';
+    scanErrorCode = '';
+    scanErrorDetails = null;
     try {
       scanStatus = await walletService.cancelFullRescan();
     } catch (cause) {
@@ -808,17 +1006,42 @@
       cancellingScan = false;
     }
   }
+  async function refreshScanTip() {
+    scanTipLoading = true;
+    scanNodeStatus = null;
+    try {
+      scanTip = (await walletService.publicNetworkStatus().catch(() => null))?.networkTip ?? null;
+      const current = await walletService.testNodeConnection();
+      scanTip = current.blocks;
+      scanNodeStatus = current;
+    } catch {
+      // A saved tip is still useful for comparison. Starting the scan performs
+      // the authoritative native validation against the live node.
+    } finally {
+      scanTipLoading = false;
+    }
+  }
   function openFullRescan() {
     scanCredential = '';
     scanError = '';
+    scanErrorCode = '';
+    scanErrorDetails = null;
     scanDraft = { ...scan };
+    scanOptionsOpen = false;
+    if (!['running', 'cancelling'].includes(scanStatus.status)) {
+      scanStatus = idleScanStatus();
+    }
     scanOpen = true;
+    void refreshScanTip();
   }
   function closeFullRescan() {
     if (scanning) return;
     scanCredential = '';
     scanError = '';
+    scanErrorCode = '';
+    scanErrorDetails = null;
     scanDraft = { ...scan };
+    scanOptionsOpen = false;
     scanOpen = false;
   }
   function openDeleteWallet() {
@@ -993,262 +1216,278 @@
 <div class="page narrow-page settings-page">
   <header class="page-header">
     <div>
-      <p class="eyebrow">{translate($locale, 'WALLET SETTINGS')}</p>
-      <h1>{selectedProfile?.name ?? translate($locale, 'Settings')}</h1>
-      <p class="subtitle">
-        {translate($locale, 'Wallet security and connection. Appearance is global.')}
-      </p>
+      <h1>
+        {walletUnlocked
+          ? translate($locale, '{walletName} settings', {
+              walletName: selectedProfile?.name ?? translate($locale, 'Wallet')
+            })
+          : translate($locale, 'Settings')}
+      </h1>
     </div>
-  </header>
-  <section class="settings-group wallet-details">
-    <h2>{translate($locale, 'Wallet details')}</h2>
-    <div class="settings-list">
-      <button
-        aria-label={translate($locale, 'Rename {wallet}', {
-          wallet: selectedProfile?.name ?? translate($locale, 'wallet')
-        })}
-        onclick={openRename}
-        ><span class="setting-icon"><Pencil size={18} /></span><span
-          ><strong>{translate($locale, 'Wallet name')}</strong><small
-            >{translate($locale, '{walletName} · Local display name only', {
-              walletName: selectedProfile?.name ?? translate($locale, 'Unnamed wallet')
-            })}</small
-          ></span
-        ><ChevronRight size={16} /></button
-      >
-      {#if hardwareSignerWallet}
-        <button
-          aria-label={translate($locale, 'Rename hardware signer {signer}', {
-            signer: hardwareSignerWallet.signer.label
+    {#if settingsSyncActive}<p class="settings-sync-indicator" aria-live="polite">
+        <RefreshCw class="spin" size={15} />
+        {#if syncStatus?.progressPercent !== null && syncStatus?.progressPercent !== undefined}
+          {translate($locale, 'Syncing · {percent}%', {
+            percent: formatInteger(syncStatus.progressPercent, $locale)
           })}
-          onclick={openSignerRename}
-          ><span class="setting-icon"><Cpu size={18} /></span><span
-            ><strong>{translate($locale, 'Hardware signer name')}</strong><small
-              >{translate($locale, '{signerName} · Used on signing and verification screens', {
-                signerName: hardwareSignerWallet.signer.label
+        {:else}{translate($locale, 'Syncing…')}{/if}
+      </p>{/if}
+  </header>
+  {#if walletUnlocked}<section class="settings-group wallet-details">
+      <h2>{translate($locale, 'Wallet details')}</h2>
+      <div class="settings-list">
+        <button
+          aria-label={translate($locale, 'Rename {wallet}', {
+            wallet: selectedProfile?.name ?? translate($locale, 'wallet')
+          })}
+          onclick={openRename}
+          ><span class="setting-icon"><Pencil size={18} /></span><span
+            ><strong>{translate($locale, 'Wallet name')}</strong><small
+              >{translate($locale, '{walletName} · Local display name only', {
+                walletName: selectedProfile?.name ?? translate($locale, 'Unnamed wallet')
               })}</small
             ></span
           ><ChevronRight size={16} /></button
         >
-        <button
-          aria-label={translate($locale, 'Inspect {signer} identity and health', {
-            signer: hardwareSignerWallet.signer.label
-          })}
-          onclick={() => (signerDetailsOpen = true)}
-        >
-          <span class="setting-icon"><HeartPulse size={18} /></span>
-          <span
-            ><strong>{translate($locale, 'Hardware signer identity & health')}</strong><small
-              >{#if signerHealth}{translate($locale, 'Last checked')}
-                <LocalTimestamp value={signerHealth.checkedAt} />{:else}{translate(
-                  $locale,
-                  'Inspect identity or run a health check'
-                )}{/if}</small
-            ></span
+        {#if hardwareSignerWallet}
+          <button
+            aria-label={translate($locale, 'Rename hardware signer {signer}', {
+              signer: hardwareSignerWallet.signer.label
+            })}
+            onclick={openSignerRename}
+            ><span class="setting-icon"><Cpu size={18} /></span><span
+              ><strong>{translate($locale, 'Hardware signer name')}</strong><small
+                >{translate($locale, '{signerName} · Used on signing and verification screens', {
+                  signerName: hardwareSignerWallet.signer.label
+                })}</small
+              ></span
+            ><ChevronRight size={16} /></button
           >
-          <span class="setting-row-status"
-            ><span
-              class="info-badge"
-              class:healthy={signerHealth?.status === 'healthy'}
-              class:attention={signerHealth?.status === 'attention'}
-              class:muted={!signerHealth}
+          <button
+            aria-label={translate($locale, 'Inspect {signer} identity and health', {
+              signer: hardwareSignerWallet.signer.label
+            })}
+            disabled={settingsSyncActive}
+            onclick={() => (signerDetailsOpen = true)}
+          >
+            <span class="setting-icon"><HeartPulse size={18} /></span>
+            <span
+              ><strong>{translate($locale, 'Hardware signer identity & health')}</strong><small
+                >{#if settingsSyncActive}{translate(
+                    $locale,
+                    'Available after sync'
+                  )}{:else if signerHealth}{translate($locale, 'Last checked')}
+                  <LocalTimestamp value={signerHealth.checkedAt} />{:else}{translate(
+                    $locale,
+                    'Inspect identity or run a health check'
+                  )}{/if}</small
+              ></span
+            >
+            <span class="setting-row-status"
+              ><span
+                class="info-badge"
+                class:healthy={signerHealth?.status === 'healthy'}
+                class:attention={signerHealth?.status === 'attention'}
+                class:muted={!signerHealth}
+                >{translate(
+                  $locale,
+                  signerHealth?.status === 'healthy'
+                    ? 'Checked'
+                    : signerHealth?.status === 'attention'
+                      ? 'Attention'
+                      : 'Not checked'
+                )}</span
+              ><ChevronRight size={16} /></span
+            >
+          </button>
+        {/if}
+      </div>
+    </section>
+    <section class="settings-group immediate-security">
+      <h2>{translate($locale, 'Security')}</h2>
+      <div class="settings-list" class:timeout-menu-open={timeoutMenuOpen}>
+        <button onclick={lockNow}
+          ><span class="setting-icon"><LockKeyhole size={18} /></span><span
+            ><strong
+              >{translate($locale, 'Lock {walletName} now', {
+                walletName: selectedProfile?.name ?? translate($locale, 'wallet')
+              })}</strong
+            ><small>{translate($locale, 'Lock only this wallet immediately.')}</small></span
+          ><ChevronRight size={16} /></button
+        >
+        <div class="setting-row automatic-lock-row">
+          <span class="setting-icon"><Clock3 size={18} /></span><span
+            ><strong>{translate($locale, 'Automatic lock')}</strong><small
               >{translate(
                 $locale,
-                signerHealth?.status === 'healthy'
-                  ? 'Checked'
-                  : signerHealth?.status === 'attention'
-                    ? 'Attention'
-                    : 'Not checked'
-              )}</span
-            ><ChevronRight size={16} /></span
+                'One global setting; each unlocked wallet tracks its own inactivity.'
+              )}</small
+            ></span
           >
-        </button>
-      {/if}
-    </div>
-  </section>
-  <section class="settings-group immediate-security">
-    <h2>{translate($locale, 'Security')}</h2>
-    <div class="settings-list" class:timeout-menu-open={timeoutMenuOpen}>
-      <button onclick={lockNow}
-        ><span class="setting-icon"><LockKeyhole size={18} /></span><span
-          ><strong
-            >{translate($locale, 'Lock {walletName} now', {
-              walletName: selectedProfile?.name ?? translate($locale, 'wallet')
-            })}</strong
-          ><small>{translate($locale, 'Lock only this wallet immediately.')}</small></span
-        ><ChevronRight size={16} /></button
-      >
-      <div class="setting-row automatic-lock-row">
-        <span class="setting-icon"><Clock3 size={18} /></span><span
-          ><strong>{translate($locale, 'Automatic lock')}</strong><small
-            >{translate(
-              $locale,
-              'One global setting; each unlocked wallet tracks its own inactivity.'
-            )}</small
-          ></span
-        >
-        <div class="timeout-control" bind:this={timeoutMenuRoot}>
-          <button
-            bind:this={timeoutMenuTrigger}
-            class="timeout-choice"
-            type="button"
-            aria-label={`${translate($locale, 'Automatic lock inactivity period')}: ${inactivityTimeoutLabel}`}
-            aria-haspopup="menu"
-            aria-expanded={timeoutMenuOpen}
-            disabled={savingInactivityTimeout}
-            onclick={toggleTimeoutMenu}
-            ><span>{inactivityTimeoutLabel}</span><span class:rotated={timeoutMenuOpen}
-              ><ChevronDown size={15} /></span
-            ></button
-          >{#if timeoutMenuOpen}<div
-              class="timeout-menu"
-              role="menu"
-              tabindex="-1"
-              aria-label={translate($locale, 'Automatic lock inactivity period')}
-              onkeydown={handleTimeoutMenuKeydown}
-            >
-              {#each timeoutOptions as option}<button
-                  type="button"
-                  role="menuitemradio"
-                  aria-checked={inactivityTimeoutMinutes === option.value}
-                  class:active={inactivityTimeoutMinutes === option.value}
-                  onclick={() => chooseInactivityTimeout(option.value)}
-                  ><span>{translate($locale, option.label)}</span
-                  >{#if inactivityTimeoutMinutes === option.value}<Check size={15} />{/if}</button
-                >{/each}
-            </div>{/if}
+          <div class="timeout-control" bind:this={timeoutMenuRoot}>
+            <button
+              bind:this={timeoutMenuTrigger}
+              class="timeout-choice"
+              type="button"
+              aria-label={`${translate($locale, 'Automatic lock inactivity period')}: ${inactivityTimeoutLabel}`}
+              aria-haspopup="menu"
+              aria-expanded={timeoutMenuOpen}
+              disabled={savingInactivityTimeout}
+              onclick={toggleTimeoutMenu}
+              ><span>{inactivityTimeoutLabel}</span><span class:rotated={timeoutMenuOpen}
+                ><ChevronDown size={15} /></span
+              ></button
+            >{#if timeoutMenuOpen}<div
+                class="timeout-menu"
+                role="menu"
+                tabindex="-1"
+                aria-label={translate($locale, 'Automatic lock inactivity period')}
+                onkeydown={handleTimeoutMenuKeydown}
+              >
+                {#each timeoutOptions as option}<button
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked={inactivityTimeoutMinutes === option.value}
+                    class:active={inactivityTimeoutMinutes === option.value}
+                    onclick={() => chooseInactivityTimeout(option.value)}
+                    ><span>{translate($locale, option.label)}</span
+                    >{#if inactivityTimeoutMinutes === option.value}<Check size={15} />{/if}</button
+                  >{/each}
+              </div>{/if}
+          </div>
         </div>
       </div>
-    </div>
-  </section>
-  <section class="settings-group current-wallet-settings">
-    <h2>{translate($locale, 'Backup and recovery')}</h2>
-    <div class="settings-list">
-      {#if isSoftwareWallet && !selectedProfile?.backupVerified}<button
-          class="wallet-context-row backup-needs-verification"
-          onclick={() => {
-            verifyError = '';
-            verifyOpen = true;
-          }}
-          ><span class="setting-icon"><KeyRound size={18} /></span><span
-            ><strong>{translate($locale, 'Recovery words not verified')}</strong><small
-              >{translate(
-                $locale,
-                'Use your written backup to confirm all 24 words in exact order.'
-              )}</small
-            ></span
-          ><span class="info-badge attention">{translate($locale, 'Verify now')}</span></button
-        >{:else}<div class="setting-row wallet-context-row">
-          <span class="setting-icon"
-            >{#if selectedProfile?.kind === 'multisig'}<ShieldCheck
-                size={18}
-              />{:else if selectedProfile?.kind === 'watch_only'}<Cpu size={18} />{:else}<KeyRound
-                size={18}
-              />{/if}</span
-          ><span><strong>{backupTitle}</strong><small>{backupDescription}</small></span><span
-            class="info-badge"
-            >{translate($locale, isSoftwareWallet ? 'Verified' : 'Backup required')}</span
+    </section>
+    <section class="settings-group current-wallet-settings">
+      <h2>{translate($locale, 'Backup and recovery')}</h2>
+      <div class="settings-list">
+        {#if isSoftwareWallet && !selectedProfile?.backupVerified}<button
+            class="wallet-context-row backup-needs-verification"
+            onclick={() => {
+              verifyError = '';
+              verifyOpen = true;
+            }}
+            ><span class="setting-icon"><KeyRound size={18} /></span><span
+              ><strong>{translate($locale, 'Recovery words not verified')}</strong><small
+                >{translate(
+                  $locale,
+                  'Use your written backup to confirm all 24 words in exact order.'
+                )}</small
+              ></span
+            ><span class="info-badge attention">{translate($locale, 'Verify now')}</span></button
+          >{:else}<div
+            class="setting-row wallet-context-row"
+            class:backup-information-row={!isSoftwareWallet}
           >
-        </div>{/if}
-      <button onclick={openFullRescan}
-        ><span class="setting-icon"><History size={18} /></span><span
-          ><strong>{translate($locale, 'Recovery scan')}</strong><small
-            >{translate($locale, 'Birthday block')}
-            {formatInteger(scan.birthdayHeight, $locale)}
-            {translate($locale, '· gap limit')}
-            {formatInteger(scan.gapLimit, $locale)}</small
-          ></span
-        ><ChevronRight size={16} /></button
-      >
-      {#if selectedProfile?.kind === 'multisig'}<button onclick={() => goto('/multisig/backup')}
-          ><span class="setting-icon"><ShieldCheck size={18} /></span><span
-            ><strong>{translate($locale, 'Export & test wallet backup')}</strong><small
-              >{translate(
-                $locale,
-                'Save the descriptors, then confirm the backup restores this wallet.'
-              )}</small
+            <span class="setting-icon"
+              >{#if selectedProfile?.kind === 'multisig'}<ShieldCheck
+                  size={18}
+                />{:else if selectedProfile?.kind === 'watch_only'}<Cpu size={18} />{:else}<KeyRound
+                  size={18}
+                />{/if}</span
+            ><span><strong>{backupTitle}</strong><small>{backupDescription}</small></span><span
+              class="info-badge"
+              >{translate($locale, isSoftwareWallet ? 'Verified' : 'Outside Groot')}</span
+            >
+          </div>{/if}
+        <button onclick={openFullRescan}
+          ><span class="setting-icon"><History size={18} /></span><span
+            ><strong>{translate($locale, 'Recovery scan')}</strong><small
+              >{translate($locale, 'Birthday block')}
+              {formatInteger(scan.birthdayHeight, $locale)}
+              {translate($locale, '· gap limit')}
+              {formatInteger(scan.gapLimit, $locale)}</small
             ></span
           ><ChevronRight size={16} /></button
-        >{:else if selectedProfile?.kind === 'watch_only'}<button
-          onclick={() => {
-            hardwareBackupOpen = true;
-            hardwareBackup = '';
-            hardwareBackupContent = '';
-            hardwareBackupFrames = [];
-            hardwareBackupError = '';
-          }}
-          ><span class="setting-icon"><FileKey size={18} /></span><span
-            ><strong>{translate($locale, 'Export public descriptor')}</strong><small
-              >{translate($locale, 'Save a watch-only backup for independent recovery.')}</small
-            ></span
-          ><ChevronRight size={16} /></button
-        >{/if}
-      <button
-        onclick={() => {
-          labelInterchangeOpen = true;
-          labelInterchangeError = '';
-        }}
-        ><span class="setting-icon"><Upload size={18} /></span><span
-          ><strong>{translate($locale, 'Import or export wallet labels')}</strong><small
-            >{translate(
-              $locale,
-              'Use the BIP329 JSONL format with another compatible wallet.'
-            )}</small
-          ></span
-        ><ChevronRight size={16} /></button
-      >
-    </div>
-  </section>
-  <section class="settings-group wallet-manager mobile-wallet-manager">
-    <h2>
-      <span>{translate($locale, 'Wallets')}</span><strong
-        >{profiles.length}
-        {translate($locale, profiles.length === 1 ? 'wallet' : 'wallets')}</strong
-      >
-    </h2>
-    <div class="settings-list">
-      {#each profiles as profile}
-        <button
-          aria-label={translate(
-            $locale,
-            profile.id === selectedWalletId ? '{name}, active wallet' : '{name}',
-            { name: profile.name }
-          )}
-          onclick={() => selectWallet(profile)}
         >
-          <span class="setting-icon"
-            >{#if profile.kind === 'multisig'}<ShieldCheck
-                size={18}
-              />{:else if profile.kind === 'watch_only'}<Cpu size={18} />{:else}<WalletCards
-                size={18}
-              />{/if}</span
-          >
-          <span
-            ><strong>{profile.name}</strong><small
+        {#if selectedProfile?.kind === 'multisig'}<button onclick={() => goto('/multisig/backup')}
+            ><span class="setting-icon"><ShieldCheck size={18} /></span><span
+              ><strong>{translate($locale, 'Export & test wallet backup')}</strong><small
+                >{translate(
+                  $locale,
+                  'Save the descriptors, then confirm the backup restores this wallet.'
+                )}</small
+              ></span
+            ><ChevronRight size={16} /></button
+          >{:else if selectedProfile?.kind === 'watch_only'}<button
+            onclick={() => {
+              hardwareBackupOpen = true;
+              hardwareBackup = '';
+              hardwareBackupContent = '';
+              hardwareBackupError = '';
+            }}
+            ><span class="setting-icon"><FileKey size={18} /></span><span
+              ><strong>{translate($locale, 'Export public descriptor')}</strong><small
+                >{translate($locale, 'Save a watch-only backup for independent recovery.')}</small
+              ></span
+            ><ChevronRight size={16} /></button
+          >{/if}
+        <button
+          onclick={() => {
+            labelInterchangeOpen = true;
+            labelInterchangeError = '';
+          }}
+          ><span class="setting-icon"><Upload size={18} /></span><span
+            ><strong>{translate($locale, 'Import or export wallet labels')}</strong><small
               >{translate(
                 $locale,
-                profile.kind === 'multisig'
-                  ? 'Multisig wallet'
-                  : profile.kind === 'watch_only'
-                    ? 'Hardware signer'
-                    : 'Software wallet'
+                'Use the BIP329 JSONL format with another compatible wallet.'
               )}</small
             ></span
+          ><ChevronRight size={16} /></button
+        >
+      </div>
+    </section>
+    <section class="settings-group wallet-manager mobile-wallet-manager">
+      <h2>
+        <span>{translate($locale, 'Wallets')}</span><strong
+          >{profiles.length}
+          {translate($locale, profiles.length === 1 ? 'wallet' : 'wallets')}</strong
+        >
+      </h2>
+      <div class="settings-list">
+        {#each profiles as profile}
+          <button
+            aria-label={translate(
+              $locale,
+              profile.id === selectedWalletId ? '{name}, active wallet' : '{name}',
+              { name: profile.name }
+            )}
+            onclick={() => selectWallet(profile)}
           >
-          {#if profile.id === selectedWalletId}<Check size={16} />{:else}<ChevronRight
-              size={16}
-            />{/if}
-        </button>
-      {/each}
-      <button onclick={() => goto('/welcome?add=1')}
-        ><span class="setting-icon"><Plus size={18} /></span><span
-          ><strong>{translate($locale, 'Add wallet')}</strong><small
-            >{translate($locale, 'Create or recover another isolated wallet.')}</small
-          ></span
-        ><ChevronRight size={16} /></button
-      >
-    </div>
-  </section>
+            <span class="setting-icon"
+              >{#if profile.kind === 'multisig'}<ShieldCheck
+                  size={18}
+                />{:else if profile.kind === 'watch_only'}<Cpu size={18} />{:else}<WalletCards
+                  size={18}
+                />{/if}</span
+            >
+            <span
+              ><strong>{profile.name}</strong><small
+                >{translate(
+                  $locale,
+                  profile.kind === 'multisig'
+                    ? 'Multisig wallet'
+                    : profile.kind === 'watch_only'
+                      ? 'Hardware signer'
+                      : 'Software wallet'
+                )}</small
+              ></span
+            >
+            {#if profile.id === selectedWalletId}<Check size={16} />{:else}<ChevronRight
+                size={16}
+              />{/if}
+          </button>
+        {/each}
+        <button onclick={() => goto('/welcome?add=1')}
+          ><span class="setting-icon"><Plus size={18} /></span><span
+            ><strong>{translate($locale, 'Add wallet')}</strong><small
+              >{translate($locale, 'Create or recover another isolated wallet.')}</small
+            ></span
+          ><ChevronRight size={16} /></button
+        >
+      </div>
+    </section>{/if}
   <section class="settings-group">
     <h2>{t('appAppearance', $locale)}</h2>
     <div class="settings-list">
@@ -1306,93 +1545,127 @@
   <section class="settings-group" id="network-services">
     <h2>{translate($locale, 'Network services')}</h2>
     <div class="settings-list">
-      <button onclick={openSyncSource}
-        ><span class="setting-icon"><RefreshCw size={18} /></span><span
-          ><strong>{translate($locale, 'Wallet activity sync')}</strong><small
-            >{translate(
-              $locale,
-              syncSource.type === 'compact_filters'
-                ? mobileRuntime
-                  ? 'Experimental compact filters are unavailable on mobile · switch to Bitcoin Core'
-                  : 'Experimental P2P compact filters · confirmed activity only'
-                : 'Bitcoin Core RPC · confirmed and mempool activity'
-            )}</small
+      <div class="setting-row bitcoin-network-row">
+        <span class="setting-icon"><Network size={18} /></span><span
+          ><strong>{translate($locale, 'Bitcoin network')}</strong><small
+            >{#if runtime === null}{translate(
+                $locale,
+                'Loading…'
+              )}{:else if runtime.networkSwitching}{translate(
+                $locale,
+                'Switching restarts Groot. Each network keeps separate wallets and settings.'
+              )}{:else}{translate($locale, 'Fixed to {network}.', {
+                network: networkName(defaultConfig.network)
+              })}{/if}</small
           ></span
-        ><ChevronRight size={16} /></button
-      >
-      <button onclick={openNodeSettings}
-        ><span class="setting-icon"><Network size={18} /></span><span
-          ><strong>{translate($locale, 'Fee and broadcast node')}</strong><small
-            >{networkName(defaultConfig.network)}{' · '}{translate(
-              $locale,
-              node.backend.type === 'local_core'
-                ? mobileRuntime
-                  ? 'Not configured on this phone'
-                  : 'This Mac'
-                : 'Trusted remote server'
-            )}{#if !(mobileRuntime && node.backend.type === 'local_core')}{' · '}<span
-                class="selectable-text">{node.backend.url}</span
-              >{/if}</small
-          ></span
-        ><ChevronRight size={16} /></button
-      >
-      {#if defaultConfig.network !== 'mainnet' && reusableNetworkSetups.length > 0}<button
-          onclick={openNetworkReuse}
-          ><span class="setting-icon"><RefreshCw size={18} /></span><span
-            ><strong>{translate($locale, 'Use an existing network setup')}</strong><small
+        ><span
+          class="theme-choice network-choice"
+          role="radiogroup"
+          aria-label={translate($locale, 'Bitcoin network')}
+        >
+          {#each SWITCHABLE_NETWORKS as candidate}<button
+              type="button"
+              role="radio"
+              aria-checked={defaultConfig.network === candidate}
+              class:active={defaultConfig.network === candidate}
+              disabled={!runtime?.networkSwitching || networkSwitching}
+              onclick={() => openNetworkSwitch(candidate)}>{networkName(candidate)}</button
+            >{/each}
+        </span>
+      </div>
+      {#if walletUnlocked}{#if syncSource.type === 'compact_filters'}<button
+            onclick={openSyncSource}
+            ><span class="setting-icon"><RefreshCw size={18} /></span><span
+              ><strong>{translate($locale, 'Wallet activity sync')}</strong><small
+                >{translate($locale, 'P2P compact filters · confirmed activity only')}</small
+              ></span
+            ><ChevronRight size={16} /></button
+          >{/if}<button onclick={openNodeSettings}
+          ><span class="setting-icon"><Network size={18} /></span><span
+            ><strong>{translate($locale, 'Bitcoin Core connection')}</strong><small
               >{translate(
                 $locale,
-                'Copy the node and sync method from another unlocked wallet.'
+                managedNodeConfigured
+                  ? syncSource.type === 'compact_filters'
+                    ? 'Groot managed · fees and broadcast'
+                    : 'Groot managed · activity, fees, and broadcast'
+                  : node.backend.type === 'local_core'
+                    ? syncSource.type === 'compact_filters'
+                      ? 'This Mac · fees and broadcast'
+                      : 'This Mac · activity, fees, and broadcast'
+                    : syncSource.type === 'compact_filters'
+                      ? 'Custom remote · fees and broadcast'
+                      : 'Custom remote · activity, fees, and broadcast'
               )}</small
             ></span
           ><ChevronRight size={16} /></button
-        >{/if}
-      <button disabled={checking} onclick={checkConnection}
-        ><span class="setting-icon"><Check size={18} /></span><span
-          ><strong>{translate($locale, 'Test connection')}</strong><small
-            >{nodeStatus
-              ? translate($locale, '{history} · {size} chain data · filter index {filter}{ibd}', {
-                  history: nodeStatus.pruned
-                    ? translate($locale, 'Pruned from block {height}', {
-                        height:
-                          nodeStatus.pruneHeight === null
-                            ? translate($locale, 'unknown')
-                            : formatInteger(nodeStatus.pruneHeight, $locale)
-                      })
-                    : translate($locale, 'Full block history'),
-                  size: storageSize(nodeStatus.sizeOnDisk),
-                  filter: translate($locale, nodeStatus.blockFilterIndex),
-                  ibd: nodeStatus.initialBlockDownload
-                    ? translate($locale, ' · initial download active')
-                    : ''
-                })
-              : translate(
+        >
+        {#if reusableNetworkSetups.length > 0}<button onclick={openNetworkReuse}
+            ><span class="setting-icon"><RefreshCw size={18} /></span><span
+              ><strong>{translate($locale, 'Use an existing network setup')}</strong><small
+                >{translate(
                   $locale,
-                  'Verify RPC authentication, retained block history, IBD, disk use, and filter-index status.'
+                  'Copy the node and sync method from another unlocked wallet.'
                 )}</small
-          ></span
-        ><span class="badge" class:offline={connected === false}
-          >{translate(
-            $locale,
-            checking
-              ? 'Checking…'
-              : connected === true
-                ? 'Connected'
-                : connected === false
-                  ? 'Offline'
-                  : 'Check'
-          )}</span
-        ></button
-      >
+              ></span
+            ><ChevronRight size={16} /></button
+          >{/if}
+        <button disabled={checking} onclick={checkConnection}
+          ><span class="setting-icon"><Check size={18} /></span><span
+            ><strong>{translate($locale, 'Test connection')}</strong><small
+              >{nodeStatus
+                ? translate($locale, '{history} · {size} chain data · filter index {filter}{ibd}', {
+                    history: nodeStatus.pruned
+                      ? translate($locale, 'Pruned from block {height}', {
+                          height:
+                            nodeStatus.pruneHeight === null
+                              ? translate($locale, 'unknown')
+                              : formatInteger(nodeStatus.pruneHeight, $locale)
+                        })
+                      : translate($locale, 'Full block history'),
+                    size: storageSize(nodeStatus.sizeOnDisk),
+                    filter: translate($locale, nodeStatus.blockFilterIndex),
+                    ibd: nodeStatus.initialBlockDownload
+                      ? translate($locale, ' · initial download active')
+                      : ''
+                  })
+                : translate(
+                    $locale,
+                    'Verify RPC authentication, retained block history, IBD, disk use, and filter-index status.'
+                  )}</small
+            ></span
+          ><span class="badge" class:offline={connected === false}
+            >{translate(
+              $locale,
+              checking
+                ? 'Checking…'
+                : connected === true
+                  ? 'Connected'
+                  : connected === false
+                    ? 'Offline'
+                    : 'Check'
+            )}</span
+          ></button
+        >{:else}<div class="setting-row locked-network-details">
+          <span class="setting-icon"><LockKeyhole size={18} /></span><span
+            ><strong>{translate($locale, 'Wallet-specific network details are locked')}</strong
+            ><small
+              >{translate(
+                $locale,
+                'Unlock the wallet to view its node route, sync source, credentials, or run a live connection check.'
+              )}</small
+            ></span
+          >
+        </div>{/if}
     </div>
   </section>
   <section class="settings-group">
-    <h2>{translate($locale, 'Diagnostics')}</h2>
+    <h2>{translate($locale, 'App logs')}</h2>
     <div class="settings-list">
       <a class="setting-row" href="/diagnostics">
-        <ScrollText class="setting-icon" size={17} />
+        <span class="setting-icon"><ScrollText size={18} /></span>
         <span
-          ><strong>{translate($locale, 'Diagnostic event log')}</strong><small
+          ><strong>{translate($locale, 'View app logs')}</strong><small
             >{translate(
               $locale,
               'Review and export sanitized app events without wallet identifiers or secrets.'
@@ -1403,7 +1676,9 @@
       </a>
     </div>
   </section>
-  {#if selectedProfile?.kind !== 'multisig'}<section class="settings-group danger-zone">
+  {#if walletUnlocked && selectedProfile?.kind !== 'multisig'}<section
+      class="settings-group danger-zone"
+    >
       <h2>{translate($locale, 'Wallet deletion')}</h2>
       <div>
         <span
@@ -1416,7 +1691,7 @@
           ><Trash2 size={15} />{translate($locale, 'Delete')}</Button
         >
       </div>
-    </section>{:else}<section class="settings-group danger-zone">
+    </section>{:else if walletUnlocked}<section class="settings-group danger-zone">
       <h2>{translate($locale, 'Wallet deletion')}</h2>
       <div>
         <span
@@ -1435,6 +1710,63 @@
 </div>
 
 <Modal
+  open={networkSwitchOpen}
+  title={translate($locale, 'Switch to {network}?', {
+    network: networkName(networkSwitchTarget ?? defaultConfig.network)
+  })}
+  description={translate(
+    $locale,
+    'Groot will restart and open only the wallets and node settings saved for that network.'
+  )}
+  onclose={() => {
+    if (networkSwitching) return;
+    networkSwitchOpen = false;
+    networkSwitchTarget = null;
+    networkSwitchError = '';
+  }}
+>
+  {#if networkSwitchTarget === 'mainnet'}<WarningNotice
+      title={translate($locale, 'Mainnet uses real bitcoin.')}
+      body={translate(
+        $locale,
+        'Confirm the Bitcoin Core network and every address before receiving, signing, or broadcasting.'
+      )}
+    />{:else}<p class="modal-supporting-copy">
+      {translate(
+        $locale,
+        'The current network stays unchanged on disk. Switching back restores its wallets exactly as they were.'
+      )}
+    </p>{/if}
+  {#if networkSwitchError}<WarningNotice
+      tone="danger"
+      icon
+      role="alert"
+      ariaLive="polite"
+      title={translate($locale, 'Network switch failed')}
+      body={networkSwitchError}
+    />{/if}
+  <div class="modal-footer">
+    <Button
+      variant="secondary"
+      disabled={networkSwitching}
+      onclick={() => {
+        networkSwitchOpen = false;
+        networkSwitchTarget = null;
+        networkSwitchError = '';
+      }}>{translate($locale, 'Cancel')}</Button
+    ><Button
+      disabled={!networkSwitchTarget}
+      loading={networkSwitching}
+      loadingLabel={translate($locale, 'Restarting…')}
+      onclick={confirmNetworkSwitch}
+      >{translate($locale, 'Restart in {network}', {
+        network: networkName(networkSwitchTarget ?? defaultConfig.network)
+      })}</Button
+    >
+  </div>
+</Modal>
+
+<Modal
   open={labelInterchangeOpen}
   title={translate($locale, 'BIP329 wallet labels')}
   description={translate(
@@ -1445,13 +1777,16 @@
     if (!labelInterchangeBusy) labelInterchangeOpen = false;
   }}
 >
-  <div class="warning-box">
-    <strong>{translate($locale, 'Private financial metadata.')}</strong>
-    {translate(
+  <WarningNotice
+    class="label-privacy-warning"
+    title={translate($locale, 'Private financial metadata')}
+    body={translate($locale, 'This file can reveal your wallet activity. Keep it private.')}
+    insightLabel={translate($locale, 'About label-file privacy')}
+    insightText={translate(
       $locale,
-      'The file can expose labels, addresses, transaction references, public account keys, and relationships in your wallet history. Store and transfer it privately, then delete copies you no longer need.'
+      'A BIP329 file can include labels, addresses, transaction references, public account keys, and links in your wallet history. Store and transfer it privately, then delete copies you no longer need.'
     )}
-  </div>
+  />
   <p class="modal-supporting-copy">
     {translate(
       $locale,
@@ -1580,10 +1915,11 @@
   description={translate($locale, 'This permanently removes wallet data from this device.')}
   onclose={closeDeleteWallet}
 >
-  <div class="warning-box danger">
-    <strong>{translate($locale, 'Make sure your recovery phrase is backed up.')}</strong>
-    {translate($locale, 'Without it, your bitcoin cannot be recovered.')}
-  </div>
+  <WarningNotice
+    tone="danger"
+    title={translate($locale, 'Make sure your recovery phrase is backed up.')}
+    body={translate($locale, 'Without it, your bitcoin cannot be recovered.')}
+  />
   <PasswordField
     label={credentialLabel}
     bind:value={deleteCredential}
@@ -1619,10 +1955,17 @@
     verifyError = '';
   }}
 >
-  <div class="warning-box verify-backup-warning">
-    <strong>{translate($locale, 'Recovery words stay inside the trusted native window.')}</strong>
-    {translate($locale, 'Revealing or verifying them\n    never sends the words into the webview.')}
-  </div>
+  <WarningNotice
+    class="verify-backup-warning"
+    credentialSpacing
+    title={translate($locale, 'Your recovery words stay private')}
+    body={translate($locale, 'Groot checks them securely on this device.')}
+    insightLabel={translate($locale, 'About recovery-word privacy')}
+    insightText={translate(
+      $locale,
+      'Groot reveals and verifies the words in a separate trusted native window. They never enter the webview or leave this device.'
+    )}
+  />
   <PasswordField
     label={translate($locale, 'Wallet passphrase')}
     bind:value={verifyCredential}
@@ -1678,13 +2021,13 @@
 >
   {#if !hardwareBackup}
     <div class="modal-form">
-      <div class="warning-box">
-        <strong>{translate($locale, 'Public, not harmless.')}</strong>
-        {translate(
+      <WarningNotice
+        title={translate($locale, 'Public, not harmless.')}
+        body={translate(
           $locale,
           'This descriptor cannot spend bitcoin, but it reveals every\n        wallet address and transaction. Store it privately.'
         )}
-      </div>
+      />
       <PasswordField
         label={translate($locale, 'App PIN')}
         bind:value={hardwareBackupPin}
@@ -1781,39 +2124,22 @@
         >{/if}
     </div>{/if}
   {#if defaultConfig.network === 'mainnet'}
-    <div class="warning-box danger">
-      <strong>{translate($locale, 'Mainnet requires the admitted local Bitcoin Core node.')}</strong
-      >
-      {translate(
+    <WarningNotice
+      tone="danger"
+      title={translate($locale, 'Mainnet requires an admitted Bitcoin Core node.')}
+      body={translate(
         $locale,
-        'Compact-filter and remote-node fallbacks are disabled so the reviewed trust boundary cannot change silently.'
+        'Compact-filter fallbacks are disabled. Activity, fees, and broadcast use only the Core endpoint you explicitly configure.'
       )}
-    </div>
-  {:else if mobileRuntime && syncSource.type === 'compact_filters'}
-    <div class="warning-box sync-source-warning">
-      <strong>{translate($locale, 'Compact filters are unavailable on mobile.')}</strong>
-      {translate(
-        $locale,
-        'Their initial scan is not yet durably resumable. Configure Bitcoin Core to continue.'
-      )}
-    </div>
+    />
   {:else if syncSourceType === 'compact_filters'}
-    <div class="warning-box">
-      <strong>{translate($locale, 'Confirmed activity only.')}</strong>
-      {translate(
+    <WarningNotice
+      title={translate($locale, 'Confirmed activity only.')}
+      body={translate(
         $locale,
-        'BIP157/158 peers provide public filters and matching blocks. Groot validates them locally; pending incoming payments are not discoverable through this source. This build keeps the public chain index in memory, so filters are downloaded again after an app restart; wallet history and checkpoints remain durable.'
+        'BIP157/158 peers provide public filters and matching blocks.\n      Groot validates them locally; pending incoming payments are not discoverable through this source.\n      This build keeps the public chain index in memory, so filters are downloaded again after an app\n      restart; wallet history and checkpoints remain durable.'
       )}
-    </div>
-  {/if}
-  {#if syncSourceType === 'compact_filters'}
-    <div class="warning-box sync-source-warning">
-      <strong>{translate($locale, 'Experimental test-network feature.')}</strong>
-      {translate(
-        $locale,
-        'Confirmed activity only. The initial scan may repeat after interruption; do not rely on this source for recovery.'
-      )}
-    </div>
+    />
     <label class="field"
       ><span>{translate($locale, 'Peer selection')}</span><select
         bind:value={syncDiscoverPeers}
@@ -1867,22 +2193,15 @@
         ></label
       >{/if}
   {:else}
-    <div class="warning-box sync-source-warning">
-      <strong>{translate($locale, 'Uses your Bitcoin Core connection.')}</strong>
-      {translate(
+    <WarningNotice
+      title={translate($locale, 'Bitcoin Core activity sync.')}
+      body={translate(
         $locale,
-        'Includes confirmed activity and mempool changes. Fee estimates and broadcast use this connection too.'
+        node.backend.type === 'remote_core'
+          ? 'Fast remote sync sends this wallet’s public output scripts to the trusted server. The server can associate those scripts and wallet activity with your connection. No private keys, labels, or signing material are sent. Bitcoin Core 29+ and a synced basic block-filter index are required.'
+          : 'Local Core sync matches wallet activity on this Mac. A pruned node can sync while it still retains every block newer than this wallet’s checkpoint; an older rescan needs an archival node or a reindex/re-download with enough history.'
       )}
-    </div>
-    <Button
-      variant="secondary"
-      class="full sync-source-configure"
-      onclick={() => {
-        syncOpen = false;
-        syncCredential = '';
-        openNodeSettings();
-      }}>{translate($locale, 'Configure Bitcoin Core')}</Button
-    >
+    />
   {/if}
   <PasswordField
     label={credentialLabel}
@@ -1919,15 +2238,23 @@
   onclose={closeFullRescan}
 >
   <div class="scan-form">
-    <div class="warning-box">
-      <strong>{translate($locale, 'Earlier is safer; later is faster.')}</strong>
-      {translate(
+    <WarningNotice
+      title={translate($locale, 'Earlier is safer; later is faster.')}
+      body={translate(
         $locale,
         'A birthday after the wallet’s first payment\n      can miss funds. A larger gap increases work and memory use.'
       )}
-    </div>
+    />
     <label class="field"
-      ><span>{translate($locale, 'Wallet birthday block')}</span><input
+      ><span class="field-label"
+        >{translate($locale, 'Wallet birthday block')}<InsightTip
+          label={translate($locale, 'About wallet birthday blocks')}
+          text={translate(
+            $locale,
+            'The first block Groot will inspect. Choose a height at or before the wallet’s first possible payment.'
+          )}
+        /></span
+      ><input
         aria-label={translate($locale, 'Wallet birthday block')}
         type="number"
         min="0"
@@ -1935,32 +2262,74 @@
         bind:value={scanDraft.birthdayHeight}
         disabled={scanning}
       /><small
-        >{translate($locale, 'Use 0 when uncertain. Regtest scans are intentionally cheap.')}</small
-      ></label
-    >
-    <label class="field"
-      ><span>{translate($locale, 'Address gap limit')}</span><input
-        aria-label={translate($locale, 'Address gap limit')}
-        type="number"
-        min="20"
-        max="1000"
-        step="1"
-        bind:value={scanDraft.gapLimit}
-        disabled={scanning}
-      /><small
         >{translate(
           $locale,
-          '20 is standard. Increase only if the wallet revealed long unused runs.'
+          'Use 0 when uncertain. Earlier scans are safer but take longer.'
         )}</small
-      ></label
+      >{#if scanTip !== null}<small class="scan-tip"
+          >{translate($locale, 'Current {network} chain tip: block {height}', {
+            network: networkName(defaultConfig.network),
+            height: formatInteger(scanTip, $locale)
+          })}</small
+        >{:else if scanTipLoading}<small class="scan-tip"
+          >{translate($locale, 'Reading current chain tip…')}</small
+        >{/if}{#if scanNodeStatus?.pruned && scanNodeStatus.pruneHeight !== null}<small
+          class="scan-tip"
+          >{translate(
+            $locale,
+            'Full blocks available from {height}. Choose a birthday after this block.',
+            {
+              height: formatInteger(scanNodeStatus.pruneHeight, $locale)
+            }
+          )}</small
+        >{:else if !scanTipLoading && (!scanNodeStatus || scanNodeStatus.pruned)}<small
+          class="scan-tip"
+          >{translate(
+            $locale,
+            'Retained block range unavailable. Check the node connection and reopen this dialog.'
+          )}</small
+        >{/if}{#if scanBirthdayAboveTip}<small class="form-error"
+          >{translate($locale, 'Birthday block must be at or below the current chain tip.')}</small
+        >{/if}</label
     >
+    <details class="scan-optional-control" bind:open={scanOptionsOpen}>
+      <summary
+        ><span>{translate($locale, 'Address discovery options')}</span><ChevronDown
+          size={15}
+        /></summary
+      >
+      <label class="field"
+        ><span class="field-label"
+          >{translate($locale, 'Address gap limit')}<InsightTip
+            label={translate($locale, 'About the address gap limit')}
+            text={translate(
+              $locale,
+              'How many consecutive unused addresses Groot derives while searching for wallet activity. Increase it only for wallets that revealed long unused address runs.'
+            )}
+          /></span
+        ><input
+          aria-label={translate($locale, 'Address gap limit')}
+          type="number"
+          min="20"
+          max="1000"
+          step="1"
+          bind:value={scanDraft.gapLimit}
+          disabled={scanning}
+        /><small
+          >{translate(
+            $locale,
+            '20 is standard. It controls address discovery, not block-scan speed.'
+          )}</small
+        ></label
+      >
+    </details>
     <PasswordField
       label={credentialLabel}
       bind:value={scanCredential}
       autocomplete="current-password"
       disabled={scanning}
     />
-    {#if scanning || ['cancelling', 'cancelled', 'interrupted', 'failed'].includes(scanStatus.status)}
+    {#if scanning || scanStatus.status === 'cancelling'}
       <div class="scan-progress" role="status" aria-live="polite">
         <div>
           <strong
@@ -1968,13 +2337,11 @@
               $locale,
               scanStatus.status === 'cancelling'
                 ? 'Cancelling safely…'
-                : scanStatus.status === 'interrupted'
-                  ? 'Previous scan interrupted'
-                  : scanStatus.status === 'cancelled'
-                    ? 'Scan cancelled'
-                    : scanStatus.status === 'failed'
-                      ? 'Previous scan failed'
-                      : translate($locale, 'Scanning blocks · {percent}%', { percent: scanPercent })
+                : scanCheckingPending
+                  ? 'Checking pending transactions…'
+                  : translate($locale, 'Scanning blocks · {percent}%', {
+                      percent: scanPercent
+                    })
             )}</strong
           ><small
             >{formatInteger(scanStatus.processedBlocks, $locale)} of {formatInteger(
@@ -1996,7 +2363,54 @@
       </div>
     {/if}
   </div>
-  {#if scanError}<p class="form-error" aria-live="polite">{scanError}</p>{/if}
+  {#if scanError}<div class="hardware-inline-error scan-error-card" role="alert" aria-live="polite">
+      <TriangleAlert size={18} />
+      <span>
+        <strong
+          >{translate(
+            $locale,
+            scanErrorCode === 'node_history_unavailable'
+              ? 'Required block history is unavailable'
+              : 'Full rescan failed'
+          )}</strong
+        >
+        <small>{scanError}</small>
+        {#if scanErrorDetails}<dl class="scan-error-details">
+            {#if scanErrorDetails.requestedBirthdayBlock !== undefined}<div>
+                <dt>{translate($locale, 'Requested birthday')}</dt>
+                <dd>
+                  {translate($locale, 'Block {height}', {
+                    height: formatInteger(scanErrorDetails.requestedBirthdayBlock, $locale)
+                  })}
+                </dd>
+              </div>{/if}
+            {#if scanErrorDetails.requiredBlock !== undefined}<div>
+                <dt>{translate($locale, 'Required anchor')}</dt>
+                <dd>
+                  {translate($locale, 'Block {height}', {
+                    height: formatInteger(scanErrorDetails.requiredBlock, $locale)
+                  })}
+                </dd>
+              </div>{/if}
+            {#if scanErrorDetails.earliestRetainedBlock !== undefined}<div>
+                <dt>{translate($locale, 'Bitcoin Core retains full blocks from')}</dt>
+                <dd>
+                  {translate($locale, 'Block {height}', {
+                    height: formatInteger(scanErrorDetails.earliestRetainedBlock, $locale)
+                  })}
+                </dd>
+              </div>{/if}
+            {#if scanErrorDetails.minimumBirthdayBlock !== undefined}<div>
+                <dt>{translate($locale, 'Earliest usable birthday')}</dt>
+                <dd>
+                  {translate($locale, 'Block {height}', {
+                    height: formatInteger(scanErrorDetails.minimumBirthdayBlock, $locale)
+                  })}
+                </dd>
+              </div>{/if}
+          </dl>{/if}
+      </span>
+    </div>{/if}
   <div class="modal-footer">
     {#if scanning}<Button
         variant="secondary"
@@ -2011,7 +2425,8 @@
         !scanCredential ||
         scanDraft.gapLimit < 20 ||
         scanDraft.gapLimit > 1000 ||
-        scanDraft.birthdayHeight < 0}
+        scanDraft.birthdayHeight < 0 ||
+        scanBirthdayAboveTip}
       loading={scanning}
       loadingLabel={translate($locale, 'Scanning blocks…')}
       onclick={runFullRescan}><RefreshCw size={15} />{translate($locale, 'Save & rescan')}</Button
@@ -2044,16 +2459,17 @@
     ></label
   >
   {#if selectedNetworkReuseSource && !selectedNetworkReuseSource.ready}
-    <div class="warning-box" role="status">
-      <strong>{translate($locale, 'Unlock the source wallet first.')}</strong>
-      {' '}
-      <span
-        >{translate(
-          $locale,
-          'Open and unlock that wallet, then return here. Its saved credentials never enter this screen.'
-        )}</span
-      >
-    </div>
+    <WarningNotice
+      role="status"
+      credentialSpacing
+      title={translate($locale, 'Unlock the source wallet first')}
+      body={translate($locale, 'Open that wallet, unlock it, then return here.')}
+      insightLabel={translate($locale, 'About copied network credentials')}
+      insightText={translate(
+        $locale,
+        'Saved node credentials stay in Groot’s trusted native code and never appear on this screen.'
+      )}
+    />
   {/if}
   <PasswordField
     label={credentialLabel}
@@ -2089,96 +2505,140 @@
   onclose={closeNodeSettings}
 >
   <div class="theme-choice node-location">
-    {#if !mobileRuntime}<button
-        class:active={node.backend.type === 'local_core'}
-        onclick={() => setNodeLocation('local_core')}>{translate($locale, 'This Mac')}</button
-      >{/if}{#if defaultConfig.network !== 'mainnet'}<button
-        class:active={node.backend.type === 'remote_core' && !node.torProxy}
-        onclick={() => setNodeLocation('remote_core')}>{translate($locale, 'Remote TLS')}</button
-      ><button class:active={!!node.torProxy} onclick={() => setNodeLocation('tor')}
-        >{translate($locale, 'Tor onion')}</button
+    {#if defaultConfig.network === 'mainnet'}<button
+        class:active={nodeMode === 'managed'}
+        onclick={() => setNodeLocation('managed')}>{translate($locale, 'Groot managed')}</button
+      >{/if}<button
+      class:active={nodeMode === 'local_core'}
+      onclick={() => setNodeLocation('local_core')}>{translate($locale, 'This Mac')}</button
+    ><button
+      class:active={nodeMode === 'remote_core'}
+      onclick={() => setNodeLocation('remote_core')}>{translate($locale, 'Custom remote')}</button
+    >{#if defaultConfig.network !== 'mainnet'}<button
+        class:active={nodeMode === 'tor'}
+        onclick={() => setNodeLocation('tor')}>{translate($locale, 'Tor onion')}</button
       >{/if}
   </div>
-  <label class="field"
-    ><span>{translate($locale, 'RPC URL')}</span><input
-      bind:value={node.backend.url}
-      placeholder={translate(
+  {#if nodeMode === 'managed'}
+    <div class="ready-panel">
+      <ShieldCheck size={18} />
+      <div>
+        <strong>{translate($locale, 'Groot managed node')}</strong><small
+          >{translate(
+            $locale,
+            'Groot provisions isolated access for this wallet. RPC credentials stay encrypted in native code and are never shown here.'
+          )}</small
+        >
+      </div>
+    </div>
+    <WarningNotice
+      class="managed-privacy-warning"
+      title={translate($locale, 'Privacy tradeoff')}
+      body={translate(
         $locale,
-        node.backend.type === 'local_core'
-          ? localRpcUrl
-          : node.torProxy
-            ? 'http://your-node.onion:8332'
-            : 'https://node.example.com:8332'
+        'The service sees connection timing and wallet scripts queried for history. Recovery words, private keys, and labels stay on this device.'
       )}
-    /><small
-      >{translate(
-        $locale,
-        defaultConfig.network === 'mainnet'
-          ? 'Mainnet requires a Bitcoin Core RPC endpoint on this Mac. Credentials in URLs are rejected.'
-          : 'Credentials in URLs are rejected. TLS uses system trust roots; Tor accepts only .onion\n      destinations.'
-      )}</small
-    ></label
-  >
-  {#if node.torProxy}<label class="field"
-      ><span>{translate($locale, 'Local SOCKS5 proxy')}</span><input
-        bind:value={node.torProxy}
-        placeholder="127.0.0.1:9050"
+    />
+  {:else}<label class="field"
+      ><span>{translate($locale, 'RPC URL')}</span><input
+        bind:value={node.backend.url}
+        placeholder={translate(
+          $locale,
+          node.backend.type === 'local_core'
+            ? localRpcUrl
+            : node.torProxy
+              ? 'http://your-node.onion:8332'
+              : 'https://node.example.com:8332'
+        )}
       /><small
         >{translate(
           $locale,
-          'The proxy must listen on loopback. Remote proxies are rejected.'
+          defaultConfig.network === 'mainnet'
+            ? 'Mainnet accepts loopback HTTP or a trusted remote HTTPS endpoint. Credentials in URLs are rejected.'
+            : 'Credentials in URLs are rejected. TLS uses system trust roots; Tor accepts only .onion\n      destinations.'
         )}</small
       ></label
-    >{/if}
-  {#if node.backend.type === 'local_core'}
-    {#if defaultConfig.network === 'regtest'}<div class="credential-warning">
-        <ShieldCheck size={16} />
-        <p>
-          <strong>{translate($locale, 'Automatic cookie authentication')}</strong><span
-            >{translate(
-              $locale,
-              'Uses Groot’s isolated local Regtest cookie. Switch to username/password only for a\n            custom local node.'
-            )}</span
-          >
-        </p>
-      </div>{/if}
-    <label class="field"
-      ><span>{translate($locale, 'Authentication')}</span><select bind:value={node.auth}
-        >{#if defaultConfig.network === 'regtest'}<option value="cookie"
-            >{translate($locale, 'Local cookie')}</option
-          >{/if}<option value="user_pass">{translate($locale, 'Username and password')}</option
-        ></select
-      ></label
     >
-  {/if}
-  {#if node.auth === 'user_pass'}<label class="field"
-      ><span>{translate($locale, 'RPC username')}</span><input
-        value={node.username ?? ''}
-        oninput={(event) => (node = { ...node, username: event.currentTarget.value })}
-        autocomplete="off"
-      /></label
-    ><PasswordField
-      label={translate($locale, 'RPC password')}
-      bind:value={nodePassword}
-      autocomplete="new-password"
-      hint={translate($locale, 'Encrypted locally; never placed in the URL or public config.')}
-    />{/if}
-  <PasswordField
-    label={credentialLabel}
-    bind:value={walletCredential}
-    autocomplete="current-password"
-    hint={translate($locale, 'Required once to protect this wallet’s RPC credentials.')}
-  />
+    {#if node.torProxy}<label class="field"
+        ><span>{translate($locale, 'Local SOCKS5 proxy')}</span><input
+          bind:value={node.torProxy}
+          placeholder="127.0.0.1:9050"
+        /><small
+          >{translate(
+            $locale,
+            'The proxy must listen on loopback. Remote proxies are rejected.'
+          )}</small
+        ></label
+      >{/if}
+    {#if nodeMode === 'local_core'}
+      {#if defaultConfig.network === 'regtest'}<div class="credential-warning">
+          <ShieldCheck size={16} />
+          <p>
+            <strong>{translate($locale, 'Automatic cookie authentication')}</strong><span
+              >{translate(
+                $locale,
+                'Uses Groot’s isolated local Regtest cookie. Switch to username/password only for a\n            custom local node.'
+              )}</span
+            >
+          </p>
+        </div>{/if}
+      <label class="field"
+        ><span>{translate($locale, 'Authentication')}</span><select bind:value={node.auth}
+          >{#if defaultConfig.network === 'regtest'}<option value="cookie"
+              >{translate($locale, 'Local cookie')}</option
+            >{/if}<option value="user_pass">{translate($locale, 'Username and password')}</option
+          ></select
+        ></label
+      >
+    {/if}
+    {#if node.auth === 'user_pass'}<label class="field"
+        ><span>{translate($locale, 'RPC username')}</span><input
+          value={node.username ?? ''}
+          oninput={(event) => (node = { ...node, username: event.currentTarget.value })}
+          autocomplete="off"
+        /></label
+      ><PasswordField
+        label={translate($locale, 'RPC password')}
+        bind:value={nodePassword}
+        autocomplete="new-password"
+        hint={translate($locale, 'Encrypted locally; never placed in the URL or public config.')}
+      />{/if}{/if}
+  {#if nodeMode !== 'managed' || managedRenewalAvailable}<div class="node-wallet-credential">
+      <PasswordField
+        label={credentialLabel}
+        bind:value={walletCredential}
+        autocomplete="current-password"
+        hint={translate($locale, 'Required once to protect this wallet’s RPC credentials.')}
+      />
+    </div>{/if}
+  {#if defaultConfig.network !== 'mainnet' && syncSource.type !== 'compact_filters'}<div
+      class="node-activity-source"
+    >
+      <Button variant="secondary" onclick={openSyncSourceFromNode}
+        >{translate($locale, 'Use compact filters for wallet activity')}</Button
+      ><small
+        >{translate(
+          $locale,
+          'Optional on rehearsal networks. Bitcoin Core still provides fees and broadcast.'
+        )}</small
+      >
+    </div>{/if}
   {#if nodeError}<p class="form-error">{nodeError}</p>{/if}
   <div class="modal-footer">
     <Button variant="secondary" onclick={closeNodeSettings}>{translate($locale, 'Cancel')}</Button
-    ><Button
-      disabled={!node.backend.url ||
-        !walletCredential ||
-        (node.auth === 'user_pass' && (!node.username || !nodePassword))}
-      loading={busy}
-      loadingLabel={translate($locale, 'Testing connection…')}
-      onclick={saveNode}>{translate($locale, 'Save & test')}</Button
-    >
+    >{#if nodeMode === 'managed' && managedNodeConfigured && !managedRenewalAvailable}<Button
+        disabled={checking}
+        loading={checking}
+        loadingLabel={translate($locale, 'Testing connection…')}
+        onclick={checkConnection}>{translate($locale, 'Check managed status')}</Button
+      >{:else}<Button
+        disabled={!walletCredential ||
+          (nodeMode !== 'managed' &&
+            (!node.backend.url ||
+              (node.auth === 'user_pass' && (!node.username || !nodePassword))))}
+        loading={busy}
+        loadingLabel={translate($locale, 'Testing connection…')}
+        onclick={nodeMode === 'managed' ? configureManagedNode : saveNode}>{nodeSaveLabel()}</Button
+      >{/if}
   </div>
 </Modal>

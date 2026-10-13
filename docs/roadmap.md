@@ -1,5 +1,12 @@
 # Groot roadmap
 
+Current status (2026-10-04): public v0.4.96 is Mainnet-ready for the approved
+macOS Apple-silicon scope. Hardware certification, local/managed Core testing,
+network/backend switching, and two-machine multi-network reproduction are
+complete. The dated gate table below is retained as historical planning context;
+its former blocked/pending labels do not override ADR 0053 or the completed
+Mainnet checklist.
+
 This roadmap is ordered by security dependency, not marketing priority. A phase is complete only when its unit, integration, regtest, responsive UI, backup, and failure-path checks pass.
 
 Commercial packaging and the issue-level sequence are tracked separately in [`commercial-product-strategy.md`](commercial-product-strategy.md) and [`product-backlog.md`](product-backlog.md). The proposed first post-release add-on is the test-network-first, end-to-end encrypted coordination path in [`remote-signer-coordination-roadmap.md`](remote-signer-coordination-roadmap.md). Family, inheritance, cosigner, and insurance direction is bounded by [`recovery-assurance-roadmap.md`](recovery-assurance-roadmap.md). None of those documents weakens the release gates below.
@@ -14,7 +21,7 @@ redesign.
 
 The regtest app now has labeled receive addresses with enlarged QR and optional derivation detail, persisted coin freeze/unfreeze, automatic or exact-input sends, recommended 2-of-3 and 3-of-5 creation plus safe advanced M-of-N controls, and real Rust-compiled configurable Recovery descriptors with compatible legacy Inheritance wallets. The remaining gates below are ordered; unchecked work must not be presented as production-ready.
 
-The first production target is a **macOS Apple-silicon desktop release with both software and approved hardware wallets, backed by user-controlled Bitcoin Core**. The included wallet classes are bounded by [ADR 0052](adr/0052-first-mainnet-software-and-hardware-scope.md): BIP84 software single-key, exact-model BIP84 hardware single-key, and standard BIP48 hardware multisig. Guided delayed/recovery policies, iOS, Android, Windows, remote Core, public Esplora, Tor/onion Core, compact-filter sync, Payjoin, and mobile mainnet remain separately gated.
+The first production target is a **macOS Apple-silicon desktop release with both software and approved hardware wallets, backed by user-controlled Bitcoin Core**. Under ADR 0069 it is one restart-bound multi-network app offering isolated Regtest, Testnet4, and Mainnet choices. The included Mainnet wallet classes are bounded by [ADR 0052](adr/0052-first-mainnet-software-and-hardware-scope.md): BIP84 software single-key, exact-model BIP84 hardware single-key, and standard BIP48 hardware multisig. Guided delayed/recovery policies, iOS, Android, Windows, public Esplora, Tor/onion Core, compact-filter sync, Payjoin, and mobile mainnet remain separately gated; direct HTTPS user-controlled Core is admitted only under ADR 0061 and its release evidence.
 
 ## Concrete path to production and mainnet
 
@@ -188,8 +195,6 @@ V2 exposes reviewed templates, not an unrestricted script editor. Every template
 - Compact-filter/P2P synchronization is an optional confirmed-only backend under ADR 0031. Its locally complete foundation, architectural decisions, adversarial gaps, public-network measurements, and platform gates are tracked in [`compact-filter-deferred-work.md`](compact-filter-deferred-work.md); branch merge is not Issue #7 closure.
 - Hardware initialization/device management only through audited vendor SDKs with an explicit seed-backup UX. It must never make Groot a seed transport or silently install firmware.
 - Desktop/mobile update delivery, rollback protection, release transparency, and long-term data migration compatibility.
-- Mainnet remains blocked on external review, production provenance and
-  signed/notarized package verification, physical-device certification, and the
-  end-to-end recovery checklist. The dedicated threat model exists and the
-  unsigned `2110eaf` evidence reproduced across two machines, but neither closes
-  those remaining gates.
+- Public v0.4.96 Mainnet is complete. Later releases must repeat exact-commit
+  review, provenance, package verification, applicable physical certification,
+  recovery, and release authorization.

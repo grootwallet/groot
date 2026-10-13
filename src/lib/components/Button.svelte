@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { LoaderCircle } from '@lucide/svelte';
   import type { Snippet } from 'svelte';
 
   type Props = {
@@ -49,7 +48,8 @@
     onclick={handleLinkClick}
     class="button {variant} {size === 'default' ? '' : size} {className}"
   >
-    {#if loading}<LoaderCircle class="spin" size={16} /><span>{loadingLabel}</span
+    {#if loading}<span class="button-loading-indicator" aria-hidden="true"></span><span
+        >{loadingLabel}</span
       >{:else}{@render children?.()}{/if}
   </a>
 {:else}
@@ -61,7 +61,8 @@
     {onclick}
     class="button {variant} {size === 'default' ? '' : size} {className}"
   >
-    {#if loading}<LoaderCircle class="spin" size={16} /><span>{loadingLabel}</span
+    {#if loading}<span class="button-loading-indicator" aria-hidden="true"></span><span
+        >{loadingLabel}</span
       >{:else}{@render children?.()}{/if}
   </button>
 {/if}

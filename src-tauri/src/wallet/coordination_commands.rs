@@ -1,3 +1,4 @@
+use crate::build_network::{name, network, multisig_account_path};
 use super::*;
 use crate::{
     coordination::{
@@ -114,11 +115,11 @@ pub fn coordination_pairing_invitation(
     let invitation = PairingInvitation {
         version: 1,
         session_id: session_id.clone(),
-        network: NETWORK_NAME.to_owned(),
+        network: name().to_owned(),
         wallet_name: wallet_name.trim().to_owned(),
         threshold,
         signer_count,
-        derivation_path: MULTISIG_ACCOUNT_PATH.to_owned(),
+        derivation_path: multisig_account_path().to_owned(),
         token: encode_hex(&token),
         expires_at: now().saturating_add(PAIRING_SESSION_SECONDS),
     };
@@ -495,7 +496,7 @@ pub fn coordination_desktop_finalize(
     let profile = selected_profile_of_kind(&app, WalletKind::Multisig)?;
     let record = PublicWalletRecord {
         version: 2,
-        network: NETWORK_NAME.to_owned(),
+        network: name().to_owned(),
         wallet_id: profile.id.to_string(),
         wallet_name: wallet.name,
         role: DeviceRole::MobileCosigner,
@@ -580,7 +581,7 @@ pub fn coordination_mobile_recovery_record(
     .map_err(bsms_api_error)?;
     let record = PublicWalletRecord {
         version: 2,
-        network: NETWORK_NAME.to_owned(),
+        network: name().to_owned(),
         wallet_id: profile.id.to_string(),
         wallet_name: wallet.name,
         role: DeviceRole::MobileCosigner,
@@ -663,7 +664,7 @@ fn validate_mobile_wallet_record(
         || !keys.iter().any(|key| {
             key.fingerprint == fingerprint
                 && key.xpub == account_xpub
-                && key.derivation_path == MULTISIG_ACCOUNT_PATH
+                && key.derivation_path == multisig_account_path()
         })
     {
         return Err(coordination_api_error(
@@ -680,7 +681,7 @@ fn validate_mobile_wallet_record(
         })
         .ok_or_else(|| coordination_api_error(CoordinationError::DescriptorMismatch))?;
     if mobile_manifest_signer.xpub != account_xpub.to_string()
-        || mobile_manifest_signer.derivation_path != MULTISIG_ACCOUNT_PATH
+        || mobile_manifest_signer.derivation_path != multisig_account_path()
         || mobile_manifest_signer.source != CosignerSource::Qr
         || mobile_manifest_signer.device_type.as_deref() != Some(MOBILE_DEVICE_TYPE)
     {
@@ -813,7 +814,7 @@ pub fn coordination_mobile_complete(
             wallet.external_descriptor.clone(),
             wallet.internal_descriptor.clone(),
         )
-        .network(NETWORK)
+        .network(network())
         .create_wallet(&mut db)
         .map_err(internal)?;
         secure_store::store(
@@ -847,7 +848,7 @@ pub fn coordination_mobile_complete(
             WalletProfile {
                 id,
                 name: wallet.name.clone(),
-                network: NETWORK_NAME.to_owned(),
+                network: name().to_owned(),
                 kind: WalletKind::Multisig,
                 descriptor_checksum: expected_checksum.clone(),
                 created_at: now(),
@@ -913,7 +914,7 @@ pub async fn coordination_mobile_recover(
                 validated.wallet.external_descriptor.clone(),
                 validated.wallet.internal_descriptor.clone(),
             )
-            .network(NETWORK)
+            .network(network())
             .create_wallet(&mut db)
             .map_err(internal)?;
             secure_store::store(
@@ -946,7 +947,7 @@ pub async fn coordination_mobile_recover(
                 WalletProfile {
                     id,
                     name: validated.wallet.name.clone(),
-                    network: NETWORK_NAME.to_owned(),
+                    network: name().to_owned(),
                     kind: WalletKind::Multisig,
                     descriptor_checksum: validated.descriptor_checksum.clone(),
                     created_at: now(),
@@ -1040,7 +1041,7 @@ fn mobile_signer_matches_wallet(
         && wallet.cosigners.iter().any(|signer| {
             signer.fingerprint.eq_ignore_ascii_case(&fingerprint)
                 && signer.xpub == account_xpub.to_string()
-                && signer.derivation_path == MULTISIG_ACCOUNT_PATH
+                && signer.derivation_path == multisig_account_path()
                 && signer.device_type.as_deref() == Some(MOBILE_DEVICE_TYPE)
         }))
 }
@@ -1262,7 +1263,7 @@ fn review_mobile_psbt_for(
         metadata.external_descriptor.clone(),
         metadata.internal_descriptor.clone(),
     )
-    .network(NETWORK)
+    .network(network())
     .create_wallet_no_persist()
     .map_err(internal)?;
     let input_total = psbt
@@ -1317,7 +1318,7 @@ fn review_mobile_psbt_for(
     let mut change = Vec::new();
     for (index, output) in psbt.unsigned_tx.output.iter().enumerate() {
         let item = MobileOutputDto {
-            address: Address::from_script(&output.script_pubkey, NETWORK)
+            address: Address::from_script(&output.script_pubkey, network())
                 .map_err(|_| {
                     api_error(
                         "malformed_psbt",
@@ -1388,7 +1389,7 @@ fn owned_derivation<'a>(
 }
 
 fn parse_owned_path(path: &DerivationPath) -> ApiResult<(KeychainKind, u32)> {
-    let account = DerivationPath::from_str(MULTISIG_ACCOUNT_PATH).map_err(internal)?;
+    let account = DerivationPath::from_str(multisig_account_path()).map_err(internal)?;
     let suffix = path
         .as_ref()
         .strip_prefix(account.as_ref())

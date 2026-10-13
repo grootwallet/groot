@@ -4,6 +4,7 @@
   import {
     Braces,
     Check,
+    ChevronRight,
     ClipboardCheck,
     Copy,
     Download,
@@ -18,6 +19,7 @@
   import QRCode from 'qrcode';
   import { onDestroy, onMount } from 'svelte';
   import Button from '$lib/components/Button.svelte';
+  import Modal from '$lib/components/Modal.svelte';
   import PasswordField from '$lib/components/PasswordField.svelte';
   import InsightTip from '$lib/components/InsightTip.svelte';
   import { copyText } from '$lib/clipboard';
@@ -38,11 +40,14 @@
   let wallet = $state<MultisigWallet | null>(null);
   let pin = $state('');
   let backup = $state('');
+  let copiedPublicValue = $state('');
   let drill = $state<RecoveryDrill | null>(null);
   let busy = $state(false);
   let exportError = $state('');
   let drillError = $state('');
   let backupFormat = $state<'bsms' | 'groot'>('bsms');
+  let exportedBackups = $state<{ bsms: string; groot: string } | null>(null);
+  let showReceiveQr = $state(false);
   let receiveQr = $state('');
   let changeQr = $state('');
   let receivePrintQr = $state<PrintableQr | null>(null);
@@ -54,6 +59,7 @@
   onDestroy(() => {
     pin = '';
     backup = '';
+    exportedBackups = null;
   });
   onMount(() => {
     void walletService.runtimePlatform().then((runtime) => (mobileRuntime = runtime.mobile));
@@ -102,23 +108,35 @@
   }
 
   async function exportBackup() {
+    if (busy) return;
     busy = true;
     exportError = '';
+    const credential = pin;
+    pin = '';
     try {
-      backup =
-        backupFormat === 'bsms'
-          ? await walletService.exportMultisigBsms(pin)
-          : await walletService.exportMultisig(pin);
+      const bsms = await walletService.exportMultisigBsms(credential);
+      const groot = await walletService.exportMultisig(credential);
+      exportedBackups = { bsms, groot };
+      backup = exportedBackups[backupFormat];
       loadedBackupName = '';
       drill = null;
-      pin = '';
       toast({ title: 'Descriptor backup ready', tone: 'success' });
     } catch (cause) {
       exportError = exportErrorMessage(cause);
-      pin = '';
     } finally {
       busy = false;
     }
+  }
+
+  function selectBackupFormat(format: 'bsms' | 'groot') {
+    if (busy) return;
+    backupFormat = format;
+    exportError = '';
+    if (!exportedBackups) return;
+    backup = exportedBackups[format];
+    loadedBackupName = '';
+    drill = null;
+    drillError = '';
   }
 
   async function verifyBackup() {
@@ -158,11 +176,15 @@
 
   async function copyDescriptor(value: string, label: string) {
     await copyText(value, 'public-wallet-data');
+    copiedPublicValue = value;
     toast({
       title: translate($locale, '{label} descriptor copied', { label: translate($locale, label) }),
       description: 'Public watch-only descriptor copied.',
       tone: 'success'
     });
+    setTimeout(() => {
+      if (copiedPublicValue === value) copiedPublicValue = '';
+    }, 1_500);
   }
 
   function savedFileAction(saved: SavedFileResult) {
@@ -228,14 +250,7 @@
 <div class="page narrow-page backup-page">
   <header class="page-header">
     <div>
-      <p class="eyebrow">{translate($locale, 'WALLET BACKUP')}</p>
       <h1>{translate($locale, 'Export & verify')}</h1>
-      <p class="subtitle">
-        {translate(
-          $locale,
-          'A public descriptor backup reconstructs this wallet without exposing signing keys.'
-        )}
-      </p>
     </div>
     <Button variant="secondary" href="/multisig">{translate($locale, 'Back to policy')}</Button>
   </header>
@@ -248,49 +263,51 @@
         </div>
         <FileKey size={19} />
       </div>
-      {#if !backup}
-        <div
-          class="backup-format-grid"
-          role="radiogroup"
-          aria-label={translate($locale, 'Backup format')}
+      <details class="optional-insight-disclosure">
+        <summary
+          >{translate($locale, 'About backup formats')}<ChevronRight
+            size={14}
+            aria-hidden="true"
+          /></summary
         >
-          <button
-            class:active={backupFormat === 'bsms'}
-            aria-pressed={backupFormat === 'bsms'}
-            onclick={() => {
-              backupFormat = 'bsms';
-              exportError = '';
-            }}
-            ><span><FileText size={18} /></span><strong>BSMS 1.0</strong><small
-              >{translate($locale, 'Most interoperable · recommended')}</small
-            ></button
-          ><button
-            class:active={backupFormat === 'groot'}
-            aria-pressed={backupFormat === 'groot'}
-            onclick={() => {
-              backupFormat = 'groot';
-              exportError = '';
-            }}
-            ><span><Braces size={18} /></span><strong>{translate($locale, 'Groot JSON')}</strong
-            ><small>{translate($locale, 'Descriptors plus Groot metadata')}</small></button
-          >
-        </div>
-        <p class="optional-insight">
-          {translate($locale, 'Backup formats')}
-          <InsightTip
-            label={translate($locale, 'About backup formats')}
-            text={translate(
-              $locale,
-              'BSMS is a portable public descriptor record supported by compatible coordinators. Groot JSON also preserves Groot-specific labels and metadata. Neither contains private keys.'
-            )}
-          />
+        <p>
+          {translate(
+            $locale,
+            'BSMS is a portable public descriptor record supported by compatible coordinators. Groot JSON also preserves Groot-specific labels and metadata. Neither contains private keys.'
+          )}
         </p>
+      </details>
+      <div
+        class="backup-format-grid"
+        role="radiogroup"
+        aria-label={translate($locale, 'Backup format')}
+      >
+        <button
+          class:active={backupFormat === 'bsms'}
+          aria-pressed={backupFormat === 'bsms'}
+          disabled={busy}
+          onclick={() => selectBackupFormat('bsms')}
+          ><span><FileText size={18} /></span><strong>BSMS 1.0</strong><small
+            >{translate($locale, 'Most interoperable · recommended')}</small
+          ></button
+        ><button
+          class:active={backupFormat === 'groot'}
+          aria-pressed={backupFormat === 'groot'}
+          disabled={busy}
+          onclick={() => selectBackupFormat('groot')}
+          ><span><Braces size={18} /></span><strong>{translate($locale, 'Groot JSON')}</strong
+          ><small>{translate($locale, 'Descriptors plus Groot metadata')}</small></button
+        >
+      </div>
+      {#if !backup}
         <div class="backup-security-note">
           <ShieldCheck size={18} /><span
-            ><strong>{translate($locale, 'Confirm this export')}</strong><small
+            ><strong>{translate($locale, 'Re-authenticate this export')}</strong><small
               >{translate(
                 $locale,
-                'Enter this wallet’s app PIN. The backup cannot spend, but it reveals every wallet address.'
+                backupFormat === 'bsms'
+                  ? 'BSMS is an unencrypted public descriptor: it cannot spend, but reveals wallet addresses. Enter the app PIN and keep the export private.'
+                  : 'Groot JSON includes public descriptors and wallet metadata. It cannot spend, but reveals wallet activity. Enter the app PIN and keep the export private.'
               )}</small
             ></span
           >
@@ -336,8 +353,15 @@
             variant="secondary"
             onclick={async () => {
               await copyText(backup, 'public-wallet-data');
+              copiedPublicValue = backup;
               toast({ title: 'Backup copied', tone: 'success' });
-            }}><Copy size={15} />{translate($locale, 'Copy backup')}</Button
+              setTimeout(() => {
+                if (copiedPublicValue === backup) copiedPublicValue = '';
+              }, 1_500);
+            }}
+            >{#if copiedPublicValue === backup}<Check size={15} />{:else}<Copy
+                size={15}
+              />{/if}{translate($locale, 'Copy backup')}</Button
           ><Button variant="secondary" onclick={saveBackupFile}
             ><Download size={15} />{translate($locale, 'Download')}
             {translate($locale, backupFormat === 'bsms' ? 'BSMS' : 'JSON')}</Button
@@ -351,10 +375,15 @@
             <span
               ><QrCode size={16} /><strong>{translate($locale, 'Receive descriptor QR')}</strong
               ></span
-            >{#if receiveQr}<img
-                src={receiveQr}
-                alt={translate($locale, 'QR code for the receive descriptor')}
-              />{:else}<small
+            >{#if receiveQr}<button
+                class="descriptor-qr-trigger"
+                aria-label={translate($locale, 'Enlarge receive descriptor QR')}
+                onclick={() => (showReceiveQr = true)}
+                ><img
+                  src={receiveQr}
+                  alt={translate($locale, 'QR code for the receive descriptor')}
+                /></button
+              >{:else}<small
                 >{translate(
                   $locale,
                   'QR unavailable for this descriptor size. Use the downloaded file.'
@@ -365,7 +394,9 @@
             <code>{wallet.externalDescriptor}</code><button
               aria-label={translate($locale, 'Copy receive descriptor')}
               onclick={() => copyDescriptor(wallet!.externalDescriptor, 'Receive')}
-              ><Copy size={15} /></button
+              >{#if copiedPublicValue === wallet.externalDescriptor}<Check size={15} />{:else}<Copy
+                  size={15}
+                />{/if}</button
             >
           </div>
         </div>
@@ -418,6 +449,9 @@
           onchange={importBackup}
         />
       </label>
+      <p class="field-help">
+        {translate($locale, 'Use a BSMS or JSON backup. PDF cannot be imported or tested.')}
+      </p>
       <Button
         class="full"
         disabled={!backup}
@@ -533,3 +567,23 @@
       <Button href="/multisig">{translate($locale, 'Return to wallet')}</Button>
     </section>{/if}
 </div>
+
+<Modal
+  open={showReceiveQr && Boolean(receiveQr)}
+  title={translate($locale, 'Receive descriptor QR')}
+  description={translate(
+    $locale,
+    'Public watch-only descriptor. Anyone who sees it can follow this wallet’s addresses.'
+  )}
+  onclose={() => (showReceiveQr = false)}
+  >{#if receiveQr}<div class="large-qr descriptor-qr-modal">
+      <img src={receiveQr} alt={translate($locale, 'Large QR code for the receive descriptor')} />
+      <Button
+        variant="secondary"
+        onclick={() => wallet && copyDescriptor(wallet.externalDescriptor, 'Receive')}
+        >{#if copiedPublicValue === wallet?.externalDescriptor}<Check size={15} />{:else}<Copy
+            size={15}
+          />{/if}{translate($locale, 'Copy receive descriptor')}</Button
+      >
+    </div>{/if}</Modal
+>

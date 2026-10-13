@@ -25,6 +25,7 @@ export function createSessionMonitor(
   let enabled = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let active: Promise<void> | undefined;
+  let generation = 0;
 
   const clearTimer = () => {
     if (timer !== undefined) clearTimeout(timer);
@@ -38,10 +39,13 @@ export function createSessionMonitor(
 
   const perform = async () => {
     if (paused()) return;
+    const startedGeneration = generation;
     try {
       const selection = await wallet.session();
+      if (!enabled || startedGeneration !== generation || paused()) return;
       if (!selection.unlocked) await onLocked(selection);
     } catch (cause) {
+      if (!enabled || startedGeneration !== generation || paused()) return;
       try {
         onError(cause);
       } catch {
@@ -75,6 +79,7 @@ export function createSessionMonitor(
     },
     stop() {
       enabled = false;
+      generation += 1;
       clearTimer();
     },
     runNow

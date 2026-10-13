@@ -6,7 +6,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::str::FromStr;
 
-pub use crate::build_network::{PARAMETERS, SINGLESIG_ACCOUNT_PATH};
+use crate::build_network::parameters;
+pub use crate::build_network::singlesig_account_path;
 pub const MAX_IMPORT_BYTES: usize = 256 * 1024;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -68,18 +69,21 @@ impl ExternalSignerError {
 
 impl ExternalSignerInput {
     pub fn validate(&self) -> Result<(), ExternalSignerError> {
-        if self.label.trim().is_empty() || self.label.chars().count() > 48 {
+        if self.label.trim().is_empty()
+            || self.label.chars().count() > 48
+            || crate::wallet::label_has_unsafe_formatting(&self.label)
+        {
             return Err(ExternalSignerError::InvalidLabel);
         }
         Fingerprint::from_str(self.fingerprint.trim())
             .map_err(|_| ExternalSignerError::InvalidFingerprint)?;
         let derivation = normalize_path(&self.derivation_path)?;
-        if derivation != SINGLESIG_ACCOUNT_PATH {
+        if derivation != singlesig_account_path() {
             return Err(ExternalSignerError::InvalidDerivation);
         }
         let xpub =
             Xpub::from_str(self.xpub.trim()).map_err(|_| ExternalSignerError::InvalidFormat)?;
-        if xpub.network != PARAMETERS.extended_key_network {
+        if xpub.network != parameters().extended_key_network {
             return Err(ExternalSignerError::WrongNetwork);
         }
         descriptors(self)?;
@@ -91,7 +95,7 @@ pub fn descriptors(input: &ExternalSignerInput) -> Result<(String, String), Exte
     reject_private_material(&input.xpub)?;
     let fingerprint = input.fingerprint.trim().to_ascii_lowercase();
     let xpub = input.xpub.trim();
-    let origin = SINGLESIG_ACCOUNT_PATH
+    let origin = singlesig_account_path()
         .strip_prefix("m/")
         .ok_or(ExternalSignerError::InvalidDerivation)?;
     let external = canonical_descriptor(&format!("wpkh([{fingerprint}/{origin}]{xpub}/0/*)"))?;
@@ -108,6 +112,9 @@ pub fn parse_import(
         return Err(ExternalSignerError::TooLarge);
     }
     reject_private_material(encoded)?;
+    if crate::wallet::validate_label_formatting(label).is_err() {
+        return Err(ExternalSignerError::InvalidLabel);
+    }
     let trimmed = encoded.trim();
     let (fingerprint, xpub, path) = if trimmed.starts_with('{') {
         let value: Value =
@@ -260,11 +267,11 @@ mod tests {
     use bdk_wallet::bitcoin::{bip32::Xpriv, NetworkKind};
 
     fn test_xpub() -> String {
-        let master = Xpriv::new_master(PARAMETERS.extended_key_network, &[7_u8; 64]).unwrap();
+        let master = Xpriv::new_master(parameters().extended_key_network, &[7_u8; 64]).unwrap();
         let derived = master
             .derive_priv(
                 &Secp256k1::new(),
-                &DerivationPath::from_str(SINGLESIG_ACCOUNT_PATH).unwrap(),
+                &DerivationPath::from_str(singlesig_account_path()).unwrap(),
             )
             .unwrap();
         Xpub::from_priv(&Secp256k1::new(), &derived).to_string()
@@ -276,7 +283,7 @@ mod tests {
         let descriptor = format!("wpkh([d34db33f/84'/1'/0']{xpub}/<0;1>/*)");
         let parsed = parse_import(&descriptor, "Passport", SignerSource::Qr).unwrap();
         assert_eq!(parsed.fingerprint, "d34db33f");
-        assert_eq!(parsed.derivation_path, SINGLESIG_ACCOUNT_PATH);
+        assert_eq!(parsed.derivation_path, singlesig_account_path());
         let json =
             serde_json::json!({"xfp":"D34DB33F","bip84":{"xpub":xpub,"deriv":"m/84h/1h/0h"}});
         let parsed = parse_import(&json.to_string(), "Cold storage", SignerSource::File).unwrap();
@@ -294,6 +301,11 @@ mod tests {
             Err(ExternalSignerError::PrivateMaterial)
         );
         let xpub = test_xpub();
+        let descriptor = format!("wpkh([d34db33f/84'/1'/0']{xpub}/<0;1>/*)");
+        assert_eq!(
+            parse_import(&descriptor, "Signer\u{e0020}hidden", SignerSource::File),
+            Err(ExternalSignerError::InvalidLabel)
+        );
         let bad = serde_json::json!({"fingerprint":"d34db33f","xpub":xpub,"path":"m/44'/1'/0'"});
         assert_eq!(
             parse_import(&bad.to_string(), "x", SignerSource::File),
@@ -311,7 +323,7 @@ mod tests {
             label: "Jade".into(),
             fingerprint: "d34db33f".into(),
             xpub: test_xpub(),
-            derivation_path: SINGLESIG_ACCOUNT_PATH.into(),
+            derivation_path: singlesig_account_path().into(),
             source: SignerSource::Usb,
             device_type: Some("jade".into()),
         };
@@ -334,7 +346,7 @@ mod tests {
             label: "Ledger".into(),
             fingerprint: "d34db33f".into(),
             xpub: test_xpub(),
-            derivation_path: SINGLESIG_ACCOUNT_PATH.into(),
+            derivation_path: singlesig_account_path().into(),
             source: SignerSource::Usb,
             device_type: Some("ledger".into()),
         };
@@ -372,12 +384,18 @@ mod tests {
             label: "Signer".into(),
             fingerprint: "d34db33f".into(),
             xpub: test_xpub(),
-            derivation_path: SINGLESIG_ACCOUNT_PATH.into(),
+            derivation_path: singlesig_account_path().into(),
             source: SignerSource::Manual,
             device_type: None,
         };
         let mut candidate = valid.clone();
         candidate.label.clear();
+        assert_eq!(candidate.validate(), Err(ExternalSignerError::InvalidLabel));
+        candidate = valid.clone();
+        candidate.label = "Ledger\u{202e}evil".into();
+        assert_eq!(candidate.validate(), Err(ExternalSignerError::InvalidLabel));
+        candidate = valid.clone();
+        candidate.label = "line\nbreak".into();
         assert_eq!(candidate.validate(), Err(ExternalSignerError::InvalidLabel));
         candidate = valid.clone();
         candidate.fingerprint = "nope".into();

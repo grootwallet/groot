@@ -192,6 +192,7 @@ const sbom = {
       name: 'Groot',
       version: appVersion,
       purl: appRef,
+      licenses: licenseEntry(packageManifest.license),
       ...(artifactEvidence
         ? { hashes: [{ alg: 'SHA-256', content: artifactEvidence.sha256 }] }
         : {}),

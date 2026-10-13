@@ -49,15 +49,30 @@ pub fn tx_proposal_cancel(
 }
 
 #[tauri::command]
-pub fn tx_prepare(
+pub async fn tx_prepare(
     app: AppHandle,
-    state: State<'_, AppState>,
     recipient: String,
     labels: Vec<String>,
     amount: u64,
     fee_rate: String,
     coin_selection: CoinSelectionInput,
 ) -> ApiResult<PaymentProposalDto> {
+    tauri::async_runtime::spawn_blocking(move || {
+        tx_prepare_blocking(app, recipient, labels, amount, fee_rate, coin_selection)
+    })
+    .await
+    .map_err(internal)?
+}
+
+fn tx_prepare_blocking(
+    app: AppHandle,
+    recipient: String,
+    labels: Vec<String>,
+    amount: u64,
+    fee_rate: String,
+    coin_selection: CoinSelectionInput,
+) -> ApiResult<PaymentProposalDto> {
+    let state = app.state::<AppState>();
     let _operation = operation_guard(&state)?;
     require_unlocked(&app, &state)?;
     let context = diagnostics::DiagnosticContext {
@@ -73,7 +88,7 @@ pub fn tx_prepare(
         None,
     );
     let result = (|| {
-        crate::release_policy::validate_spend(NETWORK, 1, amount)
+        crate::release_policy::validate_spend(network(), 1, amount)
             .map_err(|_| api_error("invalid_amount", "This spend is blocked by release policy."))?;
         let labels = normalize_labels(labels)?;
         let label = labels[0].clone();
@@ -86,15 +101,16 @@ pub fn tx_prepare(
         let unchecked = Address::from_str(recipient.trim()).map_err(|_| {
             api_error(
                 "invalid_address",
-                format!("Enter a valid {NETWORK_NAME} Bitcoin address."),
+                format!("Enter a valid {} Bitcoin address.", network_name()),
             )
         })?;
-        let address = unchecked.require_network(NETWORK).map_err(|_| {
+        let address = unchecked.require_network(network()).map_err(|_| {
             api_error(
                 "invalid_address",
-                format!("The address is not for {NETWORK_NAME}."),
+                format!("The address is not for {}.", network_name()),
             )
         })?;
+        validate_supported_payment_destination(&address)?;
         let (_applied_fee_rate, rate) = validate_fee_rate(&fee_rate)?;
         let mut db = open_db(&app)?;
         let mut transaction = db.transaction().map_err(internal)?;
@@ -202,6 +218,7 @@ pub fn tx_prepare(
             fee_difference_vs_private,
         )?;
         let proposal = PaymentProposalDto {
+            review_binding: payment_review_binding(&proposal_id, &encode_psbt(&psbt)),
             proposal_id: proposal_id.clone(),
             recipient,
             recipient_testnet_alias,
@@ -223,7 +240,7 @@ pub fn tx_prepare(
             inputs,
             locktime,
             rbf,
-            network: NETWORK_NAME,
+            network: network_name(),
             selection_impact,
             acceleration: None,
         };
@@ -252,29 +269,43 @@ pub fn tx_prepare(
 }
 
 #[tauri::command]
-pub fn tx_max_spend(
+pub async fn tx_max_spend(
     app: AppHandle,
-    state: State<'_, AppState>,
     recipient: String,
     fee_rate: String,
     coin_selection: CoinSelectionInput,
 ) -> ApiResult<MaxSpendDto> {
+    tauri::async_runtime::spawn_blocking(move || {
+        tx_max_spend_blocking(app, recipient, fee_rate, coin_selection)
+    })
+    .await
+    .map_err(internal)?
+}
+
+fn tx_max_spend_blocking(
+    app: AppHandle,
+    recipient: String,
+    fee_rate: String,
+    coin_selection: CoinSelectionInput,
+) -> ApiResult<MaxSpendDto> {
+    let state = app.state::<AppState>();
     let _operation = operation_guard(&state)?;
     require_unlocked(&app, &state)?;
     let address = Address::from_str(recipient.trim())
         .map_err(|_| {
             api_error(
                 "invalid_address",
-                format!("Enter a valid {NETWORK_NAME} Bitcoin address."),
+                format!("Enter a valid {} Bitcoin address.", network_name()),
             )
         })?
-        .require_network(NETWORK)
+        .require_network(network())
         .map_err(|_| {
             api_error(
                 "invalid_address",
-                format!("The address is not for {NETWORK_NAME}."),
+                format!("The address is not for {}.", network_name()),
             )
         })?;
+    validate_supported_payment_destination(&address)?;
     let (_applied, rate) = validate_fee_rate(&fee_rate)?;
     let mut db = open_db(&app)?;
     let mut transaction = db.transaction().map_err(internal)?;
@@ -565,7 +596,7 @@ fn core_replacement_policy(
     let client = rpc_client(app, state)?;
     checked_chain_identity(&client)?;
     let incremental_fee = core_incremental_relay_fee(&client)?;
-    let priority = if IS_REGTEST {
+    let priority = if is_regtest() {
         Some(5.0)
     } else {
         profile_commands::estimate_core_fee(&client, 2, EstimateMode::Economical).ok()
@@ -595,76 +626,102 @@ pub(super) fn core_incremental_relay_fee(client: &Client) -> ApiResult<u64> {
 }
 
 #[tauri::command]
-pub fn rbf_acceleration_quote(
+pub async fn rbf_acceleration_quote(
     app: AppHandle,
-    state: State<'_, AppState>,
+    wallet_id: Uuid,
     txid: String,
     fee_rate: Option<String>,
 ) -> ApiResult<AccelerationQuoteDto> {
-    let _operation = operation_guard(&state)?;
-    require_unlocked(&app, &state)?;
-    let txid = Txid::from_str(&txid)
-        .map_err(|_| api_error("acceleration_unavailable", "Enter a valid transaction ID."))?;
-    let (incremental_fee, priority) = core_replacement_policy(&app, &state)?;
-    let profile = selected_profile(&app)?;
-    let mut db = match profile.kind {
-        WalletKind::Multisig => open_multisig_db(&app)?,
-        WalletKind::SingleKey | WalletKind::WatchOnly => open_db(&app)?,
-    };
-    let mut transaction = db.transaction().map_err(internal)?;
-    let frozen = frozen_outpoints(&transaction)?;
-    let mut wallet = load_wallet_transaction(&mut transaction)?;
-    let (quote, psbt) = quote_rbf(
-        &mut wallet,
-        txid,
-        fee_rate.as_deref(),
-        incremental_fee,
-        priority,
-        &frozen,
-    )?;
-    validate_psbt_excludes_frozen(&psbt, &frozen)?;
-    Ok(quote)
+    let session_id = app
+        .state::<AppState>()
+        .unlocked_wallets
+        .lock()
+        .map_err(internal)?
+        .identity(wallet_id);
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let _operation = operation_guard(&state)?;
+        let session_id = validate_read_session(session_id, None)?;
+        require_wallet_read_context(&app, &state, wallet_id, Some(session_id))?;
+        require_unlocked(&app, &state)?;
+        let txid = Txid::from_str(&txid)
+            .map_err(|_| api_error("acceleration_unavailable", "Enter a valid transaction ID."))?;
+        let (incremental_fee, priority) = core_replacement_policy(&app, &state)?;
+        let profile = selected_profile(&app)?;
+        let mut db = match profile.kind {
+            WalletKind::Multisig => open_multisig_db(&app)?,
+            WalletKind::SingleKey | WalletKind::WatchOnly => open_db(&app)?,
+        };
+        let mut transaction = db.transaction().map_err(internal)?;
+        let frozen = frozen_outpoints(&transaction)?;
+        let mut wallet = load_wallet_transaction(&mut transaction)?;
+        let (quote, psbt) = quote_rbf(
+            &mut wallet,
+            txid,
+            fee_rate.as_deref(),
+            incremental_fee,
+            priority,
+            &frozen,
+        )?;
+        validate_psbt_excludes_frozen(&psbt, &frozen)?;
+        Ok(quote)
+    })
+    .await
+    .map_err(internal)?
 }
 
 #[tauri::command]
-pub fn cpfp_acceleration_quote(
+pub async fn cpfp_acceleration_quote(
     app: AppHandle,
-    state: State<'_, AppState>,
+    wallet_id: Uuid,
     txid: String,
     fee_rate: Option<String>,
 ) -> ApiResult<CpfpAccelerationQuoteDto> {
-    let _operation = operation_guard(&state)?;
-    require_unlocked(&app, &state)?;
-    let txid = Txid::from_str(&txid)
-        .map_err(|_| api_error("acceleration_unavailable", "Enter a valid transaction ID."))?;
-    let priority = if IS_REGTEST {
-        Some(5.0)
-    } else {
-        let client = rpc_client(&app, &state)?;
-        checked_chain_identity(&client)?;
-        profile_commands::estimate_core_fee(&client, 2, EstimateMode::Economical).ok()
-    };
-    let profile = selected_profile(&app)?;
-    let mut db = match profile.kind {
-        WalletKind::Multisig => open_multisig_db(&app)?,
-        WalletKind::SingleKey | WalletKind::WatchOnly => open_db(&app)?,
-    };
-    let wallet = load_wallet(&mut db)?;
-    let parent_fee = cpfp_parent_fee(&app, &state, &wallet, txid)?;
-    drop(wallet);
-    let mut transaction = db.transaction().map_err(internal)?;
-    let frozen = frozen_outpoints(&transaction)?;
-    let mut wallet = load_wallet_transaction(&mut transaction)?;
-    let (quote, psbt) = quote_cpfp(
-        &mut wallet,
-        txid,
-        parent_fee,
-        fee_rate.as_deref(),
-        priority,
-        &frozen,
-    )?;
-    validate_psbt_excludes_frozen(&psbt, &frozen)?;
-    Ok(quote)
+    let session_id = app
+        .state::<AppState>()
+        .unlocked_wallets
+        .lock()
+        .map_err(internal)?
+        .identity(wallet_id);
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let _operation = operation_guard(&state)?;
+        let session_id = validate_read_session(session_id, None)?;
+        require_wallet_read_context(&app, &state, wallet_id, Some(session_id))?;
+        require_unlocked(&app, &state)?;
+        let txid = Txid::from_str(&txid)
+            .map_err(|_| api_error("acceleration_unavailable", "Enter a valid transaction ID."))?;
+        let priority = if is_regtest() {
+            Some(5.0)
+        } else {
+            let client = rpc_client(&app, &state)?;
+            checked_chain_identity(&client)?;
+            profile_commands::estimate_core_fee(&client, 2, EstimateMode::Economical).ok()
+        };
+        let profile = selected_profile(&app)?;
+        let mut db = match profile.kind {
+            WalletKind::Multisig => open_multisig_db(&app)?,
+            WalletKind::SingleKey | WalletKind::WatchOnly => open_db(&app)?,
+        };
+        let wallet = load_wallet(&mut db)?;
+        let parent_fee = cpfp_parent_fee(&app, &state, &wallet, txid)?;
+        drop(wallet);
+        let mut transaction = db.transaction().map_err(internal)?;
+        let frozen = frozen_outpoints(&transaction)?;
+        let mut wallet = load_wallet_transaction(&mut transaction)?;
+        let (quote, psbt) = quote_cpfp(
+            &mut wallet,
+            txid,
+            parent_fee,
+            fee_rate.as_deref(),
+            priority,
+            &frozen,
+        )?;
+        validate_psbt_excludes_frozen(&psbt, &frozen)?;
+        Ok(quote)
+    })
+    .await
+    .map_err(internal)?
 }
 
 pub(crate) fn acceleration_error(error: impl ToString) -> ApiError {
@@ -719,16 +776,55 @@ pub(crate) fn cpfp_parent_fee(
     })?;
     let wallet_fee = wallet.calculate_fee(parent.tx_node.tx.as_ref()).ok();
     resolve_cpfp_parent_fee(wallet_fee, || {
-        let entry = rpc_client(app, state)?
-            .get_mempool_entry(&parent_txid)
-            .map_err(|_| {
-                api_error(
-                    "acceleration_unavailable",
-                    "Bitcoin Core could not find this unconfirmed transaction. Update the wallet and try again.",
-                )
-            })?;
+        let rpc = rpc_client(app, state)?;
+        let entry = rpc.get_mempool_entry(&parent_txid).map_err(|error| {
+            if matches!(
+                &error,
+                CoreRpcError::JsonRpc(jsonrpc::Error::Rpc(response)) if response.code == -5
+            ) {
+                let confirmed = transaction_confirmed_in_active_chain(&rpc, parent_txid);
+                if confirmed {
+                    cpfp_parent_missing_from_mempool(true)
+                } else {
+                    cpfp_parent_missing_from_mempool(false)
+                }
+            } else {
+                rpc_api_error(error)
+            }
+        })?;
         Ok(entry.fees.base)
     })
+}
+
+pub(crate) fn cpfp_parent_missing_from_mempool(confirmed: bool) -> ApiError {
+    if confirmed {
+        api_error(
+            "transaction_confirmed",
+            "This transaction has confirmed. CPFP is no longer needed.",
+        )
+    } else {
+        api_error(
+            "acceleration_unavailable",
+            "This transaction is no longer available for CPFP. It may have confirmed or left the mempool. Update the wallet and try again.",
+        )
+    }
+}
+
+pub(crate) fn acceleration_original_missing_from_mempool(
+    method: AccelerationMethod,
+    confirmed: bool,
+) -> ApiError {
+    match method {
+        AccelerationMethod::Cpfp => cpfp_parent_missing_from_mempool(confirmed),
+        AccelerationMethod::Rbf if confirmed => api_error(
+            "transaction_confirmed",
+            "The original transaction has confirmed. RBF is no longer needed.",
+        ),
+        AccelerationMethod::Rbf => api_error(
+            "acceleration_unavailable",
+            "The original transaction is no longer available for RBF. It may have confirmed or left the mempool. Update the wallet and try again.",
+        ),
+    }
 }
 
 pub(crate) fn summarize_payment_psbt(
@@ -761,10 +857,13 @@ pub(crate) fn summarize_payment_psbt(
                 "The accelerated transaction has no output.",
             )
         })?;
-    let recipient = Address::from_script(&output.script_pubkey, NETWORK).map_err(|_| {
+    let recipient = Address::from_script(&output.script_pubkey, network()).map_err(|_| {
         api_error(
             "invalid_address",
-            format!("The transaction recipient is not a standard {NETWORK_NAME} address."),
+            format!(
+                "The transaction recipient is not a standard {} address.",
+                network_name()
+            ),
         )
     })?;
     let fee = psbt
@@ -787,8 +886,10 @@ pub(crate) fn summarize_payment_psbt(
     let change_derivation_paths = proposal_change_derivation_paths(psbt, &change_addresses)?;
     let (inputs, actual_fee_rate, locktime, rbf) = proposal_transaction_details(wallet, psbt, fee)?;
     let selection_impact = selection_impact(db, wallet, psbt, "acceleration", None)?;
+    let proposal_id = Uuid::new_v4().to_string();
     Ok(PaymentProposalDto {
-        proposal_id: Uuid::new_v4().to_string(),
+        review_binding: payment_review_binding(&proposal_id, &encode_psbt(psbt)),
+        proposal_id,
         recipient,
         recipient_testnet_alias,
         recipient_is_wallet_owned,
@@ -814,7 +915,7 @@ pub(crate) fn summarize_payment_psbt(
         inputs,
         locktime,
         rbf,
-        network: NETWORK_NAME,
+        network: network_name(),
         selection_impact,
         acceleration: None,
     })
@@ -1186,13 +1287,26 @@ pub(crate) fn prepare_persisted_multisig_acceleration(
     load_multisig_proposal(db, metadata, &proposal.proposal_id)
 }
 #[tauri::command]
-pub fn tx_acceleration_prepare(
+pub async fn tx_acceleration_prepare(
     app: AppHandle,
-    state: State<'_, AppState>,
     txid: String,
     method: AccelerationMethod,
     fee_rate: String,
 ) -> ApiResult<PaymentProposalDto> {
+    tauri::async_runtime::spawn_blocking(move || {
+        tx_acceleration_prepare_blocking(app, txid, method, fee_rate)
+    })
+    .await
+    .map_err(internal)?
+}
+
+fn tx_acceleration_prepare_blocking(
+    app: AppHandle,
+    txid: String,
+    method: AccelerationMethod,
+    fee_rate: String,
+) -> ApiResult<PaymentProposalDto> {
+    let state = app.state::<AppState>();
     let _operation = operation_guard(&state)?;
     require_unlocked(&app, &state)?;
     let txid = Txid::from_str(&txid)
@@ -1300,13 +1414,26 @@ pub fn tx_acceleration_prepare(
 }
 
 #[tauri::command]
-pub fn multisig_acceleration_prepare(
+pub async fn multisig_acceleration_prepare(
     app: AppHandle,
-    state: State<'_, AppState>,
     txid: String,
     method: AccelerationMethod,
     fee_rate: String,
 ) -> ApiResult<MultisigProposalDto> {
+    tauri::async_runtime::spawn_blocking(move || {
+        multisig_acceleration_prepare_blocking(app, txid, method, fee_rate)
+    })
+    .await
+    .map_err(internal)?
+}
+
+fn multisig_acceleration_prepare_blocking(
+    app: AppHandle,
+    txid: String,
+    method: AccelerationMethod,
+    fee_rate: String,
+) -> ApiResult<MultisigProposalDto> {
+    let state = app.state::<AppState>();
     let _operation = operation_guard(&state)?;
     require_unlocked(&app, &state)?;
     let txid = Txid::from_str(&txid)
@@ -1347,6 +1474,7 @@ pub fn multisig_acceleration_prepare(
 pub async fn tx_sign_and_broadcast(
     app: AppHandle,
     proposal_id: String,
+    review_binding: String,
     credential: String,
 ) -> ApiResult<BroadcastResultDto> {
     let credential = Zeroizing::new(credential);
@@ -1376,7 +1504,7 @@ pub async fn tx_sign_and_broadcast(
             Bip84(master, KeychainKind::External),
             Bip84(master, KeychainKind::Internal),
         )
-        .network(NETWORK)
+        .network(network())
         .create_wallet_no_persist()
         .map_err(internal)?;
         let mut db = open_db(&app)?;
@@ -1387,6 +1515,25 @@ pub async fn tx_sign_and_broadcast(
             .remove(&proposal_id)
             .map(Ok)
             .unwrap_or_else(|| load_single_proposal(&db, &proposal_id))?;
+        let encoded_psbt = encode_psbt(&proposal.psbt);
+        require_payment_review_binding(&proposal_id, &encoded_psbt, &review_binding)?;
+        let persisted_psbt = db
+            .query_row(
+                "SELECT psbt FROM groot_proposals WHERE proposal_id = ?1 AND status IN ('collecting', 'ready')",
+                params![proposal_id],
+                |row| row.get::<_, String>(0),
+            )
+            .map_err(|_| {
+                api_error(
+                    "proposal_not_found",
+                    "Payment proposal was not found or is no longer active.",
+                )
+            })?;
+        require_reviewed_psbt_unchanged(
+            &persisted_psbt,
+            &encoded_psbt,
+            "The payment changed after review. Reload it before signing.",
+        )?;
         let wallet = load_wallet(&mut db)?;
         let profile = selected_profile_of_kind(&app, WalletKind::SingleKey)?;
         let loaded_external = wallet.public_descriptor(KeychainKind::External).to_string();
@@ -1403,6 +1550,7 @@ pub async fn tx_sign_and_broadcast(
             &loaded_internal,
             Some((&signing_external, &signing_internal)),
         )?;
+        bind_psbt_inputs_to_wallet(&wallet, &mut proposal.psbt)?;
         validate_proposal_fee(&proposal.psbt, proposal.fee)?;
         let acceleration = proposal_acceleration_method(&db, &proposal_id)?;
         if matches!(acceleration, Some(AccelerationMethod::Rbf)) {
@@ -1423,20 +1571,13 @@ pub async fn tx_sign_and_broadcast(
         )?;
         validate_psbt_excludes_frozen(&proposal.psbt, &frozen_outpoints(&db)?)?;
         let finalized = signing_wallet
-            .sign(
-                &mut proposal.psbt,
-                SignOptions {
-                    // The PSBT was built and retained inside this trusted Rust process.
-                    trust_witness_utxo: true,
-                    ..SignOptions::default()
-                },
-            )
+            .sign(&mut proposal.psbt, SignOptions::default())
             .map_err(internal)?;
         if !finalized {
             return Err(internal("The transaction could not be fully signed."));
         }
         let transaction = proposal.psbt.extract_tx().map_err(internal)?;
-        let txid = broadcast_transaction(&app, &state, &transaction)?;
+        let txid = broadcast_transaction(&app, &state, &db, &proposal_id, &transaction)?;
         drop(wallet);
         let mut persisted = db.transaction().map_err(internal)?;
         let mut wallet = load_wallet_transaction(&mut persisted)?;

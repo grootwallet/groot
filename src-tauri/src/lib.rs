@@ -1,7 +1,8 @@
 use serde::Serialize;
 use tauri::Manager as _;
+#[cfg(desktop)]
+use tauri_plugin_dialog::{DialogExt as _, MessageDialogButtons, MessageDialogKind};
 
-pub mod airgap;
 mod auth;
 pub mod bsms;
 mod build_network;
@@ -12,6 +13,7 @@ mod direct_rpc;
 pub mod external_signer;
 mod hardware;
 mod label_provenance;
+mod managed_gateway;
 mod multisig;
 mod native_backup;
 pub mod network;
@@ -35,8 +37,71 @@ struct RuntimePlatformDto {
     platform: &'static str,
     mobile: bool,
     network: &'static str,
+    network_switching: bool,
     version: &'static str,
     commit: &'static str,
+}
+
+#[derive(Debug, Serialize)]
+struct NetworkSelectionApiError {
+    code: &'static str,
+    message: String,
+}
+
+fn network_selection_api_error(
+    error: build_network::NetworkSelectionError,
+) -> NetworkSelectionApiError {
+    NetworkSelectionApiError {
+        code: error.code(),
+        message: error.to_string(),
+    }
+}
+
+fn initialize_network(app: &tauri::AppHandle) -> Result<(), build_network::NetworkSelectionError> {
+    if !build_network::switching_enabled()
+        || std::env::var_os("GROOT_REGTEST_APP_DATA_DIR").is_some()
+    {
+        return Ok(());
+    }
+    let root = match build_network::multi_network_app_data_override()? {
+        Some(path) => path,
+        None => app
+            .path()
+            .app_data_dir()
+            .map_err(|_| build_network::NetworkSelectionError::Io)?,
+    };
+    build_network::activate_selection(&root)
+}
+
+#[tauri::command]
+fn bitcoin_network_switch(
+    app: tauri::AppHandle,
+    selected_network: String,
+) -> Result<(), NetworkSelectionApiError> {
+    if !build_network::switching_enabled()
+        || std::env::var_os("GROOT_REGTEST_APP_DATA_DIR").is_some()
+    {
+        return Err(network_selection_api_error(
+            build_network::NetworkSelectionError::Unavailable,
+        ));
+    }
+    let selected =
+        build_network::parse_selectable(&selected_network).map_err(network_selection_api_error)?;
+    if selected == build_network::network() {
+        return Ok(());
+    }
+    let root = match build_network::multi_network_app_data_override()
+        .map_err(network_selection_api_error)?
+    {
+        Some(path) => path,
+        None => app
+            .path()
+            .app_data_dir()
+            .map_err(|_| network_selection_api_error(build_network::NetworkSelectionError::Io))?,
+    };
+    build_network::save_selection_at(&root, selected).map_err(network_selection_api_error)?;
+    app.request_restart();
+    Ok(())
 }
 
 #[tauri::command]
@@ -55,10 +120,22 @@ fn runtime_platform() -> RuntimePlatformDto {
     RuntimePlatformDto {
         platform,
         mobile: cfg!(mobile),
-        network: build_network::NAME,
+        network: build_network::name(),
+        network_switching: build_network::switching_enabled(),
         version: env!("CARGO_PKG_VERSION"),
         commit: env!("GROOT_BUILD_COMMIT"),
     }
+}
+
+#[cfg(desktop)]
+fn present_already_running_dialog(app: &tauri::AppHandle) {
+    let handle = app.clone();
+    app.dialog()
+        .message("Close the currently running Groot window, then open this version again.")
+        .title("Groot is already open")
+        .kind(MessageDialogKind::Warning)
+        .buttons(MessageDialogButtons::OkCustom("OK".to_owned()))
+        .show(move |_| handle.exit(0));
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -68,8 +145,31 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
-            let lock = process_lock::ProcessLock::acquire_for_app(app.handle())?;
+            #[cfg(desktop)]
+            if let Some(window) = app.get_webview_window("main") {
+                window.hide()?;
+            }
+            initialize_network(app.handle())?;
+            let lock = match process_lock::ProcessLock::acquire_for_app(app.handle()) {
+                Ok(lock) => lock,
+                Err(process_lock::ProcessLockError::AlreadyRunning) => {
+                    #[cfg(desktop)]
+                    {
+                        present_already_running_dialog(app.handle());
+                        return Ok(());
+                    }
+                    #[cfg(not(desktop))]
+                    return Err(process_lock::ProcessLockError::AlreadyRunning.into());
+                }
+                Err(error) => return Err(error.into()),
+            };
             app.manage(lock);
+            #[cfg(desktop)]
+            if let Some(window) = app.get_webview_window("main") {
+                window.show()?;
+                window.unminimize()?;
+                window.set_focus()?;
+            }
             let state = app.state::<wallet::AppState>();
             wallet::diagnostics::record(
                 app.handle(),
@@ -87,6 +187,7 @@ pub fn run() {
         .manage(wallet::AppState::default())
         .invoke_handler(tauri::generate_handler![
             runtime_platform,
+            bitcoin_network_switch,
             wallet::diagnostics::diagnostics_list,
             wallet::diagnostics::diagnostics_export,
             wallet::profile_commands::wallet_exists,
@@ -115,6 +216,8 @@ pub fn run() {
             wallet::profile_commands::wallet_sync_cancel,
             wallet::profile_commands::wallet_sync_status,
             wallet::profile_commands::wallet_notifications,
+            wallet::activity::wallet_activity,
+            wallet::activity::wallet_overview,
             wallet::profile_commands::wallet_notifications_ack,
             wallet::profile_commands::address_create,
             wallet::profile_commands::address_discard,
@@ -122,15 +225,15 @@ pub fn run() {
             wallet::profile_commands::multisig_coin_set_frozen,
             wallet::profile_commands::fees_estimate,
             wallet::profile_commands::mainnet_core_admit,
-            wallet::profile_commands::mainnet_core_admission_clear,
             wallet::profile_commands::node_config,
+            wallet::profile_commands::network_public_status,
+            wallet::profile_commands::managed_node_configure,
             wallet::profile_commands::node_config_save,
             wallet::profile_commands::network_setup_sources,
             wallet::profile_commands::network_setup_adopt,
             wallet::profile_commands::node_connection_test,
             wallet::profile_commands::wallet_sync_source,
             wallet::profile_commands::wallet_sync_source_save,
-            wallet::payjoin_uri_inspect,
             payjoin_support::payment_request_inspect,
             wallet::profile_commands::recovery_scan_settings,
             wallet::profile_commands::recovery_scan_settings_save,
@@ -145,6 +248,7 @@ pub fn run() {
             wallet::hardware_commands::hardware_send_pin,
             wallet::hardware_commands::hardware_check_cosigner,
             wallet::hardware_commands::hardware_check_external_signer,
+            wallet::hardware_commands::hardware_identify_saved_device,
             wallet::hardware_commands::hardware_health_checks,
             wallet::hardware_commands::hardware_import_cosigner,
             wallet::hardware_commands::external_signer_parse_import,
@@ -252,7 +356,8 @@ mod runtime_tests {
     #[test]
     fn runtime_identity_is_native_public_build_metadata() {
         let identity = runtime_platform();
-        assert_eq!(identity.network, build_network::NAME);
+        assert_eq!(identity.network, build_network::name());
+        assert_eq!(identity.network_switching, cfg!(groot_network = "multi"));
         assert_eq!(identity.version, env!("CARGO_PKG_VERSION"));
         let commit = identity
             .commit

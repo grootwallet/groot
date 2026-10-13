@@ -1,3 +1,4 @@
+use crate::build_network::{name, multisig_account_path};
 use super::*;
 use crate::secure_store::SecureStoreError;
 use bdk_bitcoind_rpc::{
@@ -77,7 +78,7 @@ fn mobile_mnemonic() -> Mnemonic {
 
 fn hardware_keys() -> Vec<HardwareKey> {
     let secp = Secp256k1::new();
-    let path = DerivationPath::from_str(MULTISIG_ACCOUNT_PATH).unwrap();
+    let path = DerivationPath::from_str(multisig_account_path()).unwrap();
     [11_u8, 29]
         .into_iter()
         .map(|value| {
@@ -106,7 +107,7 @@ fn coordinated_wallet() -> (
         label: "This phone".to_owned(),
         fingerprint: mobile_fingerprint.to_string(),
         xpub: mobile_xpub.to_string(),
-        derivation_path: MULTISIG_ACCOUNT_PATH.to_owned(),
+        derivation_path: multisig_account_path().to_owned(),
         source: CosignerSource::Qr,
         device_type: Some(MOBILE_DEVICE_TYPE.to_owned()),
     }];
@@ -119,7 +120,7 @@ fn coordinated_wallet() -> (
                 label: format!("Hardware signer {}", index + 1),
                 fingerprint: key.fingerprint.clone(),
                 xpub: key.account_public.to_string(),
-                derivation_path: MULTISIG_ACCOUNT_PATH.to_owned(),
+                derivation_path: multisig_account_path().to_owned(),
                 source: CosignerSource::Virtual,
                 device_type: Some("test-hardware".to_owned()),
             }),
@@ -170,7 +171,7 @@ fn mobile_public_wallet_record(wallet: &MultisigWalletDto) -> PublicWalletRecord
     .unwrap();
     PublicWalletRecord {
         version: 2,
-        network: NETWORK_NAME.to_owned(),
+        network: name().to_owned(),
         wallet_id: Uuid::new_v4().to_string(),
         wallet_name: wallet.name.clone(),
         role: DeviceRole::MobileCosigner,
@@ -224,11 +225,11 @@ fn invitation(expires_at: u64) -> PairingInvitation {
     PairingInvitation {
         version: 1,
         session_id: Uuid::new_v4().to_string(),
-        network: NETWORK_NAME.to_owned(),
+        network: name().to_owned(),
         wallet_name: "Mobile coordinated wallet".to_owned(),
         threshold: 2,
         signer_count: 3,
-        derivation_path: MULTISIG_ACCOUNT_PATH.to_owned(),
+        derivation_path: multisig_account_path().to_owned(),
         token: "00112233445566778899aabbccddeeff".to_owned(),
         expires_at,
     }

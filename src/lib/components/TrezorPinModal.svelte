@@ -1,10 +1,11 @@
 <script lang="ts">
   import { locale } from '$lib/i18n';
   import { translate } from '$lib/i18n-catalog';
-  import { AlertTriangle, Delete, LockKeyhole } from '@lucide/svelte';
+  import { Delete, LockKeyhole } from '@lucide/svelte';
   import Button from '$lib/components/Button.svelte';
   import HardwareActionPrompt from '$lib/components/HardwareActionPrompt.svelte';
   import Modal from '$lib/components/Modal.svelte';
+  import WarningNotice from '$lib/components/WarningNotice.svelte';
   import {
     hardwareBrand,
     TREZOR_PIN_CELLS,
@@ -120,14 +121,16 @@
         >
       </div>
     {:else if error}
-      <div class="pin-error-card" role="alert" aria-live="assertive">
-        <AlertTriangle size={18} />
-        <span
-          ><strong>{errorPresentation.title}</strong><small>{errorPresentation.detail}</small></span
-        >
-      </div>
+      <WarningNotice
+        tone="danger"
+        icon
+        role="alert"
+        ariaLive="assertive"
+        title={errorPresentation.title}
+        body={errorPresentation.detail}
+      />
       <Button class="full" variant="secondary" onclick={onretry}
-        >{translate($locale, 'Ask Trezor for a fresh layout')}</Button
+        >{translate($locale, 'Try again')}</Button
       >
     {:else if busy}
       <HardwareActionPrompt
@@ -139,13 +142,12 @@
         label={translate($locale, 'Trezor unlock in progress')}
       />
     {:else if gridAvailable}
-      {#if positions}
-        <output
-          aria-label={translate($locale, '{count} PIN positions selected', {
-            count: positions.length
-          })}>{'•'.repeat(positions.length)}</output
-        >
-      {/if}
+      <output
+        aria-live="polite"
+        aria-label={translate($locale, '{count} PIN positions selected', {
+          count: positions.length
+        })}>{'•'.repeat(positions.length) || '\u00a0'}</output
+      >
       <div class="pin-matrix" aria-label={translate($locale, 'Blind PIN position grid')}>
         {#each TREZOR_PIN_CELLS as cell}
           <button

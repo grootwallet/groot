@@ -37,8 +37,8 @@ impl Drop for MobileAccount {
 
 use crate::{
     bsms::DescriptorRecord,
-    build_network::{NAME as NETWORK_NAME, PARAMETERS},
-    multisig::{CosignerInput, PolicyInput, MULTISIG_ACCOUNT_PATH},
+    build_network::{name, multisig_account_path, parameters},
+    multisig::{CosignerInput, PolicyInput},
 };
 
 pub const MAX_COORDINATION_RECORD_BYTES: usize = 256 * 1024;
@@ -145,7 +145,7 @@ impl PairingInvitation {
         if self.version != 1 {
             return Err(CoordinationError::UnsupportedVersion);
         }
-        if self.network != NETWORK_NAME {
+        if self.network != name() {
             return Err(CoordinationError::WrongNetwork);
         }
         if self.session_id.is_empty()
@@ -156,7 +156,7 @@ impl PairingInvitation {
             || self.signer_count < 3
             || self.threshold > self.signer_count
             || self.signer_count > 7
-            || self.derivation_path != MULTISIG_ACCOUNT_PATH
+            || self.derivation_path != multisig_account_path()
             || self.expires_at == 0
         {
             return Err(CoordinationError::InvalidEncoding);
@@ -170,7 +170,7 @@ impl PublicWalletRecord {
         if self.version != 2 {
             return Err(CoordinationError::UnsupportedVersion);
         }
-        if self.network != NETWORK_NAME {
+        if self.network != name() {
             return Err(CoordinationError::WrongNetwork);
         }
         if self.wallet_id.is_empty()
@@ -265,13 +265,13 @@ impl KeyRecord {
             .split_once('/')
             .ok_or(CoordinationError::InvalidKeyRecord)?;
         let derivation_path = format!("m/{path}");
-        if derivation_path != MULTISIG_ACCOUNT_PATH {
+        if derivation_path != multisig_account_path() {
             return Err(CoordinationError::WrongDerivation);
         }
         let fingerprint =
             Fingerprint::from_str(fingerprint).map_err(|_| CoordinationError::InvalidKeyRecord)?;
         let account_xpub = Xpub::from_str(xpub).map_err(|_| CoordinationError::InvalidKeyRecord)?;
-        if account_xpub.network != PARAMETERS.extended_key_network {
+        if account_xpub.network != parameters().extended_key_network {
             return Err(CoordinationError::WrongNetwork);
         }
         if lines[3].chars().count() > 80 {
@@ -302,7 +302,7 @@ impl KeyRecord {
         }
         let secp = Secp256k1::new();
         let account_xpub = Xpub::from_priv(&secp, account);
-        let path = MULTISIG_ACCOUNT_PATH
+        let path = multisig_account_path()
             .strip_prefix("m/")
             .ok_or(CoordinationError::WrongDerivation)?;
         let first_four = format!(
@@ -327,12 +327,12 @@ pub fn derive_mobile_account(
     // Multisig recovery is intentionally words-only. The local app PIN never enters BIP39.
     let seed = Zeroizing::new(mnemonic.to_seed(""));
     let master = MobileAccount(
-        Xpriv::new_master(PARAMETERS.extended_key_network, seed.as_ref())
+        Xpriv::new_master(parameters().extended_key_network, seed.as_ref())
             .map_err(|_| CoordinationError::InvalidKeyRecord)?,
     );
     let secp = Secp256k1::new();
     let fingerprint = master.fingerprint(&secp);
-    let path = DerivationPath::from_str(MULTISIG_ACCOUNT_PATH)
+    let path = DerivationPath::from_str(multisig_account_path())
         .map_err(|_| CoordinationError::WrongDerivation)?;
     let account = MobileAccount(
         master
@@ -566,11 +566,11 @@ mod tests {
         PairingInvitation {
             version: 1,
             session_id: "session-1".to_owned(),
-            network: NETWORK_NAME.to_owned(),
+            network: name().to_owned(),
             wallet_name: "Family vault".to_owned(),
             threshold: 2,
             signer_count: 3,
-            derivation_path: MULTISIG_ACCOUNT_PATH.to_owned(),
+            derivation_path: multisig_account_path().to_owned(),
             token: "00112233445566778899aabbccddeeff".to_owned(),
             expires_at: 1_900,
         }
@@ -578,7 +578,7 @@ mod tests {
 
     fn descriptor_record() -> String {
         let secp = Secp256k1::new();
-        let path = DerivationPath::from_str(MULTISIG_ACCOUNT_PATH).unwrap();
+        let path = DerivationPath::from_str(multisig_account_path()).unwrap();
         let mut keys = (1_u8..=3)
             .map(|index| {
                 let master = Xpriv::new_master(NetworkKind::Test, &[index; 32]).unwrap();
@@ -644,7 +644,7 @@ mod tests {
             .collect::<Vec<_>>();
         PublicWalletRecord {
             version: 2,
-            network: NETWORK_NAME.to_owned(),
+            network: name().to_owned(),
             wallet_id: "wallet-1".to_owned(),
             wallet_name: "Family vault".to_owned(),
             role: DeviceRole::MobileCosigner,
@@ -694,7 +694,7 @@ mod tests {
         let parsed = KeyRecord::parse(&encoded).unwrap();
         assert_eq!(parsed.account_xpub, xpub);
         assert_eq!(parsed.fingerprint, fingerprint);
-        assert_eq!(parsed.derivation_path, MULTISIG_ACCOUNT_PATH);
+        assert_eq!(parsed.derivation_path, multisig_account_path());
     }
 
     #[test]
@@ -837,7 +837,7 @@ mod tests {
             assert!(value.validate().is_err());
         }
         let secp = Secp256k1::new();
-        let path = DerivationPath::from_str(MULTISIG_ACCOUNT_PATH).unwrap();
+        let path = DerivationPath::from_str(multisig_account_path()).unwrap();
         let replacement_master = Xpriv::new_master(NetworkKind::Test, &[9_u8; 32]).unwrap();
         let replacement_account = replacement_master.derive_priv(&secp, &path).unwrap();
         let mut mismatched_policy = valid.clone();
@@ -923,7 +923,7 @@ mod tests {
         let mainnet_account = mainnet_master
             .derive_priv(
                 &Secp256k1::new(),
-                &DerivationPath::from_str(MULTISIG_ACCOUNT_PATH).unwrap(),
+                &DerivationPath::from_str(multisig_account_path()).unwrap(),
             )
             .unwrap();
         let mainnet_record =

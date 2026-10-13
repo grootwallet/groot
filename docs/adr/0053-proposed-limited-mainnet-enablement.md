@@ -1,9 +1,22 @@
-# ADR 0053: Proposed limited mainnet enablement
+# ADR 0053: Limited mainnet enablement
 
-- Status: proposed and blocked for release; an ADR 0055 certification build exists
+- Status: accepted
 - Date: 2026-09-02
-- Would supersede: ADR 0012 only after every exit condition below is met
+- Accepted: 2026-10-04
+- Supersedes: ADR 0012; dedicated-artifact and transport details are superseded by ADR 0069, ADR 0073, and ADR 0078
 - Extends: ADR 0026, ADR 0037, ADR 0052
+
+Authorizes: public Mainnet distribution for commit f7b4b9935943f0250353a6f77c3d8fca31906fff
+
+## Acceptance record
+
+The release owner confirms that every canonical checklist row completed for
+v0.4.96. In particular, the supported BIP84/BIP48 hardware matrix and signer
+permutations passed; local pruned Core and Groot-managed remote Core passed full
+and birthday scans; backend and Regtest/Testnet4/Mainnet switching passed; and
+two independent machines reproduced the multi-network artifact. The owner
+accepts the documented residual risks and authorizes the exact commit above.
+Future releases require a new exact-commit authorization.
 
 ## Context
 
@@ -14,34 +27,35 @@ BIP84 hardware wallets, and standard BIP48 hardware multisig. ADR 0054 accepts
 HWI's exact family records for Coldcard and Jade while keeping their evidence
 model-specific.
 
-This proposal defines the eventual release decision. ADR 0055 now authorizes one
-isolated, non-distributable mainnet certification build so the exit conditions can
-be tested; it neither accepts residual risk nor authorizes distribution.
+This ADR began as the release proposal. ADR 0055 authorized the isolated
+certification build; the 2026-10-04 acceptance record above closes the exit
+conditions and authorizes exact v0.4.96.
 
-## Proposed decision
+## Decision
 
-After every exit condition is satisfied in one frozen commit, a later accepted
-revision of this ADR may authorize one dedicated mainnet build with:
+The authorized ADR 0069 multi-network GA build has:
 
-- a mainnet-specific bundle identifier and isolated application-data location;
+- one general product identity, an owner-only restart-bound selector, and isolated
+  Regtest, Testnet4, and Mainnet application-data namespaces;
 - exact Bitcoin mainnet genesis verification before any wallet database opens;
-- user-controlled, loopback-only Bitcoin Core and no explorer or fallback
-  backend;
+- user-controlled Bitcoin Core through admitted loopback HTTP or direct HTTPS,
+  with no automatic fallback backend;
 - exactly one external recipient, a positive amount, no batch spending, and a
   maximum of 1,000,000 satoshis per transaction;
 - BIP84 software single-key wallets, approved BIP84 USB hardware wallets under
   the exact-model policy plus ADR 0054's two family exceptions, and standard
   BIP48 hardware multisig only;
-- no guided delayed/recovery Miniscript, Payjoin, compact filters, remote Core,
-  Tor/onion Core, public Esplora, mobile, Windows, or automatic updates; and
+- no guided delayed/recovery Miniscript, Payjoin, compact filters, Tor/onion Core,
+  public Esplora backend, mobile, Windows, or automatic updates; and
 - a visible mainnet identity and warning on onboarding, lock, wallet, review,
   signing, and settings surfaces.
 
 The enablement change must be a small, separately reviewed diff. It must expose
-mainnet consistently in the trusted Rust network boundary, frontend build
-configuration, Tauri bundle configuration, derivation/address/descriptor/PSBT
-parameters, HWI chain selection, storage isolation, and release scripts. No
-environment variable or runtime preference may enable mainnet in another build.
+Mainnet consistently only after the trusted Rust selector is loaded, across the
+frontend build configuration, Tauri bundle configuration,
+derivation/address/descriptor/PSBT parameters, HWI chain selection, storage
+isolation, and release scripts. No environment variable, RPC URL, descriptor,
+import, or renderer-only preference may select Mainnet.
 
 All final software, external-signer, and multisig broadcast paths must re-derive the one-recipient and amount-cap policy from the exact persisted PSBT immediately before signing/finalization/broadcast, reject frozen inputs, and preserve the original recipient and value for RBF. CPFP is a separate wallet-owned fee-child branch with no external recipient. The exact-genesis/loopback-Core interlock must run before the first mainnet database opens; invoking it only after a wallet database is loaded does not satisfy this proposal.
 
@@ -70,7 +84,7 @@ model reporting the same family identity can pass admission. User assertion, USB
 path, label text, and firmware declarations are not substitutes for trusted
 model identity.
 
-## Exit conditions before acceptance
+## Exit conditions
 
 1. The independent security review of the frozen baseline is complete and all
    release-blocking findings are resolved.
@@ -102,9 +116,7 @@ invokes the published incident-response procedure.
 
 ## Consequences
 
-ADR 0012 remains authoritative for distribution. `MAINNET_ENABLED` is true only
-when the dedicated compile-time `mainnet` identity is selected under ADR 0055.
-This proposal may be edited during review, but it cannot be marked accepted until
-the checklist links exact evidence for every exit condition. Accepting it later
-does not certify any unlisted platform, model, firmware, transport, backend, or
-wallet policy.
+ADR 0012 is superseded for the exact authorized release. Mainnet is selected
+through ADR 0069's restart-bound multi-network identity. This acceptance does
+not certify an unlisted platform, model, firmware, transport, backend, selected
+network, wallet policy, or later commit.

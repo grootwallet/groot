@@ -1,12 +1,35 @@
 import { describe, expect, it } from 'vitest';
 import { WalletError } from './contracts';
 import {
+  accelerationOriginalConfirmed,
   accelerationUnavailableDescription,
   accelerationUnavailableTitle,
+  coldcardDefaultFeeLimitExceededPercent,
   RBF_FUNDING_SHORTFALL_MESSAGE
 } from './acceleration-presentation';
 
 describe('acceleration presentation', () => {
+  it("reports only fees above Coldcard's default maximum-fee percentage", () => {
+    expect(coldcardDefaultFeeLimitExceededPercent(421, 2_579)).toBe(16.3);
+    expect(coldcardDefaultFeeLimitExceededPercent(257, 2_579)).toBeNull();
+    expect(coldcardDefaultFeeLimitExceededPercent(421, 0)).toBeNull();
+    expect(coldcardDefaultFeeLimitExceededPercent(Number.NaN, 2_579)).toBeNull();
+  });
+
+  it('stops acceleration only for the exact confirmed original transaction', () => {
+    expect(
+      accelerationOriginalConfirmed('original', [{ id: 'original', status: 'confirmed' }])
+    ).toBe(true);
+    expect(accelerationOriginalConfirmed('original', [{ id: 'other', status: 'confirmed' }])).toBe(
+      false
+    );
+    expect(accelerationOriginalConfirmed('original', [{ id: 'original', status: 'pending' }])).toBe(
+      false
+    );
+    expect(accelerationOriginalConfirmed(null, [{ id: 'original', status: 'confirmed' }])).toBe(
+      false
+    );
+  });
   it('names the acceleration method instead of implying that the wallet failed to load', () => {
     expect(accelerationUnavailableTitle('cpfp')).toBe('CPFP unavailable');
     expect(accelerationUnavailableTitle('rbf')).toBe('Can’t speed up transaction');

@@ -15,12 +15,13 @@
     Network,
     RefreshCw,
     ShieldCheck,
-    Smartphone,
+    TriangleAlert,
     Trash2
   } from '@lucide/svelte';
   import Button from '$lib/components/Button.svelte';
   import Modal from '$lib/components/Modal.svelte';
   import PasswordField from '$lib/components/PasswordField.svelte';
+  import WarningNotice from '$lib/components/WarningNotice.svelte';
   import TxList from '$lib/components/TxList.svelte';
   import TxDetailsModal from '$lib/components/TxDetailsModal.svelte';
   import DeviceDetailsModal from '$lib/components/DeviceDetailsModal.svelte';
@@ -31,6 +32,7 @@
   import {
     walletService,
     WalletError,
+    type WalletErrorDetails,
     type CosignerHealthCheck,
     type CoreNodeConfig,
     type ExternalSignerWallet,
@@ -39,6 +41,7 @@
     type PaymentProposal,
     type RecoveryScanSettings,
     type RecoveryScanStatus,
+    type WalletOverview,
     type WalletProfile,
     type WalletSnapshot,
     type WalletSyncSource,
@@ -52,13 +55,17 @@
     recordHardwareHealthCheck,
     setHardwareHealthChecks
   } from '$lib/hardware/health-check-state';
-  import { latestActiveProposal } from '$lib/wallet/proposal-resume';
+  import { latestActiveProposal, proposalInputsUnavailable } from '$lib/wallet/proposal-resume';
   import type { PaymentDraft } from '$lib/wallet/payment-draft';
-  import { pendingBalanceBreakdown, sortTransactionsNewestFirst } from '$lib/wallet/presentation';
+  import {
+    pendingBalanceBreakdown,
+    sortTransactionsNewestFirst,
+    transactionForSelection
+  } from '$lib/wallet/presentation';
   import { policyMaturitySummary } from '$lib/wallet/policy';
   import { onDestroy, onMount } from 'svelte';
   import { goto } from '$app/navigation';
-  import type { Transaction } from '$lib/types';
+  import { page } from '$app/state';
   import { discreetMode, setDiscreetMode } from '$lib/privacy';
   import MobileWalletSwitcher from '$lib/components/MobileWalletSwitcher.svelte';
   import OverflowMenuButton from '$lib/components/OverflowMenuButton.svelte';
@@ -73,8 +80,13 @@
   const walletShell = useWalletShellContext();
   const isMainnet = defaultConfig.network === 'mainnet';
   let syncing = $state(false);
+  let syncError = $state('');
   let manualSyncDetailsVisible = $state(false);
-  let snapshot = $state<WalletSnapshot | null>(null);
+  let snapshot = $state<WalletSnapshot | import('$lib/wallet/contracts').WalletOverview | null>(
+    null
+  );
+  let loadGeneration = 0;
+  let secondaryError = $state('');
   let multisigWallet = $state<MultisigWallet | null>(null);
   let hardwareSignerWallet = $state<ExternalSignerWallet | null>(null);
   let signerDetailsOpen = $state(false);
@@ -85,13 +97,18 @@
   let discardDraftOpen = $state(false);
   let discardingDraft = $state(false);
   let discardDraftError = $state('');
-  let selected = $state<Transaction | null>(null);
+  let selectedTransactionId = $state<string | null>(null);
+  let selected = $derived(
+    transactionForSelection(snapshot?.transactions ?? [], selectedTransactionId)
+  );
   let multisig = $state(false);
   let moreOpen = $state(false);
   let moreMenu = $state<HTMLDivElement | null>(null);
   let moreTrigger = $state<HTMLButtonElement | null>(null);
   let showDescriptors = $state(false);
   let loadError = $state('');
+  let loadErrorCode = $state('');
+  let networkSetupRequired = $state(false);
   let selectedProfile = $state<WalletProfile | null>(null);
   let verifyOpen = $state(false);
   let verifyCredential = $state('');
@@ -104,6 +121,7 @@
   let mobileRuntime = $state(false);
   let nodeConfig = $state<CoreNodeConfig | null>(null);
   let syncPollToken = 0;
+  let syncStatusReadGeneration = 0;
   let inheritedSyncObserved = false;
   let syncClock = $state(Date.now());
   let recoverySettings = $state<RecoveryScanSettings>({ birthdayHeight: 0, gapLimit: 20 });
@@ -127,14 +145,18 @@
   let initialGapLimit = $state(20);
   let initialScanCredential = $state('');
   let initialScanError = $state('');
+  let initialScanErrorCode = $state('');
+  let initialScanErrorDetails = $state<WalletErrorDetails | null>(null);
   let initialScanStarting = $state(false);
   let nodeReady = $state(false);
+  let automaticInitialScanPending = $state(page.url.searchParams.has('initial'));
+  let automaticInitialScanRequested = false;
   const recoveryScanIsActive = (status: RecoveryScanStatus) =>
     ['running', 'cancelling'].includes(status.status);
   let recoveryPercent = $derived(
     recoveryStatus.totalBlocks > 0
       ? Math.min(
-          100,
+          recoveryScanIsActive(recoveryStatus) ? 99 : 100,
           Math.round((recoveryStatus.processedBlocks / recoveryStatus.totalBlocks) * 100)
         )
       : 0
@@ -145,7 +167,19 @@
   let savedRecoveryCanResume = $derived(
     initialHistoryRequired &&
       recoveryStatus.processedBlocks > 0 &&
-      ['cancelled', 'interrupted', 'failed'].includes(recoveryStatus.status)
+      ['interrupted', 'failed'].includes(recoveryStatus.status)
+  );
+  let walletAwaitingAutomaticScan = $derived(
+    page.url.searchParams.has('initial') &&
+      automaticInitialScanPending &&
+      initialHistoryRequired &&
+      !recoveryScanIsActive(recoveryStatus) &&
+      !savedRecoveryCanResume
+  );
+  let automaticInitialScanActive = $derived(
+    ['new', 'full'].includes(page.url.searchParams.get('initial') ?? '') &&
+      initialHistoryRequired &&
+      !initialScanError
   );
   let scanCredentialLabel = $derived(
     selectedProfile?.kind === 'single_key'
@@ -154,8 +188,12 @@
   );
   const syncStatusIsActive = (status: WalletSyncStatus | null) =>
     Boolean(
-      status && ['connecting', 'syncing', 'checking_matches', 'applying'].includes(status.state)
+      status &&
+      ['connecting', 'syncing', 'checking_pending', 'checking_matches', 'applying'].includes(
+        status.state
+      )
     );
+  let syncCheckingPending = $derived(syncStatus?.state === 'checking_pending');
   const syncFailureDescription = (status: WalletSyncStatus) => {
     if (status.lastVerifiedHeight === 0 && !snapshot?.syncedAt) {
       return translate(
@@ -201,10 +239,15 @@
   let syncInProgress = $derived(syncing || syncStatusIsActive(syncStatus));
   let syncAgeValue = $derived(syncAge(snapshot?.syncedAt ?? null, syncClock));
   let syncButtonLabel = $derived.by(() => {
+    if (initialDataLoading) return translate($locale, isMainnet ? 'Checking node…' : 'Loading…');
+    if (automaticInitialScanPending || walletAwaitingAutomaticScan)
+      return translate($locale, 'Syncing');
+    if (loadErrorCode === 'network_unavailable') return translate($locale, 'Node unavailable');
+    if (loadError && !snapshot) return translate($locale, 'Sync unavailable');
     if (initialHistoryRequired && !nodeReady && !recoveryScanIsActive(recoveryStatus))
       return translate($locale, 'Connect Bitcoin Core');
     if (initialHistoryRequired && !recoveryScanIsActive(recoveryStatus))
-      return translate($locale, savedRecoveryCanResume ? 'Resume scan' : 'Choose scan');
+      return translate($locale, savedRecoveryCanResume ? 'Resume scan' : 'Scan settings');
     if (recoveryScanIsActive(recoveryStatus)) return `${recoveryPercent}%`;
     if (
       syncInProgress &&
@@ -222,9 +265,10 @@
     return translate($locale, 'Updated {count} d ago', { count: syncAgeValue.value });
   });
   let syncButtonTitle = $derived(
-    snapshot?.syncedAt
-      ? presentLocalTimestamp(snapshot.syncedAt).detail
-      : translate($locale, 'This wallet has not completed a sync yet.')
+    loadError ||
+      (snapshot?.syncedAt
+        ? presentLocalTimestamp(snapshot.syncedAt).detail
+        : translate($locale, 'This wallet has not completed a sync yet.'))
   );
   const mobileSyncSetupRequired = $derived(
     mobileRuntime &&
@@ -288,28 +332,40 @@
   const proposalCanFinalize = $derived(
     Boolean(activeProposal && 'canFinalize' in activeProposal && activeProposal.canFinalize)
   );
+  const activeProposalInputsUnavailable = $derived(
+    Boolean(
+      multisig &&
+      activeProposal &&
+      'canFinalize' in activeProposal &&
+      proposalInputsUnavailable(activeProposal)
+    )
+  );
   const proposalTitle = $derived(
     translate(
       $locale,
-      activeProposal && !('canFinalize' in activeProposal)
-        ? 'Payment ready to sign'
-        : proposalCanFinalize
-          ? 'Payment ready to broadcast'
-          : 'Signing in progress'
+      activeProposalInputsUnavailable
+        ? 'Payment inputs unavailable'
+        : activeProposal && !('canFinalize' in activeProposal)
+          ? 'Payment ready to sign'
+          : proposalCanFinalize
+            ? 'Payment ready to broadcast'
+            : 'Signing in progress'
     )
   );
   const proposalProgress = $derived(
-    activeProposal
-      ? 'signed' in activeProposal
-        ? translate($locale, '{signed} of {required} signatures collected', {
-            signed: activeProposal.signed,
-            required: activeProposal.required
-          })
-        : translate($locale, '{signed} of {required} signatures collected', {
-            signed: 0,
-            required: 1
-          })
-      : ''
+    activeProposalInputsUnavailable
+      ? translate($locale, 'Sync and cancel this payment; its coins were spent elsewhere.')
+      : activeProposal
+        ? 'signed' in activeProposal
+          ? translate($locale, '{signed} of {required} signatures collected', {
+              signed: activeProposal.signed,
+              required: activeProposal.required
+            })
+          : translate($locale, '{signed} of {required} signatures collected', {
+              signed: 0,
+              required: 1
+            })
+        : ''
   );
   const proposalLabel = $derived(
     activeProposal ? ($discreetMode ? 'Label hidden' : activeProposal.label) : ''
@@ -318,6 +374,8 @@
 
   onDestroy(() => {
     verifyCredential = '';
+    ++loadGeneration;
+    ++syncStatusReadGeneration;
   });
   onDestroy(() => {
     initialScanCredential = '';
@@ -336,7 +394,12 @@
     };
   });
   async function loadSnapshot() {
+    const generation = ++loadGeneration;
+    let unlockSyncRequested = false;
+    let admissionRestored = false;
     loadError = '';
+    loadErrorCode = '';
+    networkSetupRequired = false;
     initialDataLoading = true;
     try {
       const pendingPairingsPromise = walletService.pendingMobilePairings().catch(() => []);
@@ -344,6 +407,7 @@
       // authoritative registry here so this route cannot race that refresh and
       // query the newly selected wallet using the previous wallet's kind.
       const registry = await walletService.profiles();
+      if (generation !== loadGeneration) return;
       if (!registry.wallets.length || !registry.selectedWalletId) {
         if (!(await walletService.exists())) {
           await goto('/welcome');
@@ -354,82 +418,159 @@
         walletService.syncSource(),
         walletService.runtimePlatform(),
         walletService.nodeConfig(),
-        isMainnet ? Promise.resolve([]) : walletService.networkSetupSources()
+        walletService.networkSetupSources()
       ]);
+      if (generation !== loadGeneration) return;
+      pendingMobilePairingCount = (await pendingPairingsPromise).length;
       syncSource = nextSyncSource;
       mobileRuntime = runtime.mobile;
       nodeConfig = nextNodeConfig;
       selectedProfile =
         registry.wallets.find((wallet) => wallet.id === registry.selectedWalletId) ?? null;
-      if (isMainnet) await walletService.testNodeConnection();
-      // A successful mainnet wallet-data read is already gated by the exact
-      // selected wallet's authenticated, retained Core setup in Rust. Mainnet
-      // deliberately rejects cross-wallet setup discovery, so do not call that
-      // test-network-only API merely to derive presentation state.
-      nodeReady =
-        isMainnet ||
-        Boolean(
-          selectedProfile &&
-          networkSetupSources.some(
-            (source) => source.walletId === selectedProfile?.id && source.ready
-          )
-        );
-      activeDraft = selectedProfile ? await walletService.paymentDraft() : null;
+      // Set the command family before any network preflight can fail. Otherwise
+      // a retry after an offline preflight uses the single-key command for a
+      // selected multisig wallet and returns `wrong_wallet_kind`.
       multisig = selectedProfile?.kind === 'multisig';
-      if (multisig) {
-        const [nextSnapshot, nextWallet, proposals] = await Promise.all([
-          walletService.multisigSnapshot(),
-          walletService.multisigWallet(),
-          walletService.multisigProposals()
-        ]);
-        snapshot = nextSnapshot;
-        multisigWallet = nextWallet;
-        hardwareSignerWallet = null;
-        setHardwareHealthChecks([]);
-        activeProposal = latestActiveProposal(proposals);
-      } else {
-        multisigWallet = null;
-        const [nextSnapshot, proposals, nextHardwareSignerWallet, nextHealthChecks] =
-          await Promise.all([
-            walletService.snapshot(),
-            selectedProfile?.kind === 'watch_only'
-              ? walletService.externalSignerProposals()
-              : walletService.paymentProposals(),
-            selectedProfile?.kind === 'watch_only'
-              ? walletService.externalSignerWallet()
-              : Promise.resolve(null),
-            selectedProfile?.kind === 'watch_only'
-              ? walletService.hardwareHealthChecks()
-              : Promise.resolve([])
-          ]);
-        snapshot = nextSnapshot;
-        hardwareSignerWallet = nextHardwareSignerWallet;
-        setHardwareHealthChecks(nextHealthChecks);
-        activeProposal =
-          selectedProfile?.kind === 'watch_only'
-            ? latestActiveProposal(proposals as MultisigProposal[])
-            : ((proposals as PaymentProposal[])[0] ?? null);
+      unlockSyncRequested = Boolean(
+        selectedProfile && walletShell.consumeUnlockSync(selectedProfile.id)
+      );
+      nodeReady = Boolean(
+        selectedProfile &&
+        networkSetupSources.some(
+          (source) => source.walletId === selectedProfile?.id && source.ready
+        )
+      );
+      // Mainnet admission is required once after unlock, not whenever the user
+      // returns to Overview. The admitted wallet session remains authoritative.
+      if (isMainnet && nodeReady && unlockSyncRequested) await walletService.testNodeConnection();
+      if (generation !== loadGeneration) return;
+      if (!selectedProfile)
+        throw new WalletError('wallet_not_found', 'The selected wallet does not exist.');
+      let nextSnapshot: WalletOverview;
+      try {
+        nextSnapshot = await walletService.overview(selectedProfile.id);
+      } catch (cause) {
+        // The shell's unlock-sync handoff is deliberately ephemeral. If route
+        // timing consumes or misses that hint, recover the native Mainnet
+        // admission once instead of presenting a configured wallet as though
+        // it had no Bitcoin Core connection.
+        if (!(
+          isMainnet &&
+          nodeReady &&
+          cause instanceof WalletError &&
+          cause.code === 'node_admission_required'
+        ))
+          throw cause;
+        await walletService.testNodeConnection();
+        admissionRestored = true;
+        nextSnapshot = await walletService.overview(selectedProfile.id);
       }
-      if (activeProposal) activeDraft = null;
-      pendingMobilePairingCount = (await pendingPairingsPromise).length;
+      if (generation !== loadGeneration) return;
+      automaticInitialScanPending = Boolean(
+        page.url.searchParams.has('initial') &&
+        nextSyncSource.type === 'bitcoin_core' &&
+        !nextSnapshot.syncedAt &&
+        nodeReady
+      );
+      snapshot = nextSnapshot;
       initialDataLoading = false;
+      void loadSecondaryDetails(generation);
       if (syncSource.type === 'bitcoin_core' && !snapshot?.syncedAt) {
         await loadRecoveryState();
       }
-      const resumeUnlockSync = selectedProfile && walletShell.consumeUnlockSync(selectedProfile.id);
-      if (
-        !inheritedSyncObserved &&
-        ((syncSource.type === 'compact_filters' && !mobileRuntime) || resumeUnlockSync)
-      )
-        void sync(false);
+      if ((unlockSyncRequested || admissionRestored) && !inheritedSyncObserved) void sync(false);
     } catch (cause) {
+      if (generation !== loadGeneration) return;
+      if (unlockSyncRequested && selectedProfile) walletShell.requestUnlockSync(selectedProfile.id);
       if (cause instanceof WalletError && cause.code === 'wallet_locked') {
         await goto('/unlock');
         return;
       }
-      loadError = localizedError(cause, $locale, 'The wallet data could not be read.');
+      loadErrorCode = cause instanceof WalletError ? cause.code : 'internal_error';
+      networkSetupRequired =
+        cause instanceof WalletError &&
+        ['invalid_node_config', 'node_admission_required', 'wallet_corrupt'].includes(cause.code);
+      nodeReady = false;
+      loadError =
+        loadErrorCode === 'network_unavailable'
+          ? translate(
+              $locale,
+              'The saved Bitcoin Core node is unreachable. Check that it is running and reachable, then try again.'
+            )
+          : networkSetupRequired
+            ? 'Connect this wallet to Bitcoin Core in Settings to load network data.'
+            : localizedError(cause, $locale, 'The wallet data could not be read.');
       initialDataLoading = false;
-      toast({ title: 'Could not open wallet', description: loadError, tone: 'danger' });
+      toast({
+        title:
+          loadErrorCode === 'network_unavailable'
+            ? 'Node unavailable'
+            : networkSetupRequired
+              ? 'Connect Bitcoin Core'
+              : 'Could not open wallet',
+        description: loadError,
+        tone: networkSetupRequired ? 'default' : 'danger'
+      });
+    }
+  }
+
+  async function openNetworkSetup() {
+    await goto('/settings?networkSetup=1');
+  }
+
+  async function loadSecondaryDetails(generation = loadGeneration) {
+    const profile = selectedProfile;
+    if (!profile) return;
+    secondaryError = '';
+    const current = () =>
+      generation === loadGeneration && profile.id === walletShell.selectedWalletId();
+    const results = await Promise.allSettled([
+      Promise.all([
+        walletService.paymentDraft(),
+        profile.kind === 'multisig'
+          ? walletService.multisigProposals()
+          : profile.kind === 'watch_only'
+            ? walletService.externalSignerProposals()
+            : walletService.paymentProposals()
+      ]).then(([draft, proposals]) => {
+        if (!current()) return;
+        activeProposal =
+          profile.kind === 'single_key'
+            ? ((proposals as PaymentProposal[])[0] ?? null)
+            : latestActiveProposal(proposals as MultisigProposal[]);
+        activeDraft = activeProposal ? null : draft;
+      }),
+      (profile.kind === 'multisig' ? walletService.multisigWallet() : Promise.resolve(null)).then(
+        (value) => {
+          if (current()) multisigWallet = value;
+        }
+      ),
+      (profile.kind === 'watch_only'
+        ? walletService.externalSignerWallet()
+        : Promise.resolve(null)
+      ).then((value) => {
+        if (current()) hardwareSignerWallet = value;
+      }),
+      (profile.kind === 'watch_only'
+        ? walletService.hardwareHealthChecks()
+        : Promise.resolve([])
+      ).then((value) => {
+        if (current()) setHardwareHealthChecks(value);
+      })
+    ]);
+    if (!current()) return;
+    const failure = results.find((result) => result.status === 'rejected');
+    if (failure?.status === 'rejected') {
+      if (failure.reason instanceof WalletError && failure.reason.code === 'wallet_locked') {
+        await goto('/unlock');
+        return;
+      }
+      secondaryError = localizedError(
+        failure.reason,
+        $locale,
+        'The wallet data could not be read.'
+      );
+      toast({ title: 'Could not load wallet', description: secondaryError, tone: 'danger' });
     }
   }
 
@@ -465,6 +606,8 @@
         multisig = event.walletKind === 'multisig';
         snapshot = event.snapshot;
         loadError = '';
+        loadErrorCode = '';
+        syncError = '';
         initialDataLoading = false;
       }
     })
@@ -487,11 +630,15 @@
     };
   });
   async function refreshSyncStatus() {
+    const generation = ++syncStatusReadGeneration;
     try {
-      syncStatus = await walletService.syncStatus();
-      if (syncStatusIsActive(syncStatus)) inheritedSyncObserved = true;
-      return syncStatus;
+      const nextStatus = await walletService.syncStatus();
+      if (generation !== syncStatusReadGeneration) return syncStatus;
+      syncStatus = nextStatus;
+      if (syncStatusIsActive(nextStatus)) inheritedSyncObserved = true;
+      return nextStatus;
     } catch {
+      if (generation !== syncStatusReadGeneration) return syncStatus;
       /* The sync result remains authoritative. */
       return null;
     }
@@ -507,17 +654,56 @@
       initialBirthdayHeight = settings.birthdayHeight;
       initialGapLimit = settings.gapLimit;
       if (recoveryScanIsActive(status)) {
+        automaticInitialScanPending = false;
         startRecoveryStatusPolling();
       } else if (!snapshot?.syncedAt && nodeReady) {
-        initialScanOpen = true;
+        // The shell wakes the first scan after setup. Start the same native
+        // single-flight here as a route-level safety net, then attach to its
+        // persisted progress even if the shell wake was missed.
+        initialScanMode = page.url.searchParams.get('initial') === 'new' ? 'new' : 'full';
+        showManualScanOptions = false;
+        showAdvancedScanOptions = false;
+        requestAutomaticInitialScan();
+        startRecoveryStatusPolling(true);
       }
     } catch (cause) {
+      automaticInitialScanPending = false;
       initialScanError = localizedError(
         cause,
         $locale,
         'Could not read the saved recovery-scan state.'
       );
+      initialScanErrorCode = cause instanceof WalletError ? cause.code : 'internal_error';
+      initialScanErrorDetails = cause instanceof WalletError ? cause.details : null;
     }
+  }
+  function requestAutomaticInitialScan() {
+    if (
+      automaticInitialScanRequested ||
+      !['new', 'full'].includes(page.url.searchParams.get('initial') ?? '')
+    )
+      return;
+    automaticInitialScanRequested = true;
+    void walletService
+      .fullRescan('')
+      .then(async () => {
+        await loadSnapshot();
+      })
+      .catch((cause) => {
+        if (
+          cause instanceof WalletError &&
+          ['sync_in_progress', 'scan_in_progress'].includes(cause.code)
+        )
+          return;
+        automaticInitialScanPending = false;
+        initialScanError = localizedError(
+          cause,
+          $locale,
+          'The wallet-history scan could not start.'
+        );
+        initialScanErrorCode = cause instanceof WalletError ? cause.code : 'internal_error';
+        initialScanErrorDetails = cause instanceof WalletError ? cause.details : null;
+      });
   }
   async function refreshRecoveryStatus() {
     try {
@@ -527,22 +713,32 @@
       return null;
     }
   }
-  async function pollRecoveryStatus(token: number) {
+  async function pollRecoveryStatus(token: number, waitForAutomaticStart = false) {
+    const startupDeadline = Date.now() + 10_000;
     while (token === recoveryPollToken) {
       const status = await refreshRecoveryStatus();
       if (!status || !recoveryScanIsActive(status)) {
-        if (status?.status === 'completed') await loadSnapshot();
+        if (status?.status === 'completed') {
+          await loadSnapshot();
+        } else if (waitForAutomaticStart && Date.now() < startupDeadline) {
+          await new Promise((resolve) => setTimeout(resolve, 250));
+          continue;
+        }
+        automaticInitialScanPending = false;
         return;
       }
+      automaticInitialScanPending = false;
       await new Promise((resolve) => setTimeout(resolve, 500));
     }
   }
-  function startRecoveryStatusPolling() {
+  function startRecoveryStatusPolling(waitForAutomaticStart = false) {
     const token = ++recoveryPollToken;
-    void pollRecoveryStatus(token);
+    void pollRecoveryStatus(token, waitForAutomaticStart);
   }
   function openInitialScan() {
     initialScanError = '';
+    initialScanErrorCode = '';
+    initialScanErrorDetails = null;
     if (!nodeReady) {
       void goto('/settings');
       return;
@@ -563,7 +759,9 @@
   async function startInitialScan() {
     initialScanStarting = true;
     initialScanError = '';
-    const credential = initialScanCredential;
+    initialScanErrorCode = '';
+    initialScanErrorDetails = null;
+    const credential = '';
     try {
       if (!savedRecoveryCanResume) {
         let birthdayHeight = 0;
@@ -595,7 +793,14 @@
     } catch (cause) {
       if (cause instanceof WalletError && cause.code === 'wallet_locked') return;
       initialScanError = localizedError(cause, $locale, 'The wallet-history scan could not start.');
-      initialScanOpen = true;
+      initialScanErrorCode = cause instanceof WalletError ? cause.code : 'internal_error';
+      initialScanErrorDetails = cause instanceof WalletError ? cause.details : null;
+      initialScanOpen = false;
+      toast({
+        title: 'Wallet-history scan paused',
+        description: initialScanError,
+        tone: 'danger'
+      });
       await refreshRecoveryStatus();
     } finally {
       initialScanCredential = '';
@@ -614,17 +819,28 @@
     void pollSyncStatus(token);
   }
   const sync = async (manual = true) => {
-    if (mobileSyncSetupRequired) {
-      if (manual) await goto('/settings#network-services');
+    if (manual && networkSetupRequired) {
+      await openNetworkSetup();
+      return;
+    }
+    if (manual && loadErrorCode === 'network_unavailable') {
+      await loadSnapshot();
       return;
     }
     if (initialHistoryRequired) {
-      openInitialScan();
+      if (!nodeReady) {
+        await openNetworkSetup();
+      } else if (savedRecoveryCanResume) {
+        await startInitialScan();
+      } else {
+        await goto('/settings');
+      }
       return;
     }
     if (syncInProgress) return;
     manualSyncDetailsVisible = manual;
     syncing = true;
+    if (manual) syncError = '';
     try {
       if (manual) await walletShell.pauseAutomaticSync();
       startSyncStatusPolling();
@@ -645,12 +861,24 @@
         await goto('/unlock');
         return;
       }
-      if (manual)
-        toast({
-          title: 'Sync failed',
-          description: localizedError(cause, $locale),
-          tone: 'danger'
-        });
+      const setupRequired =
+        cause instanceof WalletError &&
+        [
+          'invalid_node_config',
+          'network_unavailable',
+          'node_admission_required',
+          'wallet_corrupt'
+        ].includes(cause.code);
+      if (manual) {
+        syncError = localizedError(cause, $locale);
+        manualSyncDetailsVisible = false;
+        toast({ title: 'Sync failed', description: syncError, tone: 'danger' });
+      }
+      if (manual && setupRequired) {
+        networkSetupRequired = true;
+        await openNetworkSetup();
+        return;
+      }
     } finally {
       await refreshSyncStatus();
       syncing = false;
@@ -751,49 +979,35 @@
 <div class="page dashboard-page">
   <header class="page-header">
     <div>
-      <p class="eyebrow">{translate($locale, 'WALLET')}</p>
       <h1>{translate($locale, 'Overview')}</h1>
     </div>
     <button
       class="sync-button"
-      disabled={syncInProgress || recoveryScanIsActive(recoveryStatus)}
-      title={mobileSyncSetupRequired
-        ? translate(
-            $locale,
-            'Configure a trusted remote Bitcoin Core node before refreshing this wallet on mobile.'
-          )
-        : syncButtonTitle}
+      disabled={automaticInitialScanPending ||
+        walletAwaitingAutomaticScan ||
+        syncInProgress ||
+        recoveryScanIsActive(recoveryStatus)}
+      title={syncButtonTitle}
       onclick={() => sync(true)}
-      >{#if mobileSyncSetupRequired}<Network size={15} />{:else}<RefreshCw
-          size={15}
-          class={syncInProgress || recoveryScanIsActive(recoveryStatus) ? 'spin' : ''}
-        />{/if}{mobileSyncSetupRequired
-        ? translate($locale, 'Set up sync')
-        : syncButtonLabel}</button
+      ><RefreshCw
+        size={15}
+        class={automaticInitialScanPending ||
+        walletAwaitingAutomaticScan ||
+        syncInProgress ||
+        recoveryScanIsActive(recoveryStatus)
+          ? 'spin'
+          : ''}
+      />{syncButtonLabel}</button
     >
   </header>
-  {#if mobileSyncSetupRequired}
-    <section class="sync-setup-notice" aria-live="polite">
-      <Network size={18} /><span
-        ><strong>{translate($locale, 'Set up wallet sync')}</strong><small
-          >{translate(
-            $locale,
-            'Configure a trusted remote Bitcoin Core node before refreshing this wallet on mobile.'
-          )}</small
-        ></span
-      ><Button size="small" variant="secondary" href="/settings#network-services"
-        >{translate($locale, 'Configure sync')}</Button
-      >
-    </section>
-  {/if}
-  {#if initialHistoryRequired}
+  {#if initialHistoryRequired && !walletAwaitingAutomaticScan && !automaticInitialScanActive}
     <section class="initial-history-scan" aria-live="polite">
       <div>
         <strong
           >{translate(
             $locale,
             recoveryScanIsActive(recoveryStatus)
-              ? 'Scanning wallet history · {percent}%'
+              ? 'Syncing · {percent}%'
               : savedRecoveryCanResume
                 ? 'Wallet-history scan paused'
                 : nodeReady
@@ -803,14 +1017,10 @@
           )}</strong
         ><small
           >{recoveryScanIsActive(recoveryStatus) || savedRecoveryCanResume
-            ? translate(
-                $locale,
-                '{processed} of {total} blocks saved · progress continues across wallet locks',
-                {
-                  processed: formatInteger(recoveryStatus.processedBlocks, $locale),
-                  total: formatInteger(recoveryStatus.totalBlocks, $locale)
-                }
-              )
+            ? translate($locale, '{processed} / {total} blocks', {
+                processed: formatInteger(recoveryStatus.processedBlocks, $locale),
+                total: formatInteger(recoveryStatus.totalBlocks, $locale)
+              })
             : nodeReady
               ? translate(
                   $locale,
@@ -829,14 +1039,14 @@
         <Button
           size="small"
           variant="secondary"
-          href={nodeReady ? undefined : '/settings'}
-          onclick={nodeReady ? openInitialScan : undefined}
+          href={nodeReady && savedRecoveryCanResume ? undefined : '/settings'}
+          onclick={nodeReady && savedRecoveryCanResume ? startInitialScan : undefined}
           >{translate(
             $locale,
             nodeReady
               ? savedRecoveryCanResume
                 ? 'Resume scan'
-                : 'Choose scan'
+                : 'Scan settings'
               : 'Connect Bitcoin Core'
           )}</Button
         >
@@ -852,7 +1062,9 @@
             syncStatus.source === 'bitcoin_core'
               ? syncStatus.state === 'failed'
                 ? 'Wallet sync stopped'
-                : 'Scanning Bitcoin Core history'
+                : syncCheckingPending
+                  ? 'Checking pending transactions…'
+                  : 'Scanning Bitcoin Core history'
               : syncStatus.state === 'connecting'
                 ? 'Connecting to filter peers'
                 : syncStatus.state === 'checking_matches'
@@ -896,6 +1108,15 @@
           )}>{syncStatus.progressPercent}%</progress
         >{/if}
     </section>
+  {/if}
+  {#if syncError}
+    <div class="sync-failure-banner">
+      <LoadFailure
+        title={translate($locale, 'Sync failed')}
+        description={syncError}
+        onretry={() => sync(true)}
+      />
+    </div>
   {/if}
   {#if selectedProfile?.kind === 'single_key' && !selectedProfile.backupVerified}
     <section
@@ -969,9 +1190,9 @@
     <LoadFailure
       title={translate($locale, 'Wallet data is unavailable')}
       description={loadError}
-      onretry={loadSnapshot}
+      onretry={networkSetupRequired ? openNetworkSetup : loadSnapshot}
     />
-  {:else if snapshot && !initialDataLoading}
+  {:else if snapshot && !initialDataLoading && !walletAwaitingAutomaticScan}
     <section class="balance-card content-reveal">
       <div class="balance-top">
         <span>{translate($locale, 'Total balance')}</span><button
@@ -1026,28 +1247,17 @@
     <WalletSkeleton variant="balance" />
   {/if}
   {#if !loadError}
-    {#if pendingMobilePairingCount > 0}
-      <a
-        class="active-proposal-callout"
-        href="/mobile/pair"
-        aria-label={translate($locale, 'Resume wallet pairing')}
-      >
-        <span class="active-proposal-icon"><Smartphone size={17} /></span>
-        <span class="active-proposal-copy"
-          ><strong>{translate($locale, 'Wallet pairing in progress')}</strong><span
-            class="active-proposal-meta"
-            ><small>{translate($locale, 'Phone signer setup is waiting to finish')}</small></span
-          ></span
-        >
-        <span class="active-proposal-action"
-          >{translate($locale, 'Resume')} <ChevronRight size={15} /></span
-        >
-      </a>
+    {#if secondaryError}
+      <LoadFailure
+        title={translate($locale, 'Wallet details are unavailable')}
+        description={secondaryError}
+        onretry={() => loadSecondaryDetails()}
+      />
     {/if}
     {#if activeProposal}
       <a
         class="active-proposal-callout"
-        class:ready={proposalCanFinalize}
+        class:ready={proposalCanFinalize && !activeProposalInputsUnavailable}
         href={proposalHref}
         aria-label={translate($locale, 'Resume payment, {label}, {progress}', {
           label: proposalLabel,
@@ -1211,7 +1421,10 @@
           {#snippet icon()}<Activity size={22} />{/snippet}
         </EmptyState>
       {:else if recentTransactions.length}
-        <TxList items={recentTransactions} onselect={(transaction) => (selected = transaction)} />
+        <TxList
+          items={recentTransactions}
+          onselect={(transaction) => (selectedTransactionId = transaction.id)}
+        />
       {:else}
         <EmptyState
           compact
@@ -1225,7 +1438,7 @@
   {/if}
 </div>
 
-<TxDetailsModal transaction={selected} {multisig} onclose={() => (selected = null)} />
+<TxDetailsModal transaction={selected} {multisig} onclose={() => (selectedTransactionId = null)} />
 <DeviceDetailsModal
   signer={signerDetailsOpen ? hardwareSignerDetails : null}
   health={signerHealth}
@@ -1248,18 +1461,10 @@
       discardDraftError = '';
     }
   }}
-  >{#if activeDraft}<div class="warning-box">
-      <strong>{translate($locale, 'Only the draft will be removed.')}</strong>
-      {translate($locale, 'No transaction or signature exists yet.')}
-    </div>
-    <dl class="details-list cancel-proposal-details">
+  >{#if activeDraft}<dl class="details-list cancel-proposal-details">
       <div>
         <dt>{translate($locale, 'Payment')}</dt>
         <dd><PermanentLabelTags labels={activeDraft.labels} hidden={$discreetMode} prominent /></dd>
-      </div>
-      <div>
-        <dt>{translate($locale, 'Saved fields')}</dt>
-        <dd>{translate($locale, 'Recipient, labels, amount, fee, and coin selection')}</dd>
       </div>
     </dl>
     {#if discardDraftError}<p class="form-error" role="alert">{discardDraftError}</p>{/if}
@@ -1296,6 +1501,8 @@
     initialScanOpen = false;
     initialScanCredential = '';
     initialScanError = '';
+    initialScanErrorCode = '';
+    initialScanErrorDetails = null;
   }}
 >
   {#if savedRecoveryCanResume}
@@ -1423,7 +1630,58 @@
     disabled={initialScanStarting}
     hint={translate($locale, 'Used only to authenticate this saved recovery operation.')}
   />
-  {#if initialScanError}<p class="form-error" role="alert">{initialScanError}</p>{/if}
+  {#if initialScanError}<div
+      class="hardware-inline-error scan-error-card"
+      role="alert"
+      aria-live="polite"
+    >
+      <TriangleAlert size={18} />
+      <span>
+        <strong
+          >{translate(
+            $locale,
+            initialScanErrorCode === 'node_history_unavailable'
+              ? 'Required block history is unavailable'
+              : 'Wallet-history scan failed'
+          )}</strong
+        >
+        <small>{initialScanError}</small>
+        {#if initialScanErrorDetails}<dl class="scan-error-details">
+            {#if initialScanErrorDetails.requestedBirthdayBlock !== undefined}<div>
+                <dt>{translate($locale, 'Requested birthday')}</dt>
+                <dd>
+                  {translate($locale, 'Block {height}', {
+                    height: formatInteger(initialScanErrorDetails.requestedBirthdayBlock, $locale)
+                  })}
+                </dd>
+              </div>{/if}
+            {#if initialScanErrorDetails.requiredBlock !== undefined}<div>
+                <dt>{translate($locale, 'Required anchor')}</dt>
+                <dd>
+                  {translate($locale, 'Block {height}', {
+                    height: formatInteger(initialScanErrorDetails.requiredBlock, $locale)
+                  })}
+                </dd>
+              </div>{/if}
+            {#if initialScanErrorDetails.earliestRetainedBlock !== undefined}<div>
+                <dt>{translate($locale, 'Bitcoin Core retains full blocks from')}</dt>
+                <dd>
+                  {translate($locale, 'Block {height}', {
+                    height: formatInteger(initialScanErrorDetails.earliestRetainedBlock, $locale)
+                  })}
+                </dd>
+              </div>{/if}
+            {#if initialScanErrorDetails.minimumBirthdayBlock !== undefined}<div>
+                <dt>{translate($locale, 'Earliest usable birthday')}</dt>
+                <dd>
+                  {translate($locale, 'Block {height}', {
+                    height: formatInteger(initialScanErrorDetails.minimumBirthdayBlock, $locale)
+                  })}
+                </dd>
+              </div>{/if}
+          </dl>{/if}
+      </span>
+    </div>{/if}
   <div class="modal-footer">
     <Button
       variant="secondary"
@@ -1431,6 +1689,9 @@
       onclick={() => {
         initialScanOpen = false;
         initialScanCredential = '';
+        initialScanError = '';
+        initialScanErrorCode = '';
+        initialScanErrorDetails = null;
       }}>{translate($locale, 'Not now')}</Button
     ><Button
       disabled={!initialScanCredential ||
@@ -1462,10 +1723,17 @@
     verifyError = '';
   }}
 >
-  <div class="warning-box verify-backup-warning">
-    <strong>{translate($locale, 'Recovery words stay inside the trusted native window.')}</strong>
-    {translate($locale, 'Revealing or verifying them\n    never sends the words into the webview.')}
-  </div>
+  <WarningNotice
+    class="verify-backup-warning"
+    credentialSpacing
+    title={translate($locale, 'Your recovery words stay private')}
+    body={translate($locale, 'Groot checks them securely on this device.')}
+    insightLabel={translate($locale, 'About recovery-word privacy')}
+    insightText={translate(
+      $locale,
+      'Groot reveals and verifies the words in a separate trusted native window. They never enter the webview or leave this device.'
+    )}
+  />
   <PasswordField
     label={translate($locale, 'Wallet passphrase')}
     bind:value={verifyCredential}

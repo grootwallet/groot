@@ -5,6 +5,138 @@ const DEFAULT_ADDRESS_ROWS: usize = 10_000;
 const DEFAULT_SIGNERS: usize = 5_000;
 const MAX_BENCHMARK_ROWS: usize = 100_000;
 
+thread_local! {
+    static SNAPSHOT_STATEMENTS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+}
+
+unsafe extern "C" fn count_snapshot_statement(
+    _: std::ffi::c_uint,
+    _: *mut std::ffi::c_void,
+    _: *mut std::ffi::c_void,
+    _: *mut std::ffi::c_void,
+) -> std::ffi::c_int {
+    SNAPSHOT_STATEMENTS.with(|count| count.set(count.get() + 1));
+    0
+}
+
+#[test]
+#[ignore = "synthetic snapshot benchmark; run alone with --ignored --nocapture"]
+fn snapshot_history_benchmark() {
+    snapshot_history_fixture(
+        benchmark_size("GROOT_BENCH_TRANSACTIONS", 100).min(1_000),
+        4,
+        true,
+    );
+}
+
+#[test]
+fn independent_receive_snapshots_keep_a_linear_statement_budget() {
+    for rows in [10, 100] {
+        snapshot_history_fixture(rows, 2, false);
+    }
+}
+
+fn snapshot_history_fixture(rows: usize, samples: usize, report: bool) {
+    use bdk_wallet::bitcoin::{
+        absolute::LockTime, hashes::Hash, transaction::Version, ScriptBuf, Sequence, TxOut, Witness,
+    };
+    use bdk_wallet::rusqlite::ffi;
+
+    let mnemonic = Mnemonic::from_entropy(&[0; 32]).unwrap();
+    let master = root_key(&mnemonic, "synthetic benchmark").unwrap();
+    let mut db = Connection::open_in_memory().unwrap();
+    init_app_schema(&db).unwrap();
+    let mut wallet = Wallet::create(
+        Bip84(master, KeychainKind::External),
+        Bip84(master, KeychainKind::Internal),
+    )
+    .network(network())
+    .create_wallet(&mut db)
+    .unwrap();
+    for index in 0..rows {
+        let address = wallet.reveal_next_address(KeychainKind::External).address;
+        let mut previous = [0; 32];
+        previous[..8].copy_from_slice(&(index as u64 + 1).to_le_bytes());
+        let tx = Transaction {
+            version: Version::TWO,
+            lock_time: LockTime::ZERO,
+            input: vec![TxIn {
+                previous_output: OutPoint::new(Txid::from_byte_array(previous), 0),
+                script_sig: ScriptBuf::new(),
+                sequence: Sequence::ENABLE_RBF_NO_LOCKTIME,
+                witness: Witness::new(),
+            }],
+            output: vec![TxOut {
+                value: Amount::from_sat(10_000),
+                script_pubkey: address.script_pubkey(),
+            }],
+        };
+        wallet.apply_unconfirmed_txs([(tx, index as u64 + 1)]);
+    }
+    wallet.persist(&mut db).unwrap();
+    // Test-only SQLite tracing counts statements without inspecting SQL or values.
+    // SAFETY: db stays alive on this thread, the callback dereferences no pointers,
+    // and tracing is removed before db is dropped. No production tracing is enabled.
+    unsafe {
+        assert_eq!(
+            ffi::sqlite3_trace_v2(
+                db.handle(),
+                ffi::SQLITE_TRACE_STMT as u32,
+                Some(count_snapshot_statement),
+                std::ptr::null_mut()
+            ),
+            ffi::SQLITE_OK
+        );
+    }
+    for sample in 0..samples {
+        SNAPSHOT_STATEMENTS.with(|count| count.set(0));
+        let started = Instant::now();
+        let snapshot = black_box(snapshot_from(&wallet, &db, None, false, None).unwrap());
+        let elapsed = started.elapsed();
+        let statements = SNAPSHOT_STATEMENTS.with(std::cell::Cell::get);
+        assert_eq!(snapshot.transactions.len(), rows);
+        assert_eq!(snapshot.utxos.len(), rows);
+        assert_eq!(snapshot.balance.total, rows as u64 * 10_000);
+        assert!(
+            statements <= 20 * rows as u64 + 10,
+            "independent receives exceeded linear SQL budget: {statements} for {rows}"
+        );
+        let full_bytes = serde_json::to_vec(&snapshot).unwrap().len();
+        let overview = activity::overview_from_snapshot(snapshot).unwrap();
+        let overview_bytes = serde_json::to_vec(&overview).unwrap().len();
+        let request = serde_json::from_value(serde_json::json!({
+            "walletId": Uuid::nil(), "filter": "all", "query": "", "sort": "newest", "limit": 50, "cursor": null,
+        })).unwrap();
+        SNAPSHOT_STATEMENTS.with(|count| count.set(0));
+        let activity_started = Instant::now();
+        let page =
+            activity::activity_from_wallet(&wallet, &db, &request, Uuid::nil(), true).unwrap();
+        let activity_elapsed = activity_started.elapsed();
+        let activity_statements = SNAPSHOT_STATEMENTS.with(std::cell::Cell::get);
+        let page_json = serde_json::to_value(&page).unwrap();
+        let page_bytes = serde_json::to_vec(&page).unwrap().len();
+        assert_eq!(
+            page_json["transactions"].as_array().unwrap().len(),
+            rows.min(50)
+        );
+        assert!(activity_statements < statements);
+        assert!(
+            activity_statements <= 13 * rows as u64 + 10,
+            "independent receive page exceeded SQL budget: {activity_statements} for {rows}"
+        );
+        if report {
+            let _ = writeln!(std::io::stderr(),
+            "snapshot_history rows={rows} sample={sample} elapsed_us={} statements={statements}",
+            elapsed.as_micros());
+            let _ = writeln!(std::io::stderr(), "history_page rows={rows} sample={sample} elapsed_us={} statements={activity_statements} full_bytes={full_bytes} overview_bytes={overview_bytes} page_bytes={page_bytes}", activity_elapsed.as_micros());
+        }
+    }
+    // SAFETY: the same live connection is exclusively owned by this test.
+    unsafe {
+        ffi::sqlite3_trace_v2(db.handle(), 0, None, std::ptr::null_mut());
+    }
+}
+
 fn benchmark_size(variable: &str, default: usize) -> usize {
     std::env::var(variable)
         .ok()

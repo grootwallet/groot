@@ -22,6 +22,7 @@ describe('wallet invariants', () => {
   it('exposes recovery-only controls only for wallets with a Miniscript template', () => {
     expect(hasMiniscriptPolicy(null)).toBe(false);
     expect(hasMiniscriptPolicy({})).toBe(false);
+    expect(hasMiniscriptPolicy({ recoveryTemplate: null })).toBe(false);
     expect(
       hasMiniscriptPolicy({
         recoveryTemplate: {

@@ -6,7 +6,7 @@ use argon2::Argon2;
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use bdk_bitcoind_rpc::{
     bitcoincore_rpc::{
-        json::{EstimateMode, GetBlockchainInfoResult},
+        json::{EstimateMode, GetBlockFilterResult, GetBlockResult, GetBlockchainInfoResult},
         jsonrpc, Auth, Client, Error as CoreRpcError, RpcApi,
     },
     BitcoindRpcErrorExt, Emitter,
@@ -17,8 +17,8 @@ use bdk_wallet::{
         constants::genesis_block,
         hashes::{sha256, Hash as _, HashEngine},
         secp256k1::Secp256k1,
-        Address, Amount, BlockHash, FeeRate, Network, OutPoint, Psbt, Transaction, TxIn, Txid,
-        Weight,
+        Address, AddressType, Amount, BlockHash, FeeRate, Network, OutPoint, Psbt, Transaction,
+        TxIn, Txid, Weight,
     },
     chain::{BlockId, ChainPosition, CheckPoint, ConfirmationBlockTime},
     descriptor::{policy::SatisfiableItem, Descriptor, DescriptorPublicKey},
@@ -41,7 +41,7 @@ use std::{
     str::FromStr,
     sync::{
         atomic::{AtomicBool, AtomicU64, Ordering},
-        Arc, Mutex, MutexGuard,
+        Arc, Mutex, MutexGuard, RwLock, RwLockReadGuard, RwLockWriteGuard, TryLockError,
     },
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
@@ -54,18 +54,20 @@ use zeroize::{Zeroize, Zeroizing};
 use crate::auth::AuthThrottle;
 use crate::bsms::{DescriptorRecord, PublicDescriptorPair};
 use crate::build_network::{
-    DEFAULT_RPC_URL, IS_REGTEST, NAME as NETWORK_NAME, NETWORK, PARAMETERS,
+    default_rpc_url, is_regtest, name as network_name, network, parameters,
 };
 use crate::external_signer::{
-    self, ExternalSignerInput, ExternalSignerWallet, SignerSource, SINGLESIG_ACCOUNT_PATH,
+    self, singlesig_account_path, ExternalSignerInput, ExternalSignerWallet, SignerSource,
 };
-use crate::hardware::{HardwareError, HardwareTransport, HwiChain, HwiCli};
+use crate::hardware::{
+    passive_hardware_inventory, HardwareError, HardwareTransport, HwiChain, HwiCli,
+};
 use crate::label_provenance::{
     self, LabelOrigin, LabelSuggestionDto, PermanentLabelDto, ProvenanceState, ProvenanceSummaryDto,
 };
 use crate::multisig::{
-    CosignerInput, CosignerSource, MultisigPreviewDto, MultisigWalletDto, PolicyInput,
-    MULTISIG_ACCOUNT_PATH,
+    multisig_account_path, CosignerInput, CosignerSource, MultisigPreviewDto, MultisigWalletDto,
+    PolicyInput,
 };
 use crate::native_backup;
 use crate::network::{
@@ -97,9 +99,20 @@ use verification_evidence::*;
 #[path = "wallet/proposal_review.rs"]
 mod proposal_review;
 use proposal_review::*;
+#[path = "wallet/activity.rs"]
+pub(crate) mod activity;
 
 const MAX_PRIVATE_JSON_BYTES: u64 = 256 * 1024;
 const MAX_CREDENTIAL_BYTES: usize = 1_024;
+// Block hashes are tiny, while BIP158 filters are variable-size, hex-encoded
+// responses. Keep filter batches deliberately small so a busy mainnet range
+// cannot approach the direct-RPC or gateway response-body limit.
+const CORE_BLOCK_HASH_BATCH_SIZE: usize = 256;
+const CORE_BLOCK_FILTER_BATCH_SIZE: usize = 8;
+const CORE_SERVER_SCAN_RANGE_SIZE: u32 = 100_000;
+const MAX_CORE_SCAN_SCRIPTS: usize = 4_096;
+const MANAGED_HISTORY_QUERY_SIZE: usize = 256;
+const MEMPOOL_RPC_BATCH_SIZE: usize = 256;
 const MIN_NEW_WALLET_PASSPHRASE_CHARACTERS: usize = 16;
 const MAX_MNEMONIC_INPUT_BYTES: usize = 4_096;
 const ONBOARDING_SESSION_SECONDS: u64 = 15 * 60;
@@ -115,7 +128,10 @@ const MAX_SUPPLEMENTAL_DICE_ROLLS: usize = 100;
 const SUPPLEMENTAL_TRANSCRIPT_DOMAIN: &[u8] = b"Groot supplemental entropy transcript v1";
 const SUPPLEMENTAL_MIX_DOMAIN: &[u8] = b"Groot BIP39 entropy mix v1";
 const RPC_TIMEOUT: Duration = Duration::from_secs(15);
-const NODE_HEALTH_ATTEMPTS: usize = 3;
+const REMOTE_CORE_SCAN_RPC_TIMEOUT: Duration = Duration::from_secs(120);
+const NODE_HEALTH_RPC_TIMEOUT: Duration = Duration::from_secs(5);
+const NODE_HEALTH_ATTEMPTS: usize = 1;
+const CORE_RPC_ATTEMPTS: usize = 3;
 const NODE_HEALTH_RETRY_DELAY: Duration = Duration::from_millis(200);
 const MAINNET_NODE_ADMISSION_LIFETIME: Duration = Duration::from_secs(15 * 60);
 
@@ -187,10 +203,12 @@ pub async fn public_backup_pdf_save(
 #[cfg(any(target_os = "linux", target_os = "windows"))]
 #[tauri::command]
 pub fn public_backup_pdf_prepare(
+    app: AppHandle,
+    state: State<'_, AppState>,
     window: WebviewWindow,
     suggested_filename: String,
 ) -> ApiResult<PendingPdfExportDto> {
-    export_commands::public_backup_pdf_prepare(window, suggested_filename)
+    export_commands::public_backup_pdf_prepare(app, state, window, suggested_filename)
 }
 
 #[cfg(any(target_os = "android", target_os = "ios"))]
@@ -201,13 +219,18 @@ pub fn public_backup_pdf_prepare(suggested_filename: String) -> ApiResult<Pendin
 
 #[cfg(not(target_os = "macos"))]
 #[tauri::command]
-pub fn public_backup_pdf_save(save_token: String, markup: String) -> ApiResult<SavedFileDto> {
-    export_commands::public_backup_pdf_save(save_token, markup)
+pub fn public_backup_pdf_save(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    save_token: String,
+    markup: String,
+) -> ApiResult<SavedFileDto> {
+    export_commands::public_backup_pdf_save(app, state, save_token, markup)
 }
 
 fn hwi_cli(app: &AppHandle) -> ApiResult<HwiCli> {
     let home = app.path().home_dir().map_err(internal)?;
-    let chain = HwiChain::for_network(NETWORK);
+    let chain = HwiChain::for_network(network());
     #[cfg(target_os = "macos")]
     let cli = if let Some(resource_name) = option_env!("GROOT_BUNDLED_HWI_RESOURCE") {
         let resource_dir = app.path().resource_dir().map_err(internal)?;
@@ -222,6 +245,21 @@ fn hwi_cli(app: &AppHandle) -> ApiResult<HwiCli> {
         .map_err(hardware_api_error)
 }
 
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ApiErrorDetails {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    retry_after_seconds: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    requested_birthday_block: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    required_block: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    earliest_retained_block: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    minimum_birthday_block: Option<u32>,
+}
+
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ApiError {
@@ -229,6 +267,8 @@ pub struct ApiError {
     message: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     existing_wallet_id: Option<Uuid>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    details: Option<ApiErrorDetails>,
 }
 
 type ApiResult<T> = Result<T, ApiError>;
@@ -242,6 +282,20 @@ fn api_error(code: &'static str, message: impl ToString) -> ApiError {
         code,
         message: message.to_string(),
         existing_wallet_id: None,
+        details: None,
+    }
+}
+
+fn api_error_with_details(
+    code: &'static str,
+    message: impl ToString,
+    details: ApiErrorDetails,
+) -> ApiError {
+    ApiError {
+        code,
+        message: message.to_string(),
+        existing_wallet_id: None,
+        details: Some(details),
     }
 }
 
@@ -250,6 +304,7 @@ fn wallet_already_exists(profile: &WalletProfile) -> ApiError {
         code: "wallet_already_exists",
         message: "This exact descriptor wallet already exists on this device.".to_owned(),
         existing_wallet_id: Some(profile.id),
+        details: None,
     }
 }
 
@@ -265,8 +320,97 @@ fn internal(error: impl ToString) -> ApiError {
     api_error("internal_error", error)
 }
 
-fn operation_guard<'a>(state: &'a State<'_, AppState>) -> ApiResult<MutexGuard<'a, ()>> {
+struct OperationGuard<'a> {
+    _operation: MutexGuard<'a, ()>,
+    _metadata: MutexGuard<'a, ()>,
+}
+
+struct MetadataOperationGuard<'a> {
+    _operation: Option<MutexGuard<'a, ()>>,
+    _metadata: MutexGuard<'a, ()>,
+}
+
+fn foreground_sync_operation_guard(state: &AppState) -> ApiResult<MutexGuard<'_, ()>> {
     state.operations.lock().map_err(internal)
+}
+
+fn operation_guard(state: &AppState) -> ApiResult<OperationGuard<'_>> {
+    let operation = foreground_sync_operation_guard(state)?;
+    let metadata = state.metadata_operations.lock().map_err(internal)?;
+    Ok(OperationGuard {
+        _operation: operation,
+        _metadata: metadata,
+    })
+}
+
+// Display-only profile and signer metadata live outside the wallet database.
+// Let those tiny operations proceed while a foreground sync owns the database
+// lock; every other competing operation continues to serialize normally.
+fn metadata_operation_guard<'a>(
+    state: &'a AppState,
+    wallet_id: Uuid,
+) -> ApiResult<MetadataOperationGuard<'a>> {
+    match state.operations.try_lock() {
+        Ok(operation) => {
+            let metadata = state.metadata_operations.lock().map_err(internal)?;
+            Ok(MetadataOperationGuard {
+                _operation: Some(operation),
+                _metadata: metadata,
+            })
+        }
+        Err(TryLockError::Poisoned(error)) => Err(internal(error)),
+        Err(TryLockError::WouldBlock) => {
+            let syncing_selected_wallet = state
+                .foreground_sync
+                .lock()
+                .map_err(internal)?
+                .as_ref()
+                .is_some_and(|sync| sync.wallet_id == wallet_id);
+            if syncing_selected_wallet {
+                Ok(MetadataOperationGuard {
+                    _operation: None,
+                    _metadata: state.metadata_operations.lock().map_err(internal)?,
+                })
+            } else {
+                let guard = operation_guard(state)?;
+                Ok(MetadataOperationGuard {
+                    _operation: Some(guard._operation),
+                    _metadata: guard._metadata,
+                })
+            }
+        }
+    }
+}
+
+// A Core refresh stages its BDK update in memory until one SQLite commit. A
+// separate read-only connection can therefore show the last committed state
+// without waiting for remote RPC calls. Recovery scans and ordinary mutations
+// continue to use the operation lock.
+fn foreground_persisted_read_guard(
+    state: &AppState,
+    wallet_id: Uuid,
+) -> ApiResult<Option<RwLockReadGuard<'_, ()>>> {
+    let active = state.foreground_sync.lock().map_err(internal)?;
+    let safe = active.as_ref().is_some_and(|sync| {
+        sync.wallet_id == wallet_id && sync.persisted_reads_safe.load(Ordering::Acquire)
+    });
+    if safe {
+        Ok(Some(state.persisted_sync_reads.read().map_err(internal)?))
+    } else {
+        Ok(None)
+    }
+}
+
+fn stop_persisted_sync_reads(state: &AppState) -> ApiResult<RwLockWriteGuard<'_, ()>> {
+    {
+        let active = state.foreground_sync.lock().map_err(internal)?;
+        if let Some(sync) = active.as_ref() {
+            sync.persisted_reads_safe.store(false, Ordering::Release);
+        }
+    }
+    // Existing readers complete before the writer can apply its atomic update
+    // or release the ordinary wallet-operation lock.
+    state.persisted_sync_reads.write().map_err(internal)
 }
 
 fn require_unlocked_with_activity(
@@ -329,11 +473,122 @@ fn require_unlocked(app: &AppHandle, state: &State<'_, AppState>) -> ApiResult<U
     require_unlocked_with_activity(app, state, true)
 }
 
+struct ActiveWalletOperation<'a> {
+    state: &'a AppState,
+    wallet_id: Uuid,
+    session_id: Uuid,
+}
+
+impl Drop for ActiveWalletOperation<'_> {
+    fn drop(&mut self) {
+        if let Ok(mut sessions) = self.state.unlocked_wallets.lock() {
+            sessions.finish_user_operation(self.wallet_id, self.session_id, Instant::now());
+        }
+    }
+}
+
+fn begin_unlocked_user_operation<'a>(
+    app: &AppHandle,
+    state: &'a State<'_, AppState>,
+) -> ApiResult<(Uuid, ActiveWalletOperation<'a>)> {
+    let wallet_id = require_unlocked_with_activity(app, state, true)?;
+    let app_state = state.inner();
+    let session_id = app_state
+        .unlocked_wallets
+        .lock()
+        .map_err(internal)?
+        .begin_user_operation(wallet_id)
+        .ok_or_else(|| {
+            api_error(
+                "wallet_locked",
+                "Enter your passphrase / PIN to unlock Groot.",
+            )
+        })?;
+    Ok((
+        wallet_id,
+        ActiveWalletOperation {
+            state: app_state,
+            wallet_id,
+            session_id,
+        },
+    ))
+}
+
+fn begin_optional_unlocked_user_operation<'a>(
+    app: &AppHandle,
+    state: &'a State<'_, AppState>,
+) -> ApiResult<Option<ActiveWalletOperation<'a>>> {
+    let registry = load_registry(app)?;
+    let Some(wallet_id) = registry.selected_wallet_id else {
+        return Ok(None);
+    };
+    if !authorize_wallet_session(state, wallet_id, true, registry.inactivity_timeout_minutes)? {
+        return Ok(None);
+    }
+    let app_state = state.inner();
+    let session_id = app_state
+        .unlocked_wallets
+        .lock()
+        .map_err(internal)?
+        .begin_user_operation(wallet_id)
+        .ok_or_else(|| {
+            api_error(
+                "wallet_locked",
+                "Enter your passphrase / PIN to unlock Groot.",
+            )
+        })?;
+    Ok(Some(ActiveWalletOperation {
+        state: app_state,
+        wallet_id,
+        session_id,
+    }))
+}
+
 fn require_unlocked_for_background_sync(
     app: &AppHandle,
     state: &State<'_, AppState>,
 ) -> ApiResult<Uuid> {
     require_unlocked_with_activity(app, state, false)
+}
+
+// Call under operation_guard or the foreground persisted-read gate, before
+// opening any selected-wallet database.
+fn require_wallet_read_context(
+    app: &AppHandle,
+    state: &State<'_, AppState>,
+    wallet_id: Uuid,
+    session_id: Option<Uuid>,
+) -> ApiResult<Uuid> {
+    validate_read_wallet(selected_profile(app)?.id, wallet_id)?;
+    require_unlocked_for_background_sync(app, state)?;
+    let current = state
+        .unlocked_wallets
+        .lock()
+        .map_err(internal)?
+        .identity(wallet_id);
+    validate_read_session(current, session_id)
+}
+
+fn validate_read_wallet(current: Uuid, expected: Uuid) -> ApiResult<()> {
+    if current != expected {
+        return Err(api_error(
+            "wallet_selection_changed",
+            "The selected wallet changed. Retry from the current wallet.",
+        ));
+    }
+    Ok(())
+}
+
+fn validate_read_session(current: Option<Uuid>, expected: Option<Uuid>) -> ApiResult<Uuid> {
+    let current = current
+        .ok_or_else(|| api_error("wallet_locked", "Unlock the wallet before continuing."))?;
+    if expected.is_some_and(|expected| expected != current) {
+        return Err(api_error(
+            "wallet_selection_changed",
+            "The wallet session changed. Retry from the current wallet.",
+        ));
+    }
+    Ok(current)
 }
 
 fn unlock_selected(app: &AppHandle, state: &State<'_, AppState>) -> ApiResult<()> {
@@ -365,13 +620,16 @@ fn lock_wallet(state: &State<'_, AppState>, wallet_id: Uuid) -> ApiResult<()> {
 #[derive(Default)]
 pub struct AppState {
     operations: Mutex<()>,
+    metadata_operations: Mutex<()>,
     foreground_sync: Mutex<Option<ActiveForegroundSync>>,
+    persisted_sync_reads: RwLock<()>,
     proposals: Mutex<HashMap<String, PendingProposal>>,
     unlocked_wallets: Mutex<WalletSessions>,
     pending_mnemonic: Mutex<Option<PendingMnemonic>>,
     verified_recovery: Mutex<HashMap<Uuid, String>>,
     pending_hardware_pins: Mutex<HashMap<String, PendingHardwarePin>>,
     recent_hardware_scan: Mutex<Option<RecentHardwareScan>>,
+    recently_unlocked_hardware_paths: Mutex<HashMap<String, Instant>>,
     pending_hardware_admissions: Mutex<HashMap<String, Instant>>,
     hardware_scan_epoch: AtomicU64,
     node_auth: Mutex<HashMap<Uuid, NodeAuthSession>>,
@@ -386,6 +644,11 @@ pub struct AppState {
     staging_auth_retry_at: Mutex<HashMap<Uuid, Instant>>,
     pending_policy_verifications: Mutex<HashMap<String, SignerPolicyVerificationDto>>,
     desktop_pairings: Mutex<HashMap<String, coordination_commands::PendingDesktopPairing>>,
+    // Public transaction ids only. A completed snapshot lets the next refresh
+    // inspect the wallet's mempool delta instead of downloading every unchanged
+    // transaction again. The cache is deliberately process-local and contains
+    // no descriptors, addresses, credentials, or wallet transaction data.
+    core_mempool_snapshots: Mutex<HashMap<Uuid, HashSet<Txid>>>,
     sync_status: Arc<Mutex<Option<WalletSyncStatusDto>>>,
     diagnostic_log: Mutex<()>,
 }
@@ -476,13 +739,27 @@ fn update_compact_filter_sync_status(
 
 fn core_sync_progress_percent(start_height: u32, current_height: u32, target_height: u32) -> u8 {
     if target_height <= start_height {
-        return 100;
+        return 99;
     }
     let completed = current_height
         .clamp(start_height, target_height)
         .saturating_sub(start_height);
     let total = target_height.saturating_sub(start_height);
-    u8::try_from(u64::from(completed) * 100 / u64::from(total)).unwrap_or(100)
+    u8::try_from(u64::from(completed) * 100 / u64::from(total))
+        .unwrap_or(99)
+        .min(99)
+}
+
+fn mark_core_pending_status(status: &Arc<Mutex<Option<WalletSyncStatusDto>>>) {
+    if let Ok(mut status) = status.lock() {
+        if let Some(current) = status.as_mut() {
+            if current.source == "bitcoin_core" && current.state == "syncing" {
+                current.state = "checking_pending";
+                current.progress_percent = Some(99);
+                current.updated_at = now();
+            }
+        }
+    }
 }
 
 fn update_core_sync_status(
@@ -528,6 +805,9 @@ fn finish_sync_status(
         Err(error) if error.code == "sync_cancelled" => "cancelled",
         Err(_) => "failed",
     };
+    if result.is_ok() {
+        current.progress_percent = Some(100);
+    }
     current.failure_code = result.as_ref().err().map(|error| error.code);
     current.last_verified_height = verified_height;
     current.updated_at = now();
@@ -541,6 +821,7 @@ struct ActiveRecoveryScan {
 struct ActiveForegroundSync {
     wallet_id: Uuid,
     cancel: Arc<AtomicBool>,
+    persisted_reads_safe: Arc<AtomicBool>,
 }
 
 struct NodeAuthSession {
@@ -800,7 +1081,7 @@ pub struct ReceiveAddressDto {
 }
 
 fn regtest_testnet_address_alias(address: &str) -> Option<String> {
-    if !IS_REGTEST {
+    if !is_regtest() {
         return None;
     }
     let address = Address::from_str(address)
@@ -826,7 +1107,7 @@ fn proposal_testnet_aliases(
 }
 
 fn hardware_display_matches_expected_address(expected: &str, actual: &str) -> bool {
-    hardware_display_matches_expected_address_for_network(NETWORK, expected, actual)
+    hardware_display_matches_expected_address_for_network(network(), expected, actual)
 }
 
 fn hardware_display_matches_expected_address_for_network(
@@ -895,6 +1176,7 @@ pub struct TransactionDto {
     status: String,
     confirmations: u32,
     date: String,
+    block_timestamp: Option<String>,
     address: Option<String>,
     label: String,
     intent_label: Option<PermanentLabelDto>,
@@ -967,13 +1249,20 @@ struct DelayedPolicyContext {
     delay_blocks: u32,
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FeeEstimatesDto {
     economy: f64,
     standard: f64,
     priority: f64,
     source: &'static str,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PublicNetworkStatusDto {
+    priority_fee: Option<f64>,
+    network_tip: Option<u64>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -994,14 +1283,6 @@ pub struct NodeStatusDto {
     initial_block_download: bool,
     size_on_disk: u64,
     block_filter_index: &'static str,
-}
-
-#[tauri::command]
-pub fn payjoin_uri_inspect(
-    value: String,
-) -> ApiResult<crate::payjoin_support::PayjoinUriInspection> {
-    crate::payjoin_support::inspect_uri(&value, NETWORK)
-        .map_err(|error| api_error("invalid_payjoin_uri", error))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -1029,6 +1310,7 @@ pub struct RecoveryScanStatusDto {
 #[serde(rename_all = "camelCase")]
 pub struct PaymentProposalDto {
     proposal_id: String,
+    review_binding: String,
     recipient: String,
     recipient_testnet_alias: Option<String>,
     recipient_is_wallet_owned: bool,
@@ -1200,10 +1482,24 @@ pub struct HardwareDeviceDto {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct HardwarePinPromptDto {
+    challenge_id: Option<String>,
+    pin_required: bool,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CosignerHealthDto {
     status: &'static str,
     checked_at: String,
     summary: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HardwareIdentityDto {
+    fingerprint: String,
+    label: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -1253,6 +1549,7 @@ pub struct MultisigProposalDto {
     change_derivation_paths: Vec<Vec<String>>,
     output_count: usize,
     selected_outpoints: Vec<String>,
+    inputs_available: bool,
     inputs: Vec<ProposalInputDto>,
     locktime: u32,
     rbf: bool,
@@ -1303,6 +1600,10 @@ pub struct RecoveryDrillDto {
 struct HwiDevice {
     #[serde(skip)]
     capability: String,
+    #[serde(skip)]
+    passive: bool,
+    #[serde(skip)]
+    observed_unlocked: bool,
     #[serde(default)]
     fingerprint: Option<String>,
     #[serde(default, rename = "type")]
@@ -1333,6 +1634,7 @@ struct RecentHardwareScan {
 #[derive(Deserialize)]
 struct HwiSuccess {
     success: Option<bool>,
+    error: Option<String>,
     code: Option<i64>,
 }
 
@@ -1384,26 +1686,26 @@ fn missing_hardware_xpub(
     }
     match device_type.to_ascii_lowercase().as_str() {
         "ledger" => {
-            let ledger_app = if NETWORK == Network::Bitcoin {
+            let ledger_app = if network() == Network::Bitcoin {
                 "Bitcoin"
             } else {
                 "Bitcoin Test—not Bitcoin"
             };
             let message = if code == Some(-7) || safe_detail.contains("bad argument") {
-                format!("Ledger rejected this {NETWORK_NAME} account path. Open the {ledger_app} app, then reconnect and try again.")
+                format!("Ledger rejected this {} account path. Open the {ledger_app} app, then reconnect and try again.", network_name())
             } else if code == Some(-13)
                 || safe_detail.contains("technical problem")
                 || safe_detail.contains("device failure")
             {
-                format!("Ledger is in the wrong app for this {NETWORK_NAME} wallet. Quit Ledger Live, open {ledger_app}, then reconnect and try again.")
+                format!("Ledger is in the wrong app for this {} wallet. Quit Ledger Live, open {ledger_app}, then reconnect and try again.", network_name())
             } else if safe_detail.contains("bitcoin test")
                 || safe_detail.contains("not in either the bitcoin")
             {
                 format!("Open {ledger_app} on Ledger, keep Ledger Live closed, then try again.")
             } else if derivation_path.starts_with("m/48'") {
-                format!("Ledger did not return the {NETWORK_NAME} multisig account key. Keep Ledger Live closed, open {ledger_app}, try again, then approve the public-key export if Ledger asks.")
+                format!("Ledger did not return the {} multisig account key. Keep Ledger Live closed, open {ledger_app}, try again, then approve the public-key export if Ledger asks.", network_name())
             } else {
-                format!("Ledger did not return the {NETWORK_NAME} BIP84 account key. Keep Ledger Live closed, open {ledger_app}, reconnect, then try again.")
+                format!("Ledger did not return the {} BIP84 account key. Keep Ledger Live closed, open {ledger_app}, reconnect, then try again.", network_name())
             };
             api_error("hardware_unavailable", message)
         }
@@ -1444,15 +1746,37 @@ fn hwi_warns_about_empty_passphrase(device: &HwiDevice) -> bool {
 
 fn hardware_device_dto(device: HwiDevice) -> HardwareDeviceDto {
     let device_type = device.device_type.to_ascii_lowercase();
-    let label = if device.model.is_empty() {
-        device.device_type.clone()
+    let normalized_model = device.model.trim().to_ascii_lowercase();
+    let label = match (device_type.as_str(), normalized_model.as_str()) {
+        ("coldcard", "coldcard") => "Coldcard".to_owned(),
+        ("bitbox02", "bitbox02_btconly") => "BitBox02 Bitcoin-only".to_owned(),
+        ("bitbox02", "bitbox02_nova_btconly") => "BitBox02 Nova Bitcoin-only".to_owned(),
+        ("ledger", "ledger_nano_s_plus") => "Ledger Nano S Plus".to_owned(),
+        ("trezor", "trezor_1") => "Trezor Model One".to_owned(),
+        ("trezor", "trezor_t2b1" | "trezor_t3b1" | "trezor_safe 3") => "Trezor Safe 3".to_owned(),
+        ("trezor", "trezor_candidate") => "Trezor".to_owned(),
+        // HWI exposes only a Jade family identity. Do not falsely claim that a
+        // connected device was authenticated as the physically certified
+        // Jade Classic model.
+        ("jade", "jade") => "Blockstream Jade".to_owned(),
+        _ if device.model.is_empty() => device.device_type.clone(),
+        _ => device.model.clone(),
+    };
+    let ledger_ready_message = if network() == Network::Bitcoin {
+        "Detected. Groot verifies that Bitcoin is open when it reads the public account key."
     } else {
-        device.model.clone()
+        "Detected. Groot verifies that Bitcoin Test is open when it reads the public account key."
+    };
+    let ledger_unlock_message = if network() == Network::Bitcoin {
+        "Select this signer, unlock Ledger, and open Bitcoin to continue."
+    } else {
+        "Select this signer, unlock Ledger, and open Bitcoin Test—not Bitcoin—to continue."
     };
     // A locked Trezor can report both PIN and passphrase requirements. PIN must
     // be resolved first because no wallet fingerprint exists until it is unlocked.
-    let pin_required = device_type == "trezor"
-        && (device.needs_pin_sent || (device.code == Some(-12) && !device.needs_passphrase_sent));
+    let passive_trezor_on_device_unlock =
+        device_type == "trezor" && device.passive && normalized_model != "trezor_1";
+    let pin_required = hardware_pin_prompt_required(&device);
     let unsupported_trezor_model = device_type == "trezor"
         && device.code == Some(-13)
         && device
@@ -1473,11 +1797,23 @@ fn hardware_device_dto(device: HwiDevice) -> HardwareDeviceDto {
             "This Groot release's bundled HWI 3.2.0 does not support this Trezor model. Update Groot when a reviewed release adds support, then scan again.",
             "retry",
         )
+    } else if pin_required && device.observed_unlocked {
+        (
+            "ready",
+            "Unlocked. Select this signer to continue.",
+            "prompt_pin",
+        )
     } else if pin_required {
         (
             "needs_pin",
             "Locked. Start the PIN matrix, then tap the blank cells matching the locations shown on the device.",
             "prompt_pin",
+        )
+    } else if passive_trezor_on_device_unlock {
+        (
+            "detected",
+            "Detected. Select this Trezor and follow any unlock request on the device.",
+            "unlock",
         )
     } else if hwi_warns_about_empty_passphrase(&device) {
         (
@@ -1486,11 +1822,7 @@ fn hardware_device_dto(device: HwiDevice) -> HardwareDeviceDto {
             "confirm_empty_passphrase",
         )
     } else if device.fingerprint.is_some() && device_type == "ledger" {
-        (
-            "detected",
-            "Detected. Groot verifies that Bitcoin Test is open when it reads the public account key.",
-            "import",
-        )
+        ("detected", ledger_ready_message, "import")
     } else if device.fingerprint.is_some() {
         ("ready", "Ready to import the public account key.", "import")
     } else if device_type == "bitbox02" {
@@ -1506,10 +1838,12 @@ fn hardware_device_dto(device: HwiDevice) -> HardwareDeviceDto {
             "unlock",
         )
     } else if device_type == "ledger" {
+        ("needs_device_unlock", ledger_unlock_message, "unlock")
+    } else if device_type == "coldcard" && device.passive {
         (
-            "needs_device_unlock",
-            "Select this signer, unlock Ledger, and open Bitcoin Test, not Bitcoin, to continue.",
-            "unlock",
+            "detected",
+            "Detected. Continue to read and verify the public account key.",
+            "import",
         )
     } else if device_type == "coldcard" {
         (
@@ -1536,6 +1870,14 @@ fn hardware_device_dto(device: HwiDevice) -> HardwareDeviceDto {
     }
 }
 
+fn hardware_pin_prompt_required(device: &HwiDevice) -> bool {
+    device.device_type.eq_ignore_ascii_case("trezor")
+        && ((device.passive && device.model.eq_ignore_ascii_case("trezor_1"))
+            || (!device.passive
+                && (device.needs_pin_sent
+                    || (device.code == Some(-12) && !device.needs_passphrase_sent))))
+}
+
 fn require_explicit_standard_wallet_selection(
     device: &HwiDevice,
     allow_empty_passphrase: bool,
@@ -1550,7 +1892,7 @@ fn require_explicit_standard_wallet_selection(
 }
 
 fn validate_regtest_app_data_override(path: PathBuf) -> ApiResult<PathBuf> {
-    if !IS_REGTEST || !path.is_absolute() {
+    if !is_regtest() || !path.is_absolute() {
         return Err(internal("The regtest app-data override is unavailable."));
     }
     let filename = path
@@ -1581,11 +1923,18 @@ fn validate_regtest_app_data_override(path: PathBuf) -> ApiResult<PathBuf> {
     Ok(path)
 }
 
-pub(crate) fn app_data_dir(app: &AppHandle) -> ApiResult<PathBuf> {
+pub(crate) fn app_data_root(app: &AppHandle) -> ApiResult<PathBuf> {
     match std::env::var_os(REGTEST_APP_DATA_OVERRIDE) {
         Some(path) => validate_regtest_app_data_override(PathBuf::from(path)),
-        None => app.path().app_data_dir().map_err(internal),
+        None => match crate::build_network::multi_network_app_data_override().map_err(internal)? {
+            Some(path) => Ok(path),
+            None => app.path().app_data_dir().map_err(internal),
+        },
     }
+}
+
+pub(crate) fn app_data_dir(app: &AppHandle) -> ApiResult<PathBuf> {
+    Ok(crate::build_network::data_directory(app_data_root(app)?))
 }
 
 fn registry_path(app: &AppHandle) -> ApiResult<PathBuf> {
@@ -1615,14 +1964,15 @@ fn ensure_registry_network(registry: &WalletRegistry) -> ApiResult<()> {
     if registry
         .wallets
         .iter()
-        .all(|wallet| wallet.network == NETWORK_NAME)
+        .all(|wallet| wallet.network == network_name())
     {
         Ok(())
     } else {
         Err(api_error(
             "wrong_network",
             format!(
-                "This wallet registry does not belong to the compiled {NETWORK_NAME} network. No wallet was opened."
+                "This wallet registry does not belong to the active {} network. No wallet was opened.",
+                network_name()
             ),
         ))
     }
@@ -1678,6 +2028,14 @@ fn secret_path(app: &AppHandle) -> ApiResult<PathBuf> {
     Ok(wallet_dir(app)?.join("secret.json"))
 }
 
+fn wallet_secret_context(wallet_id: Uuid) -> secure_store::SecureStoreContext {
+    secure_store::SecureStoreContext::new(wallet_id, secure_store::SecureStorePurpose::WalletSecret)
+}
+
+fn node_auth_context(wallet_id: Uuid) -> secure_store::SecureStoreContext {
+    secure_store::SecureStoreContext::new(wallet_id, secure_store::SecureStorePurpose::NodeAuth)
+}
+
 fn external_signer_metadata_path(app: &AppHandle) -> ApiResult<PathBuf> {
     let profile = selected_profile_of_kind(app, WalletKind::WatchOnly)?;
     Ok(profile_directory(app, profile.id)?.join("wallet.json"))
@@ -1701,14 +2059,13 @@ fn multisig_db_path(app: &AppHandle) -> ApiResult<PathBuf> {
 }
 
 fn profile_from_directory(
-    app: &AppHandle,
     directory: &Path,
     id: Uuid,
     kind: WalletKind,
 ) -> ApiResult<WalletProfile> {
     let (name, checksum) = match kind {
         WalletKind::SingleKey => {
-            let permit = database_open_permit_for_identity_inspection(app)?;
+            let permit = database_open_permit_for_offline_identity_inspection()?;
             let mut db = open_wallet_database(&directory.join("wallet.sqlite"), &permit)?;
             let wallet = load_wallet(&mut db)?;
             (
@@ -1736,7 +2093,7 @@ fn profile_from_directory(
     Ok(WalletProfile {
         id,
         name,
-        network: NETWORK_NAME.to_owned(),
+        network: network_name().to_owned(),
         kind,
         descriptor_checksum: checksum,
         created_at: now(),
@@ -1754,7 +2111,7 @@ fn ensure_registry_migrated(app: &AppHandle) -> ApiResult<()> {
         ensure_registry_network(&registry)?;
         return Ok(());
     }
-    if !IS_REGTEST {
+    if !is_regtest() {
         return save_registry(app, &WalletRegistry::default());
     }
     let legacy = [
@@ -1775,9 +2132,8 @@ fn ensure_registry_migrated(app: &AppHandle) -> ApiResult<()> {
             ));
         }
         let id = Uuid::new_v4();
-        let profile = profile_from_directory(app, &legacy_directory, id, kind)?;
-        let (external_descriptor, _) =
-            descriptor_pair_from_directory(app, &legacy_directory, &profile)?;
+        let profile = profile_from_directory(&legacy_directory, id, kind)?;
+        let (external_descriptor, _) = descriptor_pair_from_directory(&legacy_directory, &profile)?;
         if let Some((_, existing)) = legacy_identities
             .iter()
             .find(|(existing_descriptor, _)| existing_descriptor == &external_descriptor)
@@ -1860,7 +2216,7 @@ fn current_mainnet_node_admission(state: &AppState) -> ApiResult<PendingMainnetN
     admission.take();
     Err(api_error(
         "node_admission_required",
-        "Connect and verify the approved local Bitcoin Core node before opening a mainnet wallet.",
+        "Connect and verify an approved Bitcoin Core node before opening a mainnet wallet.",
     ))
 }
 
@@ -1882,14 +2238,10 @@ fn database_admission_error(error: crate::release_policy::ReleasePolicyError) ->
     match error {
         crate::release_policy::ReleasePolicyError::BackendAdmissionRequired => api_error(
             "node_admission_required",
-            "Connect and verify the approved local Bitcoin Core node before opening a mainnet wallet.",
+            "Connect and verify an approved Bitcoin Core node before opening a mainnet wallet.",
         ),
         _ => internal("This build is not authorized to open a mainnet wallet database."),
     }
-}
-
-fn admission_allows_new_wallet(admission: &PendingMainnetNodeAdmission) -> bool {
-    admission.scope == MainnetNodeAdmissionScope::NewWallet
 }
 
 fn admission_allows_selected_wallet(
@@ -1908,20 +2260,16 @@ fn node_auth_session_allows_database_open(
     session.config == *saved_config && session.mainnet_node_verified
 }
 
-fn database_open_permit_for_new_wallet(state: &AppState) -> ApiResult<DatabaseOpenPermit> {
-    if NETWORK != Network::Bitcoin {
+fn database_open_permit_for_new_wallet(_state: &AppState) -> ApiResult<DatabaseOpenPermit> {
+    if network() != Network::Bitcoin {
         return Ok(DatabaseOpenPermit {
             issued_at: Instant::now(),
         });
     }
-    let admission = current_mainnet_node_admission(state)?;
-    if !admission_allows_new_wallet(&admission) {
-        return Err(api_error(
-            "node_admission_required",
-            "Verify the local Bitcoin Core node specifically for new mainnet wallet creation.",
-        ));
-    }
-    crate::release_policy::ensure_database_open_enabled(NETWORK, true)
+    // Creating an empty, descriptor-bound database does not read chain data.
+    // Mainnet admission remains mandatory before this database can be opened
+    // through any selected-wallet data path.
+    crate::release_policy::ensure_database_open_enabled(network(), true)
         .map_err(database_admission_error)?;
     Ok(DatabaseOpenPermit {
         issued_at: Instant::now(),
@@ -1929,7 +2277,7 @@ fn database_open_permit_for_new_wallet(state: &AppState) -> ApiResult<DatabaseOp
 }
 
 fn database_open_permit_for_selected_wallet(app: &AppHandle) -> ApiResult<DatabaseOpenPermit> {
-    if NETWORK != Network::Bitcoin {
+    if network() != Network::Bitcoin {
         return Ok(DatabaseOpenPermit {
             issued_at: Instant::now(),
         });
@@ -1954,39 +2302,22 @@ fn database_open_permit_for_selected_wallet(app: &AppHandle) -> ApiResult<Databa
     if !pending_matches && !active_matches {
         return Err(api_error(
             "node_admission_required",
-            "Verify this wallet's saved local Bitcoin Core connection before reading wallet data.",
+            "Verify this wallet's saved Bitcoin Core connection before reading wallet data.",
         ));
     }
-    crate::release_policy::ensure_database_open_enabled(NETWORK, true)
+    crate::release_policy::ensure_database_open_enabled(network(), true)
         .map_err(database_admission_error)?;
     Ok(DatabaseOpenPermit {
         issued_at: Instant::now(),
     })
 }
 
-fn database_open_permit_for_identity_inspection(app: &AppHandle) -> ApiResult<DatabaseOpenPermit> {
-    if NETWORK == Network::Bitcoin {
-        let state = app.state::<AppState>();
-        let pending = current_mainnet_node_admission(&state).is_ok();
-        let authenticated_wallets = state
-            .node_auth
-            .lock()
-            .map_err(internal)?
-            .keys()
-            .copied()
-            .collect::<Vec<_>>();
-        let sessions = state.unlocked_wallets.lock().map_err(internal)?;
-        let active = authenticated_wallets
-            .iter()
-            .any(|wallet_id| sessions.is_unlocked(*wallet_id));
-        if !pending && !active {
-            return Err(api_error(
-                "node_admission_required",
-                "Connect and verify the approved local Bitcoin Core node before inspecting mainnet wallet identities.",
-            ));
-        }
-    }
-    crate::release_policy::ensure_database_open_enabled(NETWORK, NETWORK == Network::Bitcoin)
+fn database_open_permit_for_offline_identity_inspection() -> ApiResult<DatabaseOpenPermit> {
+    // Exact-identity checks read only the public descriptors already stored in
+    // local wallet databases. They do not read chain state, so requiring a live
+    // Core admission here would prevent an offline wallet from being created or
+    // imported whenever another profile already exists.
+    crate::release_policy::ensure_database_open_enabled(network(), network() == Network::Bitcoin)
         .map_err(database_admission_error)?;
     Ok(DatabaseOpenPermit {
         issued_at: Instant::now(),
@@ -1994,14 +2325,14 @@ fn database_open_permit_for_identity_inspection(app: &AppHandle) -> ApiResult<Da
 }
 
 fn validate_database_open_permit(permit: &DatabaseOpenPermit) -> ApiResult<()> {
-    let current = NETWORK != Network::Bitcoin
+    let current = network() != Network::Bitcoin
         || permit.issued_at.elapsed() <= MAINNET_NODE_ADMISSION_LIFETIME;
-    crate::release_policy::ensure_database_open_enabled(NETWORK, current)
+    crate::release_policy::ensure_database_open_enabled(network(), current)
         .map_err(database_admission_error)
 }
 
 fn authentication_database_open_permit() -> ApiResult<AuthenticationDatabaseOpenPermit> {
-    crate::release_policy::ensure_runtime_network_enabled(NETWORK)
+    crate::release_policy::ensure_runtime_network_enabled(network())
         .map_err(database_admission_error)?;
     Ok(AuthenticationDatabaseOpenPermit {
         issued_at: Instant::now(),
@@ -2014,7 +2345,8 @@ fn validate_authentication_database_open_permit(
     if permit.issued_at.elapsed() > MAINNET_NODE_ADMISSION_LIFETIME {
         return Err(internal("The authentication database permit expired."));
     }
-    crate::release_policy::ensure_runtime_network_enabled(NETWORK).map_err(database_admission_error)
+    crate::release_policy::ensure_runtime_network_enabled(network())
+        .map_err(database_admission_error)
 }
 
 #[cfg(test)]
@@ -2098,15 +2430,14 @@ fn profile_descriptor_pair(
     profile: &WalletProfile,
 ) -> ApiResult<(String, String)> {
     let directory = profile_directory(app, profile.id)?;
-    descriptor_pair_from_directory(app, &directory, profile)
+    descriptor_pair_from_directory(&directory, profile)
 }
 
 fn descriptor_pair_from_directory(
-    app: &AppHandle,
     directory: &Path,
     profile: &WalletProfile,
 ) -> ApiResult<(String, String)> {
-    let permit = database_open_permit_for_identity_inspection(app)?;
+    let permit = database_open_permit_for_offline_identity_inspection()?;
     let mut db =
         open_existing_wallet_database_read_only(&directory.join("wallet.sqlite"), &permit)?;
     let wallet = load_wallet(&mut db)?;
@@ -2172,7 +2503,7 @@ fn find_exact_descriptor_profile_with(
     for profile in registry
         .wallets
         .iter()
-        .filter(|profile| profile.network == NETWORK_NAME)
+        .filter(|profile| profile.network == network_name())
     {
         let existing_external = read_external_descriptor(profile)?;
         if exact_descriptor_identity_matches(external_descriptor, &existing_external) {
@@ -2212,7 +2543,7 @@ fn commit_multisig_profile(app: &AppHandle, id: Uuid, wallet: &MultisigWalletDto
         WalletProfile {
             id,
             name: wallet.name.clone(),
-            network: NETWORK_NAME.to_owned(),
+            network: network_name().to_owned(),
             kind: WalletKind::Multisig,
             descriptor_checksum: descriptor_checksum(&wallet.external_descriptor)?,
             created_at: now(),
@@ -2277,18 +2608,72 @@ fn sync_source_path_for(app: &AppHandle, wallet_id: Uuid) -> ApiResult<PathBuf> 
     Ok(profile_directory(app, wallet_id)?.join("sync-source.json"))
 }
 
+fn public_network_status_path(app: &AppHandle) -> ApiResult<PathBuf> {
+    let profile = selected_profile(app)?;
+    Ok(profile_directory(app, profile.id)?.join("network-status.json"))
+}
+
+fn read_public_network_status(app: &AppHandle) -> ApiResult<PublicNetworkStatusDto> {
+    let path = public_network_status_path(app)?;
+    if !path.exists() {
+        return Ok(PublicNetworkStatusDto::default());
+    }
+    let status: PublicNetworkStatusDto =
+        serde_json::from_str(&read_private_text(&path)?).map_err(internal)?;
+    if status
+        .priority_fee
+        .is_some_and(|rate| !rate.is_finite() || rate <= 0.0)
+    {
+        return Err(internal("Saved public network status is invalid."));
+    }
+    Ok(status)
+}
+
+fn update_public_network_status(
+    app: &AppHandle,
+    priority_fee: Option<f64>,
+    network_tip: Option<u64>,
+) -> ApiResult<()> {
+    let mut status = read_public_network_status(app)?;
+    if let Some(priority_fee) = priority_fee {
+        status.priority_fee = Some(priority_fee);
+    }
+    if let Some(network_tip) = network_tip {
+        status.network_tip = Some(network_tip);
+    }
+    write_public_network_status(app, &status)
+}
+
+fn replace_public_network_status(
+    app: &AppHandle,
+    priority_fee: Option<f64>,
+    network_tip: Option<u64>,
+) -> ApiResult<()> {
+    write_public_network_status(
+        app,
+        &PublicNetworkStatusDto {
+            priority_fee,
+            network_tip,
+        },
+    )
+}
+
+fn write_public_network_status(app: &AppHandle, status: &PublicNetworkStatusDto) -> ApiResult<()> {
+    write_private_json(&public_network_status_path(app)?, status)
+}
+
 fn compact_filter_cache_dir(app: &AppHandle) -> ApiResult<PathBuf> {
     Ok(app_data_dir(app)?
         .join("compact-filters")
-        .join(NETWORK_NAME))
+        .join(network_name()))
 }
 
 fn default_node_config() -> CoreNodeConfig {
     CoreNodeConfig {
         backend: ChainBackend::LocalCore {
-            url: DEFAULT_RPC_URL.to_owned(),
+            url: default_rpc_url().to_owned(),
         },
-        auth: if IS_REGTEST {
+        auth: if is_regtest() {
             RpcAuthMode::Cookie
         } else {
             RpcAuthMode::UserPass
@@ -2324,7 +2709,9 @@ fn read_sync_source_for(app: &AppHandle, wallet_id: Uuid) -> ApiResult<WalletSyn
     }
     let source: WalletSyncSource =
         serde_json::from_str(&read_private_text(&path)?).map_err(internal)?;
-    source.validate(NETWORK).map_err(network_config_api_error)?;
+    source
+        .validate(network())
+        .map_err(network_config_api_error)?;
     Ok(source)
 }
 
@@ -2406,7 +2793,8 @@ fn load_node_auth_session(
                 .remove(&profile.id);
             return Ok(());
         }
-        let plaintext = secure_store::load(&path, credential).map_err(secure_store_error)?;
+        let plaintext = secure_store::load(&path, credential, node_auth_context(profile.id))
+            .map_err(secure_store_error)?;
         let Some(mut protected) = decode_protected_node_auth(&plaintext, &config)? else {
             state
                 .node_auth
@@ -2456,6 +2844,14 @@ fn saved_userpass_config_has_required_secret(
 }
 
 fn rpc_client(app: &AppHandle, state: &State<'_, AppState>) -> ApiResult<Client> {
+    rpc_client_with_timeout(app, state, RPC_TIMEOUT)
+}
+
+fn rpc_client_with_timeout(
+    app: &AppHandle,
+    state: &State<'_, AppState>,
+    timeout: Duration,
+) -> ApiResult<Client> {
     let config = read_node_config(app)?;
     validate_first_mainnet_rpc_endpoint(&config.backend)?;
     let url = config
@@ -2464,7 +2860,7 @@ fn rpc_client(app: &AppHandle, state: &State<'_, AppState>) -> ApiResult<Client>
         .to_string();
     let client = match config.auth {
         RpcAuthMode::Cookie => {
-            if !IS_REGTEST {
+            if !is_regtest() {
                 return Err(api_error(
                     "invalid_node_config",
                     "Automatic cookie discovery is available only in Regtest builds. Configure explicit protected RPC credentials for this public-network rehearsal.",
@@ -2499,7 +2895,7 @@ fn rpc_client(app: &AppHandle, state: &State<'_, AppState>) -> ApiResult<Client>
                 session.config.username.as_deref(),
                 Some(session.password.as_str()),
                 config.tor_proxy.as_deref(),
-                RPC_TIMEOUT,
+                timeout,
             )
         }
     }?;
@@ -2515,7 +2911,7 @@ fn candidate_rpc_client(config: &CoreNodeConfig, password: &str) -> ApiResult<Cl
         .to_string();
     let client = match config.auth {
         RpcAuthMode::Cookie => {
-            if !IS_REGTEST {
+            if !is_regtest() {
                 return Err(api_error(
                     "invalid_node_config",
                     "Automatic cookie discovery is available only in Regtest builds. Configure explicit protected RPC credentials for this public-network rehearsal.",
@@ -2543,26 +2939,26 @@ fn candidate_rpc_client(config: &CoreNodeConfig, password: &str) -> ApiResult<Cl
 }
 
 fn validate_first_mainnet_rpc_endpoint(backend: &ChainBackend) -> ApiResult<()> {
-    if NETWORK != Network::Bitcoin {
+    if network() != Network::Bitcoin {
         return Ok(());
     }
     crate::release_policy::validate_first_mainnet_backend_endpoint(backend).map_err(|_| {
         api_error(
             "invalid_node_config",
-            "The first mainnet release requires a loopback Bitcoin Core node.",
+            "Mainnet requires either loopback Bitcoin Core or a trusted remote HTTPS Core endpoint.",
         )
     })
 }
 
 fn validate_first_mainnet_rpc_backend(client: &Client, backend: &ChainBackend) -> ApiResult<()> {
-    if NETWORK != Network::Bitcoin {
+    if network() != Network::Bitcoin {
         return Ok(());
     }
     let observed_genesis = client.get_block_hash(0).map_err(rpc_api_error)?;
     crate::release_policy::validate_first_mainnet_backend(backend, observed_genesis).map_err(|_| {
         api_error(
             "invalid_node_config",
-            "The first mainnet release requires a loopback Bitcoin Core node on the exact Bitcoin genesis chain.",
+            "Mainnet requires an admitted Bitcoin Core endpoint on the exact Bitcoin genesis chain.",
         )
     })
 }
@@ -2576,7 +2972,7 @@ fn checked_core_chain(client: &Client) -> ApiResult<(GetBlockchainInfoResult, Bl
     let info = get_blockchain_info(client).map_err(rpc_api_error)?;
     ensure_expected_network(info.chain)?;
     let observed_genesis = client.get_block_hash(0).map_err(rpc_api_error)?;
-    ensure_expected_genesis(NETWORK, observed_genesis)?;
+    ensure_expected_genesis(network(), observed_genesis)?;
     Ok((info, observed_genesis))
 }
 
@@ -2604,9 +3000,14 @@ fn ensure_core_history_available(
     first_required_height: u32,
 ) -> ApiResult<()> {
     if pruned && prune_height.is_some_and(|height| u64::from(first_required_height) < height) {
-        return Err(api_error(
+        return Err(api_error_with_details(
             "node_history_unavailable",
             "Bitcoin Core no longer stores the blocks needed for this scan. Use a birthday at or above the retained block height, or connect an archival node.",
+            ApiErrorDetails {
+                required_block: Some(first_required_height),
+                earliest_retained_block: prune_height.and_then(|height| u32::try_from(height).ok()),
+                ..Default::default()
+            },
         ));
     }
     Ok(())
@@ -2623,9 +3024,18 @@ fn ensure_recovery_scan_history_available(
 ) -> ApiResult<()> {
     let anchor_height = recovery_scan_anchor_height(birthday_height);
     if pruned && prune_height.is_some_and(|height| u64::from(anchor_height) < height) {
-        return Err(api_error(
+        return Err(api_error_with_details(
             "node_history_unavailable",
             RPC_PRUNED_HISTORY_MESSAGE,
+            ApiErrorDetails {
+                requested_birthday_block: Some(birthday_height),
+                required_block: Some(anchor_height),
+                earliest_retained_block: prune_height.and_then(|height| u32::try_from(height).ok()),
+                minimum_birthday_block: prune_height
+                    .and_then(|height| u32::try_from(height).ok())
+                    .and_then(|height| height.checked_add(1)),
+                ..Default::default()
+            },
         ));
     }
     Ok(())
@@ -2633,22 +3043,23 @@ fn ensure_recovery_scan_history_available(
 
 fn recovery_scan_checkpoint(
     client: &Client,
-    genesis: BlockHash,
+    retained_checkpoint: CheckPoint,
     birthday_height: u32,
 ) -> ApiResult<CheckPoint> {
     let anchor_height = recovery_scan_anchor_height(birthday_height);
-    let genesis_checkpoint = CheckPoint::new(BlockId {
-        height: 0,
-        hash: genesis,
-    });
-    if anchor_height == 0 {
-        return Ok(genesis_checkpoint);
+    if retained_checkpoint.height() > anchor_height {
+        return Err(internal(
+            "The retained wallet checkpoint is above the recovery scan anchor.",
+        ));
+    }
+    if retained_checkpoint.height() == anchor_height {
+        return Ok(retained_checkpoint);
     }
     let anchor_hash = retry_transient_core_rpc(
         || client.get_block_hash(u64::from(anchor_height)),
         std::thread::sleep,
     )?;
-    genesis_checkpoint
+    retained_checkpoint
         .push(BlockId {
             height: anchor_height,
             hash: anchor_hash,
@@ -2663,8 +3074,10 @@ fn rewind_stale_core_checkpoints(
     let original_tip = wallet.latest_checkpoint().height();
     let mut agreement = None;
     for checkpoint in wallet.latest_checkpoint().iter() {
-        match client.get_block_info(&checkpoint.hash()) {
-            Ok(block) if block.confirmations >= 0 => {
+        // Active-chain hashes remain available after full block bodies are
+        // pruned. Agreement needs identity, not historical transaction data.
+        match client.get_block_hash(u64::from(checkpoint.height())) {
+            Ok(hash) if hash == checkpoint.hash() => {
                 agreement = Some(checkpoint);
                 break;
             }
@@ -2681,6 +3094,88 @@ fn rewind_stale_core_checkpoints(
     })?;
     let rewound = agreement.height() < original_tip;
     Ok((agreement, rewound))
+}
+
+fn reconcile_known_active_anchors(
+    client: &Client,
+    wallet: &mut Wallet,
+    checkpoint: CheckPoint,
+    pruned: bool,
+    prune_height: Option<u64>,
+) -> ApiResult<CheckPoint> {
+    let mut checkpoint_blocks = checkpoint
+        .iter()
+        .map(|checkpoint| (checkpoint.height(), checkpoint.hash()))
+        .collect::<BTreeMap<_, _>>();
+    let candidate_anchors = wallet
+        .tx_graph()
+        .all_anchors()
+        .iter()
+        .flat_map(|(txid, anchors)| anchors.iter().map(move |anchor| (anchor.block_id, *txid)))
+        .filter(|(block, _)| {
+            checkpoint_blocks.get(&block.height).copied() != Some(block.hash)
+                && block.height <= checkpoint.height()
+        })
+        .fold(
+            BTreeMap::<BlockId, HashSet<Txid>>::new(),
+            |mut missing, (block, txid)| {
+                missing.entry(block).or_default().insert(txid);
+                missing
+            },
+        );
+    let mut restored = false;
+    for (block_id, expected_transactions) in candidate_anchors {
+        let active_hash = retry_transient_core_rpc(
+            || client.get_block_hash(u64::from(block_id.height)),
+            std::thread::sleep,
+        )?;
+        if active_hash != block_id.hash {
+            continue;
+        }
+        if checkpoint_blocks
+            .get(&block_id.height)
+            .is_some_and(|hash| *hash != active_hash)
+        {
+            return Err(api_error(
+                "wallet_corrupt",
+                "The wallet checkpoint conflicts with an active Bitcoin Core confirmation.",
+            ));
+        }
+        ensure_core_history_available(pruned, prune_height, block_id.height)?;
+        let block =
+            retry_transient_core_rpc(|| client.get_block(&block_id.hash), std::thread::sleep)?;
+        let observed_transactions = block
+            .txdata
+            .iter()
+            .map(Transaction::compute_txid)
+            .collect::<HashSet<_>>();
+        if block.block_hash() != block_id.hash
+            || !expected_transactions.is_subset(&observed_transactions)
+        {
+            return Err(api_error(
+                "wallet_corrupt",
+                "A persisted transaction confirmation does not match the verified Bitcoin Core block.",
+            ));
+        }
+        checkpoint_blocks.insert(block_id.height, block_id.hash);
+        restored = true;
+    }
+    if !restored {
+        return Ok(checkpoint);
+    }
+    let reconciled = CheckPoint::from_block_ids(
+        checkpoint_blocks
+            .into_iter()
+            .map(|(height, hash)| BlockId { height, hash }),
+    )
+    .map_err(|_| internal("The verified Bitcoin Core checkpoint could not be reconstructed."))?;
+    wallet
+        .apply_update(Update {
+            chain: Some(reconciled.clone()),
+            ..Default::default()
+        })
+        .map_err(internal)?;
+    Ok(reconciled)
 }
 
 fn retry_transient_node_health<T>(
@@ -2705,12 +3200,16 @@ fn retry_transient_core_rpc<T>(
     mut operation: impl FnMut() -> Result<T, CoreRpcError>,
     mut pause: impl FnMut(Duration),
 ) -> ApiResult<T> {
-    for attempt in 0..NODE_HEALTH_ATTEMPTS {
+    for attempt in 0..CORE_RPC_ATTEMPTS {
         match operation() {
             Ok(value) => return Ok(value),
             Err(error) => {
+                if matches!(&error, CoreRpcError::Io(io) if io.kind() == std::io::ErrorKind::Interrupted)
+                {
+                    return Err(api_error("sync_cancelled", "Wallet scan cancelled."));
+                }
                 let error = rpc_api_error(error);
-                if error.code == "network_unavailable" && attempt + 1 < NODE_HEALTH_ATTEMPTS {
+                if error.code == "network_unavailable" && attempt + 1 < CORE_RPC_ATTEMPTS {
                     pause(NODE_HEALTH_RETRY_DELAY);
                     continue;
                 }
@@ -2721,11 +3220,887 @@ fn retry_transient_core_rpc<T>(
     unreachable!("Core RPC attempts are non-zero")
 }
 
+struct CoreFilterBlockPlan {
+    checkpoint: CheckPoint,
+    matched_blocks: Vec<(u32, BlockHash, BlockHash)>,
+    expected_transactions: BTreeMap<u32, HashSet<Txid>>,
+    last_active_indices: BTreeMap<KeychainKind, u32>,
+}
+
+#[derive(Deserialize)]
+struct CoreScanBlocksResult {
+    from_height: u32,
+    to_height: u32,
+    relevant_blocks: Vec<BlockHash>,
+    completed: bool,
+}
+
+#[derive(Deserialize)]
+struct CoreDescriptorActivityResult {
+    activity: Vec<CoreDescriptorActivity>,
+}
+
+#[derive(Deserialize)]
+#[serde(tag = "type", rename_all = "lowercase")]
+enum CoreDescriptorActivity {
+    Receive { txid: Txid },
+    Spend { spend_txid: Txid },
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ManagedHistoryResponse {
+    version: u8,
+    tip_height: u32,
+    histories: Vec<ManagedScriptHistory>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ManagedScriptHistory {
+    scripthash: String,
+    entries: Vec<ManagedHistoryEntry>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ManagedHistoryEntry {
+    txid: Txid,
+    height: i64,
+}
+
+fn core_batch_call<T: serde::de::DeserializeOwned>(
+    client: &Client,
+    method: &str,
+    params: &[serde_json::Value],
+) -> Option<Vec<T>> {
+    let jsonrpc = client.get_jsonrpc_client();
+    let raw_params = params
+        .iter()
+        .map(serde_json::value::to_raw_value)
+        .collect::<Result<Vec<_>, _>>()
+        .ok()?;
+    let requests = raw_params
+        .iter()
+        .map(|params| jsonrpc.build_request(method, Some(params.as_ref())))
+        .collect::<Vec<_>>();
+    let responses = jsonrpc.send_batch(&requests).ok()?;
+    if responses.len() != requests.len() {
+        return None;
+    }
+    responses
+        .into_iter()
+        .map(|response| response?.result::<T>().ok())
+        .collect()
+}
+
+fn wallet_filter_scripts(wallet: &Wallet) -> Vec<bdk_wallet::bitcoin::ScriptBuf> {
+    let lookahead = wallet.spk_index().lookahead();
+    [KeychainKind::External, KeychainKind::Internal]
+        .into_iter()
+        .flat_map(|keychain| {
+            let derived = wallet
+                .spk_index()
+                .last_revealed_index(keychain)
+                .map_or(lookahead, |index| {
+                    index.saturating_add(1).saturating_add(lookahead)
+                });
+            wallet
+                .unbounded_spk_iter(keychain)
+                .take(usize::try_from(derived).unwrap_or(usize::MAX))
+                .map(|(_, script)| script)
+        })
+        .collect()
+}
+
+fn electrum_scripthash(script: &bdk_wallet::bitcoin::Script) -> String {
+    let mut digest = sha256::Hash::hash(script.as_bytes()).to_byte_array();
+    digest.reverse();
+    digest.iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
+fn managed_history_for_scripts(
+    client: &Client,
+    scripts: &[(u32, bdk_wallet::bitcoin::ScriptBuf)],
+    target_height: u32,
+) -> ApiResult<Vec<(u32, Vec<ManagedHistoryEntry>)>> {
+    let hashes = scripts
+        .iter()
+        .map(|(_, script)| electrum_scripthash(script))
+        .collect::<Vec<_>>();
+    let response = client
+        .call::<ManagedHistoryResponse>(
+            "groot_getscripthistory",
+            &[serde_json::json!(1), serde_json::json!(hashes)],
+        )
+        .map_err(rpc_api_error)?;
+    if response.version != 1
+        || response.tip_height != target_height
+        || response.histories.len() != scripts.len()
+    {
+        return Err(api_error(
+            "network_unavailable",
+            "The managed history index is unavailable or behind Bitcoin Core.",
+        ));
+    }
+    let mut seen = HashSet::new();
+    response
+        .histories
+        .into_iter()
+        .zip(scripts)
+        .map(|(history, (index, script))| {
+            let expected = electrum_scripthash(script);
+            if history.scripthash != expected || !seen.insert(history.scripthash) {
+                return Err(internal(
+                    "The managed history index returned mismatched script history.",
+                ));
+            }
+            Ok((*index, history.entries))
+        })
+        .collect()
+}
+
+fn managed_history_block_plan(
+    client: &Client,
+    wallet: &Wallet,
+    wallet_tip: &CheckPoint,
+    target_height: u32,
+    cancel: Option<&AtomicBool>,
+) -> ApiResult<CoreFilterBlockPlan> {
+    let start_height = wallet_tip.height();
+    if start_height >= target_height {
+        return Ok(CoreFilterBlockPlan {
+            checkpoint: wallet_tip.clone(),
+            matched_blocks: Vec::new(),
+            expected_transactions: BTreeMap::new(),
+            last_active_indices: BTreeMap::new(),
+        });
+    }
+    let lookahead = wallet.spk_index().lookahead().max(1);
+    let mut expected_transactions = BTreeMap::<u32, HashSet<Txid>>::new();
+    let mut last_active_indices = BTreeMap::<KeychainKind, u32>::new();
+    let mut queried_scripts = 0usize;
+    for keychain in [KeychainKind::External, KeychainKind::Internal] {
+        let revealed_count = wallet
+            .spk_index()
+            .last_revealed_index(keychain)
+            .map_or(0, |index| index.saturating_add(1));
+        let mut required_count = revealed_count.saturating_add(lookahead).max(lookahead);
+        let mut next_index = 0u32;
+        while next_index < required_count {
+            ensure_foreground_sync_not_cancelled(cancel)?;
+            let remaining = required_count.saturating_sub(next_index);
+            let batch_size = usize::try_from(remaining)
+                .unwrap_or(usize::MAX)
+                .min(MANAGED_HISTORY_QUERY_SIZE);
+            if queried_scripts.saturating_add(batch_size) > MAX_CORE_SCAN_SCRIPTS {
+                return Err(api_error(
+                    "invalid_scan_settings",
+                    "The wallet script range exceeds the managed history limit.",
+                ));
+            }
+            let scripts = wallet
+                .unbounded_spk_iter(keychain)
+                .skip(usize::try_from(next_index).unwrap_or(usize::MAX))
+                .take(batch_size)
+                .collect::<Vec<_>>();
+            if scripts.len() != batch_size {
+                return Err(internal(
+                    "The wallet could not derive its history script range.",
+                ));
+            }
+            let histories = managed_history_for_scripts(client, &scripts, target_height)?;
+            queried_scripts = queried_scripts.saturating_add(histories.len());
+            for (index, entries) in histories {
+                if !entries.is_empty() {
+                    last_active_indices
+                        .entry(keychain)
+                        .and_modify(|current| *current = (*current).max(index))
+                        .or_insert(index);
+                    required_count =
+                        required_count.max(index.saturating_add(1).saturating_add(lookahead));
+                }
+                for entry in entries {
+                    if entry.height <= 0 {
+                        continue;
+                    }
+                    let height = u32::try_from(entry.height).map_err(|_| {
+                        internal("The managed history index returned an unsupported height.")
+                    })?;
+                    if height > target_height {
+                        return Err(internal(
+                            "The managed history index returned history above Bitcoin Core.",
+                        ));
+                    }
+                    if height > start_height {
+                        expected_transactions
+                            .entry(height)
+                            .or_default()
+                            .insert(entry.txid);
+                    }
+                }
+            }
+            next_index = next_index.saturating_add(u32::try_from(batch_size).unwrap_or(u32::MAX));
+        }
+    }
+
+    let heights = expected_transactions.keys().copied().collect::<Vec<_>>();
+    let mut hashes = Vec::with_capacity(heights.len());
+    for batch in heights.chunks(CORE_BLOCK_HASH_BATCH_SIZE) {
+        ensure_foreground_sync_not_cancelled(cancel)?;
+        let params = batch
+            .iter()
+            .map(|height| serde_json::json!([height]))
+            .collect::<Vec<_>>();
+        hashes.extend(
+            core_batch_call::<BlockHash>(client, "getblockhash", &params)
+                .ok_or_else(rpc_unavailable)?,
+        );
+    }
+    if hashes.len() != heights.len() {
+        return Err(internal(
+            "Bitcoin Core returned incomplete managed-history block hashes.",
+        ));
+    }
+    let mut matched_blocks = Vec::with_capacity(hashes.len());
+    for (height_batch, hash_batch) in heights
+        .chunks(CORE_BLOCK_HASH_BATCH_SIZE)
+        .zip(hashes.chunks(CORE_BLOCK_HASH_BATCH_SIZE))
+    {
+        let params = hash_batch
+            .iter()
+            .map(|hash| serde_json::json!([hash.to_string(), 1]))
+            .collect::<Vec<_>>();
+        let blocks = core_batch_call::<GetBlockResult>(client, "getblock", &params)
+            .ok_or_else(rpc_unavailable)?;
+        if blocks.len() != hash_batch.len() {
+            return Err(internal(
+                "Bitcoin Core returned incomplete managed-history block metadata.",
+            ));
+        }
+        for ((height, expected_hash), block) in height_batch.iter().zip(hash_batch).zip(blocks) {
+            let block_height = u32::try_from(block.height)
+                .map_err(|_| internal("Bitcoin Core returned an unsupported block height."))?;
+            let previous_hash = block.previousblockhash.ok_or_else(|| {
+                internal("Bitcoin Core returned relevant block metadata without a parent.")
+            })?;
+            if block.hash != *expected_hash || block_height != *height || block.confirmations < 0 {
+                return Err(internal(
+                    "Bitcoin Core rejected a managed-history block reference.",
+                ));
+            }
+            matched_blocks.push((*height, block.hash, previous_hash));
+        }
+    }
+    let target_hash = retry_transient_core_rpc(
+        || client.get_block_hash(u64::from(target_height)),
+        std::thread::sleep,
+    )?;
+    let mut checkpoint = wallet_tip.clone();
+    for (height, hash, _) in &matched_blocks {
+        checkpoint = checkpoint
+            .push(BlockId {
+                height: *height,
+                hash: *hash,
+            })
+            .map_err(|_| internal("The managed-history checkpoint could not be constructed."))?;
+    }
+    if checkpoint.height() < target_height {
+        checkpoint = checkpoint
+            .push(BlockId {
+                height: target_height,
+                hash: target_hash,
+            })
+            .map_err(|_| internal("The managed-history checkpoint could not be constructed."))?;
+    } else if checkpoint.hash() != target_hash {
+        return Err(internal(
+            "The managed history index conflicted with the Bitcoin Core tip.",
+        ));
+    }
+    let active_start = retry_transient_core_rpc(
+        || client.get_block_hash(u64::from(start_height)),
+        std::thread::sleep,
+    )?;
+    let active_target = retry_transient_core_rpc(
+        || client.get_block_hash(u64::from(target_height)),
+        std::thread::sleep,
+    )?;
+    if active_start != wallet_tip.hash() || active_target != checkpoint.hash() {
+        return Err(internal(
+            "Bitcoin Core changed chains during refresh. Refresh the wallet again.",
+        ));
+    }
+    Ok(CoreFilterBlockPlan {
+        checkpoint,
+        matched_blocks,
+        expected_transactions,
+        last_active_indices,
+    })
+}
+
+fn core_scan_objects(wallet: &Wallet) -> ApiResult<Vec<String>> {
+    let mut scan_objects = wallet_filter_scripts(wallet)
+        .into_iter()
+        .map(|script| format!("raw({})", script.to_hex_string()))
+        .collect::<Vec<_>>();
+    scan_objects.sort_unstable();
+    scan_objects.dedup();
+    if scan_objects.is_empty() || scan_objects.len() > MAX_CORE_SCAN_SCRIPTS {
+        return Err(api_error(
+            "invalid_scan_settings",
+            "The wallet script range is outside the supported remote scan limit.",
+        ));
+    }
+    Ok(scan_objects)
+}
+
+fn core_server_scan_block_plan(
+    client: &Client,
+    scan_client: &Client,
+    wallet: &Wallet,
+    wallet_tip: &CheckPoint,
+    target_height: u32,
+    cancel: Option<&AtomicBool>,
+    mut on_progress: impl FnMut(u32) -> ApiResult<()>,
+) -> ApiResult<CoreFilterBlockPlan> {
+    let start_height = wallet_tip.height();
+    if start_height >= target_height {
+        return Ok(CoreFilterBlockPlan {
+            checkpoint: wallet_tip.clone(),
+            matched_blocks: Vec::new(),
+            expected_transactions: BTreeMap::new(),
+            last_active_indices: BTreeMap::new(),
+        });
+    }
+    let filter_index_ready = client
+        .get_index_info()
+        .ok()
+        .and_then(|indexes| indexes.basic_block_filter_index)
+        .is_some_and(|index| index.synced);
+    if !filter_index_ready {
+        return Err(api_error(
+            "invalid_node_config",
+            "Remote Bitcoin Core sync requires a fully synced basic block-filter index.",
+        ));
+    }
+    ensure_foreground_sync_not_cancelled(cancel)?;
+    let scan_objects = core_scan_objects(wallet)?;
+
+    let first_height = start_height.saturating_add(1);
+    let mut relevant = HashSet::new();
+    for (range_start, range_end) in core_server_scan_ranges(first_height, target_height) {
+        ensure_foreground_sync_not_cancelled(cancel)?;
+        // A lost response may leave Core's global scan running. Do not retry
+        // `start` automatically and accidentally collide with that in-flight scan.
+        // Bounded ranges keep each request below remote gateway timeouts and
+        // provide authoritative progress for long birthday/genesis scans.
+        let scan = scan_client
+            .call::<CoreScanBlocksResult>(
+                "scanblocks",
+                &[
+                    serde_json::json!("start"),
+                    serde_json::json!(scan_objects),
+                    serde_json::json!(range_start),
+                    serde_json::json!(range_end),
+                    serde_json::json!("basic"),
+                ],
+            )
+            .map_err(rpc_api_error)?;
+        ensure_foreground_sync_not_cancelled(cancel)?;
+        if !scan.completed || scan.from_height != range_start || scan.to_height != range_end {
+            return Err(api_error(
+                "network_unavailable",
+                "Remote Bitcoin Core did not complete the requested wallet scan range.",
+            ));
+        }
+        relevant.extend(scan.relevant_blocks);
+        on_progress(range_end)?;
+    }
+    if relevant.len() > usize::try_from(target_height.saturating_sub(start_height)).unwrap_or(0) {
+        return Err(internal(
+            "Bitcoin Core returned too many relevant blocks for the scan range.",
+        ));
+    }
+
+    // `scanblocks` has already used Core's local BIP158 index to reduce the
+    // range to wallet-relevant hashes. Resolve only those hashes to active-chain
+    // heights; downloading every height in a genesis scan would turn a single
+    // indexed server query into thousands of remote HTTPS round trips.
+    let relevant_hashes = relevant.iter().copied().collect::<Vec<_>>();
+    let mut relevant_blocks = Vec::with_capacity(relevant_hashes.len());
+    for batch in relevant_hashes.chunks(CORE_BLOCK_HASH_BATCH_SIZE) {
+        ensure_foreground_sync_not_cancelled(cancel)?;
+        let params = batch
+            .iter()
+            .map(|hash| serde_json::json!([hash.to_string(), 1]))
+            .collect::<Vec<_>>();
+        let batch_blocks = core_batch_call::<GetBlockResult>(client, "getblock", &params)
+            .ok_or_else(rpc_unavailable)?;
+        if batch_blocks.len() != batch.len() {
+            return Err(internal(
+                "Bitcoin Core returned incomplete relevant-block metadata.",
+            ));
+        }
+        for (expected_hash, block) in batch.iter().zip(batch_blocks) {
+            let height = u32::try_from(block.height)
+                .map_err(|_| internal("Bitcoin Core returned an unsupported block height."))?;
+            let previous_hash = block.previousblockhash.ok_or_else(|| {
+                internal("Bitcoin Core returned relevant block metadata without a parent.")
+            })?;
+            if block.hash != *expected_hash
+                || block.confirmations < 0
+                || height < first_height
+                || height > target_height
+            {
+                return Err(internal(
+                    "Bitcoin Core returned a relevant block outside the active scan range.",
+                ));
+            }
+            relevant_blocks.push((height, block.hash, previous_hash));
+        }
+    }
+    relevant_blocks.sort_unstable_by_key(|(height, _, _)| *height);
+    if relevant_blocks
+        .windows(2)
+        .any(|blocks| blocks[0].0 == blocks[1].0)
+    {
+        return Err(internal(
+            "Bitcoin Core returned conflicting relevant blocks at one height.",
+        ));
+    }
+
+    let target_hash = retry_transient_core_rpc(
+        || client.get_block_hash(u64::from(target_height)),
+        std::thread::sleep,
+    )?;
+    let mut checkpoint = wallet_tip.clone();
+    for (height, hash, _) in &relevant_blocks {
+        checkpoint = checkpoint
+            .push(BlockId {
+                height: *height,
+                hash: *hash,
+            })
+            .map_err(|_| internal("The Core scan checkpoint could not be constructed."))?;
+    }
+    if checkpoint.height() < target_height {
+        checkpoint = checkpoint
+            .push(BlockId {
+                height: target_height,
+                hash: target_hash,
+            })
+            .map_err(|_| internal("The Core scan checkpoint could not be constructed."))?;
+    } else if checkpoint.hash() != target_hash {
+        return Err(internal(
+            "Bitcoin Core returned a conflicting target block for the scan range.",
+        ));
+    }
+    ensure_foreground_sync_not_cancelled(cancel)?;
+    let active_start = retry_transient_core_rpc(
+        || client.get_block_hash(u64::from(start_height)),
+        std::thread::sleep,
+    )?;
+    let active_target = retry_transient_core_rpc(
+        || client.get_block_hash(u64::from(target_height)),
+        std::thread::sleep,
+    )?;
+    if active_start != wallet_tip.hash() || active_target != checkpoint.hash() {
+        return Err(internal(
+            "Bitcoin Core changed chains during refresh. Refresh the wallet again.",
+        ));
+    }
+    Ok(CoreFilterBlockPlan {
+        checkpoint,
+        matched_blocks: relevant_blocks,
+        expected_transactions: BTreeMap::new(),
+        last_active_indices: BTreeMap::new(),
+    })
+}
+
+fn core_server_scan_ranges(first_height: u32, target_height: u32) -> Vec<(u32, u32)> {
+    let mut ranges = Vec::new();
+    let mut range_start = first_height;
+    while range_start <= target_height {
+        let range_end = range_start
+            .saturating_add(CORE_SERVER_SCAN_RANGE_SIZE.saturating_sub(1))
+            .min(target_height);
+        ranges.push((range_start, range_end));
+        if range_end == u32::MAX {
+            break;
+        }
+        range_start = range_end + 1;
+    }
+    ranges
+}
+
+fn sync_remote_core_mempool(
+    client: &Client,
+    wallet: &mut Wallet,
+    expected_mempool: &[Arc<Transaction>],
+    cancel: Option<&AtomicBool>,
+) -> ApiResult<()> {
+    ensure_foreground_sync_not_cancelled(cancel)?;
+    let scan_objects = core_scan_objects(wallet)?;
+    let result = client
+        .call::<CoreDescriptorActivityResult>(
+            "getdescriptoractivity",
+            &[
+                serde_json::json!([]),
+                serde_json::json!(scan_objects),
+                serde_json::json!(true),
+            ],
+        )
+        .map_err(rpc_api_error)?;
+    let relevant_txids = result
+        .activity
+        .into_iter()
+        .map(|activity| match activity {
+            CoreDescriptorActivity::Receive { txid } => txid,
+            CoreDescriptorActivity::Spend { spend_txid } => spend_txid,
+        })
+        .collect::<HashSet<_>>();
+    if relevant_txids.len() > 10_000 {
+        return Err(internal(
+            "Bitcoin Core returned too many remote mempool transactions.",
+        ));
+    }
+
+    let observed_at = now();
+    let mut relevant_transactions = Vec::with_capacity(relevant_txids.len());
+    for txid in &relevant_txids {
+        ensure_foreground_sync_not_cancelled(cancel)?;
+        let transaction = retry_transient_core_rpc(
+            || client.get_raw_transaction(txid, None),
+            std::thread::sleep,
+        )?;
+        if transaction.compute_txid() != *txid {
+            return Err(internal(
+                "Bitcoin Core returned a transaction with an unexpected identifier.",
+            ));
+        }
+        relevant_transactions.push((Arc::new(transaction), observed_at));
+    }
+    let evicted = expected_mempool
+        .iter()
+        .map(|transaction| transaction.compute_txid())
+        .filter(|txid| !relevant_txids.contains(txid))
+        .map(|txid| (txid, observed_at));
+    wallet.apply_evicted_txs(evicted);
+    wallet.apply_unconfirmed_txs(relevant_transactions);
+    Ok(())
+}
+
+fn try_core_filter_block_plan(
+    client: &Client,
+    wallet: &Wallet,
+    wallet_tip: &CheckPoint,
+    target_height: u32,
+    cancel: Option<&AtomicBool>,
+    status: &Arc<Mutex<Option<WalletSyncStatusDto>>>,
+) -> ApiResult<Option<CoreFilterBlockPlan>> {
+    let start_height = wallet_tip.height();
+    if start_height >= target_height {
+        return Ok(Some(CoreFilterBlockPlan {
+            checkpoint: wallet_tip.clone(),
+            matched_blocks: Vec::new(),
+            expected_transactions: BTreeMap::new(),
+            last_active_indices: BTreeMap::new(),
+        }));
+    }
+    let filter_index_ready = client
+        .get_index_info()
+        .ok()
+        .and_then(|indexes| indexes.basic_block_filter_index)
+        .is_some_and(|index| index.synced);
+    if !filter_index_ready {
+        return Ok(None);
+    }
+    ensure_foreground_sync_not_cancelled(cancel)?;
+    let scripts = wallet_filter_scripts(wallet);
+    if scripts.is_empty() {
+        return Ok(None);
+    }
+    let heights = (start_height.saturating_add(1)..=target_height).collect::<Vec<_>>();
+    let mut hashes = Vec::with_capacity(heights.len());
+    for batch in heights.chunks(CORE_BLOCK_HASH_BATCH_SIZE) {
+        ensure_foreground_sync_not_cancelled(cancel)?;
+        let params = batch
+            .iter()
+            .map(|height| serde_json::json!([height]))
+            .collect::<Vec<_>>();
+        let Some(batch_hashes) = core_batch_call::<BlockHash>(client, "getblockhash", &params)
+        else {
+            return Ok(None);
+        };
+        hashes.extend(batch_hashes);
+    }
+    if hashes.len() != heights.len() {
+        return Ok(None);
+    }
+
+    // Probe one bounded response before issuing filter batches. A gateway that
+    // has not enabled getblockfilter, or a Core node whose filter index became
+    // unavailable after getindexinfo, should fall back without a large request.
+    let Some(target_hash) = hashes.last() else {
+        return Ok(None);
+    };
+    if client
+        .call::<GetBlockFilterResult>(
+            "getblockfilter",
+            &[
+                serde_json::json!(target_hash.to_string()),
+                serde_json::json!("basic"),
+            ],
+        )
+        .is_err()
+    {
+        return Ok(None);
+    }
+
+    let mut checkpoint = wallet_tip.clone();
+    let mut matched_blocks = Vec::new();
+    for (batch_index, hash_batch) in hashes.chunks(CORE_BLOCK_FILTER_BATCH_SIZE).enumerate() {
+        ensure_foreground_sync_not_cancelled(cancel)?;
+        let params = hash_batch
+            .iter()
+            .map(|hash| serde_json::json!([hash.to_string(), "basic"]))
+            .collect::<Vec<_>>();
+        let Some(filters) =
+            core_batch_call::<GetBlockFilterResult>(client, "getblockfilter", &params)
+        else {
+            return Ok(None);
+        };
+        if filters.len() != hash_batch.len() {
+            return Ok(None);
+        }
+        for (offset, (hash, filter)) in hash_batch.iter().zip(filters).enumerate() {
+            let index = batch_index * CORE_BLOCK_FILTER_BATCH_SIZE + offset;
+            let height = heights[index];
+            let previous_hash = checkpoint.hash();
+            checkpoint = checkpoint
+                .push(BlockId {
+                    height,
+                    hash: *hash,
+                })
+                .map_err(|_| internal("The Core filter checkpoint could not be constructed."))?;
+            let filter = filter.into_filter();
+            let matched = filter
+                .match_any(hash, scripts.iter().map(|script| script.as_bytes()))
+                .map_err(internal)?;
+            if matched {
+                matched_blocks.push((height, *hash, previous_hash));
+            }
+        }
+        update_core_sync_status(status, start_height, checkpoint.height(), target_height);
+    }
+    ensure_foreground_sync_not_cancelled(cancel)?;
+    let active_start = retry_transient_core_rpc(
+        || client.get_block_hash(u64::from(start_height)),
+        std::thread::sleep,
+    )?;
+    let active_target = retry_transient_core_rpc(
+        || client.get_block_hash(u64::from(target_height)),
+        std::thread::sleep,
+    )?;
+    if active_start != wallet_tip.hash() || active_target != checkpoint.hash() {
+        return Err(internal(
+            "Bitcoin Core changed chains during refresh. Refresh the wallet again.",
+        ));
+    }
+    Ok(Some(CoreFilterBlockPlan {
+        checkpoint,
+        matched_blocks,
+        expected_transactions: BTreeMap::new(),
+        last_active_indices: BTreeMap::new(),
+    }))
+}
+
+// BDK's Core emitter reads every unknown mempool transaction. On a busy remote
+// node that may be thousands of RPC round trips after block progress reaches
+// the tip. Check between requests so navigation, lock, and scan cancellation
+// do not have to wait for the entire remote mempool traversal.
+struct CancellableCoreClient<'a> {
+    client: &'a Client,
+    cancel: &'a AtomicBool,
+    prior_mempool: Option<HashSet<Txid>>,
+    expected_wallet_mempool: HashSet<Txid>,
+    observed_mempool: Mutex<Option<HashSet<Txid>>>,
+    mempool: Mutex<MempoolPrefetch>,
+}
+
+#[derive(Default)]
+struct MempoolPrefetch {
+    txids: Vec<Txid>,
+    positions: HashMap<Txid, usize>,
+    next: usize,
+    cached: HashMap<Txid, String>,
+    batch_supported: bool,
+}
+
+impl CancellableCoreClient<'_> {
+    fn observed_mempool_snapshot(&self) -> Option<HashSet<Txid>> {
+        self.observed_mempool.lock().ok()?.clone()
+    }
+
+    fn prefetched_transaction(&self, txid: Txid) -> Option<String> {
+        let batch = {
+            let mut mempool = self.mempool.lock().ok()?;
+            if let Some(hex) = mempool.cached.remove(&txid) {
+                return Some(hex);
+            }
+            let &position = mempool.positions.get(&txid)?;
+            if !mempool.batch_supported || position < mempool.next {
+                return None;
+            }
+            // BDK walks the mempool in this order. Any results left from the
+            // preceding batch were already known to its snapshot and skipped.
+            mempool.cached.clear();
+            let end = (position + MEMPOOL_RPC_BATCH_SIZE).min(mempool.txids.len());
+            let batch = mempool.txids[position..end].to_vec();
+            mempool.next = end;
+            batch
+        };
+        if self.cancel.load(Ordering::Acquire) {
+            return None;
+        }
+        let jsonrpc = self.client.get_jsonrpc_client();
+        let params = batch
+            .iter()
+            .map(|id| serde_json::value::to_raw_value(&serde_json::json!([id.to_string(), false])))
+            .collect::<Result<Vec<_>, _>>()
+            .ok()?;
+        let requests = params
+            .iter()
+            .map(|params| jsonrpc.build_request("getrawtransaction", Some(params.as_ref())))
+            .collect::<Vec<_>>();
+        let responses = match jsonrpc.send_batch(&requests) {
+            Ok(responses) => responses,
+            Err(_) => {
+                if let Ok(mut mempool) = self.mempool.lock() {
+                    mempool.batch_supported = false;
+                }
+                return None;
+            }
+        };
+        let mut mempool = self.mempool.lock().ok()?;
+        for (id, response) in batch.into_iter().zip(responses) {
+            if let Some(Ok(hex)) = response.map(|response| response.result::<String>()) {
+                mempool.cached.insert(id, hex);
+            }
+        }
+        mempool.cached.remove(&txid)
+    }
+}
+
+impl RpcApi for CancellableCoreClient<'_> {
+    fn call<T: for<'de> Deserialize<'de>>(
+        &self,
+        command: &str,
+        args: &[serde_json::Value],
+    ) -> Result<T, CoreRpcError> {
+        if self.cancel.load(Ordering::Acquire) {
+            return Err(CoreRpcError::Io(std::io::Error::new(
+                std::io::ErrorKind::Interrupted,
+                "Wallet scan cancelled",
+            )));
+        }
+        if command == "getrawmempool" && args.is_empty() {
+            let raw: serde_json::Value = self.client.call(command, args)?;
+            let all_txids: Vec<Txid> = serde_json::from_value(raw)?;
+            let observed = all_txids.iter().copied().collect::<HashSet<_>>();
+            let txids = mempool_delta_for_wallet(
+                all_txids,
+                self.prior_mempool.as_ref(),
+                &self.expected_wallet_mempool,
+            );
+            let prefetch_txids = txids
+                .iter()
+                .filter(|txid| !self.expected_wallet_mempool.contains(*txid))
+                .copied()
+                .collect::<Vec<_>>();
+            if let Ok(mut mempool) = self.mempool.lock() {
+                *mempool = MempoolPrefetch {
+                    positions: prefetch_txids
+                        .iter()
+                        .enumerate()
+                        .map(|(i, id)| (*id, i))
+                        .collect(),
+                    txids: prefetch_txids,
+                    batch_supported: true,
+                    ..Default::default()
+                };
+            }
+            if let Ok(mut snapshot) = self.observed_mempool.lock() {
+                *snapshot = Some(observed);
+            }
+            return serde_json::to_value(txids)
+                .and_then(serde_json::from_value)
+                .map_err(CoreRpcError::from);
+        }
+        if command == "getrawtransaction" && args.len() >= 2 {
+            if let Ok(txid) = serde_json::from_value::<Txid>(args[0].clone()) {
+                if let Some(hex) = self.prefetched_transaction(txid) {
+                    if self.cancel.load(Ordering::Acquire) {
+                        return Err(CoreRpcError::Io(std::io::Error::new(
+                            std::io::ErrorKind::Interrupted,
+                            "Wallet scan cancelled",
+                        )));
+                    }
+                    return serde_json::from_value(serde_json::Value::String(hex))
+                        .map_err(CoreRpcError::from);
+                }
+            }
+        }
+        self.client.call(command, args)
+    }
+}
+
+fn mempool_delta_for_wallet(
+    all_txids: Vec<Txid>,
+    prior_mempool: Option<&HashSet<Txid>>,
+    expected_wallet_mempool: &HashSet<Txid>,
+) -> Vec<Txid> {
+    let Some(prior_mempool) = prior_mempool else {
+        return all_txids;
+    };
+    all_txids
+        .into_iter()
+        .filter(|txid| !prior_mempool.contains(txid) || expected_wallet_mempool.contains(txid))
+        .collect()
+}
+
+fn cached_core_mempool_snapshot(state: &AppState, wallet_id: Uuid) -> Option<HashSet<Txid>> {
+    state
+        .core_mempool_snapshots
+        .lock()
+        .ok()?
+        .get(&wallet_id)
+        .cloned()
+}
+
+fn remember_core_mempool_snapshot(
+    state: &AppState,
+    wallet_id: Uuid,
+    snapshot: Option<HashSet<Txid>>,
+) {
+    let Some(snapshot) = snapshot else {
+        return;
+    };
+    if let Ok(mut snapshots) = state.core_mempool_snapshots.lock() {
+        snapshots.insert(wallet_id, snapshot);
+    }
+}
+
+fn forget_core_mempool_snapshot(state: &AppState, wallet_id: Uuid) {
+    if let Ok(mut snapshots) = state.core_mempool_snapshots.lock() {
+        snapshots.remove(&wallet_id);
+    }
+}
+
 fn checked_node_status_once(client: &Client, backend: CoreNodeConfig) -> ApiResult<NodeStatusDto> {
     let info = get_blockchain_info(client).map_err(rpc_api_error)?;
     ensure_expected_network(info.chain)?;
     let observed_genesis = client.get_block_hash(0).map_err(rpc_api_error)?;
-    ensure_expected_genesis(NETWORK, observed_genesis)?;
+    ensure_expected_genesis(network(), observed_genesis)?;
     let block_filter_index = match client.get_index_info() {
         Ok(indexes) => indexes
             .basic_block_filter_index
@@ -2760,13 +4135,46 @@ fn checked_node_status(client: &Client, backend: CoreNodeConfig) -> ApiResult<No
     )
 }
 
-fn ensure_expected_network(network: Network) -> ApiResult<()> {
-    if network == NETWORK {
+fn ensure_remote_core_sync_capabilities(client: &Client, managed_history: bool) -> ApiResult<()> {
+    let jsonrpc = client.get_jsonrpc_client();
+    let methods = if managed_history {
+        vec!["getdescriptoractivity"]
+    } else {
+        vec!["scanblocks", "getdescriptoractivity"]
+    };
+    let raw_params = methods
+        .into_iter()
+        .map(|method| serde_json::value::to_raw_value(&[method]).map_err(internal))
+        .collect::<ApiResult<Vec<_>>>()?;
+    let requests = raw_params
+        .iter()
+        .map(|params| jsonrpc.build_request("help", Some(params.as_ref())))
+        .collect::<Vec<_>>();
+    let responses = jsonrpc
+        .send_batch(&requests)
+        .map_err(|error| rpc_api_error(CoreRpcError::JsonRpc(error)))?;
+    if responses.len() != requests.len() {
+        return Err(api_error(
+            "invalid_node_config",
+            RPC_REMOTE_CAPABILITY_MESSAGE,
+        ));
+    }
+    for response in responses {
+        response
+            .ok_or_else(|| api_error("invalid_node_config", RPC_REMOTE_CAPABILITY_MESSAGE))?
+            .result::<String>()
+            .map_err(|error| rpc_api_error(CoreRpcError::JsonRpc(error)))?;
+    }
+    Ok(())
+}
+
+fn ensure_expected_network(observed: Network) -> ApiResult<()> {
+    if observed == network() {
         Ok(())
     } else {
         Err(api_error(
             "wrong_network",
-            format!("The Bitcoin Core node is not running {NETWORK_NAME}."),
+            format!("The Bitcoin Core node is not running {}.", network_name()),
         ))
     }
 }
@@ -2785,11 +4193,40 @@ fn ensure_expected_genesis(network: Network, observed: BlockHash) -> ApiResult<(
 fn broadcast_transaction(
     app: &AppHandle,
     state: &State<'_, AppState>,
+    db: &Connection,
+    proposal_id: &str,
     transaction: &Transaction,
 ) -> ApiResult<Txid> {
     let rpc = rpc_client(app, state)?;
     checked_chain_identity(&rpc)?;
-    broadcast_transaction_with_rpc(&rpc, transaction)
+    broadcast_proposal_transaction_with_rpc(&rpc, db, proposal_id, transaction)
+}
+
+fn broadcast_proposal_transaction_with_rpc(
+    rpc: &Client,
+    db: &Connection,
+    proposal_id: &str,
+    transaction: &Transaction,
+) -> ApiResult<Txid> {
+    if let Some((method, original_txid)) = proposal_acceleration_origin(db, proposal_id)? {
+        require_acceleration_original_pending(rpc, method, original_txid)?;
+    }
+    broadcast_transaction_with_rpc(rpc, transaction)
+}
+
+fn require_acceleration_original_pending(
+    rpc: &Client,
+    method: AccelerationMethod,
+    original_txid: Txid,
+) -> ApiResult<()> {
+    match rpc.get_mempool_entry(&original_txid) {
+        Ok(_) => Ok(()),
+        Err(CoreRpcError::JsonRpc(jsonrpc::Error::Rpc(response))) if response.code == -5 => {
+            let confirmed = transaction_confirmed_in_active_chain(rpc, original_txid);
+            Err(transaction_commands::acceleration_original_missing_from_mempool(method, confirmed))
+        }
+        Err(error) => Err(rpc_api_error(error)),
+    }
 }
 
 fn broadcast_transaction_with_rpc(rpc: &Client, transaction: &Transaction) -> ApiResult<Txid> {
@@ -2801,12 +4238,7 @@ fn broadcast_transaction_with_rpc(rpc: &Client, transaction: &Transaction) -> Ap
         )),
         Err(_) => {
             let in_mempool = rpc.get_mempool_entry(&expected).is_ok();
-            let confirmed_in_active_chain = rpc
-                .get_raw_transaction_info(&expected, None)
-                .is_ok_and(|transaction| {
-                    transaction.confirmations.unwrap_or_default() > 0
-                        && transaction.in_active_chain.unwrap_or(true)
-                });
+            let confirmed_in_active_chain = transaction_confirmed_in_active_chain(rpc, expected);
             if in_mempool || confirmed_in_active_chain {
                 Ok(expected)
             } else {
@@ -2819,6 +4251,21 @@ fn broadcast_transaction_with_rpc(rpc: &Client, transaction: &Transaction) -> Ap
     }
 }
 
+fn transaction_confirmed_in_active_chain(rpc: &Client, txid: Txid) -> bool {
+    rpc.get_raw_transaction_info(&txid, None)
+        .ok()
+        .filter(|transaction| {
+            transaction.txid == txid && transaction.confirmations.unwrap_or_default() > 0
+        })
+        .and_then(|transaction| transaction.blockhash)
+        .and_then(|blockhash| rpc.get_raw_transaction_info(&txid, Some(&blockhash)).ok())
+        .is_some_and(|transaction| {
+            transaction.txid == txid
+                && transaction.confirmations.unwrap_or_default() > 0
+                && transaction.in_active_chain == Some(true)
+        })
+}
+
 fn now() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -2826,8 +4273,96 @@ fn now() -> u64 {
         .as_secs()
 }
 
+pub(crate) fn validate_supported_payment_destination(address: &Address) -> ApiResult<()> {
+    if matches!(
+        address.address_type(),
+        Some(
+            AddressType::P2pkh
+                | AddressType::P2sh
+                | AddressType::P2wpkh
+                | AddressType::P2wsh
+                | AddressType::P2tr
+        )
+    ) {
+        Ok(())
+    } else {
+        Err(api_error(
+            "invalid_address",
+            "Groot supports legacy, P2SH, SegWit v0, and Taproot payment destinations.",
+        ))
+    }
+}
+
+fn normalize_label_text(label: &str) -> String {
+    label.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+pub(crate) fn label_has_unsafe_formatting(label: &str) -> bool {
+    label.chars().any(|character| {
+        character.is_control()
+            || matches!(
+                character,
+                '\u{00ad}'
+                    | '\u{034f}'
+                    | '\u{061c}'
+                    | '\u{180e}'
+                    | '\u{200b}'..='\u{200f}'
+                    | '\u{202a}'..='\u{202e}'
+                    | '\u{2060}'..='\u{2069}'
+                    | '\u{feff}'
+                    | '\u{fff9}'..='\u{fffb}'
+            )
+    })
+}
+
+// Keep the v0.5.0 predicate above stable for compatibility checks that also run
+// while opening already-persisted signer metadata. New and imported labels use
+// this stricter boundary. The format ranges follow Unicode 18.0 General_Category
+// Cf; the remaining ranges are invisible separators, fillers, and variation
+// selectors called out by the v0.5.0 independent reassessments.
+fn label_has_extended_unsafe_formatting(label: &str) -> bool {
+    label.chars().any(|character| {
+        matches!(
+            character,
+            '\u{0600}'..='\u{0605}'
+                | '\u{06dd}'
+                | '\u{070f}'
+                | '\u{0890}'..='\u{0891}'
+                | '\u{08e2}'
+                | '\u{115f}'..='\u{1160}'
+                | '\u{17b4}'..='\u{17b5}'
+                | '\u{180b}'..='\u{180d}'
+                | '\u{180f}'
+                | '\u{2028}'..='\u{2029}'
+                | '\u{206a}'..='\u{206f}'
+                | '\u{2800}'
+                | '\u{3164}'
+                | '\u{fe00}'..='\u{fe0f}'
+                | '\u{ffa0}'
+                | '\u{110bd}'
+                | '\u{110cd}'
+                | '\u{13430}'..='\u{1343f}'
+                | '\u{1bca0}'..='\u{1bca3}'
+                | '\u{1d173}'..='\u{1d17a}'
+                | '\u{e0000}'..='\u{e007f}'
+                | '\u{e0100}'..='\u{e01ef}'
+        )
+    })
+}
+
+pub(crate) fn validate_label_formatting(label: &str) -> ApiResult<()> {
+    if label_has_unsafe_formatting(label) || label_has_extended_unsafe_formatting(label) {
+        return Err(api_error(
+            "invalid_label",
+            "Permanent labels cannot contain invisible or directional formatting characters.",
+        ));
+    }
+    Ok(())
+}
+
 fn normalize_label(label: &str) -> ApiResult<String> {
-    let label = label.split_whitespace().collect::<Vec<_>>().join(" ");
+    validate_label_formatting(label)?;
+    let label = normalize_label_text(label);
     if label.is_empty() {
         return Err(api_error("invalid_label", "A permanent label is required."));
     }
@@ -3124,9 +4659,13 @@ fn check_auth_throttle(app: &AppHandle, state: &State<'_, AppState>) -> ApiResul
     if let Some(retry_at) = runtime.get(&selected).copied() {
         if monotonic_now < retry_at {
             let remaining = retry_at.duration_since(monotonic_now).as_secs().max(1);
-            return Err(api_error(
+            return Err(api_error_with_details(
                 "rate_limited",
                 format!("Too many incorrect attempts. Try again in {remaining} seconds."),
+                ApiErrorDetails {
+                    retry_after_seconds: Some(remaining),
+                    ..Default::default()
+                },
             ));
         }
         runtime.remove(&selected);
@@ -3135,12 +4674,14 @@ fn check_auth_throttle(app: &AppHandle, state: &State<'_, AppState>) -> ApiResul
     let db = open_auth_db(app)?;
     let throttle = load_auth_throttle(&db)?;
     if let Err(remaining) = throttle.check(now()) {
-        return Err(api_error(
+        let remaining = remaining.as_secs().max(1);
+        return Err(api_error_with_details(
             "rate_limited",
-            format!(
-                "Too many incorrect attempts. Try again in {} seconds.",
-                remaining.as_secs()
-            ),
+            format!("Too many incorrect attempts. Try again in {remaining} seconds."),
+            ApiErrorDetails {
+                retry_after_seconds: Some(remaining),
+                ..Default::default()
+            },
         ));
     }
     Ok(())
@@ -3274,6 +4815,28 @@ fn open_multisig_db(app: &AppHandle) -> ApiResult<Connection> {
     Ok(db)
 }
 
+fn open_selected_db_for_persisted_read(app: &AppHandle, multisig: bool) -> ApiResult<Connection> {
+    let path = if multisig {
+        multisig_db_path(app)?
+    } else {
+        db_path(app)?
+    };
+    let permit = database_open_permit_for_selected_wallet(app)?;
+    let mut db = open_existing_wallet_database_read_only(&path, &permit)?;
+    // The foreground read gate prevents the writer's commit until this read
+    // finishes; BDK starts its own load transaction on this connection.
+    validate_selected_wallet_database_identity(
+        app,
+        &mut db,
+        if multisig {
+            WalletKind::Multisig
+        } else {
+            WalletKind::SingleKey
+        },
+    )?;
+    Ok(db)
+}
+
 fn compact_persisted_checkpoints(db: &mut Connection) -> ApiResult<()> {
     let (count, tip): (u32, Option<u32>) = db
         .query_row(
@@ -3391,7 +4954,7 @@ fn validate_loaded_descriptors(
 fn load_wallet(db: &mut Connection) -> ApiResult<PersistedWallet<Connection>> {
     let gap_limit = load_recovery_scan_settings(db)?.gap_limit;
     Wallet::load()
-        .check_network(NETWORK)
+        .check_network(network())
         .lookahead(gap_limit)
         .load_wallet(db)
         .map_err(internal)?
@@ -3403,7 +4966,7 @@ fn load_wallet_transaction<'db>(
 ) -> ApiResult<PersistedWallet<SqliteTransaction<'db>>> {
     let gap_limit = load_recovery_scan_settings(db)?.gap_limit;
     Wallet::load()
-        .check_network(NETWORK)
+        .check_network(network())
         .lookahead(gap_limit)
         .load_wallet(db)
         .map_err(internal)?
@@ -3412,7 +4975,13 @@ fn load_wallet_transaction<'db>(
 
 fn root_key(mnemonic: &Mnemonic, credential: &str) -> ApiResult<Xpriv> {
     let seed = Zeroizing::new(mnemonic.to_seed(credential));
-    Xpriv::new_master(PARAMETERS.extended_key_network, seed.as_ref()).map_err(internal)
+    Xpriv::new_master(parameters().extended_key_network, seed.as_ref()).map_err(internal)
+}
+
+fn software_wallet_master_fingerprint(mnemonic: &Mnemonic, credential: &str) -> ApiResult<String> {
+    Ok(root_key(mnemonic, credential)?
+        .fingerprint(&Secp256k1::new())
+        .to_string())
 }
 
 fn watch_templates(
@@ -3422,7 +4991,7 @@ fn watch_templates(
     let master = root_key(mnemonic, credential)?;
     let secp = Secp256k1::new();
     let fingerprint = master.fingerprint(&secp);
-    let account_path = DerivationPath::from_str(SINGLESIG_ACCOUNT_PATH).map_err(internal)?;
+    let account_path = DerivationPath::from_str(singlesig_account_path()).map_err(internal)?;
     let account_private = master.derive_priv(&secp, &account_path).map_err(internal)?;
     let account_public = Xpub::from_priv(&secp, &account_private);
     Ok((
@@ -3437,7 +5006,7 @@ fn software_wallet_descriptors(
 ) -> ApiResult<(String, String)> {
     let (external, internal_template) = watch_templates(mnemonic, credential)?;
     let wallet = Wallet::create(external, internal_template)
-        .network(NETWORK)
+        .network(network())
         .create_wallet_no_persist()
         .map_err(internal)?;
     Ok((
@@ -3500,6 +5069,7 @@ fn decrypt_payload(secret: EncryptedSecret, credential: &str) -> ApiResult<Zeroi
 
 fn decrypt_mnemonic(app: &AppHandle, credential: &str) -> ApiResult<Mnemonic> {
     validate_credential(credential)?;
+    let profile = selected_profile_of_kind(app, WalletKind::SingleKey)?;
     let path = secret_path(app)?;
     let encoded = read_private_text(&path).map_err(|_| {
         api_error(
@@ -3510,14 +5080,15 @@ fn decrypt_mnemonic(app: &AppHandle, credential: &str) -> ApiResult<Mnemonic> {
     let version = serde_json::from_str::<serde_json::Value>(&encoded)
         .ok()
         .and_then(|value| value.get("version").and_then(|version| version.as_u64()));
-    if matches!(version, Some(2 | 3)) {
-        let plaintext = secure_store::load(&path, credential).map_err(secure_store_error)?;
+    if matches!(version, Some(2..=5)) {
+        let plaintext = secure_store::load(&path, credential, wallet_secret_context(profile.id))
+            .map_err(secure_store_error)?;
         return parse_mnemonic_bytes(plaintext);
     }
     let secret: EncryptedSecret = serde_json::from_str(&encoded).map_err(internal)?;
     let mnemonic = decrypt_encrypted_mnemonic(secret, credential)?;
     let words = Zeroizing::new(mnemonic.to_string());
-    persist_secret_material(&path, words.as_bytes(), credential)?;
+    persist_secret_material(&path, words.as_bytes(), credential, profile.id)?;
     Ok(mnemonic)
 }
 
@@ -3602,8 +5173,13 @@ fn read_external_signer_metadata(app: &AppHandle) -> ApiResult<ExternalSignerWal
 fn verify_external_signer_credential(app: &AppHandle, credential: &str) -> ApiResult<()> {
     validate_credential(credential)?;
     let metadata = read_external_signer_metadata(app)?;
-    let mut plaintext =
-        secure_store::load(&secret_path(app)?, credential).map_err(secure_store_error)?;
+    let profile = selected_profile_of_kind(app, WalletKind::WatchOnly)?;
+    let mut plaintext = secure_store::load(
+        &secret_path(app)?,
+        credential,
+        wallet_secret_context(profile.id),
+    )
+    .map_err(secure_store_error)?;
     let expected = format!("groot-external-signer:{}", metadata.external_descriptor);
     let matches = plaintext.as_slice() == expected.as_bytes();
     plaintext.zeroize();
@@ -3723,7 +5299,7 @@ fn validate_multisig_backup(encoded: &str) -> ApiResult<MultisigBackupDto> {
     }
     let mut backup: MultisigBackupDto = serde_json::from_str(encoded)
         .map_err(|_| api_error("invalid_backup", "Enter a valid Groot descriptor backup."))?;
-    if backup.version != 1 || backup.network != NETWORK_NAME || backup.wallet.kind != "multisig" {
+    if backup.version != 1 || backup.network != network_name() || backup.wallet.kind != "multisig" {
         return Err(api_error(
             "invalid_backup",
             "This backup version or network is not supported.",
@@ -3735,6 +5311,9 @@ fn validate_multisig_backup(encoded: &str) -> ApiResult<MultisigBackupDto> {
         cosigners: backup.wallet.cosigners.clone(),
     };
     reject_virtual_cosigners(&policy.cosigners)?;
+    for cosigner in &policy.cosigners {
+        validate_label_formatting(&cosigner.label)?;
+    }
     let (expected_external, expected_internal, expected_policy_type, expected_paths) =
         if let Some(template) = &backup.wallet.recovery_template {
             let analysis =
@@ -3805,7 +5384,7 @@ fn first_multisig_address(wallet: &MultisigWalletDto) -> ApiResult<String> {
         wallet.external_descriptor.clone(),
         wallet.internal_descriptor.clone(),
     )
-    .network(NETWORK)
+    .network(network())
     .create_wallet_no_persist()
     .map_err(internal)?;
     Ok(derived
@@ -3964,6 +5543,7 @@ fn add_multisig_global_xpubs(psbt: &mut Psbt, metadata: &MultisigWalletDto) -> A
 
 fn verify_multisig_credential(app: &AppHandle, credential: &str) -> ApiResult<()> {
     validate_credential(credential)?;
+    let profile = selected_profile_of_kind(app, WalletKind::Multisig)?;
     let path = multisig_secret_path(app)?;
     let encoded = read_private_text(&path).map_err(|_| {
         api_error(
@@ -3974,12 +5554,13 @@ fn verify_multisig_credential(app: &AppHandle, credential: &str) -> ApiResult<()
     let version = serde_json::from_str::<serde_json::Value>(&encoded)
         .ok()
         .and_then(|value| value.get("version").and_then(|version| version.as_u64()));
-    let mut plaintext = if matches!(version, Some(2 | 3)) {
-        secure_store::load(&path, credential).map_err(secure_store_error)?
+    let context = wallet_secret_context(profile.id);
+    let mut plaintext = if matches!(version, Some(2..=5)) {
+        secure_store::load(&path, credential, context).map_err(secure_store_error)?
     } else {
         let secret: EncryptedSecret = serde_json::from_str(&encoded).map_err(internal)?;
         let plaintext = decrypt_payload(secret, credential)?;
-        secure_store::store(&path, &plaintext, credential).map_err(secure_store_error)?;
+        secure_store::store(&path, &plaintext, credential, context).map_err(secure_store_error)?;
         plaintext
     };
     let metadata = read_multisig_metadata(app)?;
@@ -4063,6 +5644,7 @@ fn proposal_dto(
         .map(|label| label.text)
         .collect();
     let acceleration = load_acceleration_review(db, &proposal_id, fee, fee_rate)?;
+    let inputs_available = acceleration.is_some() || proposal_inputs_available(wallet, &psbt);
     Ok(MultisigProposalDto {
         proposal_id,
         recipient,
@@ -4087,10 +5669,11 @@ fn proposal_dto(
             .iter()
             .map(|input| input.previous_output.to_string())
             .collect(),
+        inputs_available,
         inputs,
         locktime,
         rbf,
-        network: NETWORK_NAME,
+        network: network_name(),
         psbt: encoded,
         signed: progress.signed,
         required: progress.required,
@@ -4103,6 +5686,18 @@ fn proposal_dto(
         selection_impact,
         acceleration,
     })
+}
+
+fn proposal_inputs_available(wallet: &Wallet, psbt: &Psbt) -> bool {
+    let spendable: HashSet<_> = wallet.list_unspent().map(|coin| coin.outpoint).collect();
+    proposal_inputs_present(psbt, &spendable)
+}
+
+fn proposal_inputs_present(psbt: &Psbt, spendable: &HashSet<OutPoint>) -> bool {
+    psbt.unsigned_tx
+        .input
+        .iter()
+        .all(|input| spendable.contains(&input.previous_output))
 }
 
 fn selection_impact(
@@ -4466,6 +6061,7 @@ fn apply_replacement_history(
                 status: "replaced".to_owned(),
                 confirmations: 0,
                 date: row.get::<_, u64>(11)?.to_string(),
+                block_timestamp: None,
                 address: row.get(7)?,
                 label: row.get(8)?,
                 intent_label: None,
@@ -4659,6 +6255,29 @@ fn proposal_acceleration_method(
     .transpose()
 }
 
+fn proposal_acceleration_origin(
+    db: &Connection,
+    proposal_id: &str,
+) -> ApiResult<Option<(AccelerationMethod, Txid)>> {
+    let Some(method) = proposal_acceleration_method(db, proposal_id)? else {
+        return Ok(None);
+    };
+    let original = db
+        .query_row(
+            "SELECT original_txid FROM groot_accelerations WHERE proposal_id = ?1",
+            params![proposal_id],
+            |row| row.get::<_, String>(0),
+        )
+        .map_err(internal)?;
+    let txid = Txid::from_str(&original).map_err(|_| {
+        api_error(
+            "proposal_mismatch",
+            "The stored acceleration transaction reference is invalid.",
+        )
+    })?;
+    Ok(Some((method, txid)))
+}
+
 fn validate_rbf_original_intent(
     db: &Connection,
     wallet: &Wallet,
@@ -4698,7 +6317,7 @@ fn validate_rbf_original_intent(
         .collect::<Vec<_>>();
     let valid = external.len() == 1
         && external[0].value.to_sat() == amount
-        && Address::from_script(&external[0].script_pubkey, NETWORK)
+        && Address::from_script(&external[0].script_pubkey, network())
             .is_ok_and(|address| address.to_string() == recipient);
     if !valid {
         return Err(api_error(
@@ -4758,6 +6377,7 @@ fn load_payment_proposal_dto(
         .map(|label| label.text)
         .collect();
     Ok(PaymentProposalDto {
+        review_binding: payment_review_binding(&proposal_id, &encoded),
         proposal_id: proposal_id.clone(),
         recipient,
         recipient_testnet_alias,
@@ -4784,7 +6404,7 @@ fn load_payment_proposal_dto(
         inputs,
         locktime,
         rbf,
-        network: NETWORK_NAME,
+        network: network_name(),
         selection_impact,
         acceleration: load_acceleration_review(db, &proposal_id, fee, fee_rate)?,
     })
@@ -4840,8 +6460,14 @@ fn write_private_json(path: &Path, value: &impl Serialize) -> ApiResult<()> {
     result
 }
 
-fn persist_secret_material(path: &Path, material: &[u8], credential: &str) -> ApiResult<()> {
-    secure_store::store(path, material, credential).map_err(secure_store_error)
+fn persist_secret_material(
+    path: &Path,
+    material: &[u8],
+    credential: &str,
+    wallet_id: Uuid,
+) -> ApiResult<()> {
+    secure_store::store(path, material, credential, wallet_secret_context(wallet_id))
+        .map_err(secure_store_error)
 }
 
 fn cleanup_failed_profile(dir: &Path) -> ApiResult<()> {
@@ -4893,7 +6519,8 @@ fn create_from_mnemonic(
     mnemonic: Mnemonic,
     credential: &str,
     backup_verified: bool,
-) -> ApiResult<()> {
+    network_setup_source_wallet_id: Option<&str>,
+) -> ApiResult<bool> {
     let name = name.trim();
     if name.is_empty() || name.chars().count() > 48 {
         return Err(api_error(
@@ -4909,20 +6536,27 @@ fn create_from_mnemonic(
         let mut db = open_wallet_database(&dir.join("wallet.sqlite"), &permit)?;
         init_app_schema(&db)?;
         let wallet = Wallet::create(external, internal_template)
-            .network(NETWORK)
+            .network(network())
             .create_wallet(&mut db)
             .map_err(internal)?;
         let words = Zeroizing::new(mnemonic.to_string());
-        persist_secret_material(&dir.join("secret.json"), words.as_bytes(), credential)?;
-        profile_commands::persist_mainnet_node_admission_for_new_profile(
-            app, state, id, credential,
+        persist_secret_material(&dir.join("secret.json"), words.as_bytes(), credential, id)?;
+        let network_setup = profile_commands::copy_network_setup_before_profile_commit(
+            app,
+            state,
+            network_setup_source_wallet_id,
+            id,
+            credential,
         )?;
+        if let Some(birthday_height) = network_setup.birthday_height {
+            persist_initial_recovery_scan_settings(&db, birthday_height)?;
+        }
         commit_profile(
             app,
             WalletProfile {
                 id,
                 name: name.to_owned(),
-                network: NETWORK_NAME.to_owned(),
+                network: network_name().to_owned(),
                 kind: WalletKind::SingleKey,
                 descriptor_checksum: descriptor_checksum(
                     &wallet.public_descriptor(KeychainKind::External).to_string(),
@@ -4931,7 +6565,8 @@ fn create_from_mnemonic(
                 backup_verified,
             },
             &wallet.public_descriptor(KeychainKind::External).to_string(),
-        )
+        )?;
+        Ok(network_setup.copied)
     })();
     finish_new_profile_attempt(state, id, &dir, result.is_ok())?;
     result
@@ -4980,6 +6615,7 @@ fn run_foreground_sync(
 ) -> ApiResult<WalletSnapshotDto> {
     let wallet_id = require_unlocked_for_background_sync(app, state)?;
     let cancel = Arc::new(AtomicBool::new(false));
+    let persisted_reads_safe = Arc::new(AtomicBool::new(false));
     {
         let mut active = state.foreground_sync.lock().map_err(internal)?;
         if active.is_some() {
@@ -4991,11 +6627,12 @@ fn run_foreground_sync(
         *active = Some(ActiveForegroundSync {
             wallet_id,
             cancel: Arc::clone(&cancel),
+            persisted_reads_safe: Arc::clone(&persisted_reads_safe),
         });
     }
 
     let result = (|| {
-        let _operation = operation_guard(state)?;
+        let _operation = foreground_sync_operation_guard(state)?;
         ensure_foreground_sync_not_cancelled(Some(cancel.as_ref()))?;
         let selected = require_unlocked_for_background_sync(app, state)?;
         if selected != wallet_id {
@@ -5028,14 +6665,18 @@ fn run_foreground_sync(
                 "Choose a wallet birthday before the first Bitcoin Core history scan.",
             ));
         }
-        sync_wallet_with_status(
+        let core_sync = matches!(read_sync_source(app)?, WalletSyncSource::BitcoinCore);
+        persisted_reads_safe.store(core_sync, Ordering::Release);
+        let result = sync_wallet_with_status(
             app,
             state,
             &mut db,
             multisig,
             wallet_id,
             Some(cancel.as_ref()),
-        )
+        );
+        let _readers = stop_persisted_sync_reads(state)?;
+        result
     })();
 
     if let Ok(mut active) = state.foreground_sync.lock() {
@@ -5089,6 +6730,7 @@ fn sync_wallet_with_core(
     cancel: Option<&AtomicBool>,
 ) -> ApiResult<WalletSnapshotDto> {
     ensure_foreground_sync_not_cancelled(cancel)?;
+    let wallet_id = selected_profile(app)?.id;
     let rpc = Arc::new(rpc_client(app, state)?);
     let mut wallet = load_wallet(db)?;
     let (chain, _) = checked_core_chain(rpc.as_ref())?;
@@ -5100,6 +6742,13 @@ fn sync_wallet_with_core(
     let target_height = u32::try_from(chain.blocks)
         .map_err(|_| internal("The node height exceeds the supported sync range."))?;
     let (wallet_tip, _) = rewind_stale_core_checkpoints(rpc.as_ref(), &wallet)?;
+    let wallet_tip = reconcile_known_active_anchors(
+        rpc.as_ref(),
+        &mut wallet,
+        wallet_tip,
+        chain.pruned,
+        chain.prune_height,
+    )?;
     let start_height = wallet_tip.height();
     ensure_core_history_available(
         chain.pruned,
@@ -5113,35 +6762,182 @@ fn sync_wallet_with_core(
         start_height,
         target_height,
     );
-    let mut emitter = Emitter::new(
-        rpc,
-        wallet_tip,
-        scan_birthday,
-        wallet
-            .transactions()
-            .filter(|tx| tx.chain_position.is_unconfirmed()),
-    );
-    loop {
-        ensure_foreground_sync_not_cancelled(cancel)?;
-        let Some(block) = retry_transient_core_rpc(|| emitter.next_block(), std::thread::sleep)?
-        else {
-            break;
-        };
-        ensure_foreground_sync_not_cancelled(cancel)?;
-        wallet
-            .apply_block_connected_to(&block.block, block.block_height(), block.connected_to())
-            .map_err(internal)?;
-        update_core_sync_status(
-            &state.sync_status,
-            start_height,
-            block.block_height(),
+    let uncancelled = AtomicBool::new(false);
+    let node_config = read_node_config(app)?;
+    let remote_core = matches!(node_config.backend, ChainBackend::RemoteCore { .. });
+    let managed_history = remote_core && crate::managed_gateway::is_managed_config(&node_config);
+    if remote_core {
+        ensure_remote_core_sync_capabilities(rpc.as_ref(), managed_history)?;
+    }
+    let remote_scan_rpc = if remote_core {
+        Some(rpc_client_with_timeout(
+            app,
+            state,
+            REMOTE_CORE_SCAN_RPC_TIMEOUT,
+        )?)
+    } else {
+        None
+    };
+    let block_plan = if managed_history {
+        Some(managed_history_block_plan(
+            rpc.as_ref(),
+            &wallet,
+            &wallet_tip,
             target_height,
+            cancel,
+        )?)
+    } else if remote_core {
+        Some(core_server_scan_block_plan(
+            rpc.as_ref(),
+            remote_scan_rpc
+                .as_ref()
+                .expect("remote scan client exists for remote Core"),
+            &wallet,
+            &wallet_tip,
+            target_height,
+            cancel,
+            |current_height| {
+                update_core_sync_status(
+                    &state.sync_status,
+                    start_height,
+                    current_height,
+                    target_height,
+                );
+                Ok(())
+            },
+        )?)
+    } else {
+        try_core_filter_block_plan(
+            rpc.as_ref(),
+            &wallet,
+            &wallet_tip,
+            target_height,
+            cancel,
+            &state.sync_status,
+        )?
+    };
+    if let Some(plan) = block_plan {
+        let mut matched_blocks = Vec::with_capacity(plan.matched_blocks.len());
+        let expected_transactions = plan.expected_transactions;
+        let last_active_indices = plan.last_active_indices;
+        for (height, expected_hash, expected_previous_hash) in plan.matched_blocks {
+            ensure_foreground_sync_not_cancelled(cancel)?;
+            let block =
+                retry_transient_core_rpc(|| rpc.get_block(&expected_hash), std::thread::sleep)?;
+            if block.block_hash() != expected_hash
+                || block.header.prev_blockhash != expected_previous_hash
+            {
+                return Err(internal(
+                    "Bitcoin Core returned a block outside the verified compact-filter chain.",
+                ));
+            }
+            if let Some(expected) = expected_transactions.get(&height) {
+                let observed = block
+                    .txdata
+                    .iter()
+                    .map(Transaction::compute_txid)
+                    .collect::<HashSet<_>>();
+                if !expected.is_subset(&observed) {
+                    return Err(internal(
+                        "The managed history index returned a transaction outside its Bitcoin Core block.",
+                    ));
+                }
+            }
+            matched_blocks.push((height, block));
+        }
+        ensure_foreground_sync_not_cancelled(cancel)?;
+        let active_target = retry_transient_core_rpc(
+            || rpc.get_block_hash(u64::from(target_height)),
+            std::thread::sleep,
+        )?;
+        if active_target != plan.checkpoint.hash() {
+            return Err(internal(
+                "Bitcoin Core changed chains during refresh. Refresh the wallet again.",
+            ));
+        }
+        wallet
+            .apply_update(Update {
+                chain: Some(plan.checkpoint),
+                last_active_indices,
+                ..Default::default()
+            })
+            .map_err(internal)?;
+        for (height, block) in matched_blocks {
+            wallet.apply_block(&block, height).map_err(internal)?;
+        }
+    } else {
+        let block_client = CancellableCoreClient {
+            client: rpc.as_ref(),
+            cancel: cancel.unwrap_or(&uncancelled),
+            prior_mempool: None,
+            expected_wallet_mempool: HashSet::new(),
+            observed_mempool: Mutex::new(None),
+            mempool: Mutex::new(MempoolPrefetch::default()),
+        };
+        let mut block_emitter = Emitter::new(
+            &block_client,
+            wallet_tip,
+            scan_birthday,
+            Vec::<Arc<Transaction>>::new(),
         );
+        loop {
+            ensure_foreground_sync_not_cancelled(cancel)?;
+            let Some(block) =
+                retry_transient_core_rpc(|| block_emitter.next_block(), std::thread::sleep)?
+            else {
+                break;
+            };
+            ensure_foreground_sync_not_cancelled(cancel)?;
+            wallet
+                .apply_block_connected_to(&block.block, block.block_height(), block.connected_to())
+                .map_err(internal)?;
+            update_core_sync_status(
+                &state.sync_status,
+                start_height,
+                block.block_height(),
+                target_height,
+            );
+        }
     }
     ensure_foreground_sync_not_cancelled(cancel)?;
-    let mempool = retry_transient_core_rpc(|| emitter.mempool(), std::thread::sleep)?;
-    wallet.apply_evicted_txs(mempool.evicted);
-    wallet.apply_unconfirmed_txs(mempool.update);
+    mark_core_pending_status(&state.sync_status);
+    let expected_mempool = wallet
+        .transactions()
+        .filter(|tx| tx.chain_position.is_unconfirmed())
+        .map(|tx| tx.tx_node.tx.clone())
+        .collect::<Vec<_>>();
+    let observed_mempool = if remote_core {
+        sync_remote_core_mempool(rpc.as_ref(), &mut wallet, &expected_mempool, cancel)?;
+        forget_core_mempool_snapshot(state, wallet_id);
+        None
+    } else {
+        let expected_wallet_mempool = expected_mempool
+            .iter()
+            .map(|tx| tx.compute_txid())
+            .collect();
+        let client = CancellableCoreClient {
+            client: rpc.as_ref(),
+            cancel: cancel.unwrap_or(&uncancelled),
+            prior_mempool: cached_core_mempool_snapshot(state, wallet_id),
+            expected_wallet_mempool,
+            observed_mempool: Mutex::new(None),
+            mempool: Mutex::new(MempoolPrefetch::default()),
+        };
+        let mut mempool_emitter = Emitter::new(
+            &client,
+            wallet.latest_checkpoint(),
+            scan_birthday,
+            expected_mempool,
+        );
+        let mempool_result =
+            retry_transient_core_rpc(|| mempool_emitter.mempool(), std::thread::sleep);
+        ensure_foreground_sync_not_cancelled(cancel)?;
+        let mempool = mempool_result?;
+        let observed = client.observed_mempool_snapshot();
+        wallet.apply_evicted_txs(mempool.evicted);
+        wallet.apply_unconfirmed_txs(mempool.update);
+        observed
+    };
     update_core_sync_status(
         &state.sync_status,
         start_height,
@@ -5149,6 +6945,7 @@ fn sync_wallet_with_core(
         target_height,
     );
     ensure_foreground_sync_not_cancelled(cancel)?;
+    let _readers = stop_persisted_sync_reads(state)?;
     let transaction = db.transaction().map_err(internal)?;
     mark_observed_addresses(&wallet, &transaction)?;
     label_provenance::reconcile_wallet_outputs(&wallet, &transaction, now()).map_err(internal)?;
@@ -5172,6 +6969,7 @@ fn sync_wallet_with_core(
     }
     drop(wallet);
     transaction.commit().map_err(internal)?;
+    remember_core_mempool_snapshot(state, wallet_id, observed_mempool);
     Ok(snapshot)
 }
 
@@ -5190,7 +6988,7 @@ fn sync_wallet_with_compact_filters(
         ));
     }
     let config = source
-        .validate(NETWORK)
+        .validate(network())
         .map_err(network_config_api_error)?
         .ok_or_else(|| internal("The compact-filter sync source was not selected."))?;
     let cache_dir = compact_filter_cache_dir(app)?;
@@ -5198,7 +6996,7 @@ fn sync_wallet_with_compact_filters(
     let status = Arc::clone(&state.sync_status);
     let update = crate::compact_filters::sync_with_progress(
         &wallet,
-        NETWORK,
+        network(),
         &cache_dir,
         &config,
         cancel,
@@ -5282,15 +7080,32 @@ where
     Ok(snapshot)
 }
 
+fn recovery_scan_error(error: ApiError) -> ApiError {
+    if error.code == "sync_cancelled" {
+        api_error(
+            "scan_cancelled",
+            "Recovery scan cancelled. Start a new scan when you are ready.",
+        )
+    } else {
+        error
+    }
+}
+
+enum RemoteHistorySource<'a> {
+    CoreScan(&'a Client),
+    Managed,
+}
+
 fn full_rescan_loaded_wallet(
     rpc: Arc<Client>,
+    remote_history: Option<RemoteHistorySource<'_>>,
     wallet: &mut PersistedWallet<Connection>,
     db: &mut Connection,
     settings: &RecoveryScanSettingsDto,
     run_id: &str,
     cancel: &AtomicBool,
-) -> ApiResult<()> {
-    let (chain, genesis) = checked_core_chain(rpc.as_ref())?;
+) -> ApiResult<HashSet<Txid>> {
+    let (chain, _) = checked_core_chain(rpc.as_ref())?;
     let tip = chain.blocks;
     ensure_core_ready_for_wallet_history(
         tip,
@@ -5310,69 +7125,159 @@ fn full_rescan_loaded_wallet(
     )?;
     let target_height = u32::try_from(tip)
         .map_err(|_| internal("The node height exceeds the supported recovery range."))?;
-    let previous = reconcile_recovery_scan_record(db, None)?.map(|record| record.status);
-    let resumable = previous.as_ref().filter(|status| {
-        matches!(
-            status.status.as_str(),
-            "cancelled" | "interrupted" | "failed"
-        ) && status.birthday_height == settings.birthday_height
-            && status.gap_limit == settings.gap_limit
-            && status.processed_blocks > 0
-            && status.current_height <= target_height
-    });
-    let resume_checkpoint = resumable.and_then(|status| {
-        wallet
-            .latest_checkpoint()
-            .get(status.current_height)
-            .map(|checkpoint| (status, checkpoint))
-    });
-    let resume_checkpoint = match resume_checkpoint {
-        Some((status, checkpoint)) => {
-            let current_hash = retry_transient_core_rpc(
-                || rpc.get_block_hash(u64::from(status.current_height)),
-                std::thread::sleep,
-            )?;
-            (current_hash == checkpoint.hash()).then_some((status, checkpoint))
-        }
-        None => None,
-    };
-    let (checkpoint, start_height, mut processed_blocks) =
-        if let Some((status, checkpoint)) = resume_checkpoint {
-            resume_recovery_scan_record(db, run_id, status, target_height)?;
-            (
-                checkpoint,
-                status.current_height.saturating_add(1).min(target_height),
-                status.processed_blocks,
-            )
-        } else {
-            start_recovery_scan_record(db, run_id, settings, target_height)?;
-            (
-                recovery_scan_checkpoint(rpc.as_ref(), genesis, settings.birthday_height)?,
-                settings.birthday_height,
-                0,
-            )
-        };
+    reconcile_recovery_scan_record(db, None)?;
+    start_recovery_scan_record(db, run_id, settings, target_height)?;
+    let start_height = settings.birthday_height;
+    let mut processed_blocks: u32 = 0;
+    let anchor_height = recovery_scan_anchor_height(settings.birthday_height);
     db.execute(
         "DELETE FROM bdk_blocks WHERE block_height > ?1",
-        params![checkpoint.height()],
+        params![anchor_height],
     )
     .map_err(internal)?;
     *wallet = load_wallet(db)?;
+    // A recovery anchor must extend a checkpoint already retained by the
+    // wallet. Building an otherwise-correct genesis+anchor chain is ambiguous
+    // to BDK after a previous sparse scan because it may share no exact
+    // checkpoint with the persisted local chain.
+    let (retained_checkpoint, _) = rewind_stale_core_checkpoints(rpc.as_ref(), wallet)?;
+    let checkpoint =
+        recovery_scan_checkpoint(rpc.as_ref(), retained_checkpoint, settings.birthday_height)?;
     wallet
         .apply_update(Update {
             chain: Some(checkpoint.clone()),
             ..Default::default()
         })
         .map_err(internal)?;
-    let expected_mempool = wallet
-        .transactions()
-        .filter(|tx| tx.chain_position.is_unconfirmed());
-    let mut emitter = Emitter::new(rpc, checkpoint, start_height, expected_mempool);
-    while let Some(block) = retry_transient_core_rpc(|| emitter.next_block(), std::thread::sleep)? {
+
+    if let Some(history_source) = remote_history {
+        let plan = match history_source {
+            RemoteHistorySource::Managed => managed_history_block_plan(
+                rpc.as_ref(),
+                wallet,
+                &checkpoint,
+                target_height,
+                Some(cancel),
+            ),
+            RemoteHistorySource::CoreScan(scan_rpc) => core_server_scan_block_plan(
+                rpc.as_ref(),
+                scan_rpc,
+                wallet,
+                &checkpoint,
+                target_height,
+                Some(cancel),
+                |current_height| {
+                    update_recovery_scan_progress(
+                        db,
+                        run_id,
+                        current_height,
+                        current_height
+                            .saturating_sub(settings.birthday_height)
+                            .saturating_add(1),
+                    )
+                },
+            ),
+        }
+        .map_err(recovery_scan_error)?;
+        let mut matched_blocks = Vec::with_capacity(plan.matched_blocks.len());
+        let expected_transactions = plan.expected_transactions;
+        let last_active_indices = plan.last_active_indices;
+        for (height, expected_hash, expected_previous_hash) in plan.matched_blocks {
+            ensure_foreground_sync_not_cancelled(Some(cancel)).map_err(recovery_scan_error)?;
+            let block =
+                retry_transient_core_rpc(|| rpc.get_block(&expected_hash), std::thread::sleep)?;
+            ensure_foreground_sync_not_cancelled(Some(cancel)).map_err(recovery_scan_error)?;
+            if block.block_hash() != expected_hash
+                || block.header.prev_blockhash != expected_previous_hash
+            {
+                return Err(internal(
+                    "Bitcoin Core returned a block outside the verified recovery-scan range.",
+                ));
+            }
+            if let Some(expected) = expected_transactions.get(&height) {
+                let observed = block
+                    .txdata
+                    .iter()
+                    .map(Transaction::compute_txid)
+                    .collect::<HashSet<_>>();
+                if !expected.is_subset(&observed) {
+                    return Err(internal(
+                        "The managed history index returned a transaction outside its Bitcoin Core block.",
+                    ));
+                }
+            }
+            matched_blocks.push((height, block));
+        }
+        wallet
+            .apply_update(Update {
+                chain: Some(plan.checkpoint),
+                last_active_indices,
+                ..Default::default()
+            })
+            .map_err(internal)?;
+        for (height, block) in matched_blocks {
+            wallet.apply_block(&block, height).map_err(internal)?;
+        }
+        let expected_mempool = wallet
+            .transactions()
+            .filter(|tx| tx.chain_position.is_unconfirmed())
+            .map(|tx| tx.tx_node.tx.clone())
+            .collect::<Vec<_>>();
+        sync_remote_core_mempool(rpc.as_ref(), wallet, &expected_mempool, Some(cancel))
+            .map_err(recovery_scan_error)?;
         if cancel.load(Ordering::Acquire) {
             return Err(api_error(
                 "scan_cancelled",
-                "Recovery scan cancelled. Saved progress remains safe; start it again to continue.",
+                "Recovery scan cancelled. Start a new scan when you are ready.",
+            ));
+        }
+        wallet.persist(db).map_err(internal)?;
+        update_recovery_scan_progress(
+            db,
+            run_id,
+            target_height,
+            target_height
+                .saturating_sub(settings.birthday_height)
+                .saturating_add(1),
+        )?;
+        mark_observed_addresses(wallet, db)?;
+        return Ok(HashSet::new());
+    }
+
+    let expected_mempool = wallet
+        .transactions()
+        .filter(|tx| tx.chain_position.is_unconfirmed())
+        .map(|tx| tx.tx_node.tx.clone())
+        .collect::<Vec<_>>();
+    let expected_wallet_mempool = expected_mempool
+        .iter()
+        .map(|tx| tx.compute_txid())
+        .collect();
+    let client = CancellableCoreClient {
+        client: rpc.as_ref(),
+        cancel,
+        // An explicit recovery scan may have expanded the watched script set,
+        // so it always establishes a fresh complete mempool baseline.
+        prior_mempool: None,
+        expected_wallet_mempool,
+        observed_mempool: Mutex::new(None),
+        mempool: Mutex::new(MempoolPrefetch::default()),
+    };
+    let mut emitter = Emitter::new(&client, checkpoint, start_height, expected_mempool);
+    while let Some(block) = {
+        let next = retry_transient_core_rpc(|| emitter.next_block(), std::thread::sleep);
+        if cancel.load(Ordering::Acquire) {
+            return Err(api_error(
+                "scan_cancelled",
+                "Recovery scan cancelled. Start a new scan when you are ready.",
+            ));
+        }
+        next?
+    } {
+        if cancel.load(Ordering::Acquire) {
+            return Err(api_error(
+                "scan_cancelled",
+                "Recovery scan cancelled. Start a new scan when you are ready.",
             ));
         }
         wallet
@@ -5385,14 +7290,22 @@ fn full_rescan_loaded_wallet(
     if cancel.load(Ordering::Acquire) {
         return Err(api_error(
             "scan_cancelled",
-            "Recovery scan cancelled. Saved progress remains safe; start it again to continue.",
+            "Recovery scan cancelled. Start a new scan when you are ready.",
         ));
     }
-    let mempool = retry_transient_core_rpc(|| emitter.mempool(), std::thread::sleep)?;
+    let mempool_result = retry_transient_core_rpc(|| emitter.mempool(), std::thread::sleep);
+    if cancel.load(Ordering::Acquire) {
+        return Err(api_error(
+            "scan_cancelled",
+            "Recovery scan cancelled. Start a new scan when you are ready.",
+        ));
+    }
+    let mempool = mempool_result?;
     wallet.apply_evicted_txs(mempool.evicted);
     wallet.apply_unconfirmed_txs(mempool.update);
     wallet.persist(db).map_err(internal)?;
-    mark_observed_addresses(wallet, db)
+    mark_observed_addresses(wallet, db)?;
+    Ok(client.observed_mempool_snapshot().unwrap_or_default())
 }
 
 fn mark_observed_addresses(wallet: &Wallet, db: &Connection) -> ApiResult<()> {
@@ -5417,7 +7330,9 @@ fn confirmations(
         ChainPosition::Confirmed { anchor, .. } => (
             tip.saturating_sub(anchor.block_id.height).saturating_add(1),
             Some(anchor.block_id.height),
-            anchor.confirmation_time.to_string(),
+            fallback_first_seen
+                .unwrap_or(anchor.confirmation_time)
+                .to_string(),
         ),
         ChainPosition::Unconfirmed { first_seen, .. } => (
             0,
@@ -5483,7 +7398,7 @@ fn tx_counterparty(
                 .derivation_of_spk(output.script_pubkey.clone())
                 .is_none()
             {
-                if let Ok(address) = Address::from_script(&output.script_pubkey, NETWORK) {
+                if let Ok(address) = Address::from_script(&output.script_pubkey, network()) {
                     return (
                         Some(address.to_string()),
                         outgoing_label
@@ -5573,127 +7488,34 @@ fn snapshot_from(
     multisig: bool,
     delayed_policy: Option<&DelayedPolicyContext>,
 ) -> ApiResult<WalletSnapshotDto> {
-    label_provenance::reconcile_wallet_outputs(wallet, db, now()).map_err(internal)?;
+    snapshot_for_view(wallet, db, synced_at, multisig, delayed_policy, false, true)
+}
+
+// The overview-only intermediate is projected to WalletOverviewDto before IPC;
+// it is never returned to a full-snapshot consumer such as coin selection.
+fn snapshot_for_view(
+    wallet: &Wallet,
+    db: &Connection,
+    synced_at: Option<String>,
+    multisig: bool,
+    delayed_policy: Option<&DelayedPolicyContext>,
+    overview_only: bool,
+    reconcile_provenance: bool,
+) -> ApiResult<WalletSnapshotDto> {
+    if reconcile_provenance {
+        label_provenance::reconcile_wallet_outputs(wallet, db, now()).map_err(internal)?;
+    }
     let provenance_context = label_provenance::summary_context(db).map_err(internal)?;
     let balance = wallet.balance();
     let tip = wallet.latest_checkpoint().height();
     let chain_tip = chain_tip_dto(db, tip, synced_at.as_deref())?;
-    let addresses = address_rows(db, multisig)?;
+    let addresses = if overview_only {
+        Vec::new()
+    } else {
+        address_rows(db, multisig)?
+    };
 
-    let mut transactions = Vec::new();
-    for tx in wallet.transactions_sort_by(|a, b| b.chain_position.cmp(&a.chain_position)) {
-        let transaction = tx.tx_node.tx.as_ref();
-        let (sent, received) = wallet.sent_and_received(transaction);
-        let is_received = received > sent;
-        let transaction_fee = wallet.calculate_fee(transaction).ok();
-        let transaction_vbytes = transaction.weight().to_vbytes_ceil();
-        let fee_rate = transaction_fee.and_then(|fee| {
-            (transaction_vbytes > 0).then(|| {
-                ((fee.to_sat() as f64 / transaction_vbytes as f64) * 100.0).round() / 100.0
-            })
-        });
-        let has_external_value_output = transaction.output.iter().any(|output| {
-            output.value > Amount::ZERO
-                && wallet
-                    .derivation_of_spk(output.script_pubkey.clone())
-                    .is_none()
-        });
-        let kind = transaction_kind(is_received, has_external_value_output);
-        let amount = if kind == "self_spend" {
-            transaction_fee.unwrap_or(Amount::ZERO)
-        } else if is_received {
-            received - sent
-        } else {
-            (sent - received)
-                .checked_sub(transaction_fee.unwrap_or(Amount::ZERO))
-                .unwrap_or(Amount::ZERO)
-        };
-        let txid = tx.tx_node.txid.to_string();
-        let observed_at = transaction_observed_at(db, &txid)?;
-        let (confirmations, block, date) = confirmations(&tx.chain_position, tip, observed_at);
-        let intent_label = (!is_received)
-            .then(|| label_provenance::payment_label_for_txid(db, &txid).map_err(internal))
-            .transpose()?
-            .flatten();
-        let provenance_outpoints = if is_received {
-            transaction
-                .output
-                .iter()
-                .enumerate()
-                .filter(|(_, output)| {
-                    wallet
-                        .derivation_of_spk(output.script_pubkey.clone())
-                        .is_some()
-                })
-                .map(|(vout, _)| format!("{}:{vout}", tx.tx_node.txid))
-                .collect::<Vec<_>>()
-        } else {
-            transaction
-                .input
-                .iter()
-                .map(|input| input.previous_output.to_string())
-                .collect::<Vec<_>>()
-        };
-        let mut provenance = label_provenance::funding_summary_with_context(
-            db,
-            &provenance_outpoints,
-            &provenance_context,
-        )
-        .map_err(internal)?;
-        provenance.context = if is_received { "received" } else { "funding" }.to_owned();
-        let (address, fallback_label) = tx_counterparty(wallet, db, transaction, is_received);
-        let label = if let Some(intent) = &intent_label {
-            intent.text.clone()
-        } else if is_received && provenance.labels.len() == 1 {
-            provenance.labels[0].text.clone()
-        } else if is_received && provenance.labels.len() > 1 {
-            format!("Received to {} labels", provenance.labels.len())
-        } else if kind == "self_spend" {
-            "Self-spend".to_owned()
-        } else {
-            fallback_label
-        };
-        transactions.push(TransactionDto {
-            id: txid,
-            kind: kind.to_owned(),
-            direction: if is_received { "received" } else { "sent" }.to_owned(),
-            amount: amount.to_sat(),
-            fee: if is_received {
-                None
-            } else {
-                transaction_fee.map(Amount::to_sat)
-            },
-            status: if confirmations > 0 {
-                "confirmed"
-            } else {
-                "pending"
-            }
-            .to_owned(),
-            confirmations,
-            date,
-            address,
-            label,
-            intent_label,
-            provenance,
-            block,
-            replaced_by: None,
-            replaces: None,
-            input_count: Some(transaction.input.len()),
-            output_count: Some(transaction.output.len()),
-            fee_rate,
-            wallet_input_amount: (sent > Amount::ZERO).then(|| sent.to_sat()),
-            wallet_output_amount: (received > Amount::ZERO).then(|| received.to_sat()),
-            locktime: Some(transaction.lock_time.to_consensus_u32()),
-            rbf: Some(
-                transaction
-                    .input
-                    .iter()
-                    .any(|input| input.sequence.is_rbf()),
-            ),
-            rbf_history: None,
-        });
-    }
-    apply_replacement_history(db, &mut transactions)?;
+    let transactions = activity::transactions_from(wallet, db, &provenance_context)?;
 
     let mut utxos = Vec::new();
     let frozen = {
@@ -5709,7 +7531,7 @@ fn snapshot_from(
     };
     for output in wallet.list_unspent() {
         let (output_confirmations, _, _) = confirmations(&output.chain_position, tip, None);
-        let address = Address::from_script(&output.txout.script_pubkey, NETWORK)
+        let address = Address::from_script(&output.txout.script_pubkey, network())
             .map(|address| address.to_string())
             .unwrap_or_else(|_| "Unknown".to_owned());
         let label = if output.keychain == KeychainKind::External {
@@ -5779,7 +7601,7 @@ fn snapshot_from(
     }
 
     Ok(WalletSnapshotDto {
-        network: NETWORK_NAME,
+        network: network_name(),
         balance: BalanceDto {
             confirmed: balance.confirmed.to_sat(),
             pending: aggregate_pending_balance(
@@ -5792,7 +7614,11 @@ fn snapshot_from(
         transactions,
         utxos,
         receive_addresses: addresses,
-        label_suggestions: label_provenance::label_suggestions(db, None).map_err(internal)?,
+        label_suggestions: if overview_only {
+            Vec::new()
+        } else {
+            label_provenance::label_suggestions(db, None).map_err(internal)?
+        },
         synced_at: chain_tip.observed_at.clone(),
         chain_tip,
     })
@@ -6119,31 +7945,39 @@ fn fee_difference(fee: u64, private_fee: Option<u64>) -> ApiResult<Option<i64>> 
 }
 
 #[tauri::command]
-pub fn coin_selection_preview(
+pub async fn coin_selection_preview(
     app: AppHandle,
-    state: State<'_, AppState>,
     outpoints: Vec<String>,
     amount: u64,
 ) -> ApiResult<CoinSelectionPreviewDto> {
-    let _operation = operation_guard(&state)?;
-    require_unlocked(&app, &state)?;
-    let mut db = open_db(&app)?;
-    let wallet = load_wallet(&mut db)?;
-    manual_selection_preview(&db, &wallet, &outpoints, amount)
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let _operation = operation_guard(&state)?;
+        require_unlocked(&app, &state)?;
+        let mut db = open_db(&app)?;
+        let wallet = load_wallet(&mut db)?;
+        manual_selection_preview(&db, &wallet, &outpoints, amount)
+    })
+    .await
+    .map_err(internal)?
 }
 
 #[tauri::command]
-pub fn multisig_coin_selection_preview(
+pub async fn multisig_coin_selection_preview(
     app: AppHandle,
-    state: State<'_, AppState>,
     outpoints: Vec<String>,
     amount: u64,
 ) -> ApiResult<CoinSelectionPreviewDto> {
-    let _operation = operation_guard(&state)?;
-    require_unlocked(&app, &state)?;
-    let mut db = open_multisig_db(&app)?;
-    let wallet = load_wallet(&mut db)?;
-    manual_selection_preview(&db, &wallet, &outpoints, amount)
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let _operation = operation_guard(&state)?;
+        require_unlocked(&app, &state)?;
+        let mut db = open_multisig_db(&app)?;
+        let wallet = load_wallet(&mut db)?;
+        manual_selection_preview(&db, &wallet, &outpoints, amount)
+    })
+    .await
+    .map_err(internal)?
 }
 
 #[path = "wallet/multisig_proposal_commands.rs"]
@@ -6188,6 +8022,7 @@ pub fn wallet_delete(
     state.proposals.lock().map_err(internal)?.clear();
     let dir = profile_directory(&app, profile.id)?;
     delete_registered_wallet(&app, profile.id, &dir)?;
+    forget_core_mempool_snapshot(&state, profile.id);
     lock_wallet(&state, profile.id)?;
     diagnostics::record(
         &app,
@@ -6214,6 +8049,7 @@ pub fn wallet_reset_regtest(
     state.proposals.lock().map_err(internal)?.clear();
     let profile = selected_profile(&app)?;
     delete_registered_wallet(&app, profile.id, &profile_directory(&app, profile.id)?)?;
+    forget_core_mempool_snapshot(&state, profile.id);
     lock_wallet(&state, profile.id)?;
     diagnostics::record(
         &app,
@@ -6230,7 +8066,7 @@ pub fn wallet_reset_regtest(
 }
 
 fn validate_regtest_reset_confirmation(confirmation: &str) -> ApiResult<()> {
-    validate_regtest_reset_confirmation_for(IS_REGTEST, confirmation)
+    validate_regtest_reset_confirmation_for(is_regtest(), confirmation)
 }
 
 fn validate_regtest_reset_confirmation_for(is_regtest: bool, confirmation: &str) -> ApiResult<()> {

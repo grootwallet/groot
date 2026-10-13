@@ -1,34 +1,46 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createLiveSync } from './live-sync';
-
-function registry(kind: 'single_key' | 'multisig') {
-  return {
-    version: 1,
-    selectedWalletId: 'selected',
-    wallets: [
-      {
-        id: 'selected',
-        name: 'Wallet',
-        network: 'regtest' as const,
-        kind,
-        descriptorChecksum: '12345678',
-        createdAt: 1
-      }
-    ]
-  };
-}
+import { createLiveSync, LIVE_SYNC_INTERVAL_MS } from './live-sync';
 
 describe('live wallet sync', () => {
+  it('uses a 35-second steady-state refresh cadence', () => {
+    expect(LIVE_SYNC_INTERVAL_MS).toBe(35_000);
+    expect(LIVE_SYNC_INTERVAL_MS).toBeGreaterThanOrEqual(30_000);
+    expect(LIVE_SYNC_INTERVAL_MS).toBeLessThanOrEqual(40_000);
+  });
+
+  it('ignores an old wallet failure after selection restarts the scheduler', async () => {
+    vi.useFakeTimers();
+    let reject!: (cause: unknown) => void;
+    const wallet = {
+      sync: vi
+        .fn()
+        .mockImplementationOnce(() => new Promise<void>((_, fail) => (reject = fail)))
+        .mockResolvedValue(undefined),
+      syncMultisig: vi.fn(),
+      cancelSync: vi.fn().mockResolvedValue(undefined)
+    };
+    const onError = vi.fn();
+    const controller = createLiveSync(wallet, () => 'single_key', 1_000, onError);
+    controller.start();
+    const oldWallet = controller.runNow();
+    controller.stop();
+    controller.restart();
+    reject({ code: 'wallet_locked' });
+    await oldWallet;
+    expect(onError).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(wallet.sync).toHaveBeenCalledTimes(2);
+    controller.stop();
+    vi.useRealTimers();
+  });
   it('syncs the selected single-key or multisig wallet', async () => {
     for (const kind of ['single_key', 'multisig'] as const) {
       const wallet = {
-        exists: vi.fn().mockResolvedValue(true),
-        profiles: vi.fn().mockResolvedValue(registry(kind)),
         sync: vi.fn().mockResolvedValue(undefined),
         cancelSync: vi.fn().mockResolvedValue(undefined),
         syncMultisig: vi.fn().mockResolvedValue(undefined)
       };
-      const controller = createLiveSync(wallet, 60_000);
+      const controller = createLiveSync(wallet, () => kind, 60_000);
       controller.start();
       await controller.runNow();
       expect(wallet.sync).toHaveBeenCalledTimes(kind === 'single_key' ? 1 : 0);
@@ -40,13 +52,11 @@ describe('live wallet sync', () => {
   it('lets persisted route data load before the first automatic sync', async () => {
     vi.useFakeTimers();
     const wallet = {
-      exists: vi.fn().mockResolvedValue(true),
-      profiles: vi.fn().mockResolvedValue(registry('single_key')),
       sync: vi.fn().mockResolvedValue(undefined),
       cancelSync: vi.fn().mockResolvedValue(undefined),
       syncMultisig: vi.fn().mockResolvedValue(undefined)
     };
-    const controller = createLiveSync(wallet, 10_000);
+    const controller = createLiveSync(wallet, () => 'single_key', 10_000);
 
     controller.start();
     await vi.advanceTimersByTimeAsync(9_999);
@@ -58,48 +68,46 @@ describe('live wallet sync', () => {
     vi.useRealTimers();
   });
 
-  it('does nothing without an existing wallet and cannot be wedged by error reporting', async () => {
+  it('does nothing without a selected wallet and cannot be wedged by error reporting', async () => {
     const error = new Error('offline');
     const onError = vi.fn(() => {
       throw new Error('reporter failed');
     });
     const wallet = {
-      exists: vi.fn().mockResolvedValue(false),
-      profiles: vi.fn(),
-      sync: vi.fn(),
+      sync: vi.fn().mockRejectedValueOnce(error).mockResolvedValue(undefined),
       cancelSync: vi.fn().mockResolvedValue(undefined),
       syncMultisig: vi.fn()
     };
-    const controller = createLiveSync(wallet, 60_000, onError);
+    let kind: 'single_key' | null = null;
+    const controller = createLiveSync(wallet, () => kind, 60_000, onError);
     controller.start();
     await controller.runNow();
-    expect(wallet.profiles).not.toHaveBeenCalled();
-    wallet.exists.mockResolvedValue(true);
-    wallet.profiles.mockRejectedValue(error);
+    expect(wallet.sync).not.toHaveBeenCalled();
+    kind = 'single_key';
     await controller.runNow();
     expect(onError).toHaveBeenCalledWith(error);
-    wallet.profiles.mockResolvedValue(registry('single_key'));
     await controller.runNow();
-    expect(wallet.sync).toHaveBeenCalledOnce();
+    expect(wallet.sync).toHaveBeenCalledTimes(2);
     controller.stop();
   });
 
-  it('treats an unconfigured or active resumable first scan as expected scheduler state', async () => {
+  it('starts an unconfigured first scan and treats an active resumable scan as expected', async () => {
     const onError = vi.fn();
     const wallet = {
-      exists: vi.fn().mockResolvedValue(true),
-      profiles: vi.fn().mockResolvedValue(registry('single_key')),
       sync: vi
         .fn()
         .mockRejectedValueOnce({ code: 'initial_scan_required' })
         .mockRejectedValueOnce({ code: 'scan_in_progress' })
         .mockResolvedValue(undefined),
       cancelSync: vi.fn().mockResolvedValue(undefined),
-      syncMultisig: vi.fn()
+      syncMultisig: vi.fn(),
+      fullRescan: vi.fn().mockResolvedValue(undefined)
     };
-    const controller = createLiveSync(wallet, 60_000, onError);
+    const controller = createLiveSync(wallet, () => 'single_key', 60_000, onError);
     controller.start();
     await controller.runNow();
+    expect(wallet.fullRescan).toHaveBeenCalledOnce();
+    expect(wallet.fullRescan).toHaveBeenCalledWith('');
     await controller.runNow();
     await controller.runNow();
     expect(onError).not.toHaveBeenCalled();
@@ -107,11 +115,53 @@ describe('live wallet sync', () => {
     controller.stop();
   });
 
-  it('backs off repeated failures and resets after a successful sync', async () => {
+  it('observes a route-owned native sync instead of starting an overlapping refresh', async () => {
+    const wallet = {
+      sync: vi.fn().mockResolvedValue(undefined),
+      cancelSync: vi.fn().mockResolvedValue(undefined),
+      syncMultisig: vi.fn(),
+      syncStatus: vi.fn().mockResolvedValue({
+        walletId: 'wallet-1',
+        source: 'bitcoin_core',
+        state: 'checking_pending',
+        progressPercent: 99,
+        chainHeight: 1,
+        lastVerifiedHeight: 1,
+        connectedPeers: null,
+        requiredPeers: null,
+        failureCode: null,
+        updatedAt: 1
+      })
+    };
+    const controller = createLiveSync(wallet, () => 'single_key', 60_000);
+    controller.start();
+
+    await controller.runNow();
+
+    expect(wallet.syncStatus).toHaveBeenCalledOnce();
+    expect(wallet.sync).not.toHaveBeenCalled();
+    controller.stop();
+  });
+
+  it('treats a native single-flight race as expected scheduler state', async () => {
+    const onError = vi.fn();
+    const wallet = {
+      sync: vi.fn().mockRejectedValue({ code: 'sync_in_progress' }),
+      cancelSync: vi.fn().mockResolvedValue(undefined),
+      syncMultisig: vi.fn()
+    };
+    const controller = createLiveSync(wallet, () => 'single_key', 60_000, onError);
+    controller.start();
+
+    await controller.runNow();
+
+    expect(onError).not.toHaveBeenCalled();
+    controller.stop();
+  });
+
+  it('keeps the 35-second-equivalent cadence after transient failures', async () => {
     vi.useFakeTimers();
     const wallet = {
-      exists: vi.fn().mockResolvedValue(true),
-      profiles: vi.fn().mockResolvedValue(registry('single_key')),
       sync: vi
         .fn()
         .mockRejectedValueOnce(new Error('offline'))
@@ -120,15 +170,15 @@ describe('live wallet sync', () => {
       cancelSync: vi.fn().mockResolvedValue(undefined),
       syncMultisig: vi.fn()
     };
-    const controller = createLiveSync(wallet, 1_000);
+    const controller = createLiveSync(wallet, () => 'single_key', 1_000);
     controller.start();
     await controller.runNow();
     expect(wallet.sync).toHaveBeenCalledTimes(1);
-    await vi.advanceTimersByTimeAsync(1_999);
+    await vi.advanceTimersByTimeAsync(999);
     expect(wallet.sync).toHaveBeenCalledTimes(1);
     await vi.advanceTimersByTimeAsync(1);
     expect(wallet.sync).toHaveBeenCalledTimes(2);
-    await vi.advanceTimersByTimeAsync(3_999);
+    await vi.advanceTimersByTimeAsync(999);
     expect(wallet.sync).toHaveBeenCalledTimes(2);
     await vi.advanceTimersByTimeAsync(1);
     expect(wallet.sync).toHaveBeenCalledTimes(3);
@@ -136,6 +186,50 @@ describe('live wallet sync', () => {
     expect(wallet.sync).toHaveBeenCalledTimes(3);
     await vi.advanceTimersByTimeAsync(1);
     expect(wallet.sync).toHaveBeenCalledTimes(4);
+    controller.stop();
+    vi.useRealTimers();
+  });
+
+  it('restores Mainnet node admission before starting a first scan off Overview', async () => {
+    const wallet = {
+      sync: vi
+        .fn()
+        .mockRejectedValueOnce({ code: 'node_admission_required' })
+        .mockRejectedValueOnce({ code: 'initial_scan_required' }),
+      syncMultisig: vi.fn(),
+      cancelSync: vi.fn().mockResolvedValue(undefined),
+      testNodeConnection: vi.fn().mockResolvedValue({ connected: true }),
+      fullRescan: vi.fn().mockResolvedValue(undefined)
+    };
+    const controller = createLiveSync(wallet, () => 'single_key', 60_000);
+    controller.start();
+
+    await controller.runNow();
+
+    expect(wallet.testNodeConnection).toHaveBeenCalledOnce();
+    expect(wallet.sync).toHaveBeenCalledTimes(2);
+    expect(wallet.fullRescan).toHaveBeenCalledWith('');
+    controller.stop();
+  });
+
+  it('keeps checking at the normal cadence after a Mainnet admission failure', async () => {
+    vi.useFakeTimers();
+    const wallet = {
+      sync: vi.fn(),
+      cancelSync: vi.fn().mockResolvedValue(undefined),
+      syncMultisig: vi
+        .fn()
+        .mockRejectedValueOnce({ code: 'node_admission_required' })
+        .mockResolvedValue(undefined)
+    };
+    const controller = createLiveSync(wallet, () => 'multisig', 1_000);
+    controller.start();
+    await controller.runNow();
+    expect(wallet.syncMultisig).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(999);
+    expect(wallet.syncMultisig).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(wallet.syncMultisig).toHaveBeenCalledTimes(2);
     controller.stop();
     vi.useRealTimers();
   });
@@ -150,8 +244,6 @@ describe('live wallet sync', () => {
       markStarted = resolve;
     });
     const wallet = {
-      exists: vi.fn().mockResolvedValue(true),
-      profiles: vi.fn().mockResolvedValue(registry('single_key')),
       sync: vi.fn().mockImplementation(() => {
         markStarted();
         return blocked;
@@ -159,7 +251,7 @@ describe('live wallet sync', () => {
       cancelSync: vi.fn().mockResolvedValue(undefined),
       syncMultisig: vi.fn()
     };
-    const controller = createLiveSync(wallet, 60_000);
+    const controller = createLiveSync(wallet, () => 'single_key', 60_000);
     controller.start();
     void controller.runNow();
     await started;
@@ -178,8 +270,6 @@ describe('live wallet sync', () => {
       markStarted = resolve;
     });
     const wallet = {
-      exists: vi.fn().mockResolvedValue(true),
-      profiles: vi.fn().mockResolvedValue(registry('single_key')),
       sync: vi.fn().mockImplementation(
         () =>
           new Promise<void>((_resolve, reject) => {
@@ -190,7 +280,7 @@ describe('live wallet sync', () => {
       cancelSync: vi.fn().mockResolvedValue(undefined),
       syncMultisig: vi.fn()
     };
-    const controller = createLiveSync(wallet, 60_000);
+    const controller = createLiveSync(wallet, () => 'single_key', 60_000);
     controller.start();
     void controller.runNow();
     await started;
@@ -205,8 +295,6 @@ describe('live wallet sync', () => {
       markStarted = resolve;
     });
     const wallet = {
-      exists: vi.fn().mockResolvedValue(true),
-      profiles: vi.fn().mockResolvedValue(registry('single_key')),
       sync: vi.fn().mockImplementation(
         () =>
           new Promise<void>((_resolve, reject) => {
@@ -219,7 +307,7 @@ describe('live wallet sync', () => {
       }),
       syncMultisig: vi.fn()
     };
-    const controller = createLiveSync(wallet, 60_000);
+    const controller = createLiveSync(wallet, () => 'single_key', 60_000);
     controller.start();
     void controller.runNow();
     await started;
@@ -241,8 +329,6 @@ describe('live wallet sync', () => {
       markStarted = resolve;
     });
     const wallet = {
-      exists: vi.fn().mockResolvedValue(true),
-      profiles: vi.fn().mockResolvedValue(registry('single_key')),
       sync: vi
         .fn()
         .mockImplementationOnce(() => {
@@ -253,7 +339,7 @@ describe('live wallet sync', () => {
       cancelSync: vi.fn().mockResolvedValue(undefined),
       syncMultisig: vi.fn()
     };
-    const controller = createLiveSync(wallet, 60_000);
+    const controller = createLiveSync(wallet, () => 'single_key', 60_000);
     controller.start();
     const current = controller.runNow();
     await started;

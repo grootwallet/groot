@@ -28,10 +28,23 @@ describe('label suggestion tooltips', () => {
     expect(appCss).toMatch(/\.ui-tooltip\.below\s*\{[\s\S]*?translateX\(-50%\)/);
   });
 
-  it('opens by tap on coarse pointers and closes when the user taps elsewhere', () => {
-    expect(tooltip).toContain("matchMedia('(hover: hover) and (pointer: fine)')");
-    expect(tooltip).toContain('if (!finePointer)');
-    expect(tooltip).toContain('event.stopPropagation()');
-    expect(tooltip).toContain("document.addEventListener('pointerdown', closeOutside)");
+  it('uses the shared compact borderless tooltip surface', () => {
+    expect(appCss).toMatch(/\.ui-tooltip\s*\{[\s\S]*?border: 0;[\s\S]*?border-radius: 4px;/);
+    expect(appCss).toMatch(
+      /\.ui-tooltip\s*\{[\s\S]*?color: var\(--tooltip-fg\);[\s\S]*?background: var\(--tooltip-bg\);/
+    );
+    expect(appCss).toContain('--tooltip-bg: #f7f3e9;');
+    expect(appCss).toMatch(
+      /:root\[data-theme='light'\]\s*\{[\s\S]*?--tooltip-bg: #102a4c;[\s\S]*?--tooltip-fg: #ffffff;/
+    );
+  });
+
+  it('uses the same quiet blue treatment for saved suggestions and permanent labels', () => {
+    expect(appCss).toMatch(
+      /\.label-suggestions button\s*\{[\s\S]*?background: color-mix\(in srgb, var\(--fr-blue\) 8%/
+    );
+    expect(appCss).toMatch(
+      /\.permanent-label-tag,[\s\S]*?background: color-mix\(in srgb, var\(--fr-blue\) 8%/
+    );
   });
 });

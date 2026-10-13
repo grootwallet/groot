@@ -5,7 +5,7 @@ use bdk_bitcoind_rpc::bitcoincore_rpc::{jsonrpc, Error as CoreRpcError};
 use bdk_wallet::error::CreateTxError;
 
 use crate::bsms::BsmsError;
-use crate::build_network::{NAME as NETWORK_NAME, NETWORK};
+use crate::build_network::{name as network_name, network};
 use crate::external_signer::ExternalSignerError;
 use crate::hardware::HardwareError;
 use crate::multisig::PolicyError;
@@ -21,12 +21,35 @@ use super::{api_error, internal, missing_hwi_value, ApiError};
 pub(super) const RPC_UNAVAILABLE_MESSAGE: &str = "Could not connect to Bitcoin Core. Check that the node is running and review the RPC address, authentication, and network settings.";
 pub(super) const RPC_PERMISSION_MESSAGE: &str = "Bitcoin Core accepted the RPC credentials, but this user is missing a required RPC permission. Add Groot's documented RPC methods to the user's rpcwhitelist and restart Bitcoin Core.";
 pub(super) const RPC_PRUNED_HISTORY_MESSAGE: &str = "Bitcoin Core no longer stores the blocks needed for this scan. Choose a birthday above the retained prune height, or connect an archival node.";
+pub(super) const RPC_REMOTE_CAPABILITY_MESSAGE: &str = "The trusted remote server does not support Groot's indexed wallet-sync methods. Deploy the current Groot gateway, use Bitcoin Core 29 or newer, and allow the documented RPC methods.";
+pub(super) const RPC_BUSY_MESSAGE: &str =
+    "The trusted remote server is completing another wallet scan. Wait briefly, then refresh again.";
+
+pub(super) fn rejected_http_api_error(status: u16) -> Option<ApiError> {
+    match status {
+        403 => Some(api_error(
+            "invalid_node_config",
+            RPC_REMOTE_CAPABILITY_MESSAGE,
+        )),
+        429 => Some(api_error(
+            "rate_limited",
+            "The trusted remote server is busy. Wait briefly, then refresh again.",
+        )),
+        503 => Some(api_error("scan_in_progress", RPC_BUSY_MESSAGE)),
+        _ => None,
+    }
+}
 
 pub(super) fn rpc_unavailable() -> ApiError {
     api_error("network_unavailable", RPC_UNAVAILABLE_MESSAGE)
 }
 
 pub(super) fn rpc_api_error(error: CoreRpcError) -> ApiError {
+    if let Some(error) =
+        crate::direct_rpc::rejected_http_status(&error).and_then(rejected_http_api_error)
+    {
+        return error;
+    }
     match error {
         CoreRpcError::JsonRpc(jsonrpc::Error::Rpc(response))
             if response.message.contains("not allowed to call method") =>
@@ -39,6 +62,18 @@ pub(super) fn rpc_api_error(error: CoreRpcError) -> ApiError {
                 .contains("Block not available (pruned data)") =>
         {
             api_error("node_history_unavailable", RPC_PRUNED_HISTORY_MESSAGE)
+        }
+        CoreRpcError::JsonRpc(jsonrpc::Error::Rpc(response))
+            if response.code == -32601
+                || response.message.contains("Method not found")
+                || response.message.contains("Unknown command") =>
+        {
+            api_error("invalid_node_config", RPC_REMOTE_CAPABILITY_MESSAGE)
+        }
+        CoreRpcError::JsonRpc(jsonrpc::Error::Rpc(response))
+            if response.message.contains("Scan already in progress") =>
+        {
+            api_error("scan_in_progress", RPC_BUSY_MESSAGE)
         }
         _ => rpc_unavailable(),
     }
@@ -100,7 +135,7 @@ pub(super) fn network_config_api_error(error: NetworkConfigError) -> ApiError {
             "Tor compact-filter sync requires manual numeric peers with public discovery disabled to prevent local DNS leaks."
         }
         NetworkConfigError::UnsupportedSyncSource => {
-            "Mainnet wallets require the explicitly admitted local Bitcoin Core node for activity sync."
+            "Mainnet wallets require an explicitly admitted Bitcoin Core node for activity sync."
         }
     };
     api_error("invalid_node_config", message)
@@ -118,7 +153,7 @@ pub(super) fn policy_api_error(error: PolicyError) -> ApiError {
         PolicyError::DuplicateFingerprint => "Every signer must have a unique master fingerprint.",
         PolicyError::DuplicateXpub => "Every signer must have a unique account xpub.",
         PolicyError::InvalidDescriptor => {
-            if NETWORK == bdk_wallet::bitcoin::Network::Bitcoin {
+            if network() == bdk_wallet::bitcoin::Network::Bitcoin {
                 "A key or descriptor is invalid. Use a mainnet BIP48 account xpub."
             } else {
                 "A key or descriptor is invalid. Use the compiled test-network BIP48 account tpub."
@@ -198,14 +233,14 @@ pub(super) fn external_signer_api_error(error: ExternalSignerError) -> ApiError 
             "The signer fingerprint must contain exactly 8 hexadecimal characters."
         }
         ExternalSignerError::InvalidDerivation => {
-            if NETWORK == bdk_wallet::bitcoin::Network::Bitcoin {
+            if network() == bdk_wallet::bitcoin::Network::Bitcoin {
                 "Use the mainnet BIP84 account path m/84'/0'/0'."
             } else {
                 "Use the test-chain BIP84 account path m/84'/1'/0'."
             }
         }
         ExternalSignerError::WrongNetwork => {
-            if NETWORK == bdk_wallet::bitcoin::Network::Bitcoin {
+            if network() == bdk_wallet::bitcoin::Network::Bitcoin {
                 "Use a mainnet account xpub, not a test-network tpub."
             } else {
                 "Use a test-chain account tpub, not a mainnet xpub."
@@ -279,6 +314,9 @@ pub(super) fn hardware_api_error(error: HardwareError) -> ApiError {
         HardwareError::Busy => "Another hardware-signer action is already in progress.",
         HardwareError::Cancelled => "The hardware-signer action was cancelled.",
         HardwareError::OutputTooLarge => "The hardware signer returned an oversized response.",
+        HardwareError::WrongNetwork => {
+            "The hardware signer is configured for a different Bitcoin network."
+        }
         HardwareError::CommandFailed(code) => match code {
             Some(-3 | -12) => "Unlock the signer and quit other wallet apps, then try again.",
             Some(-14) => "The action was cancelled on the hardware signer.",
@@ -300,6 +338,16 @@ fn bundled_hwi_unavailable_message() -> &'static str {
 }
 
 pub(super) fn hardware_device_api_error(error: HardwareError, device_type: &str) -> ApiError {
+    if device_type.eq_ignore_ascii_case("jade") && matches!(error, HardwareError::WrongNetwork) {
+        return api_error(
+            error.code(),
+            format!(
+                "Jade is set to another network, but Groot is on {}. Confirm your recovery backup, then factory-reset and restore Jade with {} selected—or switch Groot to Jade’s current network.",
+                network_name(),
+                network_name()
+            ),
+        );
+    }
     if device_type.eq_ignore_ascii_case("trezor") && matches!(error, HardwareError::TimedOut) {
         return api_error(
             error.code(),
@@ -326,14 +374,6 @@ pub(super) fn hardware_device_api_error(error: HardwareError, device_type: &str)
             return api_error(error.code(), message);
         }
     }
-    if device_type.eq_ignore_ascii_case("coldcard")
-        && matches!(error, HardwareError::CommandFailed(Some(-7)))
-    {
-        return api_error(
-            error.code(),
-            "Coldcard does not recognize this multisig wallet. Save the wallet policy in Groot, import it from Settings → Multisig Wallets → Import on Coldcard, verify the threshold and fingerprints, then try again.",
-        );
-    }
     if device_type.eq_ignore_ascii_case("bitbox02")
         && matches!(error, HardwareError::CommandFailed(Some(-8 | -9)))
     {
@@ -356,15 +396,39 @@ pub(super) fn hardware_device_api_error(error: HardwareError, device_type: &str)
     hardware_api_error(error)
 }
 
+pub(super) fn hardware_signing_api_error(
+    error: HardwareError,
+    device_type: &str,
+    multisig: bool,
+) -> ApiError {
+    if device_type.eq_ignore_ascii_case("coldcard")
+        && matches!(error, HardwareError::CommandFailed(Some(-7)))
+    {
+        return if multisig {
+            api_error(
+                error.code(),
+                "Coldcard rejected this multisig transaction. Confirm that the wallet policy is imported and that the threshold and fingerprints match, then review any on-device warning and try again.",
+            )
+        } else {
+            api_error(
+                error.code(),
+                "Coldcard rejected the transaction. Review the message on Coldcard. For a high-fee CPFP, lower the package rate, wait for the parent, or deliberately change Coldcard's Max Network Fee setting before retrying; Groot will not bypass device safety checks.",
+            )
+        };
+    }
+    hardware_device_api_error(error, device_type)
+}
+
 pub(super) fn missing_hardware_fingerprint(device_type: &str) -> ApiError {
     let message = match device_type.to_ascii_lowercase().as_str() {
         "ledger" => format!(
-            "Unlock Ledger and open {} for this {NETWORK_NAME} wallet, then scan again.",
-            if NETWORK == bdk_wallet::bitcoin::Network::Bitcoin {
+            "Unlock Ledger and open {} for this {} wallet, then scan again.",
+            if network() == bdk_wallet::bitcoin::Network::Bitcoin {
                 "Bitcoin"
             } else {
                 "Bitcoin Test—not Bitcoin"
-            }
+            },
+            network_name()
         ),
         "bitbox02" => "Unlock BitBox, then try again.".to_owned(),
         "jade" => "Jade is still locked. Select it again and enter your PIN on Jade when prompted."
@@ -389,11 +453,14 @@ pub(super) fn missing_hardware_psbt(
     device_type: &str,
     code: Option<i64>,
     fallback: &str,
+    multisig: bool,
 ) -> ApiError {
     match code {
-        Some(code) => {
-            hardware_device_api_error(HardwareError::CommandFailed(Some(code)), device_type)
-        }
+        Some(code) => hardware_signing_api_error(
+            HardwareError::CommandFailed(Some(code)),
+            device_type,
+            multisig,
+        ),
         None => missing_hwi_value(None, fallback),
     }
 }

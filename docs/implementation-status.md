@@ -1,5 +1,444 @@
 # Implementation status
 
+## v0.5.1 QR copy and send progress localization — 2026-10-07
+
+Rejected payment QR codes now use a complete English sentence from the stable
+error code rather than displaying the native parser's lowercase diagnostic.
+Both single-key and multisig send progress steps render the existing French and
+Spanish translations. This changes presentation only: native validation,
+persisted formats, and BIP support are unchanged.
+
+## v0.5.1 payment scanner error visibility — 2026-10-07
+
+The payment-request scanner sizes its square camera from the modal body space
+remaining after status and rejection feedback, including when the window grows.
+The full rejection stays visible without scrolling the camera on desktop and
+mobile. This is presentation-only; QR decoding, payment-request validation,
+persisted formats, and BIP support are unchanged.
+
+## v0.5.1 send amount input guard — 2026-10-07
+
+Both send routes now reject letters and symbols in the amount field, including
+paste/autofill input, without silently stripping characters into a different
+payment amount. Sats retains optional comma thousands grouping; BTC accepts a
+point or comma decimal separator and still parses exactly to integer satoshis.
+The authoritative Rust payment policy, persisted formats, and transaction flow
+are unchanged. Browser fixtures cover both routes; physical testing remains
+separate.
+
+## v0.5.1 send and scanner presentation — 2026-10-07
+
+Both send routes use the existing warning notice for an invalid amount and for
+Max-selection feedback; the insufficient-balance copy is one short sentence.
+RBF and CPFP quote cards now have one **View more details / View less details**
+disclosure containing the editable fee rate and three fee facts: original rate,
+new rate, and new total network fee. The existing interactive amount control
+switches that fee between sats and BTC. Quote computation, minimum-rate policy,
+PSBT review, and signing are unchanged. Payment-request camera dialogs keep the
+square viewport within the modal without body scrolling and center the guide.
+No persisted format or BIP behavior changes.
+
+## v0.5.1 acceleration final guard and receive details — 2026-10-07
+
+The software, external-hardware, and multisig final broadcast commands share
+one native RBF/CPFP guard: the persisted original transaction must still be in
+the configured Core node's mempool immediately before sending the signed
+transaction. Missing or unavailable evidence preserves the signed proposal;
+an observed active-chain confirmation makes the send flow read-only. The two
+node requests are not atomic, so a block can still arrive between them. Prior
+receive verification time and fingerprint now appear only in the existing
+expandable address-details rows. No persisted format or BIP support changes.
+Normal macOS Finder launch can activate an already-running Groot copy with the
+same bundle identifier before the newer executable starts; the existing
+process-lock warning can appear only when a second process actually launches.
+Changing that Finder behavior requires a separately reviewed packaging path.
+
+## v0.5.1 hardware presentation follow-up — 2026-10-07
+
+The seven supported USB model rows use the same unproven identity copy in
+receive and signing: a passive model match says **Select to identify**, not
+**Select to confirm wallet**. **Ready** remains reserved for fresh saved-account
+proof. A receive address can display its previously verified fingerprint as
+historical evidence without treating a newly scanned device as the same live
+signer. Passive Trezor Safe 3 inventory cannot determine lock state, so its
+unidentified row says **Select to identify** instead of **Unlock to identify**;
+the selected-device unlock/check path is unchanged. Unidentified selectable
+rows, including BitBox02, use neutral badges rather than warning colors.
+Completed multisig signing moves **Save signed PSBT** under **Other
+options**, leaving finalization primary. No wallet, profile, proposal, registry,
+backup, descriptor, PSBT, database, or BIP format changes; no migration is
+required. Physical retesting of all seven exact devices is still needed.
+
+## v0.5.0 release preparation — 2026-10-05
+
+The tested source now reports v0.5.0 across the frontend, Tauri, Cargo, and
+diagnostic build identity. ADR 0082 authorizes the version through annotated tag
+`v0.5.0`; production packaging remains fail-closed until the peeled remote tag,
+`origin/main`, and local `HEAD` match, the executable is reproduced from the
+frozen signed-HWI input, and Developer ID signing and Apple notarization pass.
+This release-governance change alters no wallet behavior or persisted format.
+
+The v0.5.1 startup follow-up preserves the application-root process lock while
+correcting second-launch presentation. Desktop startup keeps the new window
+hidden until lock acquisition succeeds. If another Groot process already owns
+the same wallet-data root, the second process now presents a native **Groot is
+already open** message instructing the user to close the running version and try
+again, then exits normally after acknowledgement. It no longer propagates the
+expected lock conflict into the Rust runtime panic that macOS presented as an
+unexpected quit. Groot does not terminate the existing process or weaken the
+lock. No wallet, profile, registry, proposal, backup, secret-envelope, database,
+or network-selection format changes; no migration is required, and BIP behavior
+is unchanged.
+
+## Current release status — 2026-10-04
+
+Public v0.4.96 (`f7b4b993`) is Mainnet-ready and authorized for the macOS
+Apple-silicon multi-network scope. The release owner confirms the complete
+BIP84/BIP48 physical-signer matrix and signer permutations, local pruned and
+Groot-managed remote Core full/birthday scans, backend and network switching,
+and two-machine reproduction. ADR 0053 and the completed Mainnet checklist are
+canonical. Older “blocked,” “candidate,” or “pending” entries below are dated
+historical snapshots, not the current release state.
+
+Sep 30 release-candidate picker follow-up applies the saved-wallet eligibility
+copy consistently to BIP84 signing, BIP48 signing, and receive verification. A
+fingerprint-less device from a family absent from the wallet is now a disabled
+**Not part of this wallet** row and cannot be selected to trigger unlock. An
+eligible same-family device remains **Select to identify**, or **Unlock to
+identify** when a PIN step is known, until the existing native exact fingerprint,
+derivation, and account-xpub proof succeeds; this is intentionally conservative
+for multiple devices and for BitBox02-family records, whose persisted public
+signer record names the HWI family rather than a hardware submodel. Hardware
+cancellation guidance is shortened to **Reject the request on the device.** No
+wallet, profile, registry, proposal, backup, descriptor, PSBT, transaction, or
+database format changes; no migration is required.
+
+Sep 30 Model One crash correction addresses the two owner-observed process
+terminations in internal candidate `0881a194`. Both macOS crash reports end on a
+Tokio blocking worker in `IOHIDDeviceScheduleWithRunLoop` while creating a new
+`IOHIDManager`; passive HID inventory now owns one manager on one dedicated,
+process-lifetime thread and routes every refresh through it. A hardware-backed
+regression completes twenty consecutive connected-Model-One inventories in one
+process. Successful PIN submission continues directly on the already selected
+capability instead of launching another discovery, and a bounded exact-path
+unlock observation lets a later passive scan render that connected Model One as
+Ready while still rechecking the exact device before an action. Disconnecting
+removes the observation. The PIN-position output reserves its height before the
+first tap, so the matrix never moves. No persisted wallet, profile, registry,
+proposal, node, transaction, descriptor, PSBT, database, or BIP format changes;
+no migration is required. The transient node error after the crashed process is
+not treated as a node-config change and still requires replacement-package
+observation.
+
+Sep 30 hardware-pipeline correction implements ADR 0075's passive picker on
+macOS. Read-only HID, USB-registry, and serial enumeration classifies only exact
+allowlisted host endpoints and mints process-local capabilities; it never
+launches HWI or opens a vendor session. Every selected-device HWI account-key,
+unlock/PIN continuation, policy, trusted-display, and signing command is bound to
+the selected non-empty exact path; the former BitBox type-only import and
+fingerprint-selected display paths are removed. Same-family devices retain
+distinct capabilities. Concurrent discovery callers share the leader's cache
+epoch, modal close invalidates native discovery, late canceled results cannot
+repopulate the cache, and health checks suspend inactivity expiry for their
+bounded operation. Classifier fixtures cover approved HID/WebUSB/serial records,
+one native inventory call for concurrent requesters, exact-path BitBox retries,
+and Mainnet omission of the passively ambiguous Safe 3 revision-A/Model-T
+identity. Current WebUSB Model One is distinguished from core-family Trezors by
+its exact legacy USB release tuple, and a connected Model One passes the ignored
+physical inventory probe alongside Safe 3. Coldcard remains absent until its
+firmware exposes USB after local unlock. Exact-pinned macOS dependencies add
+`hidapi` 2.6.7, `nusb` 0.2.7, and
+`serialport` 4.10.1; Cargo lock/SBOM/supply-chain review applies. Physical
+seven-device, packaged timing, and non-macOS inventory remain open release
+blockers; no physical-device or release certification is claimed. No persisted
+format, descriptor, derivation, PSBT, signing-semantics, or BIP support changes;
+no migration is required.
+
+Sep 30 acceleration/modal follow-up bounds the shared desktop overlay itself to
+the title-bar-inclusive viewport, reserves backdrop padding on every edge, and
+keeps expanded modal content in the existing internal scroll body. Single-key
+hardware signing uses the shared wide-modal variant so device selection remains
+visible beside transaction review, with a one-column mobile fallback. RBF/CPFP
+quote failures now use amber inline/toast warning treatment and disable signing;
+a successful retry is required to proceed. Coldcard CPFP review proactively
+explains its documented default 10% Max Network Fee check, and HWI code `-7` no
+longer produces a false multisig-policy instruction in a BIP84 wallet. Groot does
+not bypass device safety. Wallet, profile, proposal, registry, backup,
+transaction, descriptor, PSBT, and database formats are unchanged, no migration
+is required, and BIP behavior is unchanged. Owner-operated Mainnet BIP84 receive
+address/deposit and corrected BIP48 roster evidence is recorded separately in
+the certification ledger.
+
+Sep 28 hardware-review follow-up aligns the compact single-key and multisig
+signing modal with the primary Review & sign hierarchy: the amount leads, the
+same `To → Label → Network → Network fee → Total` rows use the established type
+scale and separators, and expanded technical data stays in separated rows.
+Ledger's repeated pre-sign policy authorization omits the first-address reference
+that Ledger does not display there; new-wallet multisig policy registration
+retains that check. Automatic coin strategy selection now uses the standard blue
+outline instead of amber. These are presentation-only changes;
+wallet, profile, proposal, registry, backup, transaction, descriptor, PSBT, and
+database formats are unchanged, no migration is required, and BIP behavior is
+unchanged.
+
+Sep 28 hardware/UI closing pass replaces the improvised discard-address summary
+with the existing grouped copy control, permanent-label tags, and standard detail
+rows for derivation path and address type. Standard multisig is identified as
+**Native SegWit · standard multisig**; only delayed descriptor policies use
+**Descriptor · Miniscript**. Manual coin selection removes decorative separators,
+the redundant funding-label heading, and the non-actionable estimated-weight
+disclosure; selectable rows now expose hover/focus feedback. Single-key signing
+uses the complete discovered-device list and the shared status badges while Rust
+continues to reject non-wallet identities. Model One PIN success in that source
+line performed a fresh discovery before signing; the Sep 30 crash correction
+supersedes that handoff by continuing on the already selected capability and
+retaining exact-device proof in the action. No persisted format, descriptor, derivation, transaction,
+PSBT, dependency, or BIP support behavior changes; no migration is required.
+Stock HWI 3.2.0 aggregate discovery can still enter a vendor-owned unlock/login
+flow before Groot has a selected signer. Passive transport inventory remains a
+separate reviewed-helper proposal, not an unsafe shortcut in this patch.
+
+Sep 28 RBF follow-up retains obsolete proposal details after original confirmation
+and removes signing/PSBT/broadcast actions on both send routes. Snapshot checks
+also cover reopening. Existing native cancellation removes the saved proposal;
+draft autosave is suppressed after successful cancellation. Desktop/mobile browser
+fixtures cover live confirmation, resume and explicit discard; physical packaged
+retesting remains required. No persisted format or native transaction rule changed.
+
+Sep 28 receive follow-up removes technical candidate copy, reads saved multisig
+policy evidence for the concise unverified hint, and retains every discovered
+family (the former family filter hid an unrelated Ledger). Single-key and multisig
+discard confirmations identify the exact target with all labels and expandable
+address details. Native identity checks, retirement rules, and persisted formats
+are unchanged. Owner-reported hardware retests are recorded in the Mainnet ledger;
+the Ledger visibility correction and RBF-confirmation race still need physical evidence.
+
+Sep 27 address-reuse correction: retained original/replacement lineage could
+incorrectly count one incoming RBF payment twice. Reuse now follows BDK canonical
+external outputs, including spent receipts, while keeping historical records and
+labels. Rust regression fixtures cover single-key and standard multisig replacement,
+eviction, real reuse, repeat reconciliation, and repair of old derived flags.
+Physical confirmation of the reported Multi C badge remains pending.
+
+The [HWI investigation](hwi-performance-investigation-2026-09-26.md) measures
+bundled-helper startup without touching devices and records larger transport
+proposals. BitBox draft/saved policy display now uses the freshly proven
+fingerprint reopen already used by receive display. Full identity proof remains
+mandatory; physical reconnect and timing improvements are not certified.
+
+Sep 26 follow-up: standard receive addresses no longer imply generalized
+Miniscript support; the redundant Receive Overview link is removed. Trezor receive
+unlock refreshes discovery before explicit signer selection (physical retry pending).
+Single-key and multisig acceleration now react to wallet-scoped confirmation events.
+No Rust, persistence, transaction-construction, or dependency change is involved.
+
+Existing-wallet hardware pickers now distinguish unknown identities from known
+non-wallet fingerprints and disable the latter before device interaction.
+Fingerprint matches remain candidates, not account-key proofs. Native validation
+and persisted formats are unchanged. The CPFP/RBF eyebrow is removed; loaded
+backup selectors have vertical padding and recovery states that PDF is not an
+importable backup. Aggregate HWI latency remains an open physical regression.
+
+The 2026-09-26 setup simplification removes duplicate navigation and explanatory
+headings, moves descriptor inspection/copy to backup beside the primary file save,
+and moves multisig network adoption out of creation into Settings. Policy review
+opens immediately from saved public data; one fresh device lookup occurs only on
+explicit review, including retries. Complete native identity and address checks
+remain unchanged. This removes a redundant scan, not HWI aggregate-scan latency.
+No persisted format, dependency, or signing behavior changes.
+
+The pruned-rescan follow-up checks persisted checkpoint agreement through Core's
+active-chain height/hash mapping rather than requesting an old full block that
+may already be pruned. Stale hashes still rewind to verified agreement; actual
+scan-range retention checks remain mandatory. Settings now retains the live
+connection result's prune height for pre-submit guidance, independently of cached
+tip availability. Wallet data formats and saved birthdays are unchanged.
+
+The Multisig B setup follow-up refreshes opaque signer capabilities before policy
+review and retry instead of reusing import rows invalidated by a later health scan.
+Reusable network setups expose only public wallet identity and readiness, even
+when the selected wallet is locked; copying still authorizes the exact source,
+verifies Core, and encrypts an independent destination copy before publication.
+Duplicate descriptors are rejected before that copy or candidate-file creation.
+Standard multisig no longer implies assisted signing. Shared policy headings,
+duplicate-wallet actions, and App Logs pagination use aligned, spaced layouts.
+No persisted format, migration, dependency, or BIP semantics change is involved.
+The owner reported Multisig B key imports and health checks succeeding, Jade policy
+registration succeeding, and original BitBox02 policy verification failing on
+`8cc12222`; replacement-package verification remains required. Aggregate HWI
+discovery can still prompt before device choice; passive discovery remains separate.
+
+The payment-resume and multisig-setup follow-up holds both Send flows behind a
+loading state until the saved draft/proposal is restored, shows authoritative
+funding labels in review, and simplifies shared self-transfer and device-policy
+copy. Duplicate multisig creation offers the exact existing wallet. The shared
+health button invokes its callback without forwarding a click event as a device.
+Draft signer
+health uses the same live BIP48 identity proof without consulting or writing an
+unrelated selected wallet database; saved-wallet health is unchanged. The internal
+multi-network bundle is named **Groot**, retaining `app.groot.wallet` and its
+existing data locations. No persisted format, migration, dependency, or BIP
+support changes. Automated fixtures are not physical-device certification;
+Coldcard Mk4, Nova, and Ledger checks on the replacement package remain required.
+
+The shared UI simplification follow-up gives every portalled tooltip a compact borderless surface in both themes, gives permanent-label tags and recent-label suggestions the same blue-tinted identity, and removes the shared modal close button's resting fill. Ordinary software, single-hardware, and multisig Send flows now keep their signer summary in a right-hand desktop column across Intent, Amount & fee, and Review & sign while stacking it safely on mobile. Repeated Send headings, draft-warning copy, address-detail decoration, and the default irreversible-transaction warning are removed; funding privacy context moves into the existing optional transaction disclosure. Single-Ledger signing omits unsupported QR controls. Clicking the selected locked wallet now returns from Settings to Unlock, and Coins exposes whole-row hover/selection behavior. This is presentation and renderer navigation only: wallet, profile, proposal, registry, backup, draft, transaction, descriptor, and database formats are unchanged, no migration is required, and there is no BIP-support impact.
+
+The local-Core confirmation-reconciliation follow-up repairs a wallet graph whose
+transaction already has a valid confirmation anchor but whose sparse persisted
+chain checkpoint omits that anchor height. Ordinary sync now verifies each missing
+anchor height and hash against the active Bitcoin Core chain, downloads the retained
+block, requires the exact transaction to be present, and atomically restores the
+checkpoint before presenting activity. A pruned-away block fails with
+`node_history_unavailable`, while an anchor/block mismatch fails as corrupt wallet
+state; neither case can be reported as a successful current-tip refresh. This fixes
+the exact `b49d2a81` Mainnet failure where retained, deeply confirmed transactions
+remained pending despite repeated successful local-Core sync records. Wallet,
+profile, proposal, backup, registry, descriptor, and database formats are unchanged;
+no migration is required.
+
+The Jade onboarding follow-up distinguishes HWI's exact persisted-network
+mismatch from ordinary lock, disconnect, and application-contention failures.
+Native code emits the stable `hardware_wrong_network` code without forwarding
+raw HWI output; hardware onboarding presents a specific Jade/network heading,
+concise recovery guidance, and a close action through the shared warning
+component. The HWI dependency, discovery strategy, signer identity checks,
+descriptors, derivations, PSBTs, persisted formats, and migration state are
+unchanged.
+
+The hardware-onboarding follow-up prevents an unrelated out-of-scope HWI model
+from invalidating an approved signer returned by the same aggregate enumeration.
+Rust still bounds every record, issues capabilities only for the exact network
+allowlist, and performs the same selected-device fingerprint, derivation, and
+account-key proof before import. Hardware setup now renders scan and creation
+failures through the shared structured danger notice, and wallet-choice arrows
+participate in the card footer layout instead of overlapping localized CTA copy.
+The pinned HWI 3.2.0 binary remains the measured latency floor: its all-backend
+enumeration cannot be narrowed with `--device-type`, so this change removes the
+false failure but does not claim Sparrow-equivalent discovery performance. No
+persisted format, dependency, descriptor, derivation, PSBT, signing, or BIP
+support changes; no migration is required.
+
+The warning-copy and App Logs loading follow-up is presentation-only. Recovery-word
+verification, BIP329 label exchange, and saved network-setup reuse now lead with a
+short title and one plain-language sentence; the existing insight tooltip retains
+the fuller security or privacy detail. Credential fields keep a full control-space
+gap below those warnings. App Logs paints its destination header and shape-matched
+summary, controls, and table skeletons while native sanitized records load, instead
+of leaving the content area blank or briefly claiming zero events. Wallet secrets,
+log contents, native commands, persisted formats, dependencies, and protocol support
+are unchanged; no migration is required.
+
+The application-wide readability follow-up raises shared supporting copy to 13
+pixels, removes remaining sub-12-pixel non-print copy, strengthens secondary-text
+contrast in both themes, and increases the hierarchy of wallet, transaction,
+coin, settings, hardware, and recovery rows. Long optional backup-format guidance
+now follows the standard blue chevron disclosure while page-level subtitles are
+shorter. The compact desktop wallet list scrolls the selected wallet into view on
+launch and after selection. Wallet behavior, security consequences, native
+commands, persisted formats, dependencies, and protocol support are unchanged;
+no migration is required. The reviewed Mainnet source-policy hashes are refreshed
+only for the UI-only Settings and diagnostics subtitle changes; their wallet and
+network behavior is unchanged.
+
+The Mainnet hardware-signing presentation follow-up keeps the existing Ledger
+policy and transaction authorization boundary while reducing the policy modal
+to its security-relevant values and one action. Hardware-address details retain
+the exact grouped address, intended label, copy control, and one spacing note
+without duplicating comparison guidance. The shared desktop modal layer now
+re-anchors after window and fullscreen resizing so its internal scroll body and
+actions remain reachable. No wallet data, native command, signing behavior,
+persisted format, dependency, or protocol support changes; no migration is
+required.
+
+The multi-network onboarding header now keeps global Settings reachable when the
+selected network has no wallet profiles. This closes the empty-namespace trap in
+which the shell correctly opened onboarding but provided no route to the
+restart-bound network selector. The Settings page continues to expose only app
+preferences and network selection until a wallet is unlocked. No wallet data is
+moved, copied, opened, or migrated; persisted formats, native commands,
+dependencies, transaction behavior, and BIP support are unchanged.
+
+The rejected Mainnet multisig coordinator-PIN live-signer checklist remains
+removed. Standard multisig creation no longer depends on a 15-minute
+process-memory HWI admission, so a validated saved draft can become an offline
+watch-only coordinator after restart. Rust now rejects a new Mainnet multisig
+receive address until at least the spending threshold has durable matching
+interactive policy/first-address proof and each Coldcard policy file has its
+separate acknowledgement. The receive form links an unmet gate to Policy.
+Trezor and Coldcard cannot count toward the interactive quorum in this candidate;
+such signer combinations remain receive-blocked until a reviewed device path
+exists. External-signer and recovery admission are unchanged. No persisted
+format changes or physical certification evidence transfer; exact packaged
+restart/resume and funding tests are still required (ADR 0065).
+
+The hardware follow-up corrects Mainnet-candidate blockers found through physical
+testing. HWI 3.2.0 identifies Trezor Safe 3 revisions as
+`trezor_t2b1`/`trezor_t3b1`, and a later physical probe returned the exact
+`trezor_safe 3` retail-string representation. The trusted allowlist admits only
+those exact Safe 3 representations while continuing to reject other Trezor
+models and fuzzy aliases. Saved-signer discovery no longer destroys the other exact,
+time-bounded admissions accumulated for one multisig draft, and a successful
+live policy/address proof renews only the proven signer. No renderer metadata can
+create admission. Shared dialogs now portal through the existing reusable modal,
+the shared loading animation is namespaced, and hardware setup copy names only
+the release-target models with network-correct Ledger instructions. No persisted
+format, migration, dependency, command, descriptor, or PSBT behavior changes.
+The exact old-build evidence and required corrected-build repetition are in
+[`hardware-certification-mainnet-2026-09-12.md`](hardware-certification-mainnet-2026-09-12.md).
+
+The approved 2026-09-08 design refresh applies locally bundled Source Sans 3,
+Blue Ink/ivory light and dark semantic tokens, shared radii and readable supporting
+type across existing application routes and reusable components. Wallet operations,
+native secret-entry sheets, startup timing and backup print output are unchanged.
+No persisted format or network/dependency change is introduced. Browser evidence
+and physical-webview limitations: [`design-refresh-2026-09-08.md`](design-refresh-2026-09-08.md).
+
+The subsequent 2026-09-08 query follow-up combines indexed provenance reads,
+removes a redundant output-lineage lookup, and replaces correlated address-reuse
+recounts with one grouped calculation that skips unchanged row writes. Frozen
+read/reconciliation oracles, corruption and rollback fixtures, and query-plan and
+statement budgets protect the same persisted results. No schema, transport,
+dependency, BIP behavior or production UI change is introduced. See
+[`provenance-query-follow-up-2026-09-08.md`](provenance-query-follow-up-2026-09-08.md).
+
+The 2026-09-08 navigation follow-up binds notification read/ack to wallet UUID
+and ephemeral unlock-session identity, invalidates stale frontend delivery work,
+and removes notification latency/failure from snapshot and broadcast completion.
+Native Overview returns recent-three activity plus complete pending accounting;
+native Activity filters/sorts the complete transaction history and exposes bounded,
+revision-bound cursor pages without constructing receive/coin/suggestion DTOs.
+RBF/CPFP quotes and saved external-signer reads run on blocking workers. Overview
+secondary details and Send public signer identity no longer wait behind unrelated
+reads. The 1.8-second startup gate is unchanged. These are shared Rust/frontend
+paths, not a claim of mobile or physical-hardware certification. No persisted
+format, dependency or network transport changes; no migration or BIP support-level
+change. The two new read endpoints bring the registered command count to 133.
+Evidence and remaining performance work are recorded in
+[`navigation-performance-2026-09-08.md`](navigation-performance-2026-09-08.md).
+
+The 2026-09-08 maintenance follow-up removes two registered native commands with no
+current caller: the legacy Payjoin-specific inspection wrapper superseded in Send by
+the general bounded payment-request parser, and a standalone mainnet-admission clear
+wrapper whose cleanup remains owned by every relevant lifecycle path. The active
+V2-only payment-request parser and its Payjoin detection test remain; its dead
+specialized DTO/parser and duplicate tests are removed, and no Payjoin transport or
+session is enabled. Export filenames now share one private validator for the unchanged length,
+path, NUL, trimming, and allowlisted-extension rules. Registered native commands
+decrease from 133 to 131. Persisted formats, dependencies, UI behavior, wallet and
+network policy, transaction behavior, and BIP support/evidence are unchanged; no
+migration is required.
+
+The 2026-09-08 simplification follow-up removes the unused generic `airgap`
+multipart decoder. It had no command registration, adapter call, production
+caller, persisted representation, or documentation-owned product behavior; the
+active animated-QR implementation remains the bounded `crypto-psbt` UR transport
+and retains its multipart ordering, redundancy, CBOR, PSBT, and resource tests.
+The same follow-up gives permanent-label, multisig-signer, and hardware-signer
+renaming one pure whitespace-normalization helper while preserving their distinct
+bounds and stable errors. No command, dependency, capability, DTO, persisted
+format, protocol behavior, or BIP support/evidence changes; no migration is
+required.
+
 The 2026-09-06 contract-maintenance follow-up preserves fourteen existing native
 error codes that previously normalized to `internal_error` in the frontend.
 Source-contract and mocked-IPC adapter tests cover the allowlist, including the
@@ -15,10 +454,18 @@ v0.4.92 adds a trusted, app-scoped diagnostic event log for wallet lifecycle,
 sync/recovery scans, transaction preparation/signing/broadcast, receive generation,
 eligible-address discard and hardware verification, coin freeze state, backup/recovery operations, network
 configuration, and diagnostic export. Rust uses a fixed allowlisted schema and
-stable-error redaction; no renderer-authored strings enter records. The log remains
-entered from its standalone Settings section and exports deterministic JSON or CSV.
-The page shows the complete allowlisted category inventory and safe context,
-including receive-generation label count without label text. It is a separate
+stable-error redaction; no renderer-authored strings enter records. The user-facing
+feature is **App logs**. It remains entered from its standalone Settings section,
+preserves the regular unlocked shell navigation, and exports deterministic JSON or
+CSV. The page can search all safe fixed-field context, combine closed event-type
+and outcome filters, reverse date order, switch between an aligned table and the exact
+sanitized JSON, and explicitly copy the current JSON result. Allowlisted failures add
+a fixed safe explanation and closed scalar context. Pruned recovery failures include
+the requested birthday, required anchor, earliest retained full block, and earliest
+usable birthday in the app log and durable modal error; raw backend strings remain
+excluded. The complete allowlisted category
+inventory is collapsed as optional insight. Receive generation shows label count
+without label text. The log is a separate
 owner-only append-only JSONL file capped at 16 MiB, so wallet, registry, proposal,
 backup, descriptor, node-setting, and secret-envelope formats are unchanged and no
 migration is required. This has no BIP support impact.
@@ -132,6 +579,14 @@ are unchanged; this release-tooling correction has no BIP impact. The unsigned b
 used by the packaged application and avoiding Tauri's development-only embedded
 configuration-parent path.
 
+The production macOS packager now invokes that exact evidence Cargo command and
+normalizer before calling Tauri's bundle-only command with Tauri signing
+disabled. This prevents `tauri build` from recompiling with CLI-specific build
+environment and preserves the independently reproduced executable byte for byte
+inside the pre-sign app. The outer app remains Developer ID signed only after
+that equality gate. This release-tooling correction changes no runtime behavior,
+persisted format, descriptor, transaction, recovery rule, or BIP support.
+
 Fresh Machine A and independent Machine B builds of frozen detached commit
 `2110eaf0afd0339754c1b9bbba31011c66aa3d69` passed on the exact macOS 26.6.2,
 Xcode 26.1.1, SDK 26.1, Node 24.19.0, pnpm 11.13.1, repository Rust 1.97.1,
@@ -154,9 +609,10 @@ device metadata is derived from the admission rather than trusted from the backu
 Guided delayed/recovery Miniscript backups remain recoverable on test networks but
 are rejected before profile creation on mainnet, preserving the standard-BIP48-only
 first-release scope.
-Final mainnet CPFP validation requires one descriptor-derived wallet output, and
-a non-loopback or non-HTTP Core backend is rejected before any
-genesis RPC. Test-network behavior and every persisted format are unchanged; no
+Final mainnet CPFP validation requires one descriptor-derived wallet output. ADR
+0061 admits either loopback HTTP or direct HTTPS Core before any genesis RPC while
+still rejecting remote plaintext, Tor/onion, Esplora, and automatic fallback.
+Test-network behavior and every persisted format are unchanged; no
 migration is required. The follow-up Core-admission branch now requires a typed
 Rust-owned permit at both SQLite constructors, binds existing-wallet admission to
 the selected wallet and exact saved Core configuration, consumes new-wallet
@@ -171,6 +627,14 @@ v0.4.91 makes the native package version and short source commit available from 
 The same exact v0.4.91 source commit `0849375d` now has a Developer ID signed and Apple-notarized macOS arm64 Testnet4 package. Groot and its bundled HWI 3.2.0 helper carry the same Developer ID team, hardened runtime, and secure timestamps; the stapled app passes deep strict verification, offline ticket validation, Gatekeeper assessment, and a real packaged `hwi --version` launch. Because HWI is a PyInstaller one-file executable, its helper-only signature has the explicitly approved `com.apple.security.cs.disable-library-validation` entitlement so its authenticated embedded Python runtime can load after extraction; Groot itself does not have that entitlement. The signed HWI digest is compiled into Groot, and the fresh 539-component SBOM binds the signed Groot executable and exact source commit. A reviewer then launched the exact repository artifact without an unidentified-developer warning and confirmed its displayed `v0.4.91 · 0849375d` identity. The same package physically discovered a previously certified signer through its bundled HWI, derived its authoritative public identity, rejected duplicate creation, and opened the existing wallet. A subsequent non-spending check matched a newly revealed Testnet4 receive address exactly between Groot and that signer's trusted display. The reviewer then completed one disposable Testnet4 payment with a previously certified signer: the pre-sign review matched, the bundled HWI returned a valid signature, Bitcoin Core accepted the finalized transaction, and a complete app restart plus sync preserved confirmed outgoing activity, the reviewed fee, remaining balance, label, and accounting. This focused candidate-specific pass retains no wallet, signer, transaction, address, or node identifier. It does not transfer the broader physical lifecycle results from v0.4.90, provide independent review, or establish mainnet readiness.
 
 v0.4.90 corrects three presentation and startup findings from the packaged v0.4.89 software-wallet Testnet4 run. Setup warnings retain visible separation from each other and from the first credential field; the shared amount component gives BTC and sats units explicit inline separation on software, external-signer, and multisig authorization surfaces; and Overview reads the authoritative selected profile before dispatching wallet-kind-specific queries, avoiding a false unsupported-wallet toast while the shell refreshes after creation. Registry v1 and every persisted wallet, proposal, backup, network-settings, and secret-envelope format remain unchanged; no migration is required.
+
+The software-wallet creation result returns the public BIP32 master fingerprint, authenticated public receive/change descriptors, and whether the protected network setup was copied. Groot presents the fingerprint through the shared readable-identifier copy control and keeps the checksummed BIP389 multipath watch-only descriptor plus its privacy warning behind the standard **View more details** disclosure. Creation now completes the native network-copy attempt before committing/publishing the profile and before the success screen can navigate to Overview, closing the race in which Overview could read a selected wallet before its node setup and protected RPC secret existed. A failed or stale source still produces a valid offline wallet with one setup action. Mainnet Overview and Settings now expose the same protected setup reuse already authorized natively: a manual retry opens the reuse dialog when another saved source exists, otherwise it opens Core configuration. Setup-copy failure records a sanitized diagnostic event, and stable missing-admission/storage/source codes no longer collapse to `internal_error`. No persisted wallet, registry, backup, proposal, network-settings, secret-envelope, or version-1 diagnostic schema change is required. This changes BIP32/BIP39/BIP380/BIP389 presentation and records reviewer-operated Sparrow 2.5.4 recovery evidence for exact packaged v0.4.94 commit `a735fb19` in `docs/bip-support.md`.
+
+The software-wallet fingerprint label includes the shared accessible insight tooltip. Its optional localized explanation identifies the fingerprint as public recovery-check metadata and states that it cannot restore the wallet or spend bitcoin. This is presentation-only, has no further BIP support impact, and changes no persisted format or migration requirement.
+
+Software-wallet creation now transitions immediately from the credential form to the fingerprint confirmation after the native wallet command succeeds, before optional network-setup adoption. The earlier diagnosis that this transition was absent was incorrect: the actual mainnet failure occurred earlier, when duplicate-wallet detection opened existing local databases for public descriptor identity and incorrectly demanded a live Core admission. Offline exact-identity inspection is now explicitly limited to read-only public descriptors and no longer requires Core; selected-wallet data reads remain admission-gated. This repair changes no wallet data, BIP support, or persisted format.
+
+The software-wallet protection step now contains one compact acknowledgement: keep the exact passphrase with the backup, it cannot be reset, and a different value opens a different wallet. The copied-profile sentence and the deferred-backup card are absent here; Overview and Settings retain the persistent unverified-backup reminder. The field hint is limited to validation guidance. This presentation-only simplification changes no credential policy, BIP support, wallet data, or persisted format.
 
 The current follow-up corrects hardware-wallet duplicate identity and routing. Rust now treats only an exact canonical public receive descriptor as the same wallet, scans every same-network profile's authoritative wallet database, and retains the eight-character descriptor checksum solely as an integrity check. Distinct wallets with a checksum collision can coexist; true duplicates return the authoritative existing wallet UUID, and the UI selects only that profile instead of navigating to whichever wallet was previously active. Network-setup reuse remains downstream and independent. The desktop sidebar also shows the native package version and short source commit before unlock, startup fails closed if native/web version or network identities disagree, and release builds refuse a missing, malformed, or checkout-mismatched commit identity. A physical Testnet4 follow-up exposed that Bitcoin Core emitter failures bypassed the existing sanitized RPC boundary and that one transient request stopped a fresh history scan. Core block and mempool emission now retries transient transport failures a bounded number of times, maps exhaustion to the stable network error, and has an English presentation backstop against raw internal messages. A failed first scan no longer describes the genesis checkpoint as verified balance history. Registry v1 and every persisted wallet, proposal, backup, and network-settings format remain unchanged; no migration is required.
 
@@ -361,7 +825,7 @@ ADR 0048 and
 | Pending transaction acceleration                                     | Yes                                                                                                                                                                                                                                                                                                                                                                                     | RBF and CPFP create one idempotently resumed persisted authoritative PSBT per original/method; BDK changes, proposal, and lineage commit atomically; each RBF conflict set materializes as one accounting row plus an outcome-aware detail timeline                                                                                                                                                                                                                                                                                                                                                                     | Forced rollback proves no partial lineage or consumed change index; focused original-winner/replacement-winner row-collapse regressions; a disposable Core 31.1 test crosses production preparation/resumption, sequential signature import, restart, finalization, rejection-safe broadcast, persisted replacement lineage, and CPFP package rate; an independent BDK/Core test adds reorg, mempool restoration, and reconfirmation | Regtest implementation and funded Groot workflow evidence complete; physical signer/Testnet4 rehearsal remains                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | Birthday/gap-limit/full rescan                                       | Yes, including explicit first-scan choice, unverified pre-scan presentation, block progress, cancellation, lock-safe continuation, and retry                                                                                                                                                                                                                                            | Persisted bounded controls; credential-authenticated asynchronous Core rescan; one active run per wallet; run-id-guarded per-block checkpoints; matching-checkpoint resume with safe birthday restart fallback; normal Core sync blocked until the first verified observation                                                                                                                                                                                                                                                                                                                                           | Rust bounds/progress/resume/terminal/reopen units; scheduler first-scan-state unit; known-history Core birthday/gap recovery; 65-payment/121-address extended-gap fixture under 30 seconds; clean file-backed descriptor recovery/reopen; desktop/mobile cancel/retry journey                                                                                                                                                        | Automated native trusted-boundary evidence complete; packaged Testnet4 first-scan, inactivity-lock continuation, restart-resume, and independent clean-storage evidence remain                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | Remote Core TLS/Tor                                                  | Per-wallet direct/Tor settings with explicit errors                                                                                                                                                                                                                                                                                                                                     | HTTPS with platform certificate validation; v3 onion hostname sent only inside bounded loopback SOCKS5; encrypted RPC password; exact chain check; no fallback                                                                                                                                                                                                                                                                                                                                                                                                                                                          | URL/auth policy units; inspected SOCKS hostname/no-fallback/rejection/timeout tests; direct auth/timeout/TLS-handshake/wrong-chain matrix                                                                                                                                                                                                                                                                                            | Automated boundary green; real VPS certificate and network-level DNS observation pending                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| Foreground live sync and notices                                     | N/A                                                                                                                                                                                                                                                                                                                                                                                     | Selected-wallet single-key/multisig BDK sync, durable unique receipt/confirmation markers; coalesced wake-ups and bounded exponential failure backoff                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | Scheduler overlap/error/backoff units; Rust snapshot-event and notification persistence units                                                                                                                                                                                                                                                                                                                                        | Regtest functional while unlocked app is running; terminated background delivery out of scope                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| Foreground live sync and notices                                     | N/A                                                                                                                                                                                                                                                                                                                                                                                     | Selected-wallet single-key/multisig BDK sync, durable unique receipt/confirmation markers; fixed 35-second post-attempt cadence; route-independent scheduler; coalesced wake-ups without overlap                                                                                                                                                                                                                                                                                                                                                                                                                        | Scheduler cadence/overlap/error/restart units; route-lifecycle source checks; Rust snapshot-event and notification persistence units                                                                                                                                                                                                                                                                                                 | Regtest functional while unlocked app is running; exact-package Mainnet route/cadence retest pending; terminated background delivery out of scope                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | Multisig receive/sync/balance                                        | Yes                                                                                                                                                                                                                                                                                                                                                                                     | Yes, separate BDK database + labels; saved descriptors/xpub metadata require an unlocked selected wallet                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | Descriptor address unit test; desktop/mobile route E2E                                                                                                                                                                                                                                                                                                                                                                               | Regtest functional                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | Multisig PSBT collect/merge/finalize/broadcast                       | Yes, pre-funded 2-of-3 demo wallet                                                                                                                                                                                                                                                                                                                                                      | Yes, persisted PSBT + HWI/import merge; every ECDSA partial signature is verified against its real input sighash before count or mutation                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | Real-sighash valid/forged/no-mutation Rust tests, ready-made-wallet E2E, pinned Bitcoin Core 31.1 CI broadcast, desktop/mobile E2E                                                                                                                                                                                                                                                                                                   | Regtest functional; physical-device certification remains in progress                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | Multisig export/recovery/delete                                      | Yes, branch copy, BSMS/JSON download, and native-save PDF QR sheet                                                                                                                                                                                                                                                                                                                      | Yes, credential-authorized checksummed public backup + first-address drill                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | Rust tamper/round-trip tests and desktop/mobile lifecycle E2E                                                                                                                                                                                                                                                                                                                                                                        | Regtest functional; PDF output is WebKit-rendered, path-private, and unencrypted                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
@@ -484,6 +948,23 @@ Packaged v0.4.65 Testnet4 received direct reviewer confirmation for the complete
 
 v0.4.84 restores the documented offline fallback when a multisig network-setup source expires after being offered: Rust attempts and cleans the protected copy, commits the otherwise valid wallet offline, and returns one setup result instead of aborting at a stale preflight unlock check. Settings lists saved setup sources with a public readiness flag and unlock guidance while node details and credentials remain native-only. A fresh Core wallet no longer opens history controls before Core is ready; Overview shows a zero placeholder labeled **Never synced** and links to Settings. With Core ready, **New wallet** is selected by default, while birthday/full-history and address-gap controls are progressively disclosed. The multisig setup chip now derives the compiled network instead of saying Regtest, and the Bitcoin Core warning has explicit text spacing. Existing wallet, registry, proposal, scan, descriptor, secret-envelope, and network-settings formats are unchanged.
 
+The 2026-09-09 RC follow-up removes the remaining separator directly below the expanded transaction-detail disclosure. The locked network popover now reads the selected wallet's saved non-secret backend, transport, and activity-sync method instead of showing generic architecture. RPC passwords remain encrypted and live fee, reachability, and tip checks still require unlock. No persisted format changes.
+
+The subsequent RC follow-up changes an open transaction disclosure to **View less details**, renames **Core service tip** to **Network tip**, and shows the selected wallet's last successfully verified public priority fee and network tip while locked. Those observations live in a new optional owner-only per-wallet cache; existing wallets need no migration, RPC credentials remain encrypted, and fresh network calls still require unlock.
+
+The 2026-09-12 internal-RC correction implements ADR 0064. Software-wallet
+creation and recovery no longer request RPC credentials; an empty encrypted
+profile can be created offline, while every Mainnet wallet-data open remains
+blocked until that selected wallet has an admitted exact-chain Core session.
+Same-network setup copying now includes Mainnet. The first scan starts
+automatically without another credential prompt, and later scan-setting changes
+still authenticate. App-level sync now runs every five seconds across Settings,
+Receive, and Send. Core fee estimates retain sub-1 sat/vB precision. Shared
+amount, disclosure, separator, locktime, shortcut, status-dot, and spinner
+presentation is consistent. The native recovery verifier no longer overlays its
+bottom shuffled-word row. No persisted format or BIP behavior changes; ADR 0061
+remote-node and final-candidate evidence remain open.
+
 v0.4.85 repairs two Bitcoin Core checkpoint-replay boundaries found during the physical Testnet4 campaign. Normal sync now compares sparse saved checkpoints with Core's active chain and, after a deeper reorganization, feeds BDK an in-memory checkpoint view ending at the highest agreement while replaying no earlier than the saved wallet birthday; stale-chain replacement remains part of the ordinary atomic commit. Explicit full rescans remove only local-chain checkpoints above the selected matching resume point before replay so an existing later tip cannot disconnect the introduced chain. Transaction history, descriptors, labels, proposals, signer metadata, registry, credentials, and network setup formats are unchanged. The durable Overview failure state now carries only a stable safe error code and distinguishes node permission/configuration from wallet-state reconciliation without exposing RPC details.
 
 v0.4.86 corrects the Bitcoin Core policy boundary used to quote RBF replacements. Groot now reads the authoritative incremental-relay fee from the purpose-built read-only `getmempoolinfo` response rather than the compatibility-oriented `getnetworkinfo` response, and RPC whitelist rejection is translated to the stable actionable node-configuration error. The documented least-privilege RPC method list now includes `getmempoolinfo`. Transaction construction, replacement eligibility, persisted wallets, proposals, profiles, registries, descriptors, credentials, and network-settings formats are unchanged; no fallback fee policy is invented when Core omits or denies the authoritative value.
@@ -493,6 +974,22 @@ v0.4.87 restores the Policy capability boundary between standard threshold multi
 v0.4.88 makes pre-PSBT payment drafts directly disposable. Overview now separates **Discard draft** from **Resume**, and resumed software, external-hardware, and multisig Send flows repeat the discard action beside Back. Confirmation names the saved draft fields and states that no transaction or signature exists; successful clearing suppresses the route-exit auto-save that would otherwise recreate the draft. Prepared proposals keep their existing, separate cancellation review. This is a UI/lifecycle correction over the existing authenticated `payment_draft_clear` boundary; wallet, payment-draft, proposal, registry, profile, backup, credential, and network-settings formats are unchanged.
 
 v0.4.89 closes the Core-configuration catch-up race observed during the packaged Testnet4 BIP84 recovery rehearsal. Before normal sync or any explicit full/birthday history scan, Rust now requires the configured Core node to be out of initial block download and its tip to have reached the wallet's last verified checkpoint. Full and birthday scans also reject a requested block range that a pruned node no longer stores. These cases return stable actionable `node_syncing` or `node_history_unavailable` errors and keep the previous verified wallet state untouched instead of surfacing a generic BDK reconciliation failure. This is compatible with every existing wallet, checkpoint, recovery-scan, descriptor, profile, registry, proposal, credential, and network-setting record; no migration is required.
+
+# Restart-bound internal network selection
+
+ADR 0068 adds a `multi` native identity whose Settings screen offers Regtest,
+Testnet4, and Mainnet. ADR 0069 selects it as the intended GA artifact while
+leaving distribution blocked on expanded exact-package evidence. Rust persists the exact closed-set selection in an
+owner-only versioned file, loads it before the application-root process lock and
+wallet initialization, and restarts on change. Existing Regtest data stays in its
+compatible root; Testnet4 and Mainnet use separate named subdirectories. Foreign
+registries still fail before wallet open, frontend/native mismatch still blocks the
+shell, and malformed or unsafe selection storage aborts startup. Fixed release
+builds remain compile-time network-bound and cannot switch. The current multi
+package is not approved for distribution until ADR 0069's selector, restart, and
+cross-network isolation evidence passes, and Mainnet retains its exact-Core
+admission, policy, spend, HWI, and release gates. Wallet/profile/registry/database/
+secret formats are unchanged and no migration is required.
 
 # Isolated mainnet certification candidate
 
@@ -512,6 +1009,22 @@ blocks distribution and merge to `main`. The existing portable-profile Argon2id
 parameters and persisted formats are unchanged. No BIP family support changes in
 this correction.
 
+## 2026-09-14 remote-Core recovery scan responsiveness
+
+The owner reports the trusted Mainnet remote Core endpoint connected at block
+966,930 with full history in the prior internal build. The subsequent wallet
+rescan from birthday 966,900 stalled visually at 100% and the app beachballed;
+that is **not** a completed remote-node wallet certification. The follow-up
+moves recovery-settings validation and scan cancellation off the native UI
+event loop, pauses automatic sync during explicit rescans, makes Core emitter
+RPC calls interruptible between requests, and labels block-tip completion as
+pending-transaction reconciliation until the atomic result is committed.
+Activity gains a manual sync action using the existing wallet-specific path.
+The owner's prior steps 1–4 (including cancellation presentation) passed on
+the earlier build; remote rescan and clean-profile recovery remain open for
+physical retest. No persisted wallet, profile, registry, proposal, or backup
+format changes; no BIP support change.
+
 ## Registry contract maintenance
 
 Shared synthetic fixtures now check native registry/profile serialization against
@@ -523,4 +1036,730 @@ session-expiry behavior are unchanged; mocked IPC does not establish native
 end-to-end conformance. No persisted format, migration, dependency, BIP support,
 or BIP evidence changes are involved.
 
+## Foreground scheduler maintenance
+
+The measured snapshot follow-up replaces unconditional full-history provenance
+passes with a transient dependency work queue that preserves legacy pass order
+and skips unchanged sources. Exact persisted-table comparisons protect permanent
+cluster evidence, labels, and replacement behavior. Independent-receive snapshots
+at 300 transactions dropped from 817,507 to 7,507 SQL statements. There is no
+persisted-format, schema, BIP support, or dependency change. Measurements and
+scope limitations are recorded in `assurance-baseline-2026-09-08.md`.
+
+The follow-up lifecycle assurance pass rejects session responses that settle
+after monitor stop/restart or while hardware review pauses expiry handling.
+Obsolete sync failures also cannot redirect the next wallet or alter its retry
+cadence. Deferred-promise frontend tests reproduce the old behavior and verify
+the fix. The synthetic snapshot benchmark and its confirmed quadratic SQL work
+are recorded in `assurance-baseline-2026-09-08.md`; provenance optimization remains
+a separate implementation with equivalence tests. No persisted format or BIP
+behavior changes.
+
+The ten-second live-sync scheduler now consumes the selected wallet kind already
+owned by `AppShell`, eliminating the preceding `wallet_exists` and
+`wallet_profiles` calls from each cycle. The invoked Rust sync command remains
+authoritative for current selection, session, network, and wallet-state checks.
+No profile means no scheduled native work. This changes no persisted format,
+public DTO, stable error, dependency, BIP behavior, or user-visible flow.
+
+ADR 0061 supersedes the Mainnet table row's local-only transport description:
+the isolated candidate now admits loopback HTTP or direct HTTPS Core, with no
+automatic fallback. Its remote-endpoint, network-observation, exact-candidate,
+and independent-review evidence remains open, so distribution remains blocked.
+
 Update this table in the same change whenever a capability crosses a boundary.
+
+## 2026-09-16 Locked global Settings and multi-network build correction
+
+The internal multi-network application now keeps global Settings reachable while the selected wallet is locked. The locked surface exposes only appearance, build identity, the active Bitcoin network, restart-bound network selection, sanitized logs, and cached public network status; wallet-specific node routes, sync configuration, credentials, recovery controls, exports, deletion, and live connection tests still require an unlocked session. Desktop and mobile shells retain a direct Settings entry and pass the locked state to the public network-status control. No wallet, profile, registry, proposal, descriptor, backup, credential, or network-selection format changes.
+
+## 2026-09-16 Mainnet GA campaign reconciliation
+
+The Mainnet campaign is not restarting from Testnet4. Existing owner-operated
+evidence includes the `ab830d32` software lifecycle, Sparrow 2.5.4 recovery of
+the exact `a735fb19` software wallet, a Mk4 + Nano S Plus + Nova BIP48 address
+match, a confirmed deposit, a Groot 2-of-3 payment signed by Nano S Plus + Nova
+and persisted after restart, and recovery/spending from the same public multisig
+descriptor in Sparrow with Nova + Mk4. The remote campaign also includes an
+archival Mainnet Core with synchronized indexes, bounded narrow-gateway probes,
+two completed `783f2010` Groot refreshes, and a completed but still slow
+`c7376112` refresh. These are retained as named-package evidence rather than
+being downgraded to pending exploratory work.
+
+The remaining GA delta is exact-artifact work: owner timing of the current
+warm-mempool optimization, the complete remote HTTPS failure/lifecycle matrix,
+frozen-package negative and recovery rows for Mk4/Nano S Plus/Nova, complete
+Mainnet records for Model One/original BitBox02/Jade Classic/Safe 3 or an
+explicitly reviewed scope reduction, the signed software/profile lifecycle,
+final-commit reproducibility and notarization, and independent recovery/security
+review. ADR 0069 now selects the restart-bound multi-network application as the
+intended GA artifact, so its selector integrity, restart teardown, and
+cross-network isolation become additional exact-package gates. The canonical ordered resume point is in
+`docs/mainnet-release-checklist.md`; model-specific detail is in
+`docs/hardware-certification-mainnet-2026-09-12.md`. This reconciliation adds no
+new runtime behavior, persisted format, dependency, or BIP support claim.
+
+## 2026-09-13 Mainnet multisig setup and Policy correction
+
+The 2026-09-14 presentation correction fixes the policy-lab eligibility check
+for Rust's `null` absent recovery template, so standard multisig shows no lab
+entry in either Policy action location. The backup format label now precedes the
+two choices with explicit spacing, and its shorter security note changes with
+the selected public export format. Single-key and multisig Receive use the
+existing wallet skeleton during initial reads instead of claiming an empty
+address list. Multisig Send opens the existing hardware progress dialog before
+session validation and device enumeration; actual HWI discovery remains
+asynchronous and unchanged. No persisted wallet, backup, descriptor, proposal,
+network, or signer format changes occur; physical performance remains to be
+measured on device.
+
+The subsequent remote-Core Settings correction restores the already-accepted
+ADR 0061 Mainnet direct-HTTPS selection: the Mainnet-only UI guard now excludes
+Tor but permits Remote TLS, consistent with Rust's existing exact-genesis,
+credential, certificate, and pre-database admission policy. A Mainnet-mode
+browser regression covers selection, save, reopening, and credential clearing;
+this fixture is not a live remote-node certification. Local Core and saved
+remote configurations retain their existing behavior. No wallet, registry,
+credential, node-configuration, descriptor, or backup format changes occur.
+
+The subsequent internal UI follow-up retains the current native wallet, signer,
+PSBT, and Bitcoin Core paths. The shared disabled-button indicator is again one
+open spinning circle without a decorative dot. The multisig Policy route shows
+the existing wallet skeleton while its selected-wallet lookup is pending and an
+actionable error if that lookup fails, never the single-key fallback for an
+unresolved lookup. Standard sortedmulti wallets hide the Miniscript-only
+Recovery policy lab in the card and overflow menu once both missing and native-null
+recovery templates are treated as absent; the browser regression now
+also watches for a transient false fallback. Export & verify authorizes both
+existing public BSMS and Groot JSON commands with one app PIN, clears that PIN,
+and switches between the two transient records without new authorization or a
+persisted schema change. The existing shared modal enlarges the receive
+descriptor QR. These are source/browser presentation and orchestration checks,
+not physical certification of the replacement Mainnet binary.
+
+Owner-operated internal `v0.4.94 · 4630bf95` testing subsequently displayed
+the Mk4 policy-file acknowledgement and verified Nano S Plus/Nova policy
+states, then a permanently labeled first multisig receive address verified on
+the Nano S Plus. The Nova and Mk4 receive-address comparisons, funded signing,
+restart, recovery, and independent Mainnet gates remain open. The subsequent
+shared-button indicator and policy-review wording change is presentation-only;
+it does not change HWI, wallet formats, or protocol behavior. Candidate-bound
+details and the next physical steps are in the sanitized Mainnet hardware
+checkpoint.
+
+The exact packaged `08f45e1` candidate created the watch-only wallet but did
+not copy a previously working network setup; Policy status, health status,
+Coldcard acknowledgement, and snapshot reads then failed the unchanged
+Mainnet database permit. The Policy route could also present a found Ledger or
+Nova signer as “not found” when a coupled status read discarded the separately
+available public first-address reference. ADR 0066 records the
+corrected copy precondition, existing-wallet adoption session order, independent
+reference read, single automatic error, and Coldcard reference/CTA copy. No HWI
+binary, model allowlist, fingerprint matching, descriptor, database, draft,
+node-secret, or wallet-backup format changes. These are source and browser/native
+test claims only until the new packaged app is retested with the exact devices
+and Core connection; Mainnet GA remains blocked.
+
+The owner then reported that internal Mainnet candidate `dacb5cac` remained at
+99% during a remote-Core unlock scan while Activity and Coins stayed in loading
+skeletons. The follow-up keeps the last committed wallet state readable via an
+authenticated read-only SQLite connection gated against the final commit during the in-memory Core refresh,
+and prefetches raw mempool transactions in bounded 32-call RPC batches with a
+direct-call fallback. It does not skip pending-transaction reconciliation or
+promote 99% to completion. No persisted wallet, profile, proposal, registry,
+backup, descriptor, or node-settings format and no frontend DTO or stable error
+changes. Source/regression tests do not certify the replacement package against
+the owner's remote node; physical retest remains required.
+
+The owner-supplied sanitized log from exact Mainnet build `6edf79d8` shows
+unlock succeeded but every subsequent automatic sync failed at 0% with
+`node_admission_required`; it did not reach a block or mempool scan. A separate
+unauthenticated reachability check from the same Mac resolved the saved remote
+hostname but timed out connecting to TCP 443 while unrelated HTTPS responded.
+This observation establishes an endpoint/network outage at the time of the
+check, not a remote-server root cause or proof of wallet-data loss. The follow-up
+shortens selected-wallet node-health timeouts, distinguishes an unreachable saved
+node from absent setup in Overview, and suppresses misleading “Never synced”
+while the persisted snapshot remains admission-gated. Existing persisted formats
+and wallet-data admission requirements are unchanged. This does not certify the
+remote node, rescan, or the new package; owner retest remains necessary once the
+endpoint is reachable.
+
+The narrow Core gateway is now implemented under `services/core-gateway` as a
+dependency-free Python service with an NGINX/systemd deployment boundary. It is
+wire-compatible with Groot's existing bounded JSON-RPC transport but accepts
+only the exact chain/block/mempool/fee/index/broadcast calls and validated
+parameters Groot uses. It authenticates revocable per-client principals from
+salted scrypt verifiers, reconstructs requests with server-owned ids and Core's
+loopback cookie, disables request logging, rate limits source and principal,
+and structurally bounds responses. Integration tests cover valid single/batch
+traffic, all-or-nothing rejection, unsupported methods, invalid parameters,
+authentication, POST-only handling, client/Core credential separation, and
+error-data stripping. The internal-alpha hostname was cut over from direct
+NGINX-to-Core proxying to this gateway on 2026-09-15. External probes verified
+authentication, method denial, exact Mainnet genesis, height, archival history,
+required indexes, fee and mempool data, malformed and oversized-batch rejection,
+and bounded overload behavior; a 60-request burst produced only successful or
+rate-limited responses and the service recovered immediately. Full Groot
+rescan/relaunch/broadcast testing and an independent security review remain open
+under ADR 0067, so this deployment is not public-production evidence.
+
+The owner then completed two exact `783f2010` remote-Core refreshes against the
+gateway: both preserved the last committed wallet state and ultimately reached
+100%, while the repeated pending-transaction phase remained near 99% for roughly
+twelve minutes. The follow-up aligns client and gateway on a 256-call bounded
+mempool batch to reduce authenticated HTTPS round trips eightfold. Automatic and
+Activity refreshes now inspect and follow the native single-flight status instead
+of producing repeated `sync_in_progress` failures, Activity uses the shared
+`LoadFailure` surface for real errors, and Overview removes its raw secondary-data
+loading sentence while retaining the committed snapshot. Request/response byte
+bounds, exact RPC allowlisting, gateway concurrency/rate limits, atomic wallet
+commit semantics, and cancellation remain unchanged. No persisted format or
+stable error changes; a replacement exact build and live timing retest remain
+required.
+
+The exact `c7376112` owner retest confirmed that Overview and Activity remain
+usable and the refresh completes, but the pending phase still required roughly
+three to four minutes. The client now keeps a process-local public mempool-txid
+baseline per wallet after a successful atomic commit. Later ordinary refreshes
+scan only newly added transactions plus that wallet's still-pending
+transactions, so BDK retains correct eviction handling without redownloading
+unchanged unrelated transactions. Revealing a receive address invalidates the
+baseline; explicit recovery scans always perform a complete mempool pass and
+then seed the baseline. No raw transaction, address, descriptor, credential,
+or persisted-format cache is introduced. The first pass after process launch
+remains complete; exact-build warm-refresh timing still requires owner retest.
+
+The 2026-09-16 Mainnet multisig run then showed 503 seconds of incomplete block
+progress while its durable checkpoint was only 135 blocks behind the connected
+node. That evidence isolates serial remote raw-block RPC as the bottleneck, not
+wallet size, multisig evaluation, client hardware, node storage, or the later
+mempool phase. Core refresh now uses a synced basic block-filter index when
+available: block hashes are read in bounded 256-call batches and variable-size
+BIP158 filters in separate eight-call batches,
+wallet scripts are matched locally, and only matching raw blocks are fetched.
+Start/target chain identity and each fetched block link are verified before the
+complete chain checkpoint and relevant transactions enter the existing atomic
+commit. Gateway and client parameter tests keep `getblockfilter` read-only and
+basic-only. Nodes or gateways without the optional method/index keep the prior
+full-block fallback. This is source evidence until the updated gateway and exact
+packaged build complete the owner's live Mainnet timing retest.
+
+The first exact packaged filter build `f5544e6a` exposed a transport regression
+on that same wallet: its 135 filters were requested in one batch, the remote
+HTTPS response remained in a sustained read for more than five minutes, progress
+stayed at 0%, and the app appeared frozen until cancellation. The wallet's
+durable checkpoint and data remained intact. Hash and filter batch limits are now
+separate, filter responses are capped at eight calls per request, and one filter
+is probed before batching so an undeployed/unsupported gateway falls back
+promptly. This is an implementation correction, not evidence that the live
+Mainnet timing gate has passed; the replacement exact package must still be
+tested against the gateway and Family Test wallet.
+
+The owner rejected client-side filter transfer as the default remote-Core UX
+and explicitly accepted public wallet-query disclosure to the trusted server.
+ADR 0070 now makes remote Core use `scanblocks` plus mempool-only
+`getdescriptoractivity`: Groot sends at most 4,096
+deduplicated `raw(script)` public scan objects, receives potentially matching
+block hashes, verifies them against its independently fetched active hash range,
+downloads only matching full blocks and matching pending transactions, and
+retains the existing atomic wallet reconciliation. The gateway rejects address/key descriptors, private
+material, other scan actions, unordered ranges, non-basic filters, and arbitrary
+options. Local Core and the separate P2P compact-filter source are unchanged.
+There is no persisted-format migration. On 2026-09-17 the owner-controlled
+Mainnet service deployed the required gateway at source commit `5f94581`, added
+`scanblocks`, `getdescriptoractivity`, scoped `help`, and `getblockfilter` to
+both Core RPC whitelists, and restarted only Core and the gateway. Bitcoin Core
+31.1 returned at height 967449 with transaction and basic-filter indexes
+synced. A reversible authenticated HTTPS probe with 256 public scripts then
+completed the four-call health/capability batch in 0.086 seconds, scanned blocks
+967180-967449 in 0.120 seconds, and completed mempool descriptor activity in
+2.662 seconds; the temporary principal was removed and the credential file was
+restored byte-for-byte. This closes the infrastructure deployment prerequisite,
+not the exact packaged Family Test timing gate.
+
+The first packaged ADR 0070 run exposed three integration defects before that
+live gate: an offline Mainnet preflight left Overview's command-family flag at
+its single-key default and therefore sent a multisig retry to the wrong native
+command; the connection test checked only generic Core health and could report
+an outdated gateway as ready; and the gateway's ordinary ten-second upstream
+timeout could abandon a still-running synchronous `scanblocks` request. The
+follow-up binds retry dispatch to the selected profile before any preflight,
+checks the two indexed methods through exact allowlisted `help` calls, uses one
+five-second health attempt, maps rejected/missing capabilities to stable
+configuration guidance, and gives only `scanblocks` a 120-second client and
+gateway bound. No wallet, profile, proposal, registry, backup, descriptor,
+node-settings, or diagnostic format changes; no migration is required. The live
+gateway deployment passed the bounded probe recorded above; exact-package
+Mainnet Family Test timing evidence remains required.
+
+The exact `8d67d48` multi-network package then passed the owner's Mainnet Family
+Test unlock and automatic Overview sync against that deployed path. The
+follow-up removes the redundant connection test from ordinary Overview remounts:
+Mainnet admission remains mandatory once after unlock, while returning during
+the same admitted session reads the persisted snapshot without starting network
+work. The app-shell cadence is now 35 seconds. Its reference-counted manual-sync
+pause survives read-only route navigation, and both single-key and multisig
+Receive expose the existing coordinated refresh action. No wallet, profile,
+proposal, registry, backup, descriptor, node-settings, DTO, stable-error, or
+dependency format changes; no migration is required. The reviewed mainnet
+source-policy snapshot now pins the shell, scheduler, Overview, and both Receive
+routes at these exact bytes. Exact replacement-package navigation and cadence
+evidence remains required.
+
+The subsequent owner review of `fbdd6419` found that successful route behavior
+still masked three release defects: scheduler failures could exponentially delay
+the next automatic attempt, explicit cancellation retained a resumable run and
+stale modal progress, and the manual full-rescan command still used the local
+per-block transport even for trusted remote Core. The correction keeps the
+scheduler mounted across normal routes and schedules every next attempt at the
+fixed 35-second interval. Explicit cancellation now discards its run record;
+unexpected failure or process interruption remains the only resumable terminal
+state. The Settings modal shows the live selected-network tip, rejects a future
+birthday, explains both birthday and gap controls, and hides the standard gap
+under an optional address-discovery disclosure. Remote birthday/genesis scans
+now reuse the indexed `scanblocks` and `getdescriptoractivity` architecture,
+resolve and download only matching blocks, and build a verified sparse tip
+without a per-height HTTPS walk. This changes no wallet, registry, descriptor,
+proposal, backup, node-setting, dependency, or schema format; legacy terminal
+`cancelled` run rows are safely deleted when first observed. Exact-package
+Mainnet full-scan timing, cancellation/reset, route-independent cadence, and
+hardware certification remain owner acceptance gates.
+
+The exact `be20f19` Mainnet owner run proved the indexed remote path could
+complete, then exposed a repeat-rescan checkpoint discontinuity: a later
+birthday anchor was constructed from genesis rather than the highest retained
+BDK checkpoint, so BDK correctly rejected the introduced sparse chain. The
+correction verifies that retained checkpoint against Core and extends it to the
+new anchor before applying the indexed result. It also supersedes partial-run
+resume behavior: cancelled, failed, and process-interrupted scan rows are
+discarded, retries begin at zero from the saved birthday, and the Settings modal
+never displays a stale prior range. The gap-limit tooltip is contained within
+the rescan dialog. Follow-up owner evidence on `ae696ea` showed that the previous
+completed row could still win the first UI poll, and that a single genesis-to-tip
+`scanblocks` request failed after 18 seconds while the same node remained healthy.
+The correction initializes the new zero-progress range before polling, ignores
+terminal rows while that foreground command starts, and divides long indexed
+scans into sequential ranges of at most 100,000 blocks with persisted progress
+after each range. The remote transport still downloads matching blocks only and
+performs one bounded descriptor-activity mempool pass; no per-height HTTPS walk
+was reintroduced. No wallet, registry, descriptor,
+proposal, backup, node-setting, dependency, DTO, or schema format changes; no
+migration is required. Exact replacement-package repeat-scan timing and
+Mainnet hardware certification remain owner acceptance gates.
+
+The first exact `6a25085` owner retest then exposed a deployment mismatch rather
+than a wallet or Core performance limit: the client and gateway allowed each
+indexed range 120 seconds, but the live outer NGINX route still terminated reads
+after 15 seconds. Core continued that abandoned process-wide scan, so unlock
+refresh failed and the next birthday scan correctly encountered Core's active
+scanner. The live route now uses the repository's 125-second outer bound. The
+gateway additionally serializes its process-wide indexed scan slot and reports a
+concurrent request as `scan_in_progress` rather than a missing connection. A
+wallet-independent live check completed the selected-tip 64-block range in
+0.012 seconds and confirmed the chunked genesis workload progresses on the
+indexed Core path. No wallet, registry, descriptor, proposal, backup,
+node-setting, dependency, DTO, or schema format changes; no migration is
+required. Exact replacement-package wallet-script timing remains an owner gate.
+
+The exact `78d3b4d` owner retest confirmed the saved multisig node credentials
+and indexed sync remained usable, but exposed an unlock/navigation race in the
+Overview presentation: a missed one-shot unlock hint could leave native Mainnet
+admission unrestored for the first persisted snapshot read, even while the
+route-independent synchronizer subsequently restored the session and completed.
+Overview now treats that specific `node_admission_required` result as a
+recoverable session transition, verifies the already-configured node once, and
+retries the cached snapshot instead of telling the user to reconnect Bitcoin
+Core. This changes no wallet, registry, credential, node-setting, DTO, or schema
+format; no migration is required.
+
+The exact `688ff7e` owner recording confirmed unlock and remote Core refresh
+complete successfully, and exposed a presentation-only status polling race:
+an older in-flight status read could overwrite the terminal 100% result with
+its earlier 99% snapshot before the next poll restored completion. Overview now
+accepts only the newest requested status read, so progress remains monotonic and
+the completed state cannot regress. Native sync ordering, wallet data, node
+settings, DTOs, schemas, and the 35-second automatic cadence are unchanged; no
+migration or BIP-support change is required.
+
+The subsequent exact-package Family Test unlock exposed a narrow JSON-RPC
+gateway compatibility error: when indexed matching found exactly one relevant
+block, Groot correctly sent a one-item batch for that block, but the gateway
+collapsed it into a single upstream request and response object. The Rust batch
+client rejected that response shape and surfaced the misleading
+`network_unavailable` result after the indexed scan had succeeded. The gateway
+now preserves the original batch shape independently of batch length, with an
+integration regression covering the one-item request, upstream payload, restored
+client id, and array response. No wallet data, credentials, persisted format,
+DTO, dependency, or schema changes; no migration is required.
+
+The 2026-09-19 Mainnet accounting review found no duplicate 7,000-satoshi
+payment: the Ledger and multisig databases contain two distinct shared
+transactions from separate dates, while the multisig CPFP remains its own
+fee-only activity entry. It did expose a presentation race when a detail modal
+was already open: the wallet snapshot and confirmation toast refreshed, but the
+modal retained the previously clicked pending object. Overview and Activity now
+retain only the selected transaction identifier and resolve its current record
+from every authoritative snapshot, following the canonical RBF replacement when
+needed. Network Services also restores vertical padding on its network row and
+uses shorter copy. No native accounting, transaction graph, wallet data,
+descriptor, proposal, node-setting, DTO, dependency, or schema format changes;
+no migration is required. The reviewed Mainnet source-policy snapshot now pins
+the exact Overview, Activity, and Settings route bytes containing this change.
+
+The subsequent manual-sync failure polish is presentation-only. Overview,
+Activity, and both Receive flows now preserve their last verified content while
+showing the same concise retry banner, with enough following space to prevent
+Activity search and sort labels from overlapping it. The sanitized
+`network_unavailable` copy is shorter in every supported locale. Wallet sync,
+credentials, node admission, persistence, DTOs, and schemas are unchanged; no
+migration is required.
+
+## 2026-09-19 Managed Mainnet enrollment and locked Settings continuity
+
+ADR 0071 removes the shared-client-secret dead end without embedding a password
+in source, build configuration, or environment. The gateway now issues unique
+random principals through a separately source-throttled, size-bounded endpoint
+and persists only scrypt verifiers. Native Rust consumes the one-time response,
+rejects redirects, unknown fields, malformed credentials, wrong chain, IBD, and
+missing indexed-scan capabilities, then uses the existing per-wallet encrypted
+node-secret envelope. New Mainnet profiles and existing Mainnet profiles with no
+saved node enroll automatically; every saved custom or managed configuration is
+left untouched. An unavailable enrollment service leaves the wallet offline and
+does not select a fallback node or fee.
+
+The same follow-up fixes the recorded locked-route bounce. Startup and the
+session monitor both treat Settings and App logs as intentional locked utility
+routes, so the reduced **Settings** surface remains stable instead of briefly
+rendering before redirecting to Unlock. It exposes only appearance, language,
+denomination, shortcuts, Bitcoin network selection, build identity, and sanitized
+app logs. Wallet-specific node, sync, backup, recovery, export, and deletion
+controls still require unlock. Existing wallet, registry, node-setting,
+credential-envelope, descriptor, proposal, backup, and database formats are
+unchanged; no migration is required. Gateway deployment, load/abuse review, and
+exact-package Mainnet acceptance remain open GA gates.
+
+## 2026-09-19 Managed-node mode and route-independent first sync
+
+The `da617773` physical run confirmed that native managed enrollment and Core
+preflight succeeded, but exposed two UI/orchestration gaps. A never-synced
+wallet did not begin its initial history scan until Overview mounted, and the
+fixed managed endpoint appeared inside the editable custom-RPC form with its
+generated principal visible.
+
+The global live-sync controller now treats unlock as an immediate wake-up,
+restores Mainnet node admission when required, and starts the saved first scan
+without depending on the current route. Settings separately presents **Groot
+managed**, **This Mac**, and **Custom remote**. Managed mode renders neither RPC
+field, states its privacy tradeoff, and provides an explicitly authenticated
+renew/switch action that enrolls and verifies a fresh isolated principal in
+native Rust. Failure stays on the selected mode and never chooses a fallback
+node or fee source. Existing wallet, registry, scan, node-setting,
+credential-envelope, descriptor, proposal, backup, and database formats are
+unchanged; no migration is required.
+
+## 2026-09-19 Generated-wallet birthday and first-scan progress
+
+Physical retest of `6f5cc85` showed that the route-independent scan did start,
+but a generated wallet still inherited the recovery fallback birthday `0` and
+Overview could miss the start transition until remount. Generated software
+wallet creation now persists the verified node tip in the existing recovery
+settings row before publishing the profile. The shell wakes immediately after
+creation, and Overview watches the short admission/start window so it attaches
+to native progress without navigation. Recovery/import profiles without a saved
+choice reject automatic empty-credential scans instead of defaulting to
+genesis. The progress banner is reduced to percentage and block counts. This is
+compatible with every existing database; no migration or discard is required.
+
+Physical retest of `e959a532` confirmed that the creation-tip birthday was saved
+at the live Mainnet height, but exposed a separate shell-state race: leaving
+onboarding still saw the pre-creation locked state and suppressed the immediate
+sync wake. The post-creation transition now refreshes both the profile registry
+and selected native session before deciding whether sync is paused, then starts
+and awaits the first sync wake. A generated software wallet therefore performs
+only its short tip/mempool reconciliation without presenting the recovery/import
+history-choice state. This changes orchestration and test-fixture fidelity only;
+it has no BIP support or persisted-format impact.
+
+Follow-up physical review of `ee5bce4` confirmed the tip-based scan completes,
+but found presentation gaps around that correct behavior. The creation action
+now paints its busy indicator before native work begins; the generated-wallet
+route suppresses the recovery/import history-choice banner while automatic
+startup is pending; recovery words receive a one-pixel optical baseline
+correction; and the Mainnet-only Core controls are shown as one connection row.
+The managed-service warning and credential spacing are also tightened. These
+are UI/orchestration changes only: existing profiles and databases remain
+compatible, and there is no BIP-support impact.
+
+The next presentation-only follow-up moves every reusable warning insight into
+a viewport-clamped body portal so modal overflow cannot crop its text, shortens
+the managed-node warning to state that keys and wallet data remain locally in
+Groot, and renders the shared App Logs skeleton both during route navigation and
+while native diagnostics load. Signet is not part of ADR 0069's selectable GA
+application and is therefore no longer tracked as a Mainnet GA release blocker;
+Regtest, Testnet4, and Mainnet evidence remain network-specific. No wallet,
+profile, credential, node-setting, database, DTO, or BIP behavior changes.
+
+The network-services follow-up gives Regtest, Testnet4, and Mainnet the same
+primary **Bitcoin Core connection** row. Regtest and Testnet4 show the separate
+**Wallet activity sync** row only when compact filters are active, because only
+then is activity discovery genuinely independent from Core fees and broadcast.
+The Core dialog keeps that rehearsal-only option reachable without making the
+normal Core configuration look different by network. This is presentation and
+navigation only; saved node and sync-source formats are unchanged, and there is
+no migration or BIP-support impact.
+
+A physical Mainnet Coldcard Mk4 import showed that the managed node was ready but
+the new wallet remained at **Never synced** with a manual history-choice warning.
+External-hardware creation now saves block `0` in the existing recovery-settings
+row before publishing the profile, because an imported signer cannot provide a
+trustworthy birthday. Leaving hardware onboarding immediately wakes the shared
+sync scheduler, and Overview opens in automatic full-history mode so it attaches
+to the resumable scan without flashing the manual warning. Existing profiles are
+not rewritten; wallet, descriptor, key, credential, node, proposal, backup, and
+database formats remain compatible and no migration is required. Physical retest
+on the replacement package remains required.
+
+The subsequent original-BitBox02 review corrects two remaining setup messages.
+If aggregate HWI discovery exits while the user is completing BitBox unlock,
+the shared inline error now describes an interrupted unlock and retains the
+explicit rescan action instead of claiming a wallet request was rejected.
+Original BitBox02 and Nova single-key review both state that the device does not
+display its master fingerprint during import, use a device-specific continue
+action, and defer the meaningful physical check to the first receive address.
+Discovery still invokes the pinned HWI 3.2.0 aggregate enumerator exactly once;
+that executable initializes every backend and owns the remaining device-scan
+latency. Reaching Sparrow-class BitBox timing requires a separately reviewed
+native vendor transport and physical certification, not additional automatic
+HWI retries. No wallet, profile, descriptor, key, credential, node, proposal,
+backup, database, or stable DTO format changes; no migration is required.
+
+The earlier HWI continuation audit removed aggregate rescans
+after a successful Trezor PIN challenge in receive verification, multisig
+signer import, multisig signing, and saved/draft signer health checks. Each flow
+redeems the already admitted opaque capability and immediately runs the same
+native live fingerprint, derivation, and complete account-xpub proof before the
+requested action. Explicit **Scan again**, missing transient state, and genuine
+ambiguity still fail closed or start a fresh bounded discovery. This removes
+avoidable pinned-HWI startup work without weakening identity checks, changing
+wallet data, or migrating existing profiles. Physical timing on the replacement
+package remains required; the aggregate HWI enumerator is still the first-scan
+latency floor. The later Sep 26 Model One regression supersedes the receive-only
+continuation: receive refreshes discovery after PIN success before explicit
+signer selection, as described at the top of this document.
+
+The next Trezor and initial-history follow-up corrects two presentation and
+orchestration defects without changing either trusted operation. A locked Trezor
+row is now compact and labeled **Locked**; selecting it immediately opens the
+shared targeted PIN/loading dialog, so stale aggregate-discovery copy is never
+shown while Groot calls the exact opaque Trezor capability. Exclusive ownership
+by Sparrow or another wallet remains a concise fail-closed error: Groot does not
+terminate or preempt another process. After external-hardware creation, Overview
+makes one idempotent request into the existing native scan single-flight and ends
+its bounded startup placeholder if admission does not begin. This prevents a
+missed shell wake from leaving an indefinite skeleton and exposes the existing
+persisted percentage and processed/total block progress once the scan runs.
+Genesis, gap-limit, indexed remote-Core `scanblocks`, cancellation, resume, and
+identity checks are unchanged. No wallet, descriptor, key, credential, node,
+proposal, backup, database, DTO, or stable-error format changes; no migration is
+required. Exact packaged Trezor and managed-node timing remains a physical
+acceptance gate.
+
+## 2026-09-21 Managed Mainnet Fulcrum history acceleration
+
+Physical hardware-wallet imports showed that ADR 0070's Core `scanblocks` path
+can take several minutes for a genesis or old-birthday Mainnet scan even though
+ordinary incremental scans are small. ADR 0073 replaces only the fixed
+Groot-managed endpoint's confirmed-history discovery with a pinned private
+Fulcrum index behind the existing authenticated HTTPS gateway. Custom remote
+Core retains `scanblocks`; local Core and the explicit compact-filter source are
+unchanged.
+
+The client derives Electrum script hashes locally, queries them adaptively until
+the wallet gap limit is satisfied, requires exact Fulcrum/Core tip agreement,
+then fetches each matching full block from Core and verifies every claimed txid
+is present before BDK applies it. The index can omit activity and is therefore a
+trusted managed-service availability component, but it cannot manufacture a
+confirmed transaction or balance. Stale, malformed, excessive, or unavailable
+history fails closed without silently starting a long fallback scan. The UI now
+states that the service sees queried wallet scripts; it no longer claims that
+all wallet data stays local.
+
+The existing Hetzner archival Core data is reused. Fulcrum 2.1.2 is installed
+with a verified signed checksum, dedicated service account and RPC principal,
+loopback-only listeners, bounded memory, and its own derived index on the
+existing data volume. Initial indexing and exact-candidate live timing, stale
+index, reorg, restart, recovery, fee, broadcast, route-observation, and
+no-fallback evidence remain open before GA. No wallet/profile/database format
+changes and no migration are required.
+
+On 2026-09-30 the managed service reached Bitcoin Core's exact Mainnet tip at
+height 969,314. A controlled Fulcrum stop/restart returned to the same tip.
+Bitcoin Core, the Groot Core gateway, NGINX, and Fulcrum were active; Fulcrum's
+TCP and admin listeners remained loopback-only, and external connection attempts
+timed out. The deployed gateway source hash matched the repository. A temporary
+authenticated principal successfully returned Core's exact tip and the expected
+transaction/height for a public output in block 750,000; Groot's gateway result
+was checked against the full Core block. Malformed, duplicate, over-limit, and
+forbidden requests were rejected, and a controlled Fulcrum outage returned the
+bounded `history_unavailable` failure instead of falling back. The temporary
+principal was revoked after the probe.
+
+The authenticated HTTPS path through NGINX subsequently served
+`getblockchaininfo` on Mainnet, `getmempoolinfo`, `estimatesmartfee`, and
+`groot_getscripthistory`; forbidden `stop` remained a 403. A controlled gateway
+restart recovered authenticated Core access at the then-current exact tip of
+969,317. Each live probe used a temporary principal revoked in a `finally`
+cleanup. The gateway's 26 loopback integration tests also passed, including
+malformed Fulcrum response rejection and response-size bounds.
+
+Indexing is therefore complete; future acceptance work must not wait for it.
+This remains infrastructure evidence, not wallet-level sync or GA evidence. The
+stale-index client failure, wallet-level no-fallback behavior, broadcast-source
+verification, exact-tip full-block wallet reconciliation, repository evidence,
+complete validation, and a fresh internal multi-network build remain open
+alongside the physical-device and independent-review gates.
+
+## 2026-10-01 Multi-network production release tooling
+
+The accepted ADR 0069 GA identity now has a separate fail-closed release path.
+`release:prepare:signed-hwi` signs only the manifest-pinned HWI helper with the
+reviewed PyInstaller library-validation entitlement, hardened runtime, secure
+timestamp, and expected Developer ID team, then emits a bounded generated
+manifest. `release:unsigned:multi` verifies that immutable signed helper input
+and compiles its post-sign digest into reproducible multi-network Groot evidence.
+`release:package:macos:ga` accepts only sealed evidence from the current clean
+remote-main commit, requires the packaged pre-sign executable to match the
+independently reproduced Groot bytes, self-configures the same source epoch and
+reproducible Rust environment as the evidence builder, normalizes the packaged
+Mach-O UUID before comparison, signs the outer app without the HWI
+entitlement, notarizes and staples the app and DMG, re-verifies Gatekeeper and
+the bundled helper, and emits final signed SBOM, provenance, and checksums.
+
+The first `v0.4.95` prerelease candidate was withdrawn on 2026-10-01 before GA
+after launch verification detected that its native executable had been paired
+with a browser-prototype frontend. The release helpers had invoked the Vite
+multi-network build outside Tauri without setting `TAURI_ENV_PLATFORM`, so the
+frontend composition root selected `DummyWalletAdapter`; the native/web build
+identity check correctly failed closed before wallet access. Both reproducible
+evidence and package builders now bind `TAURI_ENV_PLATFORM=macos` and reject the
+generated frontend unless it contains the native runtime bridge and excludes
+browser-fixture markers. A replacement candidate requires fresh exact-commit
+reproducibility, signing, notarization, and launch acceptance. This correction
+does not change wallet behavior or persisted formats and has no BIP impact.
+
+This changes release infrastructure only. Wallet/profile/database/registry,
+backup, proposal, descriptor, credential, and network-selector formats are
+unchanged; no migration is required. It has no BIP support impact. The existing
+`76fb54e8` two-machine result is exact fixed-Mainnet supporting evidence, not a
+substitute for the required final multi-network reproduction and signed-package
+acceptance campaign.
+
+## 2026-10-02 v0.4.96 hardening candidate
+
+The v0.4.96 work is isolated from the published v0.4.95 prerelease on
+`codex/v0.4.96`. It ports only the reviewed hardening changes onto the exact
+v0.4.95 source commit while retaining the corrected multi-network release
+pipeline and dependency set. The candidate adds portable envelope v4 with
+authenticated v2/v3 migration, canonical software-signing prevout binding,
+final-PSBT Mainnet fee and total-debit caps, strict active-chain broadcast
+proof, Mainnet multisig quorum intersection, sparse-fee capping, bounded native
+backup behavior, stale-input rejection after hardware interaction, strict sats
+parsing, and supply-chain parser hardening. The macOS DMG now also contains an
+Applications link for the conventional drag-to-install flow.
+
+Functional testing then found that the Regtest-only acceptance override was
+being reused for a clean multi-network profile, correctly disabling switching.
+The candidate now has a separate fail-closed `groot-multi-*` temporary-profile
+override that preserves restart-bound switching without accessing the normal
+profile. Hardware pickers use the shared compact three-line device row, retain
+all connected signers, and distinguish exact wallet matches, identities that
+still require proof, and devices proven unrelated to the open wallet. Network
+and receive-verification failures use the shared structured warning component.
+The DMG retains the Applications link and adds a compact branded Finder layout
+with enlarged icons and explicit drag direction. Its reviewed Finder metadata is
+now copied deterministically before image creation instead of relying on Finder
+to persist `.DS_Store`; the helper rejects any volume name other than `Groot`.
+These changes do not alter
+wallet, registry, proposal, descriptor, backup, or network-selection formats
+and have no BIP impact.
+
+This candidate is not merged, signed, notarized, reproducibly built, tagged, or
+released. It must first pass the complete validation harness and an isolated
+unsigned/ad-hoc functional regression campaign. Envelope migration testing may
+use only disposable profiles or copies because a v4 write cannot be opened by
+older Groot versions. The stable v0.4.95 prerelease, tag, assets, and evidence
+remain unchanged.
+
+## 2026-10-03 licensing and public-release governance correction
+
+The base wallet now declares Apache-2.0 consistently in the root license and
+notice, Node/Rust manifests, contribution policy, generated application SBOM,
+provenance, and packaged legal resources. Third-party HWI, vendored code,
+dependencies, and fonts retain their own terms. Git history supports Thibaud
+Marechal and the same-email `thib` alias as the current contributor identity;
+the repository contains no company assignment or CLA, so any undisclosed prior
+assignment remains an ownership question rather than an invented corporate
+claim. ADR 0080 records the boundary and no-trademark grant.
+
+The public `v0.4.96` release at `f7b4b993` initially shipped before its completed
+certification record was reconciled into the repository. On 2026-10-04 the owner
+supplied the missing BIP84/BIP48 hardware, local/remote Core, network-switching,
+scan, and two-machine multi-network reproducibility results. ADR 0053 and the
+release checklist now authorize that exact commit. The public `v0.4.95` tag also
+moved from the locally retained `f486d923` target to `c3002279`; ADR 0079 remains
+the historical governance record.
+
+The production macOS packager refuses to proceed before build, signing, or
+notarization unless the machine-readable record names the package version and
+annotated release tag, a unique accepted ADR authorizes them, the checklist is
+approved with no open item, and the peeled remote tag, `origin/main`, and local
+`HEAD` match. Internal unsigned/ad-hoc certification builds remain available
+with their existing warnings.
+
+## 2026-10-04 approved security hardening
+
+ADR 0081 implements decision-queue items 2, 3, 5, 6, 13, and 15: canonical
+prevout binding on every final external/multisig path, exact reviewed-PSBT
+binding for software signing, invisible-format label rejection, blocking-pool
+acceleration preparation, a closed payment-destination set through Taproot v1,
+and wallet/purpose-bound secure-store v5. Authenticated v2/v3/v4 records migrate
+automatically and failure-atomically; migrated protected records cannot be read
+by v0.4.96 or older. Item 12 and every other report proposal remain deferred.
+
+The 2026-10-05 v0.5.0 reassessment found that the approved invisible-format
+label rule omitted Unicode TAG characters, format controls outside the original
+fixed list, line/paragraph separators, Hangul fillers, and variation selectors.
+New and imported permanent-payment and signer labels now reject those remaining
+classes at the Rust boundary. Existing persisted labels remain byte-for-byte
+unchanged and readable. This changes no descriptor, transaction, recovery,
+backup, or BIP support.
+
+Follow-up evidence on 2026-10-06 adds deterministic hostile corpora for PSBT,
+BIP21/payment-request, and public descriptor parsing. The corpora remain bounded
+and fail closed. BIP21 inspection intentionally preserves a syntactically valid
+amount above the Mainnet release ceiling; authoritative transaction preparation
+still rejects it through the existing integer-satoshi release policy, so no URI
+parser restriction was added. The same evidence found that two same-wallet
+metadata writes could bypass the operation lock during foreground sync and let a
+stale registry snapshot reintroduce a deleted registry entry. A dedicated
+metadata-mutation lock now serializes that fast path with every ordinary wallet
+operation while foreground sync retains its operations-only lock. Regression
+tests cover fast-path serialization and the rename/delete lifecycle boundary.
+This changes no UI, persisted format, transaction behavior, recovery behavior,
+or BIP support, and no migration is required.
+
+A disposable-key release-evidence verifier now proves a detached signature can
+bind the exact version, tag, commit, `SHA256SUMS`, and `PROVENANCE.json`, rejecting
+the wrong key, wrong version, and changed evidence. It introduces no production
+signing key or release-signing requirement. The multi-network temporary-root
+review also confirmed that the process lock restricts an existing same-owner
+directory to mode `0700` before wallet storage opens; a foreign-owned directory
+cannot be chmodded by the process and setup fails. These evidence additions do
+not change wallet behavior, persisted formats, transactions, recovery, or BIP
+support.
+
+Public v0.4.96 commit `f7b4b993` remains the latest published Mainnet release.
+ADR 0082 authorizes v0.5.0 once its annotated remote tag and `origin/main` bind
+the same validated commit; signing, notarization, stapling, and final package
+verification remain required before publication.

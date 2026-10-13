@@ -23,7 +23,7 @@ pub(super) fn address_rows(db: &Connection, multisig: bool) -> ApiResult<Vec<Rec
             let address: String = row.get(1)?;
             let (hardware_verified_at, hardware_verified_by) =
                 validated_hardware_verification_metadata(
-                    NETWORK,
+                    network(),
                     &address,
                     row.get::<_, Option<String>>(7)?.as_deref(),
                     row.get(5)?,
@@ -45,9 +45,9 @@ pub(super) fn address_rows(db: &Connection, multisig: bool) -> ApiResult<Vec<Rec
                 created: row.get::<_, u64>(3)?.to_string(),
                 status: row.get(4)?,
                 derivation_path: if multisig {
-                    format!("{MULTISIG_ACCOUNT_PATH}/0/{}", row.get::<_, u32>(0)?)
+                    format!("{}/0/{}", multisig_account_path(), row.get::<_, u32>(0)?)
                 } else {
-                    format!("{SINGLESIG_ACCOUNT_PATH}/0/{}", row.get::<_, u32>(0)?)
+                    format!("{}/0/{}", singlesig_account_path(), row.get::<_, u32>(0)?)
                 },
                 hardware_verified_at,
                 hardware_verified_by,
@@ -243,6 +243,78 @@ pub(super) fn has_coldcard_policy_acknowledgement(
                     .eq_ignore_ascii_case(&identity.fingerprint)
                 && verification.device_type.eq_ignore_ascii_case("coldcard")
         })
+}
+
+/// A Mainnet coordinator may be stored before its signers are available, but
+/// Groot must not hand out receive addresses until a spendable quorum has
+/// proved the complete descriptor's first address on trusted devices. Every
+/// Coldcard in the policy must also have its separate policy-file acknowledgement.
+pub(super) fn require_multisig_receive_readiness(
+    network: Network,
+    wallet: &MultisigWalletDto,
+    verifications: &[SignerPolicyVerificationDto],
+) -> ApiResult<()> {
+    if network != Network::Bitcoin {
+        return Ok(());
+    }
+    let first_address = first_multisig_address(wallet)?;
+    let mut verified_signers = 0usize;
+    for signer in &wallet.cosigners {
+        let Some(device_type) = signer.device_type.as_deref() else {
+            return Err(api_error(
+                "hardware_not_approved",
+                "Verify the wallet policy with enough saved hardware signers before receiving bitcoin.",
+            ));
+        };
+        if device_type.eq_ignore_ascii_case("coldcard") {
+            let imported = verifications.iter().any(|verification| {
+                verification.scope == "policy_file_acknowledgement"
+                    && verification
+                        .signer_fingerprint
+                        .eq_ignore_ascii_case(&signer.fingerprint)
+                    && verification.device_type.eq_ignore_ascii_case("coldcard")
+            });
+            if !imported {
+                return Err(api_error(
+                    "hardware_not_approved",
+                    "Import and acknowledge every Coldcard policy before receiving bitcoin.",
+                ));
+            }
+        }
+        let first_address_verified = verifications.iter().any(|verification| {
+            verification.scope == "policy_and_address"
+                && verification
+                    .signer_fingerprint
+                    .eq_ignore_ascii_case(&signer.fingerprint)
+                && verification.device_type.eq_ignore_ascii_case(device_type)
+                && verification
+                    .displayed_address
+                    .as_deref()
+                    .is_some_and(|address| {
+                        hardware_display_matches_expected_address(&first_address, address)
+                    })
+        });
+        if records_interactive_policy_verification(device_type) && first_address_verified {
+            verified_signers += 1;
+        }
+    }
+    // Both a spendable verified quorum and an intersection with every possible
+    // signing quorum are required. Otherwise, for example, two unverified keys
+    // in a 2-of-4 wallet could form an attacker-only quorum even when two real
+    // devices had passed the old threshold-only check.
+    let quorum_intersection = wallet
+        .cosigners
+        .len()
+        .saturating_sub(wallet.threshold)
+        .saturating_add(1);
+    let required_verifications = wallet.threshold.max(quorum_intersection);
+    if verified_signers < required_verifications {
+        return Err(api_error(
+            "hardware_not_approved",
+            "Verify the complete wallet policy and first address on enough hardware signers to intersect every signing quorum before receiving bitcoin.",
+        ));
+    }
+    Ok(())
 }
 
 pub(super) fn supports_coldcard_policy_acknowledgement(signer: &CosignerInput) -> bool {

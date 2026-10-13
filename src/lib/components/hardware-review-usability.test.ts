@@ -4,9 +4,18 @@ import { describe, expect, it } from 'vitest';
 const amount = readFileSync(new URL('./Amount.svelte', import.meta.url), 'utf8');
 const details = readFileSync(new URL('./TransactionReviewDetails.svelte', import.meta.url), 'utf8');
 const policy = readFileSync(new URL('./SignerPolicyReview.svelte', import.meta.url), 'utf8');
+const recipientAddressModal = readFileSync(
+  new URL('./RecipientAddressModal.svelte', import.meta.url),
+  'utf8'
+);
+const appCss = readFileSync(new URL('../../app.css', import.meta.url), 'utf8');
 const singleSend = readFileSync(new URL('../../routes/send/+page.svelte', import.meta.url), 'utf8');
 const multisigSend = readFileSync(
   new URL('../../routes/multisig/send/+page.svelte', import.meta.url),
+  'utf8'
+);
+const multisigSetup = readFileSync(
+  new URL('../../routes/multisig/new/+page.svelte', import.meta.url),
   'utf8'
 );
 
@@ -23,9 +32,32 @@ describe('hardware signing review usability', () => {
 
   it('keeps the Ledger policy and transaction reviews as explicit reachable steps', () => {
     expect(policy).toContain("'Step 1 of 2 · Wallet policy'");
-    expect(policy).toContain("'Wallet policy reviewed. Show transaction'");
+    expect(policy).toContain("'Wallet policy reviewed — show transaction'");
+    expect(policy).toContain("'Review & sign on {device}'");
     expect(multisigSend).toContain("'Step 2 of 2 · Transaction review'");
     expect(multisigSend).toContain('showTransactionDuringSigning()');
+  });
+
+  it('keeps the Ledger policy modal compact without removing trusted-display checks', () => {
+    expect(policy).not.toContain("'Compare every signer key and the first address on Ledger.'");
+    expect(policy).toContain("'Signer keys to compare'");
+    expect(policy).toContain("'First address reference'");
+    expect(policy).toContain('showAddressReference = true');
+    expect(multisigSend).toContain(
+      "showAddressReference={policyRegistrationProfile(signer).kind !== 'ledger'}"
+    );
+    expect(multisigSetup).toContain('<SignerPolicyReview');
+    expect(multisigSetup).not.toContain('showAddressReference=');
+    expect(policy).not.toContain(
+      "Groot's current Ledger connection must authorize this policy again for each signing"
+    );
+    expect(multisigSend).not.toContain(
+      "description={translate($locale, 'Check the policy, signer keys, and first address.')}"
+    );
+    expect(appCss).toMatch(/\.signer-policy-review\s*\{[^}]*gap:\s*10px;/s);
+    expect(appCss).toMatch(
+      /\.policy-review-step,[\s\S]*?\.hardware-review-step\s*\{[^}]*margin:\s*0 0 2px;/s
+    );
   });
 
   it('starts with a compact first-address reference and expands on request', () => {
@@ -33,6 +65,58 @@ describe('hardware signing review usability', () => {
     expect(policy).toContain('<code>{compactAddress(displayedAddress)}</code>');
     expect(policy).toContain('aria-expanded={addressExpanded}');
     expect(policy).toContain('{#if addressExpanded}<ReadableAddress');
+  });
+
+  it('does not repeat address-comparison guidance in the hardware address modal', () => {
+    expect(recipientAddressModal).not.toContain('The brighter first and last groups');
+    expect(recipientAddressModal).not.toContain('status-dot');
+    expect(recipientAddressModal).not.toContain('{detail}');
+    for (const source of [singleSend, multisigSend]) {
+      const hardwareAddressStart = source.indexOf('open={hardwareAddressOpen}');
+      const hardwareAddressEnd = source.indexOf('/>', hardwareAddressStart);
+      const hardwareAddressModal = source.slice(hardwareAddressStart, hardwareAddressEnd);
+      expect(hardwareAddressModal).toContain('description=""');
+      expect(hardwareAddressModal).toContain('detail=""');
+    }
+  });
+
+  it('does not offer QR transfer controls to a directly connected Ledger signer', () => {
+    expect(singleSend).toContain('!/ledger/i.test(hardwareSignerIdentity)');
+    expect(singleSend).toContain('{#if hardwareQrTransferAvailable}');
+  });
+
+  it('does not place a decorative divider above hardware review details', () => {
+    expect(appCss).toMatch(/\.hardware-review-details\s*\{[^}]*border-top:\s*0;/s);
+  });
+
+  it('uses the main review hierarchy and separators in compact hardware review', () => {
+    for (const source of [singleSend, multisigSend]) {
+      const start = source.indexOf('class="hardware-review"');
+      const end = source.indexOf('<TransactionReviewDetails', start);
+      const review = source.slice(start, end);
+      expect(review).toContain('class="hardware-review-amount"');
+      expect(review).toContain('class="details-list hardware-review-primary"');
+      expect(review.indexOf("'To'")).toBeLessThan(review.indexOf("'Label'"));
+      expect(review.indexOf("'Label'")).toBeLessThan(review.indexOf("'Network'"));
+      expect(review.indexOf("'Network'")).toBeLessThan(review.indexOf("'Network fee'"));
+      expect(review.indexOf("'Network fee'")).toBeLessThan(review.indexOf("'Total'"));
+      expect(review).not.toContain("'Transaction to verify'");
+    }
+    expect(details).toContain('<dl class="details-list">');
+    expect(appCss).toMatch(
+      /\.hardware-review \.details-list > div\s*\{[^}]*min-height: 43px;[^}]*gap: 18px;/s
+    );
+    expect(appCss).toMatch(/\.hardware-review-details > dl\s*\{[^}]*border-top:\s*0;/s);
+    expect(appCss).toMatch(
+      /\.hardware-review-details > dl > div:last-child\s*\{[^}]*border-bottom:\s*0;/s
+    );
+  });
+
+  it('rejects a second renderer signing dispatch while one is active', () => {
+    expect(singleSend).toContain('if (accelerationConfirmed || broadcasting) return;');
+    expect(multisigSend).toContain(
+      'if (accelerationConfirmed || busy || policyReviewBusy) return;'
+    );
   });
 
   it('marks wallet-owned recipients and shows their Rust-derived receive paths', () => {
@@ -46,7 +130,9 @@ describe('hardware signing review usability', () => {
     expect(details).toContain('proposal.recipientDerivationPaths');
     expect(details).toContain("'Receive path'");
     for (const source of [singleSend, multisigSend]) {
-      expect(source).toContain("proposal.recipientIsWalletOwned ? 'Self-transfer recipient'");
+      const start = source.indexOf('class="hardware-review"');
+      const end = source.indexOf('<TransactionReviewDetails', start);
+      expect(source.slice(start, end)).toContain("translate($locale, 'To')");
     }
   });
 
@@ -64,5 +150,55 @@ describe('hardware signing review usability', () => {
       expect(source).toContain('const releaseHardwareReview = walletShell.beginHardwareReview()');
       expect(source).toContain('releaseHardwareReview()');
     }
+  });
+
+  it('treats discovery as active use and top-weights the desktop signing review', () => {
+    for (const source of [singleSend, multisigSend]) {
+      const scanStart = source.indexOf(
+        source === singleSend ? 'async function scanHardware()' : 'async function scan()'
+      );
+      const scanEnd = source.indexOf('function closeHardwareScan()', scanStart);
+      const scan = source.slice(scanStart, scanEnd);
+      expect(scan).toContain('walletShell.beginHardwareReview()');
+      expect(scan).toContain('releaseHardwareReview()');
+
+      const modalStart = source.indexOf("title={translate($locale, 'Sign with hardware')}");
+      const modalEnd = source.indexOf('>', modalStart);
+      expect(source.slice(modalStart, modalEnd)).toContain('upper');
+    }
+    expect(appCss).toMatch(/\.modal-layer\s*\{[^}]*align-items: flex-start;/s);
+  });
+
+  it('keeps strategy comparison out of the final review and uses signing readiness states', () => {
+    for (const source of [singleSend, multisigSend]) {
+      expect(source).not.toContain("translate($locale, 'Exact strategy comparison')");
+    }
+    expect(multisigSend).toContain('hardwareDeviceStateLabel(device, membership)');
+    expect(multisigSend).not.toContain("? 'No setup needed'");
+    expect(multisigSend).toContain('policyRequired && !policyVerified');
+  });
+
+  it('keeps the single-key signer visible beside review details and explains Coldcard fee limits', () => {
+    expect(singleSend).toContain('class="single-hardware-signing-layout"');
+    expect(singleSend).toContain('class="single-hardware-device-pane"');
+    expect(singleSend).toContain('coldcardDefaultFeeLimitExceededPercent');
+    expect(singleSend).toContain("translate($locale, 'Coldcard fee limit')");
+    expect(singleSend).toContain("Coldcard's 10% limit may reject it.");
+    expect(appCss).toMatch(
+      /\.single-hardware-signing-layout\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1\.15fr\) minmax\(230px, 0\.85fr\);/s
+    );
+  });
+
+  it('unlocks a selected single-key Trezor before attempting to sign', () => {
+    expect(singleSend).toContain(
+      "if (device.action === 'prompt_pin' && !pinReady && !identifiedDevices[device.id])"
+    );
+    expect(singleSend).toContain('await startHardwarePin(device)');
+    expect(singleSend).toContain('await identifyHardware(device)');
+    expect(singleSend).toContain('walletService.promptHardwarePin(device.id)');
+    expect(singleSend).toContain('if (!prompt.pinRequired)');
+    expect(singleSend).toContain('await signHardware(device, true)');
+    expect(singleSend).toContain('walletService.sendHardwarePin(pinChallenge, positions)');
+    expect(singleSend).toContain('<TrezorPinModal');
   });
 });

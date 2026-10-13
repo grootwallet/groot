@@ -18,9 +18,14 @@ describe('payment request QR scanning', () => {
   it('uses a large square camera viewport and square targeting guide', () => {
     expect(scanner).toContain('class="camera-frame"');
     expect(scanner).toMatch(/\.camera-frame\s*\{[\s\S]*?aspect-ratio:\s*1;/);
+    expect(scanner).toContain('height: min(100%, 100cqw);');
     expect(scanner).toMatch(/\.scan-guide\s*\{[\s\S]*?aspect-ratio:\s*1;/);
+    expect(scanner).toMatch(/\.scan-guide\s*\{[\s\S]*?top:\s*50%;/);
+    expect(scanner).toContain('transform: translate(-50%, -50%);');
     expect(singleSend).toMatch(/open=\{paymentScanOpen\}[\s\S]*?wide/);
     expect(multisigSend).toMatch(/open=\{paymentScanOpen\}[\s\S]*?wide/);
+    expect(singleSend).toMatch(/open=\{paymentScanOpen\}[\s\S]*?fixedViewport/);
+    expect(multisigSend).toMatch(/open=\{paymentScanOpen\}[\s\S]*?fixedViewport/);
   });
 
   it.each([

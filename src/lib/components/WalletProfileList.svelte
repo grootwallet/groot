@@ -16,6 +16,25 @@
     onselect: (walletId: string) => void | Promise<void>;
     compact?: boolean;
   }>();
+  let list = $state<HTMLUListElement | null>(null);
+
+  $effect(() => {
+    if (!compact || !selectedWalletId || !list) return;
+
+    const frame = requestAnimationFrame(() => {
+      const activeWallet = list?.querySelector<HTMLElement>('[aria-current="true"]');
+      if (!activeWallet || !list) return;
+
+      const listBounds = list.getBoundingClientRect();
+      const walletBounds = activeWallet.getBoundingClientRect();
+      if (walletBounds.top < listBounds.top || walletBounds.bottom > listBounds.bottom) {
+        activeWallet.scrollIntoView({ block: 'nearest' });
+      }
+    });
+
+    return () => cancelAnimationFrame(frame);
+  });
+
   function kindLabel(profile: WalletProfile) {
     return profile.kind === 'multisig'
       ? 'Multisig'
@@ -25,7 +44,12 @@
   }
 </script>
 
-<ul class:compact class="wallet-profile-list" aria-label={translate($locale, 'Wallets')}>
+<ul
+  bind:this={list}
+  class:compact
+  class="wallet-profile-list"
+  aria-label={translate($locale, 'Wallets')}
+>
   {#each profiles as profile}
     <li>
       <Tooltip text={profile.name} truncatedSelector=".wallet-profile-copy strong"
