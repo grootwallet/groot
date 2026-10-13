@@ -32,6 +32,7 @@ export type Transaction = {
   status: 'confirmed' | 'pending' | 'replaced';
   confirmations: number;
   date: string;
+  blockTimestamp?: string | null;
   address: string | null;
   label: string;
   block?: number;

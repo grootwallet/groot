@@ -20,8 +20,8 @@
 </script>
 
 {#snippet formattedAmount()}
-  <strong>{hidden ? '••••••' : `${sign}${formatAmount(value, $denomination)}`}</strong
-  >{#if unit}{' '}<small>{amountUnit($denomination)}</small>{/if}
+  <strong>{hidden ? '••••••' : `${sign}${formatAmount(value, $denomination)}`}</strong>
+  {#if unit}<small>{amountUnit($denomination)}</small>{/if}
 {/snippet}
 
 {#if interactive && !hidden}
@@ -33,6 +33,19 @@
 {/if}
 
 <style>
+  .formatted-amount {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0;
+    max-width: 100%;
+  }
+
+  .formatted-amount > small {
+    display: inline-flex;
+    align-items: baseline;
+    margin-inline-start: 0.5rem;
+  }
+
   .interactive-amount {
     appearance: none;
     border: 0;

@@ -19,6 +19,7 @@
 - [ ] No secret or sensitive payload added to logs, fixtures, screenshots, or analytics
 - [ ] Product spec / ADR updated when behavior or architecture changed
 - [ ] Implementation status and flow/design documentation updated when applicable
+- [ ] BIP support matrix updated, or this change explicitly has no BIP impact
 - [ ] Fixture, simulator, integration, physical-device, and production claims are labeled precisely
 - [ ] Referenced GitHub issue state was checked live; no issue mutation was performed without authorization
 - [ ] Hardware worksheet, sanitized report, and canonical matrix agree (if hardware evidence changed)

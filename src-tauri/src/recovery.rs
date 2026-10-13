@@ -1,4 +1,4 @@
-use crate::multisig::{CosignerInput, MULTISIG_ACCOUNT_PATH};
+use crate::multisig::{multisig_account_path, CosignerInput};
 use bdk_wallet::{
     descriptor::{Descriptor, DescriptorPublicKey},
     miniscript::{
@@ -291,13 +291,13 @@ fn key_for_branch(
     cosigner: &CosignerInput,
     branch: u8,
 ) -> Result<DescriptorPublicKey, RecoveryError> {
-    if cosigner.derivation_path != MULTISIG_ACCOUNT_PATH {
+    if cosigner.derivation_path != multisig_account_path() {
         return Err(RecoveryError::InvalidKey);
     }
     format!(
         "[{}/{}]{}/{branch}/*",
         cosigner.fingerprint,
-        MULTISIG_ACCOUNT_PATH.trim_start_matches("m/"),
+        multisig_account_path().trim_start_matches("m/"),
         cosigner.xpub
     )
     .parse()
@@ -480,6 +480,12 @@ pub fn analyze_template(
     template: &RecoveryTemplate,
     cosigners: &[CosignerInput],
 ) -> Result<PolicyAnalysis, RecoveryError> {
+    if cosigners
+        .iter()
+        .any(|cosigner| cosigner.parse_for_validation().is_err())
+    {
+        return Err(RecoveryError::InvalidKey);
+    }
     let known = cosigners
         .iter()
         .map(|key| key.id.as_str())
@@ -730,7 +736,7 @@ mod tests {
             Err(RecoveryError::InvalidDelay)
         );
     }
-    use crate::multisig::{CosignerInput, CosignerSource, MULTISIG_ACCOUNT_PATH};
+    use crate::multisig::{multisig_account_path, CosignerInput, CosignerSource};
     use bdk_wallet::bitcoin::{
         bip32::{DerivationPath, Xpriv, Xpub},
         secp256k1::Secp256k1,
@@ -742,14 +748,14 @@ mod tests {
     fn signer(index: u8) -> CosignerInput {
         let secp = Secp256k1::new();
         let master = Xpriv::new_master(NetworkKind::Test, &[index; 32]).unwrap();
-        let path = DerivationPath::from_str(MULTISIG_ACCOUNT_PATH).unwrap();
+        let path = DerivationPath::from_str(multisig_account_path()).unwrap();
         let account = master.derive_priv(&secp, &path).unwrap();
         CosignerInput {
             id: format!("key-{index}"),
             label: format!("Key {index}"),
             fingerprint: master.fingerprint(&secp).to_string(),
             xpub: Xpub::from_priv(&secp, &account).to_string(),
-            derivation_path: MULTISIG_ACCOUNT_PATH.to_owned(),
+            derivation_path: multisig_account_path().to_owned(),
             source: CosignerSource::Virtual,
             device_type: None,
         }
@@ -1093,6 +1099,16 @@ mod tests {
         wrong_path[0].derivation_path = "bad".into();
         assert_eq!(
             analyze_template(&template, &wrong_path).unwrap_err(),
+            RecoveryError::InvalidKey
+        );
+        let mut wrong_network = signers(4);
+        let secp = Secp256k1::new();
+        let master = Xpriv::new_master(NetworkKind::Main, &[9_u8; 32]).unwrap();
+        let path = DerivationPath::from_str(multisig_account_path()).unwrap();
+        let account = master.derive_priv(&secp, &path).unwrap();
+        wrong_network[0].xpub = Xpub::from_priv(&secp, &account).to_string();
+        assert_eq!(
+            analyze_template(&template, &wrong_network).unwrap_err(),
             RecoveryError::InvalidKey
         );
     }

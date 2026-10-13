@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { locale } from '$lib/i18n';
+  import { formatInteger, locale } from '$lib/i18n';
   import { translate } from '$lib/i18n-catalog';
-  import { ArrowRight, ArrowUp, Copy, ExternalLink, Layers } from '@lucide/svelte';
+  import { ArrowRight, ArrowUp, Check, Copy, ExternalLink, Layers } from '@lucide/svelte';
   import Modal from './Modal.svelte';
   import Button from './Button.svelte';
   import { copyText } from '$lib/clipboard';
@@ -25,6 +25,7 @@
   let showAddress = $state(false);
   let showMore = $state(false);
   let addressCopied = $state(false);
+  let txidCopied = $state(false);
   let explorerError = $state('');
   let explorerUrl = $derived(
     transaction ? transactionExplorerUrl(defaultConfig.network, transaction.id) : null
@@ -33,6 +34,7 @@
   let canIncreaseFee = $derived(
     transaction?.status === 'pending' &&
       transaction.direction === 'sent' &&
+      !isSelfSpend &&
       transaction.rbf === true
   );
   let canSpendOutput = $derived(
@@ -52,13 +54,16 @@
     transaction?.id;
     showAddress = false;
     showMore = false;
+    txidCopied = false;
   });
 
   async function copyTxid() {
     if (!transaction) return;
     try {
       await copyText(transaction.id, 'identifier');
+      txidCopied = true;
       toast({ title: 'Transaction ID copied', tone: 'success' });
+      setTimeout(() => (txidCopied = false), 1_500);
     } catch {
       toast({ title: 'Copy failed', tone: 'danger' });
     }
@@ -213,11 +218,24 @@
         </details>
       </aside>
     {/if}
-    <dl class="details-list">
+    <dl class="details-list transaction-summary-list">
       <div>
-        <dt>{translate($locale, 'Date')}</dt>
+        <dt>
+          {translate(
+            $locale,
+            transaction.blockTimestamp && transaction.date !== transaction.blockTimestamp
+              ? 'First seen'
+              : transaction.blockTimestamp
+                ? 'Block time'
+                : 'Date'
+          )}
+        </dt>
         <dd><LocalTimestamp value={transaction.date} /></dd>
       </div>
+      {#if transaction.blockTimestamp && transaction.date !== transaction.blockTimestamp}<div>
+          <dt>{translate($locale, 'Block timestamp')}</dt>
+          <dd><LocalTimestamp value={transaction.blockTimestamp} /></dd>
+        </div>{/if}
       <div>
         <dt>{translate($locale, 'Confirmations')}</dt>
         <dd>{transaction.confirmations}</dd>
@@ -250,7 +268,7 @@
         >
       </div>{/if}
     <details class="proposal-review-details transaction-more-details" bind:open={showMore}>
-      <summary>{translate($locale, 'View more details')}</summary>
+      <summary>{translate($locale, showMore ? 'View less details' : 'View more details')}</summary>
       <dl class="details-list">
         {#if transaction.inputCount != null}<div>
             <dt>{translate($locale, 'Inputs')}</dt>
@@ -305,7 +323,7 @@
         {#if transaction.locktime != null && transaction.rbf != null}<div>
             <dt>{translate($locale, 'Locktime / RBF')}</dt>
             <dd>
-              {transaction.locktime}{' · '}{translate(
+              {formatInteger(transaction.locktime, $locale)}{' · '}{translate(
                 $locale,
                 transaction.rbf ? 'Enabled' : 'Disabled'
               )}
@@ -321,7 +339,7 @@
           </div>{/if}
         {#if transaction.block}<div>
             <dt>{translate($locale, 'Block')}</dt>
-            <dd>{transaction.block}</dd>
+            <dd>{formatInteger(transaction.block, $locale)}</dd>
           </div>{/if}
         {#if isSelfSpend}<div>
             <dt>{translate($locale, 'Transaction type')}</dt>
@@ -331,7 +349,7 @@
       <button class="hash-box" onclick={copyTxid}
         ><span>{translate($locale, 'Transaction ID')}</span><code
           >{compactIdentifier(transaction.id)}</code
-        ><Copy size={16} /></button
+        >{#if txidCopied}<Check size={16} />{:else}<Copy size={16} />{/if}</button
       >
       {#if explorerUrl}
         <div class="explorer-panel">

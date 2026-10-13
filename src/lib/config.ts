@@ -1,6 +1,8 @@
-export const SUPPORTED_NETWORKS = ['signet', 'testnet4', 'regtest'] as const;
-export const APP_VERSION = '0.4.89';
+export const SUPPORTED_NETWORKS = ['signet', 'testnet4', 'regtest', 'mainnet'] as const;
+export const SWITCHABLE_NETWORKS = ['regtest', 'testnet4', 'mainnet'] as const;
+export const APP_VERSION = '0.5.1';
 export type SupportedNetwork = (typeof SUPPORTED_NETWORKS)[number];
+export type SwitchableNetwork = (typeof SWITCHABLE_NETWORKS)[number];
 
 export type AppConfig = {
   network: SupportedNetwork;
@@ -8,6 +10,7 @@ export type AppConfig = {
   explorerUrl: string | null;
 };
 
+export const networkSwitchingBuild = import.meta.env.PUBLIC_NETWORK_SWITCHING === 'true';
 const configuredNetwork = parseNetwork(
   import.meta.env.PUBLIC_BITCOIN_NETWORK as string | undefined
 );
@@ -26,6 +29,7 @@ export const defaultConfig: AppConfig = {
 };
 
 export function explorerUrlForNetwork(network: SupportedNetwork): string | null {
+  if (network === 'mainnet') return 'https://mempool.space';
   if (network === 'signet') return 'https://mempool.space/signet';
   if (network === 'testnet4') return 'https://mempool.space/testnet4';
   return null;
@@ -41,6 +45,17 @@ export function parseNetwork(value: string | undefined): SupportedNetwork {
   if (value && SUPPORTED_NETWORKS.includes(value as SupportedNetwork))
     return value as SupportedNetwork;
   return 'signet';
+}
+
+export function applyRuntimeNetwork(network: SupportedNetwork): void {
+  defaultConfig.network = network;
+  defaultConfig.esploraUrl =
+    network === 'signet'
+      ? 'https://mempool.space/signet/api'
+      : network === 'testnet4'
+        ? 'https://mempool.space/testnet4/api'
+        : null;
+  defaultConfig.explorerUrl = explorerUrlForNetwork(network);
 }
 
 export function networkName(network: SupportedNetwork): string {

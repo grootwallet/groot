@@ -20,8 +20,14 @@ make_evidence() {
     'node=v24.19.0' \
     'pnpm=11.13.1' \
     'tauri=tauri-cli 2.11.4' \
-    'os=Darwin 25.6.0 arm64' \
-    'sdk=macOS 26.0' \
+    'macos_product_version=26.6.2' \
+    'macos_build_version=25G83' \
+    'architecture=arm64' \
+    'xcode_version=26.1.1' \
+    'xcode_build=17B100' \
+    'apple_clang_version=17.0.0 (clang-1700.4.4.1)' \
+    'apple_clang_target=arm64-apple-darwin25.6.0' \
+    'sdk=macOS 26.1' \
     'cargo_lock_sha256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' \
     'pnpm_lock_sha256=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' \
     > "${directory}/BUILD-INFO"
@@ -54,6 +60,19 @@ make_evidence "${second}"
 
 printf 'different environment\n' >> "${second}/BUILD-INFO"
 expect_rejection "different build metadata" \
+  bash "${repository_root}/scripts/release/compare-unsigned.sh" "${first}" "${second}"
+make_evidence "${second}"
+
+sed 's/xcode_build=17B100/xcode_build=17B101/' "${second}/BUILD-INFO" > "${second}/BUILD-INFO.changed"
+mv "${second}/BUILD-INFO.changed" "${second}/BUILD-INFO"
+expect_rejection "a different Xcode build" \
+  bash "${repository_root}/scripts/release/compare-unsigned.sh" "${first}" "${second}"
+make_evidence "${second}"
+
+sed 's/apple_clang_target=arm64-apple-darwin25.6.0/apple_clang_target=arm64-apple-darwin25.6.1/' \
+  "${second}/BUILD-INFO" > "${second}/BUILD-INFO.changed"
+mv "${second}/BUILD-INFO.changed" "${second}/BUILD-INFO"
+expect_rejection "a different Apple Clang target" \
   bash "${repository_root}/scripts/release/compare-unsigned.sh" "${first}" "${second}"
 make_evidence "${second}"
 

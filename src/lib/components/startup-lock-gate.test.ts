@@ -2,8 +2,13 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 const shell = readFileSync(new URL('./AppShell.svelte', import.meta.url), 'utf8');
+const buildIdentity = readFileSync(new URL('./BuildIdentity.svelte', import.meta.url), 'utf8');
 const brandLockup = readFileSync(new URL('./BrandLockup.svelte', import.meta.url), 'utf8');
 const appCss = readFileSync(new URL('../../app.css', import.meta.url), 'utf8');
+const settings = readFileSync(
+  new URL('../../routes/settings/+page.svelte', import.meta.url),
+  'utf8'
+);
 const buildScript = readFileSync(new URL('../../../src-tauri/build.rs', import.meta.url), 'utf8');
 
 describe('startup wallet lock gate', () => {
@@ -34,9 +39,18 @@ describe('startup wallet lock gate', () => {
     expect(runtime).toBeGreaterThan(-1);
     expect(session).toBeGreaterThan(runtime);
     expect(shell).toContain('runtime.version !== APP_VERSION');
-    expect(shell).toContain('class="sidebar-build-identity"');
-    expect(shell).toContain("'Groot v{version} · {commit}'");
-    expect(shell).toContain("commit.endsWith('-dirty') ? '-dirty' : ''");
+    expect(shell).toContain('<BuildIdentity runtime={runtimeIdentity} placement="sidebar" />');
+    expect(shell).toContain(
+      '{#if onboardingRoute}<BuildIdentity runtime={runtimeIdentity} placement="onboarding" />{/if}'
+    );
+    expect(settings).toContain('<BuildIdentity placement="settings" />');
+    expect(buildIdentity).toContain("'Groot v{version} · {commit}'");
+    expect(buildIdentity).toContain("await copyText(identity, 'build-information')");
+    expect(buildIdentity).toContain("aria-label={translate($locale, 'Copy build information')}");
+    expect(buildIdentity).toContain("copyState = 'failed'");
+    expect(appCss).toContain('.build-identity button:focus-visible');
+    expect(appCss).toContain('.build-identity-onboarding');
+    expect(buildIdentity).toContain("commit.endsWith('-dirty') ? '-dirty' : ''");
     expect(buildScript).toContain(
       'GROOT_BUILD_COMMIT does not match the checked-out repository commit'
     );
@@ -50,9 +64,36 @@ describe('startup wallet lock gate', () => {
     expect(buildScript).toContain('directories.insert(encoded.into_owned())');
   });
 
-  it('holds the native launch mark briefly without slowing the browser prototype', () => {
-    expect(shell).toContain('const minimumStartupGateMs = isPrototypeWallet ? 0 : 1_800');
-    expect(shell).toContain('await holdStartupGate()');
+  it('keeps global Settings and public network status available while locked', () => {
+    expect(shell).toContain("let settingsRoute = $derived(page.url.pathname === '/settings')");
+    expect(shell).toContain('!settingsRoute &&');
+    expect(shell).toContain('locked={walletLocked}');
+    expect(shell).toContain('class="locked-settings-link"');
+    expect(shell).toMatch(
+      /selection\.profile\.id !== selectedWalletId \|\|[\s\S]*lockedRoute \|\|[\s\S]*settingsRoute \|\|[\s\S]*diagnosticsRoute/
+    );
+    expect(settings).toContain('walletService.session()');
+    expect(settings).toContain(
+      '{#if walletUnlocked}<section class="settings-group wallet-details">'
+    );
+    expect(settings).toContain(": translate($locale, 'Settings')");
+    expect(settings).toContain('Wallet-specific network details are locked');
+    expect(appCss).toContain('.locked-settings-link:focus-visible');
+  });
+
+  it('keeps global Settings reachable when the selected network has no wallets', () => {
+    const welcome = readFileSync(
+      new URL('../../routes/welcome/+page.svelte', import.meta.url),
+      'utf8'
+    );
+    expect(welcome).toContain('class="onboarding-settings"');
+    expect(welcome).toContain('href="/settings"');
+    expect(welcome).toContain("aria-label={translate($locale, 'Settings')}");
+    expect(appCss).toContain('.onboarding-settings:focus-visible');
+  });
+
+  it('shows the launch mark during trusted startup without an artificial delay', () => {
+    expect(shell).not.toContain('holdStartupGate');
     expect(shell).toContain('<BrandLockup animated />');
     expect(brandLockup).toContain('animation: brand-lockup-reveal 900ms');
     expect(brandLockup).toContain('clip-path: inset(0 100% 0 0)');

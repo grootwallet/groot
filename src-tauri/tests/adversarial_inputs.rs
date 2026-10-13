@@ -1,5 +1,4 @@
 use groot_lib::{
-    airgap::{AirgapError, MultipartDecoder},
     bsms::DescriptorRecord,
     external_signer::{parse_import, SignerSource},
     proposal, ur_transport,
@@ -58,31 +57,4 @@ fn hostile_text_is_rejected_by_every_public_import_boundary_without_panicking() 
             "hostile UR corpus entry {index} was accepted"
         );
     }
-}
-
-#[test]
-fn multipart_decoder_rejects_conflicting_identity_order_and_resource_inputs() {
-    let mut decoder = MultipartDecoder::default();
-    assert_eq!(decoder.ingest("wallet-a", 0, 2, b"first"), Ok(false));
-    assert_eq!(
-        decoder.ingest("wallet-b", 1, 2, b"second"),
-        Err(AirgapError::MismatchedSet)
-    );
-
-    let mut decoder = MultipartDecoder::default();
-    assert_eq!(
-        decoder.ingest("wallet", usize::MAX, 2, b"x"),
-        Err(AirgapError::InvalidPart)
-    );
-    assert_eq!(
-        decoder.ingest("wallet", 0, 0, b"x"),
-        Err(AirgapError::InvalidPart)
-    );
-
-    let mut decoder = MultipartDecoder::default();
-    assert_eq!(decoder.ingest("wallet", 0, 2, b"first"), Ok(false));
-    assert_eq!(
-        decoder.ingest("wallet", 0, 2, b"changed"),
-        Err(AirgapError::DuplicateConflict)
-    );
 }

@@ -505,6 +505,7 @@ pub(super) fn recover(app: &AppHandle) -> Result<Option<Zeroizing<String>>, Stri
                     mtm,
                 );
                 let field = NSTextField::textFieldWithString(&NSString::from_str(""), mtm);
+                field.setAutomaticTextCompletionEnabled(false);
                 field.setFrame(rect(28.0, 121.0, width - 56.0, 68.0));
                 field.setMaximumNumberOfLines(3);
                 field.setPlaceholderString(Some(&NSString::from_str(
@@ -522,7 +523,7 @@ pub(super) fn recover(app: &AppHandle) -> Result<Option<Zeroizing<String>>, Stri
                     &NSColor::systemRedColor(),
                     mtm,
                 );
-                *root.ivars().field.borrow_mut() = Some(field);
+                *root.ivars().field.borrow_mut() = Some(field.clone());
                 *root.ivars().error_label.borrow_mut() = Some(error);
 
                 let cancel = unsafe {
@@ -550,6 +551,16 @@ pub(super) fn recover(app: &AppHandle) -> Result<Option<Zeroizing<String>>, Stri
                 root.addSubview(&confirm);
 
                 parent.beginSheet_completionHandler(&panel, None);
+                panel.makeFirstResponder(Some(&field));
+                if let Some(editor) = field.currentEditor() {
+                    unsafe {
+                        let _: () = msg_send![&*editor, setContinuousSpellCheckingEnabled: false];
+                        let _: () = msg_send![&*editor, setAutomaticSpellingCorrectionEnabled: false];
+                        let _: () = msg_send![&*editor, setAutomaticTextReplacementEnabled: false];
+                        let _: () = msg_send![&*editor, setAutomaticQuoteSubstitutionEnabled: false];
+                        let _: () = msg_send![&*editor, setAutomaticDashSubstitutionEnabled: false];
+                    }
+                }
                 let response = NSApplication::sharedApplication(mtm).runModalForWindow(&panel);
                 parent.endSheet_returnCode(&panel, response);
                 if response != NSModalResponseOK {
@@ -840,7 +851,10 @@ fn verify_backup_order(parent: &NSWindow, words: &[String], mtm: MainThreadMarke
     let error = add_label(
         &root,
         "",
-        rect(28.0, 80.0, width - 56.0, 24.0),
+        // Keep this label below the last shuffled-word row. Even an empty
+        // NSTextField participates in hit testing and previously intercepted
+        // clicks across that row.
+        rect(28.0, 55.0, width - 56.0, 20.0),
         &NSFont::systemFontOfSize_weight(10.0, 0.0),
         &NSColor::systemRedColor(),
         mtm,

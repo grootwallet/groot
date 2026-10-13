@@ -73,7 +73,7 @@
   </div>
   <span class="fee-source">
     {#if estimates}{translate($locale, 'Estimated fee')}
-      <Amount value={estimatedFee} /> · {estimates.source}{:else}{translate(
+      <Amount value={estimatedFee} />{:else}{translate(
         $locale,
         'Estimate\n      unavailable · Enter a custom rate'
       )}{/if}

@@ -68,6 +68,9 @@ impl WalletSyncSource {
         else {
             return Ok(None);
         };
+        if network == Network::Bitcoin {
+            return Err(NetworkConfigError::UnsupportedSyncSource);
+        }
         if peers.len() > 15 || *required_peers == 0 || *required_peers > 15 {
             return Err(NetworkConfigError::InvalidPeerConfiguration);
         }
@@ -216,6 +219,7 @@ pub enum NetworkConfigError {
     InvalidPeerConfiguration,
     InsufficientPeerDiversity,
     ProxyDnsLeak,
+    UnsupportedSyncSource,
 }
 
 pub const ESPLORA_PRESETS: &[(&str, &str)] = &[
@@ -462,6 +466,20 @@ mod tests {
             Err(NetworkConfigError::InsufficientPeerDiversity)
         );
         assert!(source.validate(Network::Regtest).is_ok());
+    }
+
+    #[test]
+    fn compact_filters_are_rejected_on_mainnet() {
+        let source = WalletSyncSource::CompactFilters {
+            peers: vec!["127.0.0.1:8333".into(), "127.0.0.2:8333".into()],
+            required_peers: 2,
+            discover_peers: false,
+            tor_proxy: None,
+        };
+        assert_eq!(
+            source.validate(Network::Bitcoin),
+            Err(NetworkConfigError::UnsupportedSyncSource)
+        );
     }
 
     #[test]

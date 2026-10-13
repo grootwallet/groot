@@ -4,6 +4,7 @@ import {
   addressPrefixForNetwork,
   canDiscardAddress,
   hasAddressPrefixForNetwork,
+  INACTIVITY_TIMEOUT_CHOICES,
   normalizePermanentLabel
 } from './policy';
 import {
@@ -62,15 +63,114 @@ import {
   prototypeCredential
 } from './dummy-state';
 import type { PaymentDraft } from './payment-draft';
+import { pendingBalanceBreakdown, sortTransactions } from './presentation';
 
 export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
   private multisigSetupDraftValue: import('./contracts').MultisigSetupDraft | null = null;
   private paymentDrafts = new Map<string, PaymentDraft>();
   private multisigPolicyVerificationRecords: SignerPolicyVerification[] = [];
   private hardwareHealthCheckRecords = new Map<string, HardwareHealthCheckRecord>();
+  private detailFixtureFailed = false;
+  private activityFixtureFailed = false;
   async paymentDraft() {
+    if (typeof location !== 'undefined') {
+      const params = new URLSearchParams(location.search);
+      if (params.has('fixture-delayed-wallet-details'))
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+      if (params.has('fixture-wallet-details-error') && !this.detailFixtureFailed) {
+        this.detailFixtureFailed = true;
+        throw new WalletError('internal_error', 'Synthetic wallet details failure.');
+      }
+    }
     const draft = this._selectedWalletId ? this.paymentDrafts.get(this._selectedWalletId) : null;
     return draft ? structuredClone(draft) : null;
+  }
+  async diagnostics() {
+    if (
+      typeof location !== 'undefined' &&
+      new URLSearchParams(location.search).has('fixture-delayed-diagnostics')
+    ) {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+    const timestamp = Math.floor(Date.now() / 1000);
+    const records = [
+      {
+        schemaVersion: 1 as const,
+        timestamp: timestamp - 120,
+        event: 'receive_address_generated' as const,
+        outcome: 'succeeded' as const,
+        trigger: 'manual' as const,
+        walletKind: 'software' as const,
+        itemCount: 1,
+        appVersion: APP_VERSION,
+        buildCommit: 'development',
+        compiledNetwork: defaultConfig.network,
+        platform: 'browser' as const
+      },
+      {
+        schemaVersion: 1 as const,
+        timestamp: timestamp - 60,
+        event: 'receive_address_discarded' as const,
+        outcome: 'succeeded' as const,
+        trigger: 'manual' as const,
+        walletKind: 'software' as const,
+        appVersion: APP_VERSION,
+        buildCommit: 'development',
+        compiledNetwork: defaultConfig.network,
+        platform: 'browser' as const
+      },
+      {
+        schemaVersion: 1 as const,
+        timestamp,
+        event: 'app_started' as const,
+        outcome: 'succeeded' as const,
+        trigger: 'startup' as const,
+        appVersion: APP_VERSION,
+        buildCommit: 'development',
+        compiledNetwork: defaultConfig.network,
+        platform: 'browser' as const
+      },
+      {
+        schemaVersion: 1 as const,
+        timestamp: timestamp - 30,
+        event: 'recovery_scan' as const,
+        outcome: 'failed' as const,
+        trigger: 'recovery' as const,
+        walletKind: 'software' as const,
+        syncSource: 'bitcoin_core' as const,
+        errorCode: 'node_history_unavailable',
+        errorMessage:
+          'Bitcoin Core has pruned a block required by this scan. The attached block heights identify the unavailable range and earliest usable birthday.',
+        errorDetails: {
+          requestedBirthdayBlock: 96_600,
+          requiredBlock: 96_599,
+          earliestRetainedBlock: 960_062,
+          minimumBirthdayBlock: 960_063
+        },
+        appVersion: APP_VERSION,
+        buildCommit: 'development',
+        compiledNetwork: defaultConfig.network,
+        platform: 'browser' as const
+      }
+    ];
+    if (
+      typeof location !== 'undefined' &&
+      new URLSearchParams(location.search).has('fixture-large-diagnostics')
+    ) {
+      return Array.from({ length: 2000 }, (_, index) => ({
+        ...records[index % records.length],
+        timestamp: timestamp - index,
+        itemCount: index
+      }));
+    }
+    return records;
+  }
+  async exportDiagnostics(_format: 'json' | 'csv') {
+    return {
+      saved: true,
+      revealToken: 'fixture-diagnostics-export-reveal',
+      revealLabel: 'Show in Finder'
+    };
   }
   async savePaymentDraft(draft: PaymentDraft) {
     if (!this._selectedWalletId || draft.walletId !== this._selectedWalletId)
@@ -86,9 +186,16 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
       platform: 'browser' as const,
       mobile: false,
       network: defaultConfig.network,
+      networkSwitching: false,
       version: APP_VERSION,
       commit: 'development'
     };
+  }
+  async switchNetwork(_network: import('$lib/config').SwitchableNetwork) {
+    throw new WalletError(
+      'network_switch_unavailable',
+      'Network switching is available only in the native multi-network build.'
+    );
   }
   async exists() {
     return this._exists;
@@ -120,10 +227,13 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     return renamed;
   }
   async saveInactivityTimeout(minutes: number) {
-    if (!Number.isInteger(minutes) || minutes < 1 || minutes > 60) {
+    if (!this._selectedWalletId || !this._unlockedWalletIds.has(this._selectedWalletId)) {
+      throw new WalletError('wallet_locked', 'Unlock this wallet before changing automatic lock.');
+    }
+    if (!INACTIVITY_TIMEOUT_CHOICES.includes(minutes)) {
       throw new WalletError(
         'invalid_inactivity_timeout',
-        'Automatic lock must be between 1 and 60 minutes.'
+        'Automatic lock must be 1, 5, 15, 30, or 60 minutes.'
       );
     }
     this._inactivityTimeoutMinutes = minutes;
@@ -170,8 +280,16 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
         )
     };
   }
-  async cancelOnboarding() {}
-  async createWallet(name: string, credential: string, backupVerified: boolean) {
+  async cancelOnboarding(_preserveMainnetAdmission = false) {}
+  async createWallet(
+    name: string,
+    credential: string,
+    backupVerified: boolean,
+    _networkSetupSourceWalletId?: string
+  ) {
+    // Keep the browser adapter asynchronous enough to exercise the same
+    // painted loading state as native profile encryption and persistence.
+    await new Promise((resolve) => setTimeout(resolve, 250));
     if (!name.trim()) throw new WalletError('invalid_wallet_name', 'A wallet name is required.');
     if (!credential) throw new WalletError('invalid_credential', 'A passphrase / PIN is required.');
     if (unicodeCharacterLength(credential) < MIN_NEW_WALLET_PASSPHRASE_CHARACTERS)
@@ -195,6 +313,12 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     this._credentials.set(profile.id, credential);
     this._unlockedWalletIds.add(profile.id);
     this._exists = true;
+    return {
+      masterFingerprint: '0fe7e3d2',
+      externalDescriptor: "wpkh([0fe7e3d2/84'/1'/0']tpub-groot-demo/0/*)#c4z9ljqv",
+      internalDescriptor: "wpkh([0fe7e3d2/84'/1'/0']tpub-groot-demo/1/*)#xkgxenf9",
+      networkSetupCopied: true
+    };
   }
   async recoverWallet(_name: string, _credential: string) {
     throw new WalletError(
@@ -284,6 +408,19 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
   async nodeConfig() {
     return structuredClone(this._nodeConfig);
   }
+  async publicNetworkStatus() {
+    return { priorityFee: 12, networkTip: 301 };
+  }
+  async admitMainnetCore(
+    config: CoreNodeConfig,
+    password: string,
+    _purpose: 'open_existing_wallet' | 'create_new_wallet'
+  ) {
+    if (config.auth === 'user_pass' && !password)
+      throw new WalletError('invalid_node_config', 'RPC password is required.');
+    this._nodeConfig = { ...config, backend: { ...config.backend } };
+    return this.testNodeConnection();
+  }
   async networkSetupSources() {
     if (
       typeof location !== 'undefined' &&
@@ -296,7 +433,6 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     return this._profiles.map((profile) => ({
       walletId: profile.id,
       walletName: profile.name,
-      syncSource: structuredClone(this._syncSource),
       ready:
         this._unlockedWalletIds.has(profile.id) &&
         (!lockReusableSources || profile.id === this._selectedWalletId)
@@ -307,6 +443,17 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
       throw new WalletError('wallet_not_found', 'The source wallet no longer exists.');
     if (!this._selectedWalletId || credential !== this._credentials.get(this._selectedWalletId))
       throw new WalletError('invalid_credential', 'Incorrect app PIN.');
+    return this.testNodeConnection();
+  }
+  async configureManagedNode(credential: string) {
+    if (!this._selectedWalletId || credential !== this._credentials.get(this._selectedWalletId))
+      throw new WalletError('invalid_credential', 'Incorrect app PIN.');
+    this._nodeConfig = {
+      backend: { type: 'remote_core', url: 'https://bitcoin-rpc.usegroot.com/' },
+      auth: 'user_pass',
+      username: 'groot-0123456789abcdef01234567',
+      torProxy: null
+    };
     return this.testNodeConnection();
   }
   async saveNodeConfig(config: CoreNodeConfig, password: string, credential: string) {
@@ -327,12 +474,15 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     };
   }
   async testNodeConnection() {
+    const pruned =
+      typeof location !== 'undefined' &&
+      new URLSearchParams(location.search).has('fixture-pruned-history');
     return {
       connected: true,
-      blocks: 301,
+      blocks: pruned ? 968_684 : 301,
       backend: structuredClone(this._nodeConfig),
-      pruned: false,
-      pruneHeight: null,
+      pruned,
+      pruneHeight: pruned ? 960_062 : null,
       initialBlockDownload: false,
       sizeOnDisk: 42_000_000,
       blockFilterIndex: 'disabled' as const
@@ -350,17 +500,24 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     this._syncSource = structuredClone(source);
     return structuredClone(this._syncSource);
   }
-  async inspectPayjoinUri(_value: string): Promise<import('./contracts').PayjoinUriInspection> {
+  async inspectPaymentRequest(
+    _value: string
+  ): Promise<import('./contracts').PaymentRequestInspection> {
     throw new WalletError(
-      'invalid_payjoin_uri',
-      'The browser fixture does not run Payjoin protocol parsing.'
+      'invalid_payment_request',
+      'The browser fixture does not run trusted payment-request parsing.'
     );
   }
   async recoveryScanSettings() {
     return { ...this._scanSettings };
   }
   async saveRecoveryScanSettings(birthdayHeight: number, gapLimit: number, credential: string) {
-    if (!this._selectedWalletId || credential !== this._credentials.get(this._selectedWalletId))
+    const initialFixtureScan = !this._initialHistoryCompleted && this._initialHistoryRequired;
+    if (
+      !this._selectedWalletId ||
+      (credential !== this._credentials.get(this._selectedWalletId) &&
+        !(initialFixtureScan && credential === ''))
+    )
       throw new WalletError('invalid_credential', 'Incorrect app PIN.');
     if (
       !Number.isInteger(birthdayHeight) ||
@@ -377,12 +534,32 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     return structuredClone(this._scanStatus);
   }
   async fullRescan(credential: string) {
-    if (!this._selectedWalletId || credential !== this._credentials.get(this._selectedWalletId))
+    const initialFixtureScan = !this._initialHistoryCompleted && this._initialHistoryRequired;
+    if (
+      !this._selectedWalletId ||
+      (credential !== this._credentials.get(this._selectedWalletId) &&
+        !(initialFixtureScan && credential === ''))
+    )
       throw new WalletError('invalid_credential', 'Incorrect app PIN.');
     if (this._scanStatus.status === 'running' || this._scanStatus.status === 'cancelling')
       throw new WalletError(
         'scan_in_progress',
         'A recovery scan is already running for this wallet.'
+      );
+    if (
+      typeof location !== 'undefined' &&
+      new URLSearchParams(location.search).has('fixture-pruned-history')
+    )
+      throw new WalletError(
+        'node_history_unavailable',
+        'Bitcoin Core no longer stores the blocks needed for this scan. Choose a birthday above the retained prune height, or connect an archival node.',
+        null,
+        {
+          requestedBirthdayBlock: this._scanSettings.birthdayHeight,
+          requiredBlock: Math.max(0, this._scanSettings.birthdayHeight - 1),
+          earliestRetainedBlock: 960_062,
+          minimumBirthdayBlock: 960_063
+        }
       );
     const startedAt = Math.floor(Date.now() / 1000);
     const totalBlocks = 8;
@@ -396,6 +573,19 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
       startedAt,
       updatedAt: startedAt
     };
+    if (
+      typeof location !== 'undefined' &&
+      new URLSearchParams(location.search).has('fixture-recovery-scan-failure')
+    ) {
+      this._scanStatus = {
+        ...this._scanStatus,
+        status: 'failed',
+        currentHeight: this._scanSettings.birthdayHeight,
+        processedBlocks: 1,
+        updatedAt: Math.floor(Date.now() / 1000)
+      };
+      throw new WalletError('internal_error', 'The recovery scan could not be completed.');
+    }
     const holdForCancellation = this._holdFirstRecoveryScan && this._recoveryScanAttempts === 0;
     this._recoveryScanAttempts += 1;
     while (holdForCancellation && this._scanStatus.status === 'running') {
@@ -405,13 +595,18 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
       await new Promise((resolve) => setTimeout(resolve, 50));
       if (this._scanStatus.status === 'cancelling') {
         this._scanStatus = {
-          ...this._scanStatus,
-          status: 'cancelled',
-          updatedAt: Math.floor(Date.now() / 1000)
+          status: 'idle',
+          ...this._scanSettings,
+          currentHeight: 0,
+          targetHeight: 0,
+          processedBlocks: 0,
+          totalBlocks: 0,
+          startedAt: 0,
+          updatedAt: 0
         };
         throw new WalletError(
           'scan_cancelled',
-          'Recovery scan cancelled. Saved progress remains safe; start it again to continue.'
+          'Recovery scan cancelled. Start a new scan when you are ready.'
         );
       }
       this._scanStatus = {
@@ -456,10 +651,7 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     const pendingSelfSpend =
       typeof location !== 'undefined' &&
       new URLSearchParams(location.search).has('fixture-pending-self-spend');
-    const initialHistoryRequired =
-      typeof location !== 'undefined' &&
-      new URLSearchParams(location.search).has('fixture-initial-history-required') &&
-      !this._initialHistoryCompleted;
+    const initialHistoryRequired = this._initialHistoryRequired && !this._initialHistoryCompleted;
     const snapshot: WalletSnapshot = {
       network: defaultConfig.network,
       balance: emptyWallet
@@ -499,7 +691,7 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
                   walletInputAmount: 40_000,
                   walletOutputAmount: 39_890,
                   locktime: 0,
-                  rbf: false,
+                  rbf: true,
                   intentLabel: null,
                   provenance: {
                     state: 'unknown',
@@ -560,7 +752,12 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     return snapshot;
   }
 
-  async sync(): Promise<WalletSnapshot> {
+  async sync(_automatic = false): Promise<WalletSnapshot> {
+    if (this._initialHistoryRequired && !this._initialHistoryCompleted)
+      throw new WalletError(
+        'initial_scan_required',
+        'Complete the first wallet-history scan before syncing.'
+      );
     return this.snapshot();
   }
 
@@ -714,8 +911,10 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
       (outpoint) => ({ outpoint, amount: sats(available), sequence: 0xfffffffd })
     );
     const walletRecipient = this._addresses.find((address) => address.address === recipient);
+    const proposalId = crypto.randomUUID();
     const proposal: PaymentProposal = {
-      proposalId: crypto.randomUUID(),
+      proposalId,
+      reviewBinding: `fixture-review-${proposalId}`,
       recipient,
       recipientTestnetAlias: null,
       recipientIsWalletOwned: Boolean(walletRecipient),
@@ -819,11 +1018,32 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
         incrementalFee: quote.incrementalFee,
         recommendationSource: quote.recommendationSource
       };
+    } else {
+      const quote = await this.quoteCpfp(txid, selectedRate);
+      proposal.amount = sats(0);
+      proposal.fee = quote.childFee;
+      proposal.feeRate = quote.targetFeeRate;
+      proposal.total = quote.childFee;
+      proposal.acceleration = {
+        method,
+        originalTxid: txid,
+        originalFeeRate: quote.parentEffectiveFeeRate,
+        minimumFeeRate: quote.minimumFeeRate,
+        targetFeeRate: quote.targetFeeRate,
+        incrementalFee: quote.childFee,
+        recommendationSource: quote.recommendationSource
+      };
     }
     return proposal;
   }
 
   async quoteRbf(txid: string, selectedRate?: ReturnType<typeof feeRate>) {
+    if (
+      typeof location !== 'undefined' &&
+      new URLSearchParams(location.search).has('fixture-acceleration-loading')
+    ) {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
     if (
       typeof location !== 'undefined' &&
       new URLSearchParams(location.search).has('fixture-rbf-insufficient-funds')
@@ -860,6 +1080,48 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     };
   }
 
+  async quoteCpfp(txid: string, selectedRate?: ReturnType<typeof feeRate>) {
+    const tx = this._transactions.find((item) => item.id === txid);
+    if (!tx || tx.status !== 'pending')
+      throw new WalletError('acceleration_unavailable', 'Only pending transactions can use CPFP.');
+    const parentVsize = 180;
+    const parentFee = sats(tx.fee ?? Math.ceil(Number(tx.feeRate ?? 1) * parentVsize));
+    const parentRate = Number(parentFee) / parentVsize;
+    const minimum = Math.ceil((parentRate + 0.004) * 250) / 250;
+    const target = selectedRate ?? feeRate(Math.max(5, minimum + 1));
+    if (target < minimum)
+      throw new WalletError(
+        'fee_rate_too_low',
+        `Choose at least ${minimum} sat/vB for this package.`
+      );
+    const childVsize = 110;
+    const packageVsize = parentVsize + childVsize;
+    const childFee = sats(
+      Math.max(
+        Math.ceil(Number(target) * packageVsize) - Number(parentFee),
+        Math.ceil(Number(target) * childVsize)
+      )
+    );
+    const packageFee = sats(Number(parentFee) + Number(childFee));
+    return {
+      method: 'cpfp' as const,
+      originalTxid: txid,
+      parentFee,
+      parentVsize,
+      parentEffectiveFeeRate: feeRate(Math.round(parentRate * 1000) / 1000),
+      minimumFeeRate: feeRate(minimum),
+      targetFeeRate: feeRate(Number(target)),
+      childFee,
+      childVsize,
+      packageFee,
+      packageVsize,
+      resultingPackageFeeRate: feeRate(
+        Math.round((Number(packageFee) / packageVsize) * 1000) / 1000
+      ),
+      recommendationSource: selectedRate ? ('custom' as const) : ('package_fallback' as const)
+    };
+  }
+
   async openTransactionExplorer(txid: string) {
     const url = transactionExplorerUrl(defaultConfig.network, txid);
     if (!url || typeof window === 'undefined' || !window.open(url, '_blank', 'noopener,noreferrer'))
@@ -880,10 +1142,12 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     return { importedCount: 2, unchangedCount: 1, ignoredCount: 1, spendabilityChangeCount: 0 };
   }
 
-  async signAndBroadcast(proposalId: string, credential: string) {
+  async signAndBroadcast(proposalId: string, reviewBinding: string, credential: string) {
     const proposal = this._proposals.get(proposalId);
     if (!proposal)
       throw new WalletError('wallet_not_found', 'Payment proposal was not found or expired.');
+    if (reviewBinding !== proposal.reviewBinding)
+      throw new WalletError('proposal_mismatch', 'The payment changed after review.');
     if (!this._selectedWalletId || credential !== this._credentials.get(this._selectedWalletId))
       throw new WalletError('invalid_credential', 'Incorrect passphrase / PIN.');
     const txid = this._accelerations.has(proposalId)
@@ -999,7 +1263,7 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
         'invalid_hardware_request',
         'This device does not need the PIN-matrix flow.'
       );
-    return 'fixture-pin-challenge';
+    return { challengeId: 'fixture-pin-challenge', pinRequired: true };
   }
   async sendHardwarePin(challengeId: string, pinPositions: string) {
     await new Promise((resolve) => setTimeout(resolve, 200));
@@ -1012,8 +1276,32 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
       );
     this._trezorPinUnlocked = true;
   }
-  async cancelHardwareOperations() {}
-  async checkHardwareCosigner(cosigner: PolicyDraft['cosigners'][number], deviceId: string) {
+  async cancelHardwareOperations(_preserveMainnetAdmission = false) {}
+  async identifySavedHardwareDevice(deviceId: string) {
+    const device = (await this.listHardwareDevices()).find(
+      (candidate) => candidate.id === deviceId
+    );
+    const fingerprint = device?.fingerprint?.toLowerCase();
+    if (!fingerprint)
+      throw new WalletError('hardware_unavailable', 'Unlock this signer, then identify it again.');
+    const kind = this._profiles.find((profile) => profile.id === this._selectedWalletId)?.kind;
+    const saved =
+      kind === 'multisig'
+        ? this._multisig?.cosigners.find(
+            (signer) => signer.fingerprint.toLowerCase() === fingerprint
+          )
+        : kind === 'watch_only' &&
+            this._externalWallet?.signer.fingerprint.toLowerCase() === fingerprint
+          ? this._externalWallet.signer
+          : null;
+    if (!saved) throw new WalletError('unknown_signer', 'This signer is not part of this wallet.');
+    return { fingerprint, label: saved.label };
+  }
+  async checkHardwareCosigner(
+    cosigner: PolicyDraft['cosigners'][number],
+    deviceId: string,
+    draft = false
+  ) {
     await new Promise((resolve) => setTimeout(resolve, 200));
     const checkedAt = new Date().toISOString();
     const connected = await this.importHardwareCosigner(deviceId, cosigner.label, true);
@@ -1031,7 +1319,7 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
       checkedAt,
       summary: 'Signer matches this wallet.'
     };
-    this.persistFixtureHardwareHealth(cosigner.fingerprint, result);
+    if (!draft) this.persistFixtureHardwareHealth(cosigner.fingerprint, result);
     return result;
   }
   async checkHardwareExternalSigner(signer: ExternalSigner, deviceId: string) {
@@ -1071,6 +1359,14 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     );
   }
   async multisigSignerPolicyVerifications() {
+    if (
+      typeof location !== 'undefined' &&
+      location.search.includes('fixture-policy-status-offline')
+    )
+      throw new WalletError(
+        'node_admission_required',
+        'Verify this wallet’s Bitcoin Core connection.'
+      );
     return structuredClone(this.multisigPolicyVerificationRecords);
   }
   async multisigPolicyVerificationAddress() {
@@ -1457,6 +1753,15 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
   ): Promise<import('./contracts').MultisigCreation> {
     if (!credential) throw new WalletError('invalid_credential', 'An app PIN is required.');
     const preview = await this.previewMultisig(policy);
+    if (
+      this._multisigProfileId &&
+      this._multisig?.externalDescriptor === preview.externalDescriptor
+    )
+      throw new WalletError(
+        'wallet_already_exists',
+        'This exact descriptor wallet already exists on this device.',
+        this._multisigProfileId
+      );
     const setupDraft = this.multisigSetupDraftValue;
     this._recoveryVerified = false;
     this._multisig = {
@@ -1744,9 +2049,106 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     this._recoveryVerified = false;
   }
   async multisigSnapshot() {
+    if (
+      typeof location !== 'undefined' &&
+      location.search.includes('fixture-policy-status-offline')
+    )
+      throw new WalletError(
+        'node_admission_required',
+        'Verify this wallet’s Bitcoin Core connection.'
+      );
     return this.snapshot();
   }
-  async syncMultisig() {
+  async overview(walletId: string): Promise<import('./contracts').WalletOverview> {
+    if (walletId !== this._selectedWalletId)
+      throw new WalletError('wallet_selection_changed', 'The selected wallet changed.');
+    const snapshot = await this.snapshot();
+    return {
+      network: snapshot.network,
+      balance: snapshot.balance,
+      utxos: snapshot.utxos,
+      transactions: sortTransactions(snapshot.transactions, 'newest').slice(0, 3),
+      syncedAt: snapshot.syncedAt,
+      chainTip: snapshot.chainTip,
+      pendingOutgoing: pendingBalanceBreakdown(snapshot).outgoing
+    };
+  }
+  async activity(
+    request: import('./contracts').ActivityRequest
+  ): Promise<import('./contracts').ActivityPage> {
+    if (request.walletId !== this._selectedWalletId)
+      throw new WalletError('wallet_selection_changed', 'The selected wallet changed.');
+    if (
+      !Number.isInteger(request.limit) ||
+      request.limit < 1 ||
+      request.limit > 100 ||
+      [...request.query].length > 128
+    )
+      throw new WalletError('invalid_transaction', 'The history request is invalid.');
+    const snapshot = await this.snapshot();
+    const query = request.query.trim().toLowerCase();
+    if (typeof location !== 'undefined') {
+      const params = new URLSearchParams(location.search);
+      if (params.has('fixture-large-history') && snapshot.transactions[0]) {
+        snapshot.transactions = Array.from({ length: 120 }, (_, index) => ({
+          ...snapshot.transactions[0],
+          id: index.toString(16).padStart(64, '0'),
+          label: `Synthetic history ${index}`,
+          intentLabel: null,
+          provenance: { ...snapshot.transactions[0].provenance, labels: [] },
+          direction: index % 2 ? 'sent' : 'received',
+          status: 'confirmed',
+          confirmations: 1,
+          amount: sats(index + 1),
+          date: '2026-09-01T00:00:00.000Z'
+        }));
+      }
+      if (
+        params.has('fixture-history-page-error') &&
+        request.cursor &&
+        !this.activityFixtureFailed
+      ) {
+        this.activityFixtureFailed = true;
+        throw new WalletError('internal_error', 'Synthetic history page failure.');
+      }
+    }
+    const transactions = sortTransactions(
+      snapshot.transactions
+        .filter(
+          (tx) =>
+            (request.filter === 'all' || request.filter === tx.direction) &&
+            [
+              tx.label,
+              tx.intentLabel?.text,
+              ...tx.provenance.labels.map((label) => label.text)
+            ].some((label) => label?.toLowerCase().includes(query))
+        )
+        .sort((a, b) => a.id.localeCompare(b.id)),
+      request.sort
+    );
+    const encoded = new TextEncoder().encode(
+      JSON.stringify([request.walletId, request.filter, query, request.sort, transactions])
+    );
+    const digest = await crypto.subtle.digest('SHA-256', encoded);
+    const revision = Array.from(new Uint8Array(digest), (byte) =>
+      byte.toString(16).padStart(2, '0')
+    ).join('');
+    const index = request.cursor
+      ? transactions.findIndex((tx) => tx.id === request.cursor?.after)
+      : -1;
+    if (request.cursor && (request.cursor.revision !== revision || index < 0))
+      throw new WalletError('history_changed', 'History changed. Refresh the transaction list.');
+    const page = transactions.slice(index + 1, index + 1 + request.limit);
+    return {
+      transactions: page,
+      total: transactions.length,
+      nextCursor:
+        index + 1 + page.length < transactions.length
+          ? { revision, after: page[page.length - 1].id }
+          : null
+    };
+  }
+  async syncMultisig(_automatic = false) {
     return this.snapshot();
   }
   async createMultisigAddress(labels: string[]) {
@@ -2154,7 +2556,11 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     return structuredClone(proposal);
   }
 
-  #recordFixtureBroadcast(proposalId: string, proposal: PaymentProposal, txid: string) {
+  #recordFixtureBroadcast(
+    proposalId: string,
+    proposal: PaymentProposal | MultisigProposal,
+    txid: string
+  ) {
     const acceleration = this._accelerations.get(proposalId);
     const original = acceleration
       ? this._transactions.find((transaction) => transaction.id === acceleration.originalTxid)
@@ -2220,7 +2626,35 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
 
   subscribe(listener: (event: WalletEvent) => void) {
     this._listeners.add(listener);
-    return () => this._listeners.delete(listener);
+    const params = typeof location === 'undefined' ? null : new URLSearchParams(location.search);
+    const timer = params?.has('fixture-acceleration-confirmed')
+      ? setTimeout(
+          async () => {
+            const snapshot = await this.snapshot();
+            const txid = params.get('txid');
+            const transaction = snapshot.transactions.find(
+              (transaction) => transaction.id === txid
+            );
+            if (!transaction || !this._selectedWalletId) return;
+            transaction.status = 'confirmed';
+            transaction.confirmations = 1;
+            this._transactions = this._transactions.map((item) =>
+              item.id === txid ? { ...item, status: 'confirmed', confirmations: 1 } : item
+            );
+            listener({
+              type: 'wallet_updated',
+              walletId: this._selectedWalletId,
+              walletKind: location.pathname.startsWith('/multisig') ? 'multisig' : 'single_key',
+              snapshot
+            });
+          },
+          params.has('fixture-confirm-after-review') ? 5000 : 1500
+        )
+      : null;
+    return () => {
+      if (timer) clearTimeout(timer);
+      this._listeners.delete(listener);
+    };
   }
 
   #emit(event: WalletEvent) {

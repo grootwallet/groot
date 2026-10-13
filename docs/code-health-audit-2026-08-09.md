@@ -47,7 +47,12 @@ The next automation investment should be native command acceptance with isolated
 - Instrumented native command and packaged-app E2E on supported operating systems.
 - Platform credential storage, lifecycle, camera, safe-area, interruption, and accessibility certification.
 - Incremental decomposition of the Rust command/orchestration module.
-- Funded delayed-recovery/reorg tests, remote-node privacy/TLS evidence, large-history performance, single-instance locking, reproducible signed builds, SBOM/provenance, and update-delivery review.
+- At this audit date: funded delayed-recovery/reorg tests, remote-node
+  privacy/TLS evidence, large-history performance, single-instance locking,
+  reproducible unsigned evidence, signed/notarized package verification,
+  SBOM/provenance, and update-delivery review. The unsigned reproducibility
+  portion later passed for frozen commit `2110eaf`; see
+  [`reproducible-mainnet-builds-2026-09-04.md`](reproducible-mainnet-builds-2026-09-04.md).
 
 These gaps remain blockers under the canonical mainnet checklist. Test counts and coverage floors do not waive them.
 

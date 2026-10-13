@@ -3,16 +3,21 @@
   import { translate, localizedError } from '$lib/i18n-catalog';
   import { LockKeyhole, Trash2 } from '@lucide/svelte';
   import { afterNavigate, goto } from '$app/navigation';
-  import { onDestroy, onMount } from 'svelte';
+  import { onDestroy, onMount, tick } from 'svelte';
   import { fly } from 'svelte/transition';
   import Button from '$lib/components/Button.svelte';
   import Modal from '$lib/components/Modal.svelte';
   import PasswordField from '$lib/components/PasswordField.svelte';
+  import WarningNotice from '$lib/components/WarningNotice.svelte';
   import { defaultConfig } from '$lib/config';
   import { isPrototypeWallet, walletService } from '$lib/wallet';
   import { page } from '$app/state';
   import { useWalletShellContext } from '$lib/wallet/shell-context';
-  import type { WalletProfile, WalletProfileCompatibility } from '$lib/wallet/contracts';
+  import {
+    WalletError,
+    type WalletProfile,
+    type WalletProfileCompatibility
+  } from '$lib/wallet/contracts';
   const walletShell = useWalletShellContext();
 
   let credential = $state('');
@@ -24,6 +29,9 @@
   let profiles = $state<WalletProfile[]>([]);
   let selectedWalletId = $state<string | null>(null);
   let compatibility = $state<WalletProfileCompatibility | null>(null);
+  let credentialForm = $state<HTMLFormElement | null>(null);
+  let retryAfterSeconds = $state(0);
+  let retryTimer: ReturnType<typeof setInterval> | null = null;
   let selectedProfile = $derived(profiles.find((wallet) => wallet.id === selectedWalletId));
   let isSoftwareWallet = $derived(selectedProfile?.kind === 'single_key');
   let credentialLabel = $derived(
@@ -43,8 +51,13 @@
       error = '';
       resetConfirmation = '';
       showReset = false;
+      if (retryTimer) clearInterval(retryTimer);
+      retryTimer = null;
+      retryAfterSeconds = 0;
     }
     compatibility = selectedWalletId ? await walletService.profileCompatibility() : null;
+    await tick();
+    credentialForm?.querySelector<HTMLInputElement>('input')?.focus();
   }
 
   onMount(async () => {
@@ -61,10 +74,28 @@
   onDestroy(() => {
     credential = '';
     resetConfirmation = '';
+    if (retryTimer) clearInterval(retryTimer);
   });
 
+  function startRetryCountdown(seconds: number) {
+    retryAfterSeconds = Math.max(1, Math.ceil(seconds));
+    error = `Too many incorrect attempts. Try again in ${retryAfterSeconds} seconds.`;
+    if (retryTimer) clearInterval(retryTimer);
+    retryTimer = setInterval(() => {
+      retryAfterSeconds = Math.max(0, retryAfterSeconds - 1);
+      if (retryAfterSeconds > 0) {
+        error = `Too many incorrect attempts. Try again in ${retryAfterSeconds} seconds.`;
+        return;
+      }
+      if (retryTimer) clearInterval(retryTimer);
+      retryTimer = null;
+      error = '';
+      void tick().then(() => credentialForm?.querySelector<HTMLInputElement>('input')?.focus());
+    }, 1_000);
+  }
+
   async function unlock() {
-    if (busy || !credential) return;
+    if (busy || retryAfterSeconds > 0 || !credential) return;
     busy = true;
     error = '';
     try {
@@ -75,9 +106,15 @@
         requested?.startsWith('/') && !requested.startsWith('//') && requested !== '/multisig'
           ? requested
           : '/';
+      if (next === '/' && selectedWalletId) walletShell.requestUnlockSync(selectedWalletId);
       await goto(next);
     } catch (cause) {
-      error = localizedError(cause, $locale, 'Could not unlock wallet.');
+      if (cause instanceof WalletError && cause.code === 'rate_limited') {
+        const messageSeconds = Number(cause.message.match(/(\d+)\s+seconds?/)?.[1] ?? 0);
+        startRetryCountdown(cause.details?.retryAfterSeconds ?? messageSeconds ?? 1);
+      } else {
+        error = localizedError(cause, $locale, 'Could not unlock wallet.');
+      }
       credential = '';
     } finally {
       busy = false;
@@ -131,18 +168,16 @@
           )}{:else}{translate($locale, 'Enter this\n          wallet’s app PIN to continue.')}{/if}
       </p>
       {#if compatibility && !compatibility.supported}
-        <div class="warning-box">
-          <strong
-            >{translate(
-              $locale,
-              'This profile predates the current hardware-signer storage format.'
-            )}</strong
-          >
-          {translate(
+        <WarningNotice
+          title={translate(
+            $locale,
+            'This profile predates the current hardware-signer storage format.'
+          )}
+          body={translate(
             $locale,
             'Groot will not guess missing metadata or reset its app PIN. Because Regtest wallets are disposable,\n          delete this test wallet and recreate or recover it from a public wallet backup. Its existing\n          files remain untouched until you explicitly delete it.'
           )}
-        </div>
+        />
       {/if}
       {#if isPrototypeWallet}<p class="prototype-hint">
           {translate($locale, 'UI prototype PIN:')}
@@ -150,6 +185,7 @@
         </p>{/if}
       {#if compatibility?.supported !== false}
         <form
+          bind:this={credentialForm}
           onsubmit={(event) => {
             event.preventDefault();
             unlock();
@@ -170,14 +206,16 @@
             placeholder={credentialPlaceholder}
             autocomplete="current-password"
             {error}
-            oninput={() => (error = '')}
+            oninput={() => {
+              if (retryAfterSeconds === 0) error = '';
+            }}
             onkeydown={submitCredentialOnEnter}
           />
           <Button
             type="submit"
             size="large"
             class="full"
-            disabled={!credential}
+            disabled={!credential || retryAfterSeconds > 0}
             loading={busy}
             loadingLabel={translate($locale, 'Unlocking wallet…')}
             >{translate($locale, 'Unlock wallet')}</Button
@@ -191,9 +229,6 @@
         >{/if}
     </main>
   {/key}
-  <footer class="onboarding-footer">
-    {translate($locale, 'Keys stay on this device · Open source')}
-  </footer>
 </div>
 
 <Modal
@@ -210,17 +245,16 @@
     resetConfirmation = '';
   }}
 >
-  <div class="warning-box danger">
-    <strong>{translate($locale, 'This removes the encrypted wallet data from this device.')}</strong
-    >
-    {#if isSoftwareWallet}{translate(
-        $locale,
-        'It cannot be undone unless you have the correct 24 recovery words and\n      wallet passphrase.'
-      )}{:else}{translate(
-        $locale,
-        'It cannot be undone unless you have the public wallet backup and\n      access to the required signer or signers.'
-      )}{/if}
-  </div>
+  <WarningNotice
+    tone="danger"
+    title={translate($locale, 'This removes the encrypted wallet data from this device.')}
+    body={translate(
+      $locale,
+      isSoftwareWallet
+        ? 'It cannot be undone unless you have the correct 24 recovery words and\n      wallet passphrase.'
+        : 'It cannot be undone unless you have the public wallet backup and\n      access to the required signer or signers.'
+    )}
+  />
   <label class="field"
     ><span>{translate($locale, 'Type RESET REGTEST to confirm')}</span><input
       bind:value={resetConfirmation}

@@ -18,6 +18,11 @@ describe('transaction explorer opening', () => {
     expect(adapter).toContain("command<void>('transaction_explorer_open', { txid })");
   });
 
+  it('keeps the mainnet action behind the same txid-only native boundary', () => {
+    expect(modal).toContain('transactionExplorerUrl(defaultConfig.network, transaction.id)');
+    expect(modal).toContain('walletService.openTransactionExplorer(transaction.id)');
+  });
+
   it('offers the same guarded explorer and copy controls after every send broadcast', () => {
     for (const route of [singleSend, multisigSend]) {
       expect(route).toContain('transactionExplorerUrl(defaultConfig.network, txid)');

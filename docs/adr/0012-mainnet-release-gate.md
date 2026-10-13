@@ -1,8 +1,19 @@
 # ADR 0012: fail-closed mainnet release gate
 
-- Status: accepted
+- Status: superseded by ADR 0053 for public v0.4.96 Mainnet distribution
 - Date: 2026-08-03
 - Extends: ADR 0003, ADR 0005, ADR 0009, ADR 0011
+
+Release update (2026-10-04): the owner certified the completed release
+checklist and accepted ADR 0053 for exact commit
+`f7b4b9935943f0250353a6f77c3d8fca31906fff`. This ADR remains the historical
+fail-closed design record and applies again to any later commit until that
+release receives its own authorization.
+
+Certification clarification (2026-09-03): ADR 0055 permits one isolated,
+non-distributable mainnet candidate so the remaining gates can be exercised. This
+ADR continues to block public distribution and merge to `main`; ADR 0053 remains
+the final release decision.
 
 ADR 0037 supersedes ADR 0011's mandatory device-key storage design. The mainnet gate remains in force; its current storage evidence requires portable-envelope migration/restore, filesystem protection, Argon2id calibration, packaged lifecycle testing, and independent review.
 

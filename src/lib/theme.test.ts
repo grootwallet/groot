@@ -93,7 +93,15 @@ describe('theme system', () => {
         ['primary-fg', 'primary-bg', 4.5],
         ['danger-fg', 'danger', 4.5],
         ['warning-text', 'panel', 4.5],
-        ['link', 'bg', 4.5]
+        ['link', 'bg', 4.5],
+        ['warning-text', 'accent-soft', 4.5],
+        ['accent-contrast', 'accent', 4.5],
+        ['success', 'panel', 4.5],
+        ['danger', 'panel', 4.5],
+        ['fr-red', 'panel', 4.5],
+        ['muted-2', 'panel-2', 4.5],
+        ['focus', 'panel', 3],
+        ['control-border', 'surface-control', 3]
       ];
       for (const [foreground, background, minimum] of pairs) {
         expect(

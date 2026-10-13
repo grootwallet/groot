@@ -17,6 +17,31 @@ export type { MessageValues, Translation, CatalogSection } from './locales/types
 // translations makes reviews able to compare meaning without chasing opaque IDs.
 // User data and protocol identifiers must never be passed through this catalog.
 export const copyCatalog = {
+  'Block time': { fr: 'Heure du bloc', es: 'Hora del bloque' },
+  'Block timestamp': { fr: 'Horodatage du bloc', es: 'Marca de tiempo del bloque' },
+  'First seen': { fr: 'Première observation', es: 'Primera detección' },
+  identify: { fr: 'identifier', es: 'identificar' },
+  'Identifying signer': { fr: 'Identification du signataire', es: 'Identificando al firmante' },
+  'Signer identification failed': {
+    fr: 'Échec de l’identification du signataire',
+    es: 'No se pudo identificar al firmante'
+  },
+  'Signer identified': { fr: 'Signataire identifié', es: 'Firmante identificado' },
+  '{signer} is ready.': { fr: '{signer} est prêt.', es: '{signer} está listo.' },
+  'Unlock or approve the public-key request on the selected device.': {
+    fr: 'Déverrouillez ou approuvez la demande de clé publique sur l’appareil sélectionné.',
+    es: 'Desbloquea o aprueba la solicitud de clave pública en el dispositivo seleccionado.'
+  },
+  'Waiting for signer identity': {
+    fr: 'En attente de l’identité du signataire',
+    es: 'Esperando la identidad del firmante'
+  },
+  'Previously verified by': { fr: 'Déjà vérifié par', es: 'Verificado anteriormente por' },
+  'Connected signer identity is checked again each time.': {
+    fr: 'L’identité du signataire connecté est vérifiée à chaque fois.',
+    es: 'La identidad del firmante conectado se comprueba cada vez.'
+  },
+  'Other options': { fr: 'Autres options', es: 'Otras opciones' },
   ...settingsCopy,
   ...onboardingCopy,
   ...componentCopy,
@@ -87,11 +112,10 @@ export const copyCatalog = {
     fr: 'Poursuivez la vérification de la transaction sur l’appareil.',
     es: 'Continúa la revisión de la transacción en el dispositivo.'
   },
-  'Reject or cancel the pending request on the device. Groot will close this dialog after the device responds.':
-    {
-      fr: 'Refusez ou annulez la demande en attente sur l’appareil. Groot fermera cette fenêtre après la réponse de l’appareil.',
-      es: 'Rechaza o cancela la solicitud pendiente en el dispositivo. Groot cerrará esta ventana cuando responda el dispositivo.'
-    },
+  'Reject the request on the device.': {
+    fr: 'Refusez la demande sur l’appareil.',
+    es: 'Rechaza la solicitud en el dispositivo.'
+  },
   'Copy failed': { fr: 'Échec de la copie', es: 'Error al copiar' },
   'Could not delete wallet': {
     fr: 'Impossible de supprimer le portefeuille',
@@ -206,6 +230,14 @@ export const copyCatalog = {
     fr: 'Signataire matériel déverrouillé',
     es: 'Firmante físico desbloqueado'
   },
+  'Continuing with this signer now.': {
+    fr: 'Poursuite avec ce signataire.',
+    es: 'Continuando ahora con este firmante.'
+  },
+  'Device status refreshed. Select this signer to continue.': {
+    fr: 'État de l’appareil actualisé. Sélectionnez ce signataire pour continuer.',
+    es: 'Estado del dispositivo actualizado. Selecciona este firmante para continuar.'
+  },
   'Health check needs attention': {
     fr: 'Le contrôle d’état requiert votre attention',
     es: 'La comprobación de estado requiere atención'
@@ -259,6 +291,10 @@ export const copyCatalog = {
     fr: 'Choisissez maintenant son portefeuille standard ou masqué.',
     es: 'Elige ahora su cartera estándar u oculta.'
   },
+  'Reading its public account key now.': {
+    fr: 'Lecture de sa clé publique de compte.',
+    es: 'Leyendo ahora su clave pública de cuenta.'
+  },
   'PDF not saved': { fr: 'PDF non enregistré', es: 'PDF no guardado' },
   'PDF saved': { fr: 'PDF enregistré', es: 'PDF guardado' },
   'PSBT copied': { fr: 'PSBT copiée', es: 'PSBT copiada' },
@@ -291,6 +327,10 @@ export const copyCatalog = {
     fr: 'Reprise du contrôle d’état du signataire.',
     es: 'Reanudando la comprobación del firmante.'
   },
+  'Verifying the address now.': {
+    fr: 'Vérification de l’adresse.',
+    es: 'Verificando ahora la dirección.'
+  },
   'Return when your written recovery words are available.': {
     fr: 'Revenez lorsque vos mots de récupération écrits sont disponibles.',
     es: 'Vuelve cuando tengas disponibles tus palabras de recuperación escritas.'
@@ -314,6 +354,31 @@ export const copyCatalog = {
   'Select and copy the address manually.': {
     fr: 'Sélectionnez et copiez l’adresse manuellement.',
     es: 'Selecciona y copia la dirección manualmente.'
+  },
+  'Incoming payments and receive addresses refreshed.': {
+    fr: 'Les paiements entrants et les adresses de réception ont été actualisés.',
+    es: 'Se actualizaron los pagos entrantes y las direcciones de recepción.'
+  },
+  'Refresh payments': {
+    fr: 'Actualiser les paiements',
+    es: 'Actualizar pagos'
+  },
+  'Refresh activity': { fr: 'Actualiser l’activité', es: 'Actualizar actividad' },
+  'Refreshing activity…': {
+    fr: 'Actualisation de l’activité…',
+    es: 'Actualizando actividad…'
+  },
+  'Transactions refreshed.': {
+    fr: 'Transactions actualisées.',
+    es: 'Transacciones actualizadas.'
+  },
+  'Could not refresh activity.': {
+    fr: 'Impossible d’actualiser l’activité.',
+    es: 'No se pudo actualizar la actividad.'
+  },
+  'Refreshing payments…': {
+    fr: 'Actualisation des paiements…',
+    es: 'Actualizando pagos…'
   },
   'Setup discarded': { fr: 'Configuration abandonnée', es: 'Configuración descartada' },
   'Signature added': { fr: 'Signature ajoutée', es: 'Firma añadida' },
@@ -456,9 +521,9 @@ export const copyCatalog = {
     fr: 'Vos mots écrits correspondent à ce portefeuille.',
     es: 'Tus palabras escritas coinciden con esta cartera.'
   },
-  '{processed} of {total} blocks saved · progress continues across wallet locks': {
-    fr: '{processed} blocs sur {total} enregistrés · la progression continue quand le portefeuille se verrouille',
-    es: '{processed} de {total} bloques guardados · el progreso continúa aunque la cartera se bloquee'
+  '{processed} / {total} blocks': {
+    fr: '{processed} / {total} blocs',
+    es: '{processed} / {total} bloques'
   },
   '20 is standard. It controls address discovery, not block-scan speed.': {
     fr: '20 est la valeur standard. Elle contrôle la découverte des adresses, pas la vitesse d’analyse des blocs.',
@@ -545,9 +610,9 @@ export const copyCatalog = {
     fr: 'Analyser depuis le bloc initial. Cela peut prendre plusieurs dizaines de minutes sur Testnet4.',
     es: 'Escanear desde el bloque génesis. Puede tardar decenas de minutos en Testnet4.'
   },
-  'Scanning wallet history · {percent}%': {
-    fr: 'Analyse de l’historique · {percent} %',
-    es: 'Escaneando el historial · {percent}%'
+  'Syncing · {percent}%': {
+    fr: 'Synchronisation · {percent} %',
+    es: 'Sincronizando · {percent}%'
   },
   'Start at the current chain tip. Fastest, but it will not find older payments.': {
     fr: 'Commencer à la pointe actuelle de la chaîne. C’est le plus rapide, mais les anciens paiements ne seront pas trouvés.',
@@ -608,12 +673,24 @@ const errorCategoryCopy = {
     es: 'Desbloquea la cartera para continuar.'
   },
   network_unavailable: {
-    fr: 'Le réseau est indisponible. Réessayez lorsque la connexion est rétablie.',
-    es: 'La red no está disponible. Inténtalo cuando se restablezca la conexión.'
+    fr: 'Bitcoin Core est indisponible. Vérifiez la connexion dans Réglages.',
+    es: 'Bitcoin Core no está disponible. Comprueba la conexión en Ajustes.'
+  },
+  node_syncing: {
+    fr: 'Bitcoin Core est encore en cours de synchronisation. Attendez qu’il ait atteint le dernier bloc vérifié du portefeuille, puis réessayez.',
+    es: 'Bitcoin Core aún se está sincronizando. Espera a que alcance el último bloque verificado de la cartera e inténtalo de nuevo.'
+  },
+  node_history_unavailable: {
+    fr: 'Bitcoin Core ne conserve plus les blocs nécessaires. Choisissez une date de création située dans l’historique conservé ou connectez un nœud d’archive.',
+    es: 'Bitcoin Core ya no conserva los bloques necesarios. Elige un bloque de nacimiento dentro del historial conservado o conecta un nodo de archivo.'
   },
   hardware_unavailable: {
     fr: 'Le signataire matériel est indisponible. Vérifiez sa connexion et réessayez.',
     es: 'El firmante físico no está disponible. Comprueba la conexión e inténtalo de nuevo.'
+  },
+  hardware_wrong_network: {
+    fr: 'Jade utilise un autre réseau Bitcoin. Vérifiez votre sauvegarde, puis restaurez Jade sur le même réseau que Groot.',
+    es: 'Jade usa otra red de Bitcoin. Comprueba tu copia de seguridad y restaura Jade en la misma red que Groot.'
   },
   hardware_pairing_required: {
     fr: 'Associez cette BitBox dans BitBoxApp et vérifiez que BitBoxApp peut l’ouvrir. Quittez ensuite complètement BitBoxApp, puis relancez la recherche dans Groot.',
@@ -640,6 +717,10 @@ const errorCategoryCopy = {
     fr: 'L’adresse Bitcoin n’est pas valide pour ce réseau.',
     es: 'La dirección de Bitcoin no es válida para esta red.'
   },
+  invalid_payment_request: {
+    fr: 'Le code QR n’est pas une demande de paiement Bitcoin valide pour ce réseau.',
+    es: 'El código QR no es una solicitud de pago de Bitcoin válida para esta red.'
+  },
   insufficient_funds: {
     fr: 'Le portefeuille ne dispose pas de fonds suffisants pour ce paiement et ses frais.',
     es: 'La cartera no tiene fondos suficientes para este pago y su comisión.'
@@ -662,7 +743,9 @@ export function localizedError(
   if (current === 'en') {
     if (cause && typeof cause === 'object' && 'code' in cause) {
       if (cause.code === 'network_unavailable')
-        return 'Could not connect to Bitcoin Core. Check that the node is running and review the RPC address, authentication, and network settings.';
+        return 'Bitcoin Core is unavailable. Check the connection in Settings.';
+      if (cause.code === 'invalid_payment_request')
+        return 'This QR code is not a valid Bitcoin payment request for this network.';
       if (cause.code === 'internal_error') return fallback;
     }
     return cause instanceof Error ? cause.message : fallback;

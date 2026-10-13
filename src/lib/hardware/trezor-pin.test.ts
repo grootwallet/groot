@@ -24,7 +24,7 @@ function device(label: string, model: string): HardwareDevice {
 describe('Trezor PIN presentation', () => {
   it('normalizes transport labels to a human device brand', () => {
     expect(hardwareBrand(device('trezor_1', 'trezor_1'))).toBe('Trezor');
-    expect(hardwareBrand(device('KeepKey #1', 'keepkey'))).toBe('KeepKey');
+    expect(hardwareBrand(device('KeepKey #1', 'keepkey'))).toBe('hardware signer');
     expect(hardwareBrand(device('Unknown', 'hid'))).toBe('hardware signer');
     expect(hardwareBrand(null)).toBe('hardware signer');
   });
@@ -54,9 +54,14 @@ describe('Trezor PIN presentation', () => {
     });
     expect(trezorPinError('hardware_challenge_expired', 'raw').title).toBe('PIN matrix expired');
     expect(trezorPinError('hardware_unavailable', 'raw')).toEqual({
-      title: 'Device disconnected',
-      detail: 'Reconnect the hardware signer, then ask for a new layout.'
+      title: 'Trezor unavailable',
+      detail: 'Close other wallet apps, reconnect Trezor, and try again.'
     });
+    expect(trezorPinError('hardware_busy', 'Close Sparrow.')).toEqual({
+      title: 'Trezor is busy',
+      detail: 'Close other wallet apps and try again.'
+    });
+    expect(trezorPinError('hardware_cancelled', '').title).toBe('Unlock cancelled');
     expect(trezorPinError('internal_error', 'USB unavailable').detail).toBe('USB unavailable');
     expect(trezorPinError('', '').detail).toBe(
       'Reconnect the hardware signer and start a new PIN matrix.'

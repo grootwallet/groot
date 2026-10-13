@@ -21,6 +21,10 @@ export const accessibilityCopy = {
     fr: 'Aperçu caméra du QR animé',
     es: 'Vista de cámara del QR animado'
   },
+  'Payment QR camera preview': {
+    fr: 'Aperçu caméra du QR de paiement',
+    es: 'Vista de cámara del QR de pago'
+  },
   'Authoritative transaction details': {
     fr: 'Détails de transaction de référence',
     es: 'Detalles autorizados de la transacción'
@@ -117,9 +121,9 @@ export const accessibilityCopy = {
   },
   'e.g. Coldcard': { fr: 'p. ex. Coldcard', es: 'p. ej., Coldcard' },
   'e.g. Family wallet': { fr: 'p. ex. Portefeuille familial', es: 'p. ej., Cartera familiar' },
-  'e.g. Hardware purchase, Pay Alex, Test transaction': {
-    fr: 'p. ex. Achat matériel, Paiement Alex, Transaction de test',
-    es: 'p. ej., Compra de equipo, Pago a Alex, Transacción de prueba'
+  'e.g. Pay Alex': {
+    fr: 'p. ex. Paiement Alex',
+    es: 'p. ej., Pago a Alex'
   },
   'e.g. Invoice #105': { fr: 'p. ex. Facture nº 105', es: 'p. ej., Factura n.º 105' },
   'e.g. Treasury deposit': {

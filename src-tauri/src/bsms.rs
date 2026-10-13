@@ -470,6 +470,31 @@ mod tests {
     }
 
     #[test]
+    fn hostile_descriptor_text_corpus_fails_closed() {
+        let malformed = [
+            "",
+            "   ",
+            "wsh()",
+            "wsh(sortedmulti())",
+            "wsh(sortedmulti(2,key/0/*))",
+            "wsh(sortedmulti(2,tprv-secret/0/*))",
+            "wsh(sortedmulti(2,key/0/*))\0",
+            "wsh(sortedmulti(2,key/0/*))\r\n",
+            "wsh(sortedmulti(2,key/<0;1>/*))#badcheck",
+        ];
+        for encoded in malformed {
+            assert!(
+                PublicDescriptorPair::parse(encoded).is_err(),
+                "hostile corpus input was unexpectedly accepted: {encoded:?}"
+            );
+        }
+        assert_eq!(
+            PublicDescriptorPair::parse(&"wsh(".repeat(MAX_BSMS_BYTES)),
+            Err(BsmsError::TooLarge)
+        );
+    }
+
+    #[test]
     fn descriptor_identity_ignores_checksums_but_not_policy_changes() {
         let (external, internal) = descriptors();
         let address = first_address(&external, &internal);
@@ -576,6 +601,12 @@ mod tests {
             DescriptorRecord::from_descriptor_pair(&external, &internal, "not-an-address"),
             Err(BsmsError::InvalidEncoding)
         );
+        for invalid_address in ["", " ", "address with-space"] {
+            assert_eq!(
+                DescriptorRecord::from_descriptor_pair(&external, &internal, invalid_address,),
+                Err(BsmsError::InvalidEncoding)
+            );
+        }
 
         let valid = DescriptorRecord::from_descriptor_pair(&external, &internal, &address)
             .unwrap()

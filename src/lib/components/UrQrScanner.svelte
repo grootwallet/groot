@@ -3,7 +3,7 @@
   import { translate } from '$lib/i18n-catalog';
   import { Camera, CameraOff } from '@lucide/svelte';
   import { onMount } from 'svelte';
-  import QrScanner from 'qr-scanner';
+  import type QrScanner from 'qr-scanner';
 
   let { onframe } = $props<{ onframe: (frame: string) => void | Promise<void> }>();
   let video: HTMLVideoElement;
@@ -31,6 +31,8 @@
     void (async () => {
       try {
         if (!navigator.mediaDevices?.getUserMedia) throw new Error('camera_unavailable');
+        const { default: QrScanner } = await import('qr-scanner');
+        if (stopped) return;
         scanner = new QrScanner(
           video,
           (result) => {
@@ -47,6 +49,7 @@
         );
         await scanner.start();
       } catch (cause) {
+        if (stopped) return;
         const name = cause instanceof DOMException ? cause.name : '';
         error =
           name === 'NotAllowedError'

@@ -257,7 +257,7 @@
                   : (health?.summary ?? 'Connect and unlock the signer to check it.')
               )}
             </p>
-            <Button variant="secondary" class="full" onclick={oncheck}
+            <Button variant="secondary" class="full" onclick={() => oncheck()}
               ><RefreshCw size={15} />{translate($locale, 'Check signer')}</Button
             >
           {/if}

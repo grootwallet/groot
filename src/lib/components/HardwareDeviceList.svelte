@@ -3,7 +3,13 @@
   import { translate } from '$lib/i18n-catalog';
   import { Cpu, RefreshCw } from '@lucide/svelte';
   import type { HardwareDevice } from '$lib/wallet';
-  import { hardwareDeviceDisplayName, type SavedHardwareSignerName } from '$lib/hardware/discovery';
+  import {
+    hardwareDeviceStateLabel,
+    hardwareDeviceDisplayName,
+    hardwareWalletMembership,
+    type HardwareWalletMembership,
+    type SavedHardwareSignerName
+  } from '$lib/hardware/discovery';
   import Button from './Button.svelte';
 
   let {
@@ -14,7 +20,16 @@
     disabled = false,
     showRescan = false,
     detailedStatus = false,
-    savedSigners = []
+    savedSigners = [],
+    eligibleFingerprints = [],
+    eligibleDeviceTypes = [],
+    membershipOverrides = {},
+    policyUnverified = () => false,
+    deviceDisplayName = (device) => hardwareDeviceDisplayName(device, savedSigners),
+    deviceSecondaryLabel = (device) => device.fingerprint ?? '',
+    deviceStateLabel = (device, membership) =>
+      hardwareDeviceStateLabel(device, membership, policyUnverified(device)),
+    deviceDisabled = (_device, membership) => savedSigners.length > 0 && membership === 'unrelated'
   }: {
     devices: HardwareDevice[];
     emptyMessage: string;
@@ -24,24 +39,15 @@
     showRescan?: boolean;
     detailedStatus?: boolean;
     savedSigners?: readonly SavedHardwareSignerName[];
+    eligibleFingerprints?: readonly string[];
+    eligibleDeviceTypes?: readonly string[];
+    membershipOverrides?: Readonly<Record<string, HardwareWalletMembership>>;
+    policyUnverified?: (device: HardwareDevice) => boolean;
+    deviceDisplayName?: (device: HardwareDevice) => string;
+    deviceSecondaryLabel?: (device: HardwareDevice) => string;
+    deviceStateLabel?: (device: HardwareDevice, membership: HardwareWalletMembership) => string;
+    deviceDisabled?: (device: HardwareDevice, membership: HardwareWalletMembership) => boolean;
   } = $props();
-
-  function detail(device: HardwareDevice) {
-    return detailedStatus && device.fingerprint
-      ? translate($locale, 'Fingerprint {fingerprint} · {message}', {
-          fingerprint: device.fingerprint,
-          message: translate($locale, device.message)
-        })
-      : (device.fingerprint ?? device.message);
-  }
-
-  function status(device: HardwareDevice) {
-    if (device.status === 'ready') return 'Ready';
-    if (device.status === 'detected') return 'Detected';
-    if (device.action === 'unlock') return 'Unlock & continue';
-    if (device.action === 'confirm_empty_passphrase') return 'Choose wallet';
-    return 'Attention';
-  }
 </script>
 
 {#if !devices.length}
@@ -51,18 +57,45 @@
     <Button variant="secondary" onclick={onrescan}>{translate($locale, 'Scan again')}</Button>
   </div>
 {:else}
-  <div class="source-list" class:hardware-device-list={detailedStatus}>
+  <div
+    class="source-list"
+    class:hardware-device-list={detailedStatus ||
+      devices.some((device) => device.action === 'prompt_pin')}
+  >
     {#each devices as device (device.id)}
-      <button onclick={() => onselect(device)} {disabled}>
+      {@const secondaryLabel = deviceSecondaryLabel(device)}
+      {@const membership =
+        membershipOverrides[device.id] ??
+        (eligibleFingerprints.length || eligibleDeviceTypes.length || savedSigners.length
+          ? hardwareWalletMembership(
+              device,
+              eligibleFingerprints.length
+                ? eligibleFingerprints
+                : savedSigners.map((signer) => signer.fingerprint),
+              eligibleDeviceTypes.length
+                ? eligibleDeviceTypes
+                : savedSigners
+                    .map((signer) => signer.deviceType)
+                    .filter((deviceType): deviceType is string => Boolean(deviceType)),
+              savedSigners
+            )
+          : 'candidate')}
+      {@const stateLabel = deviceStateLabel(device, membership)}
+      <button
+        onclick={() => onselect(device)}
+        disabled={disabled || deviceDisabled(device, membership)}
+      >
         <Cpu size={18} />
         <span
-          ><strong>{hardwareDeviceDisplayName(device, savedSigners)}</strong><small
-            >{translate($locale, detail(device))}</small
+          ><strong>{deviceDisplayName(device)}</strong>{#if secondaryLabel}<small
+              >{secondaryLabel}</small
+            >{/if}<em
+            class:ready={stateLabel === 'Ready'}
+            class:attention={stateLabel !== 'Select to identify' &&
+              stateLabel !== 'Ready' &&
+              stateLabel !== 'Already signed'}>{translate($locale, stateLabel)}</em
           ></span
         >
-        {#if detailedStatus}<em class:ready={device.status === 'ready'}
-            >{translate($locale, status(device))}</em
-          >{/if}
       </button>
     {/each}
     {#if showRescan}

@@ -5,39 +5,76 @@
   import { lockModalScroll } from './modal-scroll-lock';
   import { onDestroy } from 'svelte';
   import { fly } from 'svelte/transition';
-  let { open, title, description = '', onclose, attentionSignal = 0, children } = $props();
+  let {
+    open,
+    title,
+    description = '',
+    onclose,
+    attentionSignal = 0,
+    wide = false,
+    upper = false,
+    fixedViewport = false,
+    children
+  } = $props();
   let dialog = $state<HTMLDivElement>();
-  let documentTop = $state(-32);
   let attentionActive = $state(false);
+  let attentionRunning = false;
   let attentionFrame: number | null = null;
   let attentionTimer: ReturnType<typeof setTimeout> | null = null;
 
-  onDestroy(() => {
+  function portal(node: HTMLElement) {
+    document.body.appendChild(node);
+    return {
+      destroy() {
+        node.remove();
+      }
+    };
+  }
+
+  function clearAttentionSchedule() {
     if (attentionFrame !== null) cancelAnimationFrame(attentionFrame);
     if (attentionTimer !== null) clearTimeout(attentionTimer);
-  });
+    attentionFrame = null;
+    attentionTimer = null;
+  }
+
+  function activateAttention() {
+    attentionRunning = true;
+    attentionActive = true;
+    attentionTimer = setTimeout(() => {
+      attentionTimer = null;
+      attentionRunning = false;
+      attentionActive = false;
+    }, 420);
+  }
+
+  onDestroy(clearAttentionSchedule);
 
   $effect(() => {
     const signal = attentionSignal;
-    if (!open || !signal || typeof requestAnimationFrame === 'undefined') return;
-    if (attentionFrame !== null) cancelAnimationFrame(attentionFrame);
-    if (attentionTimer !== null) clearTimeout(attentionTimer);
+    if (!open || !signal) return;
+    clearAttentionSchedule();
+    if (!attentionRunning) {
+      activateAttention();
+      return;
+    }
+    attentionRunning = false;
     attentionActive = false;
-    attentionFrame = requestAnimationFrame(() => {
+    const restart = () => {
       attentionFrame = null;
-      attentionActive = true;
-      attentionTimer = setTimeout(() => {
-        attentionTimer = null;
-        attentionActive = false;
-      }, 420);
-    });
+      activateAttention();
+    };
+    if (typeof requestAnimationFrame === 'undefined') {
+      attentionTimer = setTimeout(restart, 0);
+    } else {
+      attentionFrame = requestAnimationFrame(restart);
+    }
   });
 
   $effect(() => {
     if (!open || typeof document === 'undefined') return;
     const previousFocus =
       document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    documentTop = window.scrollY - 32;
     const releaseScrollLock = lockModalScroll(document);
     queueMicrotask(() => {
       const first = dialog?.querySelector<HTMLElement>(
@@ -83,13 +120,16 @@
 {#if open}
   <div
     class="modal-layer"
-    style:--modal-document-top={`${documentTop}px`}
+    class:modal-layer-upper={upper}
+    use:portal
     role="presentation"
     onclick={(e) => e.target === e.currentTarget && onclose()}
   >
     <div
       bind:this={dialog}
       class="modal"
+      class:modal-wide={wide}
+      class:modal-fixed-viewport={fixedViewport}
       class:modal-attention={attentionActive}
       role="dialog"
       aria-modal="true"

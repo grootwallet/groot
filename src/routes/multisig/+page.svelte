@@ -25,6 +25,7 @@
   import MultisigDescriptorsModal from '$lib/components/MultisigDescriptorsModal.svelte';
   import TrezorPinModal from '$lib/components/TrezorPinModal.svelte';
   import PermanentLabelTags from '$lib/components/PermanentLabelTags.svelte';
+  import WarningNotice from '$lib/components/WarningNotice.svelte';
   import {
     walletService,
     WalletError,
@@ -71,7 +72,10 @@
   const MATURITY_UNCONFIRMED = 'unconfirmed';
   const walletShell = useWalletShellContext();
   let wallet = $state<MultisigWallet | null>(null);
+  let walletLoading = $state(true);
+  let walletLoadError = $state('');
   let snapshot = $state<WalletSnapshot | null>(null);
+  let statusError = $state('');
   let selectedSigner = $state<CosignerDraft | null>(null);
   let showDescriptors = $state(false);
   let moreOpen = $state(false);
@@ -105,41 +109,45 @@
     healthPinChallenge = '';
     healthPinPositions = '';
   });
-  onMount(async () => {
-    wallet = await walletService.multisigWallet();
+  async function loadPolicyWallet() {
+    walletLoading = true;
+    walletLoadError = '';
+    try {
+      wallet = await walletService.multisigWallet();
+    } catch (cause) {
+      walletLoadError = localizedError(cause, $locale, 'Could not load this wallet policy.');
+      return;
+    } finally {
+      walletLoading = false;
+    }
     if (!wallet) return;
-    try {
-      const [nextPolicyVerifications, nextPolicyAddress] = await Promise.all([
-        walletService.multisigSignerPolicyVerifications(),
-        walletService.multisigPolicyVerificationAddress()
-      ]);
-      policyVerifications = nextPolicyVerifications;
-      policyAddress = nextPolicyAddress;
-    } catch (cause) {
-      toast({
-        title: 'Policy status unavailable',
-        description: localizedError(cause, $locale),
-        tone: 'danger'
-      });
+    const [verifications, address, health, walletSnapshot] = await Promise.allSettled([
+      walletService.multisigSignerPolicyVerifications(),
+      walletService.multisigPolicyVerificationAddress(),
+      walletService.hardwareHealthChecks(),
+      walletService.multisigSnapshot()
+    ]);
+    if (verifications.status === 'fulfilled') policyVerifications = verifications.value;
+    if (address.status === 'fulfilled') policyAddress = address.value;
+    if (health.status === 'fulfilled') setHardwareHealthChecks(health.value);
+    if (walletSnapshot.status === 'fulfilled') snapshot = walletSnapshot.value;
+    const firstFailure =
+      walletSnapshot.status === 'rejected'
+        ? { title: 'Wallet is offline', cause: walletSnapshot.reason }
+        : verifications.status === 'rejected'
+          ? { title: 'Policy status unavailable', cause: verifications.reason }
+          : address.status === 'rejected'
+            ? { title: 'Policy status unavailable', cause: address.reason }
+            : health.status === 'rejected'
+              ? { title: 'Health-check status unavailable', cause: health.reason }
+              : null;
+    if (firstFailure) {
+      statusError = localizedError(firstFailure.cause, $locale);
+      toast({ title: firstFailure.title, description: statusError, tone: 'danger' });
     }
-    try {
-      setHardwareHealthChecks(await walletService.hardwareHealthChecks());
-    } catch (cause) {
-      toast({
-        title: 'Health-check status unavailable',
-        description: localizedError(cause, $locale),
-        tone: 'danger'
-      });
-    }
-    try {
-      snapshot = await walletService.multisigSnapshot();
-    } catch (cause) {
-      toast({
-        title: 'Wallet is offline',
-        description: localizedError(cause, $locale),
-        tone: 'danger'
-      });
-    }
+  }
+  onMount(() => {
+    void loadPolicyWallet();
   });
   onMount(() =>
     walletService.subscribe((event) => {
@@ -230,7 +238,7 @@
       tone: 'success'
     });
   }
-  async function runHealthCheck() {
+  async function runHealthCheck(unlockedDevice?: HardwareDevice) {
     if (!selectedSigner || checking) return;
     const signer = selectedSigner;
     checking = true;
@@ -240,7 +248,7 @@
           'hardware_unavailable',
           'This signer has no interactive USB device type.'
         );
-      const device = await walletService.findSavedHardwareDevice(signer);
+      const device = unlockedDevice ?? (await walletService.findSavedHardwareDevice(signer));
       const result = await walletService.checkHardwareCosigner(signer, device.id);
       await saveHardwareHealthCheck(signer.fingerprint, result);
       toast({
@@ -270,7 +278,14 @@
     healthPinPositions = '';
     healthPinChallenge = '';
     try {
-      healthPinChallenge = await walletService.promptHardwarePin(device.id);
+      const prompt = await walletService.promptHardwarePin(device.id);
+      if (!prompt.pinRequired) {
+        healthPinDevice = null;
+        healthPinOpen = false;
+        await runHealthCheck(device);
+        return;
+      }
+      healthPinChallenge = prompt.challengeId ?? '';
       healthPinDevice = device;
       healthPinOpen = true;
     } catch (cause) {
@@ -288,6 +303,7 @@
     healthPinError = '';
     healthPinErrorCode = '';
     const positions = healthPinPositions;
+    const unlockedDevice = healthPinDevice;
     healthPinPositions = '';
     try {
       await walletService.sendHardwarePin(healthPinChallenge, positions);
@@ -299,7 +315,8 @@
         description: 'Resuming the signer health check.',
         tone: 'success'
       });
-      await runHealthCheck();
+      if (unlockedDevice) await runHealthCheck(unlockedDevice);
+      else await runHealthCheck();
     } catch (cause) {
       healthPinChallenge = '';
       healthPinErrorCode = cause instanceof WalletError ? cause.code : 'internal_error';
@@ -446,16 +463,16 @@
   {#if wallet}
     <header class="page-header">
       <div>
-        <p class="eyebrow">{translate($locale, 'WALLET POLICY')}</p>
         <h1>{wallet.name}</h1>
-        <p class="subtitle">
-          {translate(
-            $locale,
-            'A watch-only wallet whose spending policy is enforced by independent keys.'
-          )}
-        </p>
       </div>
     </header>
+    {#if statusError}<WarningNotice
+        role="status"
+        title={translate($locale, 'Wallet data is unavailable')}
+        body={statusError}
+      >
+        <a href="/settings">{translate($locale, 'Open network settings')}</a>
+      </WarningNotice>{/if}
     <section class="vault-hero">
       <span><ShieldCheck size={22} /></span>
       <div class="vault-summary">
@@ -740,6 +757,35 @@
           >{/if}
       </aside>
     </div>
+  {:else if walletLoading}
+    <section
+      class="policy-loading-skeleton"
+      aria-label={translate($locale, 'Loading wallet policy')}
+      role="status"
+    >
+      <div class="wallet-skeleton balance" aria-hidden="true">
+        <span class="skeleton-line label"></span>
+        <span class="skeleton-line amount"></span>
+        <span class="skeleton-line pending"></span>
+      </div>
+      <div class="wallet-skeleton transactions" aria-hidden="true">
+        {#each [1, 2, 3] as row (row)}<div class="skeleton-row">
+            <span class="skeleton-block icon"></span>
+            <span class="skeleton-copy"
+              ><span class="skeleton-line primary"></span><span class="skeleton-line secondary"
+              ></span></span
+            >
+          </div>{/each}
+      </div>
+    </section>
+  {:else if walletLoadError}
+    <section class="empty-state vault-empty" role="alert">
+      <h2>{translate($locale, 'Wallet policy unavailable')}</h2>
+      <p>{walletLoadError}</p>
+      <Button variant="secondary" onclick={loadPolicyWallet}
+        >{translate($locale, 'Try again')}</Button
+      >
+    </section>
   {:else}
     <section class="empty-state vault-empty">
       <span class="empty-icon"><Usb size={24} /></span>
@@ -808,6 +854,7 @@
       signer={policySigner}
       busy={policyBusy}
       error={policyError}
+      completionLabel="Complete policy registration"
       ondownload={saveColdcardPolicy}
       onconfirm={confirmColdcardPolicy}
     />
@@ -828,6 +875,14 @@
       error={policyError}
       onverify={verifySignerPolicy}
     />
+  {:else if policySigner && policyDevice}<div class="device-scan">
+      <Cpu size={20} /><strong>{translate($locale, 'Policy reference unavailable')}</strong><span
+        >{translate(
+          $locale,
+          'Groot found the signer, but could not load this wallet’s first address. Check the wallet connection and try again.'
+        )}</span
+      >
+    </div>
   {:else if policySigner}<div class="device-scan">
       <Cpu size={20} /><strong>{translate($locale, 'Saved signer not found')}</strong><span
         >{translate(

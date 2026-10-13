@@ -42,7 +42,12 @@ Static review found no route-level Tauri access, direct UI network calls, unsafe
 - Physical Coldcard, Trezor, Ledger, BitBox02, and Jade certification across supported operating systems and transports.
 - Physical camera and animated-UR interoperability testing with supported air-gapped signers.
 - Funded regtest and Testnet4 RBF/CPFP races, recovery drills, backend failure/reorg cases, and the isolated Bitcoin Core integration harness.
-- Platform secure-storage certification, reproducible signed packages, SBOM/provenance evidence, accessibility assistive-technology review, and independent security review.
+- At this audit date: platform secure-storage certification, reproducible
+  unsigned evidence, signed/notarized package verification, SBOM/provenance
+  evidence, accessibility assistive-technology review, and independent security
+  review. The unsigned reproducibility portion later passed for frozen commit
+  `2110eaf`; see
+  [`reproducible-mainnet-builds-2026-09-04.md`](reproducible-mainnet-builds-2026-09-04.md).
 - BitBox02 Nova transport implementation and its own certification row; it must not inherit original BitBox02 evidence.
 
 Mainnet remains compile-time disabled and controlled by ADR 0012 and the mainnet release checklist.

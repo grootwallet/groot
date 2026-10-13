@@ -1,7 +1,10 @@
 import type { ReceiveAddress } from '$lib/types';
+import type { SwitchableNetwork } from '$lib/config';
 import type { CosignerDraft, PolicyDraft } from '$lib/multisig/policy';
 import type {
   HardwareDevice,
+  HardwarePinPrompt,
+  HardwareIdentity,
   ExternalSigner,
   ExternalSignerBackup,
   ExternalSignerSource,
@@ -29,11 +32,13 @@ import type {
   WalletProfileCompatibility,
   NodeStatus,
   NetworkSetupSource,
-  PayjoinUriInspection,
+  PublicNetworkStatus,
+  PaymentRequestInspection,
   RecoveryScanSettings,
   RecoveryScanStatus,
   RuntimePlatform,
   SupplementalEntropyInput,
+  SoftwareWalletCreation,
   WalletEvent,
   WalletProfile,
   WalletRegistry,
@@ -57,6 +62,7 @@ import type { PaymentDraft } from '../payment-draft';
 
 export interface WalletProfilesPort {
   runtimePlatform(): Promise<RuntimePlatform>;
+  switchNetwork(network: SwitchableNetwork): Promise<void>;
   exists(): Promise<boolean>;
   profiles(): Promise<WalletRegistry>;
   profileCompatibility(): Promise<WalletProfileCompatibility>;
@@ -65,8 +71,13 @@ export interface WalletProfilesPort {
   session(): Promise<WalletSelection>;
   selectWallet(walletId: string): Promise<WalletSelection>;
   generateMnemonic(supplementalEntropy?: SupplementalEntropyInput): Promise<MnemonicPresentation>;
-  cancelOnboarding(): Promise<void>;
-  createWallet(name: string, credential: string, backupVerified: boolean): Promise<void>;
+  cancelOnboarding(preserveMainnetAdmission?: boolean): Promise<void>;
+  createWallet(
+    name: string,
+    credential: string,
+    backupVerified: boolean,
+    networkSetupSourceWalletId?: string
+  ): Promise<SoftwareWalletCreation>;
   verifyBackup(credential: string): Promise<boolean>;
   revealAndVerifyBackup(credential: string): Promise<boolean>;
   recoverWallet(name: string, credential: string): Promise<void>;
@@ -77,15 +88,22 @@ export interface WalletProfilesPort {
 }
 
 export interface WalletNetworkPort {
+  admitMainnetCore(
+    config: CoreNodeConfig,
+    password: string,
+    purpose: 'open_existing_wallet' | 'create_new_wallet'
+  ): Promise<NodeStatus>;
   networkSetupSources(): Promise<NetworkSetupSource[]>;
   adoptNetworkSetup(sourceWalletId: string, credential: string): Promise<NodeStatus>;
+  configureManagedNode(credential: string): Promise<NodeStatus>;
   nodeConfig(): Promise<CoreNodeConfig>;
+  publicNetworkStatus(): Promise<PublicNetworkStatus>;
   saveNodeConfig(config: CoreNodeConfig, password: string, credential: string): Promise<NodeStatus>;
   testNodeConnection(): Promise<NodeStatus>;
   syncSource(): Promise<WalletSyncSource>;
   syncStatus(): Promise<WalletSyncStatus | null>;
   saveSyncSource(source: WalletSyncSource, credential: string): Promise<WalletSyncSource>;
-  inspectPayjoinUri(value: string): Promise<PayjoinUriInspection>;
+  inspectPaymentRequest(value: string): Promise<PaymentRequestInspection>;
   recoveryScanSettings(): Promise<RecoveryScanSettings>;
   saveRecoveryScanSettings(
     birthdayHeight: number,
@@ -98,11 +116,15 @@ export interface WalletNetworkPort {
 }
 
 export interface WalletSnapshotPort {
+  overview(walletId: string): Promise<import('./transactions').WalletOverview>;
+  activity(
+    request: import('./transactions').ActivityRequest
+  ): Promise<import('./transactions').ActivityPage>;
   snapshot(): Promise<WalletSnapshot>;
-  sync(): Promise<WalletSnapshot>;
+  sync(automatic?: boolean): Promise<WalletSnapshot>;
   cancelSync(): Promise<void>;
   multisigSnapshot(): Promise<WalletSnapshot>;
-  syncMultisig(): Promise<WalletSnapshot>;
+  syncMultisig(automatic?: boolean): Promise<WalletSnapshot>;
 }
 
 export interface WalletTransactionsPort {
@@ -137,11 +159,19 @@ export interface WalletTransactionsPort {
     feeRate: FeeRate
   ): Promise<PaymentProposal>;
   quoteRbf(txid: string, feeRate?: FeeRate): Promise<import('./transactions').AccelerationQuote>;
-  signAndBroadcast(proposalId: string, credential: string): Promise<BroadcastResult>;
+  quoteCpfp(
+    txid: string,
+    feeRate?: FeeRate
+  ): Promise<import('./transactions').CpfpAccelerationQuote>;
+  signAndBroadcast(
+    proposalId: string,
+    reviewBinding: string,
+    credential: string
+  ): Promise<BroadcastResult>;
 }
 
 export interface WalletHardwarePort {
-  cancelHardwareOperations(): Promise<void>;
+  cancelHardwareOperations(preserveMainnetAdmission?: boolean): Promise<void>;
   listHardwareDevices(): Promise<HardwareDevice[]>;
   listHardwareDevicesForTypes(deviceTypes: string[]): Promise<HardwareDevice[]>;
   findSavedHardwareDevice(signer: {
@@ -150,9 +180,14 @@ export interface WalletHardwarePort {
     derivationPath: string;
     xpub: string;
   }): Promise<HardwareDevice>;
-  promptHardwarePin(deviceId: string): Promise<string>;
+  promptHardwarePin(deviceId: string): Promise<HardwarePinPrompt>;
   sendHardwarePin(challengeId: string, pinPositions: string): Promise<void>;
-  checkHardwareCosigner(cosigner: CosignerDraft, deviceId: string): Promise<CosignerHealthCheck>;
+  identifySavedHardwareDevice(deviceId: string): Promise<HardwareIdentity>;
+  checkHardwareCosigner(
+    cosigner: CosignerDraft,
+    deviceId: string,
+    draft?: boolean
+  ): Promise<CosignerHealthCheck>;
   checkHardwareExternalSigner(
     signer: ExternalSigner,
     deviceId: string
@@ -321,6 +356,11 @@ export interface WalletEventsPort {
   subscribe(listener: (event: WalletEvent) => void): () => void;
 }
 
+export interface WalletDiagnosticsPort {
+  diagnostics(): Promise<import('./runtime').DiagnosticRecord[]>;
+  exportDiagnostics(format: 'json' | 'csv'): Promise<SavedFileResult>;
+}
+
 export interface WalletPort
   extends
     WalletProfilesPort,
@@ -330,4 +370,5 @@ export interface WalletPort
     WalletHardwarePort,
     WalletMultisigPort,
     WalletFileTransportPort,
+    WalletDiagnosticsPort,
     WalletEventsPort {}

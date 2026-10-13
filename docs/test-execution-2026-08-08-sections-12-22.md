@@ -187,7 +187,12 @@ The live matrix contains 43 rows. These totals are counted from those rows; the 
 1. The dated snapshot is superseded by the canonical matrix in `hardware-certification.md`: Coldcard Mk4, Trezor Model One, Ledger Nano S Plus, original BitBox02, original Jade, Trezor Safe 3, and BitBox02 Nova now have model-specific local Regtest evidence with explicit limitations and open release rows. Jade Plus remains an independent exact-model target; Nova Whisper/Bluetooth is a separate transport campaign.
 2. Native restart, crash, window lifecycle, single-instance, secure-storage, automatic-lock wall-clock behavior, camera permissions, saved PDF, and mobile suspend/background behavior still need interactive platform execution; storage isolation is no longer the blocker.
 3. Complete-history native rescans still need before/after label, coin, retry, and process-restart evidence; the authoritative Core late-birthday and gap-limit drills are now green.
-4. Testnet4, reorg/backend-failure rehearsal, reproducible builds, SBOM/provenance, signing/notarization, packaged HWI verification, and independent release-candidate review remain outstanding.
+4. At this 2026-08-08 test snapshot, Testnet4, reorg/backend-failure rehearsal,
+   reproducible builds, SBOM/provenance, signing/notarization, packaged HWI
+   verification, and independent release-candidate review remained outstanding.
+   The unsigned reproducibility item was later completed for frozen commit
+   `2110eaf`; see
+   [`reproducible-mainnet-builds-2026-09-04.md`](reproducible-mainnet-builds-2026-09-04.md).
 
 ## Mainnet confirmation
 

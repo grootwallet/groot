@@ -3,6 +3,12 @@ import type { Sats, WalletSnapshot } from './transactions';
 
 export type MnemonicPresentation =
   { mode: 'native'; backupVerified: boolean } | { mode: 'fixture'; words: string[] };
+export type SoftwareWalletCreation = {
+  masterFingerprint: string;
+  externalDescriptor: string;
+  internalDescriptor: string;
+  networkSetupCopied: boolean;
+};
 export type WalletProfile = {
   id: string;
   name: string;
@@ -29,8 +35,50 @@ export type RuntimePlatform = {
   platform: 'ios' | 'android' | 'macos' | 'windows' | 'linux' | 'browser';
   mobile: boolean;
   network: SupportedNetwork;
+  networkSwitching: boolean;
   version: string;
   commit: string;
+};
+export type DiagnosticRecord = {
+  schemaVersion: 1;
+  timestamp: number;
+  event:
+    | 'app_started'
+    | 'wallet_created'
+    | 'wallet_recovered'
+    | 'wallet_removed'
+    | 'wallet_unlocked'
+    | 'wallet_locked'
+    | 'sync'
+    | 'recovery_scan'
+    | 'transaction_prepared'
+    | 'transaction_signed'
+    | 'transaction_broadcast'
+    | 'receive_address_generated'
+    | 'receive_address_discarded'
+    | 'receive_address_verified'
+    | 'coin_frozen'
+    | 'coin_unfrozen'
+    | 'backup_exported'
+    | 'backup_imported'
+    | 'backup_verified'
+    | 'recovery_tested'
+    | 'network_configuration_changed'
+    | 'diagnostics_exported';
+  outcome: 'started' | 'progress' | 'succeeded' | 'failed' | 'cancelled';
+  trigger: 'automatic' | 'manual' | 'startup' | 'recovery';
+  walletKind?: 'software' | 'hardware' | 'multisig';
+  syncSource?: 'bitcoin_core' | 'compact_filters';
+  progressPercent?: number;
+  itemCount?: number;
+  exportFormat?: 'json' | 'csv';
+  errorCode?: string;
+  errorMessage?: string;
+  errorDetails?: import('./errors').WalletErrorDetails;
+  appVersion: string;
+  buildCommit: string;
+  compiledNetwork: SupportedNetwork;
+  platform: RuntimePlatform['platform'];
 };
 export type CoreNodeConfig = {
   backend: { type: 'local_core' | 'remote_core'; url: string };
@@ -48,6 +96,10 @@ export type NodeStatus = {
   sizeOnDisk: number;
   blockFilterIndex: 'synced' | 'building' | 'disabled' | 'unknown';
 };
+export type PublicNetworkStatus = {
+  priorityFee: number | null;
+  networkTip: number | null;
+};
 export type WalletSyncSource =
   | { type: 'bitcoin_core' }
   | {
@@ -60,7 +112,6 @@ export type WalletSyncSource =
 export type NetworkSetupSource = {
   walletId: string;
   walletName: string;
-  syncSource: WalletSyncSource;
   ready: boolean;
 };
 export type WalletSyncStatus = {
@@ -69,6 +120,7 @@ export type WalletSyncStatus = {
   state:
     | 'connecting'
     | 'syncing'
+    | 'checking_pending'
     | 'checking_matches'
     | 'applying'
     | 'completed'
@@ -82,13 +134,12 @@ export type WalletSyncStatus = {
   failureCode: string | null;
   updatedAt: number;
 };
-export type PayjoinUriInspection = {
+export type PaymentRequestInspection = {
   address: string;
-  amount: number | null;
+  amountSats: string | null;
   label: string | null;
   message: string | null;
-  endpoint: string;
-  version: 'v2';
+  payjoin: boolean;
 };
 export type RecoveryScanSettings = { birthdayHeight: number; gapLimit: number };
 export type RecoveryScanStatus = {

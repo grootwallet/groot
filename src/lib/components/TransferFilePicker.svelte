@@ -31,7 +31,7 @@
     gap: 10px;
     padding: 14px 18px;
     border: 1px dashed var(--border);
-    border-radius: 8px;
+    border-radius: var(--radius-control);
     color: var(--muted);
     background: var(--surface-inset);
     cursor: pointer;
@@ -63,14 +63,14 @@
   }
 
   strong {
-    font-size: 11px;
+    font-size: 14px;
   }
 
   small {
     max-width: min(520px, 70vw);
     overflow: hidden;
     color: var(--text-soft);
-    font-size: 9px;
+    font-size: var(--font-size-meta);
     line-height: 1.4;
     text-overflow: ellipsis;
     white-space: nowrap;

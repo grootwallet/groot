@@ -24,6 +24,8 @@ const MAX_OUTPUT_BYTES: u64 = 384 * 1024;
 const PIPE_CLEANUP_TIMEOUT: Duration = Duration::from_secs(2);
 const CANCELLATION_CLEANUP_TIMEOUT: Duration = Duration::from_secs(5);
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(90);
+#[cfg(target_os = "macos")]
+const PASSIVE_INVENTORY_TIMEOUT: Duration = Duration::from_secs(10);
 // HWI 3.2.0 opens and initializes every BitBox02 client before `enumerate`
 // can return its path-only row. A locked device can therefore ask for its
 // password during aggregate discovery itself, before Groot has a capability
@@ -31,12 +33,303 @@ const DEFAULT_TIMEOUT: Duration = Duration::from_secs(90);
 // human unlock window while ensuring an aggregate backend stall cannot look
 // indefinite. Selected-device review retains the longer five-minute window,
 // while transaction signing allows ten minutes for full on-device review.
+#[cfg(test)]
 const DISCOVERY_TIMEOUT: Duration = Duration::from_secs(90);
 const USER_REVIEW_TIMEOUT: Duration = Duration::from_secs(5 * 60);
 const SIGNING_REVIEW_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 const HWI_DIGEST_HEX_BYTES: usize = 64;
 const HWI_FIXED_ARGV: &[&str] = &["--stdin"];
 static HWI_COORDINATOR: OnceLock<HardwareCoordinator> = OnceLock::new();
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PassiveHardwareCandidate {
+    pub device_type: String,
+    pub model: String,
+    pub path: String,
+}
+
+#[cfg(any(target_os = "macos", test))]
+const JADE_SERIAL_IDS: &[(u16, u16)] = &[
+    (0x10c4, 0xea60),
+    (0x1a86, 0x55d4),
+    (0x0403, 0x6001),
+    (0x1a86, 0x7523),
+    (0x303a, 0x4001),
+    (0x303a, 0x1001),
+];
+
+#[cfg(any(target_os = "macos", test))]
+fn passive_hid_candidate(
+    vendor_id: u16,
+    product_id: u16,
+    interface_number: i32,
+    usage_page: u16,
+    product_string: Option<&str>,
+    path: &str,
+) -> Option<PassiveHardwareCandidate> {
+    let (device_type, model, path) = match (vendor_id, product_id) {
+        // HWI 3.2.0's BitBox adapter selects only its general endpoint and
+        // distinguishes the Bitcoin-only editions by these exact USB product
+        // strings. Bootloader and multi-edition strings are deliberately absent.
+        (0x03eb, 0x2402 | 0x2403) if interface_number == 0 || usage_page == 0xffff => {
+            let model = match product_string? {
+                "BitBox02BTC" => "bitbox02_btconly",
+                "BitBox02 Nova BTC-only" => "bitbox02_nova_btconly",
+                _ => return None,
+            };
+            ("bitbox02", model, path.to_owned())
+        }
+        // Coldcard exposes this HID interface only after its own firmware has
+        // enabled USB. Inventory cannot and must not bypass that device policy.
+        (0xd13e, 0xcc10) => ("coldcard", "coldcard", path.to_owned()),
+        // Ledger's high product-id byte identifies the model. Admit only the
+        // Nano S Plus interface already approved by the Mainnet model gate.
+        (0x2c97, product)
+            if product >> 8 == 0x50 && (interface_number == 0 || usage_page == 0xffa0) =>
+        {
+            ("ledger", "ledger_nano_s_plus", path.to_owned())
+        }
+        // Legacy Model One firmware uses HID. trezorlib prefixes the same
+        // hidapi path with `hid:` when addressing the selected device.
+        (0x534c, 0x0001) if interface_number == 0 || usage_page == 0xff00 => {
+            ("trezor", "trezor_1", format!("hid:{path}"))
+        }
+        _ => return None,
+    };
+    Some(PassiveHardwareCandidate {
+        device_type: device_type.to_owned(),
+        model: model.to_owned(),
+        path,
+    })
+}
+
+#[cfg(any(target_os = "macos", test))]
+struct PassiveTrezorUsbObservation<'a> {
+    device_id: (u16, u16),
+    device_version: u16,
+    manufacturer: Option<&'a str>,
+    product: Option<&'a str>,
+    interface_zero_is_vendor_class: bool,
+    bus_number: u8,
+    port_chain: &'a [u8],
+}
+
+#[cfg(any(target_os = "macos", test))]
+fn passive_trezor_webusb_candidate(
+    active_network: Network,
+    observation: PassiveTrezorUsbObservation<'_>,
+) -> Option<PassiveHardwareCandidate> {
+    let PassiveTrezorUsbObservation {
+        device_id,
+        device_version,
+        manufacturer,
+        product,
+        interface_zero_is_vendor_class,
+        bus_number,
+        port_chain,
+    } = observation;
+    if device_id != (0x1209, 0x53c1) || !interface_zero_is_vendor_class || port_chain.is_empty() {
+        return None;
+    }
+
+    let model = match (manufacturer, product) {
+        // Safe 3 revision B exposes a model-specific product string.
+        (Some("Trezor Company"), Some("Trezor Safe 3")) => "trezor_t3b1",
+        // Current Model One firmware uses WebUSB with the shared Trezor
+        // VID/PID, but retains the legacy USB device release 1.00. Core-family
+        // devices use release 2.00, so this exact tuple identifies Model One
+        // without opening it or triggering an unlock prompt during discovery.
+        (Some("SatoshiLabs"), Some("TREZOR")) if device_version == 0x0100 => "trezor_1",
+        // Safe 3 revision A and Model T expose the same strings, VID/PID, and
+        // core-family release. Test networks may present the row for physical
+        // interoperability testing, but Mainnet must not weaken its exact-model
+        // allowlist by guessing which device is attached.
+        (Some("SatoshiLabs"), Some("TREZOR")) if active_network != Network::Bitcoin => {
+            "trezor_candidate"
+        }
+        _ => return None,
+    };
+
+    // trezorlib's WebUsbTransport path is the zero-padded libusb bus number
+    // followed by the complete upstream port chain. Preserve every hop so two
+    // Trezors on one hub cannot collapse onto the same selected-device path.
+    let port_path = port_chain
+        .iter()
+        .map(u8::to_string)
+        .collect::<Vec<_>>()
+        .join(":");
+    let path = format!("webusb:{bus_number:03}:{port_path}");
+    Some(PassiveHardwareCandidate {
+        device_type: "trezor".to_owned(),
+        model: model.to_owned(),
+        path,
+    })
+}
+
+#[cfg(any(target_os = "macos", test))]
+fn passive_jade_serial_candidate(
+    vendor_id: u16,
+    product_id: u16,
+    path: &str,
+) -> Option<PassiveHardwareCandidate> {
+    // pyserial, used by HWI 3.2.0, selects IOCalloutDevice on macOS. The Rust
+    // enumerator reports both callout and dial-in paths, so keep only `/dev/cu.*`
+    // to avoid two capabilities for one Jade and to pass HWI the exact path form.
+    if !JADE_SERIAL_IDS.contains(&(vendor_id, product_id)) || !path.starts_with("/dev/cu.") {
+        return None;
+    }
+    Some(PassiveHardwareCandidate {
+        device_type: "jade".to_owned(),
+        model: "jade".to_owned(),
+        path: path.to_owned(),
+    })
+}
+
+#[cfg(target_os = "macos")]
+fn collect_macos_passive_hardware_inventory(
+    active_network: Network,
+    hid: &mut hidapi::HidApi,
+) -> Result<Vec<PassiveHardwareCandidate>, HardwareError> {
+    use nusb::MaybeFuture as _;
+    use serialport::SerialPortType;
+
+    hid.refresh_devices()
+        .map_err(|_| HardwareError::Unavailable)?;
+    let mut candidates = hid
+        .device_list()
+        .filter_map(|device| {
+            passive_hid_candidate(
+                device.vendor_id(),
+                device.product_id(),
+                device.interface_number(),
+                device.usage_page(),
+                device.product_string(),
+                device.path().to_str().ok()?,
+            )
+        })
+        .collect::<Vec<_>>();
+
+    let usb_devices = nusb::list_devices()
+        .wait()
+        .map_err(|_| HardwareError::Unavailable)?;
+    candidates.extend(usb_devices.filter_map(|device| {
+        let interface_zero_is_vendor_class = device
+            .interfaces()
+            .any(|interface| interface.interface_number() == 0 && interface.class() == 0xff);
+        passive_trezor_webusb_candidate(
+            active_network,
+            PassiveTrezorUsbObservation {
+                device_id: (device.vendor_id(), device.product_id()),
+                device_version: device.device_version(),
+                manufacturer: device.manufacturer_string(),
+                product: device.product_string(),
+                interface_zero_is_vendor_class,
+                bus_number: (device.location_id() >> 24) as u8,
+                port_chain: device.port_chain(),
+            },
+        )
+    }));
+
+    let serial_ports = serialport::available_ports().map_err(|_| HardwareError::Unavailable)?;
+    candidates.extend(serial_ports.into_iter().filter_map(|port| {
+        let SerialPortType::UsbPort(usb) = port.port_type else {
+            return None;
+        };
+        passive_jade_serial_candidate(usb.vid, usb.pid, &port.port_name)
+    }));
+
+    candidates.sort_by(|left, right| {
+        left.device_type
+            .cmp(&right.device_type)
+            .then_with(|| left.model.cmp(&right.model))
+            .then_with(|| left.path.cmp(&right.path))
+    });
+    Ok(candidates)
+}
+
+#[cfg(target_os = "macos")]
+struct MacosPassiveInventoryRequest {
+    active_network: Network,
+    response: mpsc::SyncSender<Result<Vec<PassiveHardwareCandidate>, HardwareError>>,
+}
+
+#[cfg(target_os = "macos")]
+struct MacosPassiveInventoryWorker {
+    requests: mpsc::Sender<MacosPassiveInventoryRequest>,
+}
+
+#[cfg(target_os = "macos")]
+static MACOS_PASSIVE_INVENTORY_WORKER: OnceLock<
+    Result<MacosPassiveInventoryWorker, HardwareError>,
+> = OnceLock::new();
+
+#[cfg(target_os = "macos")]
+fn macos_passive_inventory_worker() -> Result<&'static MacosPassiveInventoryWorker, HardwareError> {
+    match MACOS_PASSIVE_INVENTORY_WORKER.get_or_init(|| {
+        let (requests, receiver) = mpsc::channel::<MacosPassiveInventoryRequest>();
+        thread::Builder::new()
+            .name("groot-passive-hardware-inventory".to_owned())
+            .spawn(move || {
+                // hidapi's macOS backend owns a process-global IOHIDManager
+                // scheduled on the thread that initializes it. Creating and
+                // dropping HidApi from arbitrary Tokio workers can leave that
+                // manager attached to a dead run loop and crash inside
+                // IOHIDManager on the next scan. Keep both the manager and all
+                // of its refresh calls on this one process-lifetime thread.
+                let mut hid = hidapi::HidApi::new().ok();
+                while let Ok(request) = receiver.recv() {
+                    if hid.is_none() {
+                        hid = hidapi::HidApi::new().ok();
+                    }
+                    let result = hid.as_mut().map_or_else(
+                        || Err(HardwareError::Unavailable),
+                        |hid| collect_macos_passive_hardware_inventory(request.active_network, hid),
+                    );
+                    let _ = request.response.send(result);
+                }
+            })
+            .map_err(|_| HardwareError::Unavailable)?;
+        Ok(MacosPassiveInventoryWorker { requests })
+    }) {
+        Ok(worker) => Ok(worker),
+        Err(error) => Err(*error),
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn macos_passive_hardware_inventory(
+    active_network: Network,
+) -> Result<Vec<PassiveHardwareCandidate>, HardwareError> {
+    let worker = macos_passive_inventory_worker()?;
+    let (response, receiver) = mpsc::sync_channel(1);
+    worker
+        .requests
+        .send(MacosPassiveInventoryRequest {
+            active_network,
+            response,
+        })
+        .map_err(|_| HardwareError::Unavailable)?;
+    receiver
+        .recv_timeout(PASSIVE_INVENTORY_TIMEOUT)
+        .map_err(|error| match error {
+            mpsc::RecvTimeoutError::Timeout => HardwareError::TimedOut,
+            mpsc::RecvTimeoutError::Disconnected => HardwareError::Unavailable,
+        })?
+}
+
+pub fn passive_hardware_inventory(
+    active_network: Network,
+) -> Result<Vec<PassiveHardwareCandidate>, HardwareError> {
+    #[cfg(target_os = "macos")]
+    {
+        macos_passive_hardware_inventory(active_network)
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = active_network;
+        Err(HardwareError::Unavailable)
+    }
+}
 
 #[cfg_attr(test, allow(dead_code))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -47,6 +340,7 @@ pub enum HardwareError {
     Busy,
     Cancelled,
     OutputTooLarge,
+    WrongNetwork,
     CommandFailed(Option<i64>),
     Io,
 }
@@ -60,22 +354,16 @@ impl HardwareError {
             Self::Busy => "hardware_busy",
             Self::Cancelled => "hardware_cancelled",
             Self::OutputTooLarge => "hardware_response_too_large",
+            Self::WrongNetwork => "hardware_wrong_network",
             Self::CommandFailed(_) => "hardware_command_failed",
             Self::Io => "hardware_io_error",
         }
     }
 }
 
-fn validate_master_fingerprint(fingerprint: &str) -> Result<(), HardwareError> {
-    if fingerprint.len() == 8 && fingerprint.bytes().all(|byte| byte.is_ascii_hexdigit()) {
-        Ok(())
-    } else {
-        Err(HardwareError::InvalidArgument)
-    }
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum HardwareOperationKind {
+    #[cfg(test)]
     Discovery,
     Interactive,
 }
@@ -124,13 +412,16 @@ fn admission_error(
     if state.interactive_waiter {
         return Some(HardwareError::Busy);
     }
-    match (kind, state.active.as_ref().map(|active| active.kind)) {
-        (HardwareOperationKind::Discovery, Some(_))
-        | (HardwareOperationKind::Interactive, Some(HardwareOperationKind::Interactive)) => {
-            Some(HardwareError::Busy)
-        }
-        _ => None,
+    #[cfg(test)]
+    if kind == HardwareOperationKind::Discovery && state.active.is_some() {
+        return Some(HardwareError::Busy);
     }
+    (kind == HardwareOperationKind::Interactive
+        && state
+            .active
+            .as_ref()
+            .is_some_and(|active| active.kind == HardwareOperationKind::Interactive))
+    .then_some(HardwareError::Busy)
 }
 
 #[derive(Debug)]
@@ -255,6 +546,11 @@ impl HardwareOperation {
         self.remaining()?;
         Ok(complete())
     }
+
+    #[cfg(test)]
+    pub(crate) fn cancelled_for_test(&self) -> bool {
+        self.cancelled.load(Ordering::Acquire)
+    }
 }
 
 impl Drop for HardwareOperation {
@@ -329,6 +625,18 @@ fn validate_arguments(arguments: &[String]) -> Result<(), HardwareError> {
     Ok(())
 }
 
+fn validate_selected_device_path(device_path: &str) -> Result<(), HardwareError> {
+    if device_path.is_empty()
+        || device_path.len() > 1024
+        || device_path.starts_with("groot-saved-device:")
+        || device_path.contains('\0')
+        || device_path.chars().any(char::is_control)
+    {
+        return Err(HardwareError::InvalidArgument);
+    }
+    Ok(())
+}
+
 fn read_bounded<R: Read>(reader: R) -> Result<Vec<u8>, HardwareError> {
     let mut bytes = Vec::new();
     reader
@@ -348,6 +656,13 @@ fn hwi_error_code(stdout: &[u8]) -> Option<i64> {
         .as_i64()
 }
 
+fn hwi_reports_wrong_network(stdout: &[u8]) -> bool {
+    serde_json::from_slice::<serde_json::Value>(stdout)
+        .ok()
+        .and_then(|value| value.get("error")?.as_str().map(str::to_ascii_lowercase))
+        .is_some_and(|message| message.contains("network type inconsistent with prior usage"))
+}
+
 fn pin_command_input(pin_positions: &[u8]) -> Result<Vec<u8>, HardwareError> {
     if pin_positions.is_empty()
         || pin_positions.len() > MAX_PIN_POSITIONS
@@ -365,6 +680,7 @@ fn pin_command_input(pin_positions: &[u8]) -> Result<Vec<u8>, HardwareError> {
 }
 
 pub trait HardwareTransport: Send + Sync {
+    #[cfg(test)]
     fn enumerate(&self) -> Result<Vec<u8>, HardwareError>;
     #[cfg(test)]
     fn account_keypool(
@@ -514,27 +830,9 @@ impl HwiCli {
         device_path: &str,
         command: &str,
         value: &str,
-    ) -> Vec<String> {
-        let mut arguments = vec![
-            "--chain".into(),
-            self.chain.as_hwi_argument_for_device(device_type).into(),
-            "--device-type".into(),
-            device_type.into(),
-        ];
-        if !device_path.is_empty() && !device_path.starts_with("groot-saved-device:") {
-            arguments.extend(["--device-path".into(), device_path.into()]);
-        }
-        arguments.extend([command.into(), value.into()]);
-        arguments
-    }
-
-    fn device_command_without_value(
-        &self,
-        device_type: &str,
-        device_path: &str,
-        command: &str,
-    ) -> Vec<String> {
-        vec![
+    ) -> Result<Vec<String>, HardwareError> {
+        validate_selected_device_path(device_path)?;
+        Ok(vec![
             "--chain".into(),
             self.chain.as_hwi_argument_for_device(device_type).into(),
             "--device-type".into(),
@@ -542,7 +840,26 @@ impl HwiCli {
             "--device-path".into(),
             device_path.into(),
             command.into(),
-        ]
+            value.into(),
+        ])
+    }
+
+    fn device_command_without_value(
+        &self,
+        device_type: &str,
+        device_path: &str,
+        command: &str,
+    ) -> Result<Vec<String>, HardwareError> {
+        validate_selected_device_path(device_path)?;
+        Ok(vec![
+            "--chain".into(),
+            self.chain.as_hwi_argument_for_device(device_type).into(),
+            "--device-type".into(),
+            device_type.into(),
+            "--device-path".into(),
+            device_path.into(),
+            command.into(),
+        ])
     }
 
     pub fn begin_interactive_operation(&self) -> Result<HardwareOperation, HardwareError> {
@@ -553,6 +870,7 @@ impl HwiCli {
         HardwareOperation::acquire(HardwareOperationKind::Interactive, SIGNING_REVIEW_TIMEOUT)
     }
 
+    #[cfg(test)]
     fn begin_discovery_operation(&self) -> Result<HardwareOperation, HardwareError> {
         HardwareOperation::acquire(HardwareOperationKind::Discovery, DISCOVERY_TIMEOUT)
     }
@@ -564,6 +882,7 @@ impl HwiCli {
         device_path: &str,
         derivation_path: &str,
     ) -> Result<Vec<u8>, HardwareError> {
+        validate_selected_device_path(device_path)?;
         let keypool_path = format!("{derivation_path}/0/*");
         run_program_in_operation(
             &self.program,
@@ -587,32 +906,6 @@ impl HwiCli {
         )
     }
 
-    pub fn standard_bitbox_singlesig_keypool_in_operation(
-        &self,
-        operation: &HardwareOperation,
-    ) -> Result<Vec<u8>, HardwareError> {
-        let arguments = [
-            "--chain".into(),
-            self.chain.as_hwi_argument_for_device("bitbox02").into(),
-            "--device-type".into(),
-            "bitbox02".into(),
-            "getkeypool".into(),
-            "--addr-type".into(),
-            "wit".into(),
-            "--account".into(),
-            "0".into(),
-            "0".into(),
-            "1".into(),
-        ];
-        run_public_hwi_argv_in_operation(
-            &self.program,
-            &self.source,
-            &arguments,
-            operation,
-            self.home.as_deref(),
-        )
-    }
-
     pub fn account_xpub_in_operation(
         &self,
         operation: &HardwareOperation,
@@ -623,7 +916,7 @@ impl HwiCli {
         run_program_in_operation(
             &self.program,
             &self.source,
-            &self.device_command(device_type, device_path, "getxpub", derivation_path),
+            &self.device_command(device_type, device_path, "getxpub", derivation_path)?,
             operation,
             self.home.as_deref(),
             None,
@@ -640,7 +933,7 @@ impl HwiCli {
         run_program_in_operation(
             &self.program,
             &self.source,
-            &self.device_command(device_type, device_path, "signtx", psbt),
+            &self.device_command(device_type, device_path, "signtx", psbt)?,
             operation,
             self.home.as_deref(),
             None,
@@ -655,36 +948,8 @@ impl HwiCli {
         descriptor: &str,
     ) -> Result<Vec<u8>, HardwareError> {
         let mut arguments =
-            self.device_command(device_type, device_path, "displayaddress", "--desc");
+            self.device_command(device_type, device_path, "displayaddress", "--desc")?;
         arguments.push(descriptor.into());
-        run_program_in_operation(
-            &self.program,
-            &self.source,
-            &arguments,
-            operation,
-            self.home.as_deref(),
-            None,
-        )
-    }
-
-    pub fn display_bitbox_descriptor_address_in_operation(
-        &self,
-        operation: &HardwareOperation,
-        fingerprint: &str,
-        descriptor: &str,
-    ) -> Result<Vec<u8>, HardwareError> {
-        validate_master_fingerprint(fingerprint)?;
-        let arguments = [
-            "--chain".into(),
-            self.chain.as_hwi_argument_for_device("bitbox02").into(),
-            "--device-type".into(),
-            "bitbox02".into(),
-            "--fingerprint".into(),
-            fingerprint.to_ascii_lowercase(),
-            "displayaddress".into(),
-            "--desc".into(),
-            descriptor.into(),
-        ];
         run_program_in_operation(
             &self.program,
             &self.source,
@@ -697,6 +962,7 @@ impl HwiCli {
 }
 
 impl HardwareTransport for HwiCli {
+    #[cfg(test)]
     fn enumerate(&self) -> Result<Vec<u8>, HardwareError> {
         let operation = self.begin_discovery_operation()?;
         run_program_in_operation(
@@ -770,7 +1036,7 @@ impl HardwareTransport for HwiCli {
         run_program_in_operation(
             &self.program,
             &self.source,
-            &self.device_command_without_value(device_type, device_path, "promptpin"),
+            &self.device_command_without_value(device_type, device_path, "promptpin")?,
             &operation,
             self.home.as_deref(),
             None,
@@ -783,7 +1049,7 @@ impl HardwareTransport for HwiCli {
         device_path: &str,
         pin_positions: &[u8],
     ) -> Result<Vec<u8>, HardwareError> {
-        let arguments = self.device_command_without_value(device_type, device_path, "--stdin");
+        let arguments = self.device_command_without_value(device_type, device_path, "--stdin")?;
         // Zeroizing drops the PIN buffer on every return path, including a
         // failed operation-lease acquisition before the process is spawned.
         let input = Zeroizing::new(pin_command_input(pin_positions)?);
@@ -899,30 +1165,6 @@ fn hwi_stdin_command(
     Ok(input)
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum HwiInvocationMode {
-    PrivateStdin,
-    PublicArgv,
-}
-
-fn run_public_hwi_argv_in_operation(
-    program: &Path,
-    source: &HwiSource,
-    arguments: &[String],
-    operation: &HardwareOperation,
-    home: Option<&Path>,
-) -> Result<Vec<u8>, HardwareError> {
-    run_program_in_operation_with_mode(
-        program,
-        source,
-        arguments,
-        operation,
-        home,
-        None,
-        HwiInvocationMode::PublicArgv,
-    )
-}
-
 fn run_program_in_operation(
     program: &Path,
     source: &HwiSource,
@@ -931,56 +1173,19 @@ fn run_program_in_operation(
     home: Option<&Path>,
     extra_input: Option<&[u8]>,
 ) -> Result<Vec<u8>, HardwareError> {
-    run_program_in_operation_with_mode(
-        program,
-        source,
-        arguments,
-        operation,
-        home,
-        extra_input,
-        HwiInvocationMode::PrivateStdin,
-    )
-}
-
-fn run_program_in_operation_with_mode(
-    program: &Path,
-    source: &HwiSource,
-    arguments: &[String],
-    operation: &HardwareOperation,
-    home: Option<&Path>,
-    extra_input: Option<&[u8]>,
-    mode: HwiInvocationMode,
-) -> Result<Vec<u8>, HardwareError> {
     operation.remaining()?;
     if !program.is_absolute() {
         return Err(HardwareError::Unavailable);
     }
     let program = trusted_executable(program, source)?;
     validate_arguments(arguments)?;
-    if mode == HwiInvocationMode::PublicArgv && extra_input.is_some() {
-        return Err(HardwareError::InvalidArgument);
-    }
     // Zeroizing drops the sensitive stdin command (Trezor PIN positions,
     // selectors, PSBTs) on every return path, including spawn and pipe
     // failures before the write below.
-    let mut input = match mode {
-        HwiInvocationMode::PrivateStdin => {
-            Some(Zeroizing::new(hwi_stdin_command(arguments, extra_input)?))
-        }
-        HwiInvocationMode::PublicArgv => None,
-    };
+    let input = Zeroizing::new(hwi_stdin_command(arguments, extra_input)?);
     let mut command = Command::new(program);
-    match mode {
-        HwiInvocationMode::PrivateStdin => {
-            // Sensitive selectors and payloads remain off process metadata.
-            command.args(HWI_FIXED_ARGV);
-        }
-        HwiInvocationMode::PublicArgv => {
-            // This mode is reserved for the fixed BitBox BIP84 import command.
-            // Its argv contains no path, fingerprint, address, key, or PSBT.
-            command.args(arguments);
-        }
-    }
+    // Sensitive selectors and payloads remain off process metadata.
+    command.args(HWI_FIXED_ARGV);
     command.env_clear();
     if let Some(home) = home {
         command.env("HOME", trusted_home(home)?);
@@ -991,11 +1196,7 @@ fn run_program_in_operation_with_mode(
         command.process_group(0);
     }
     let mut child = command
-        .stdin(if input.is_some() {
-            Stdio::piped()
-        } else {
-            Stdio::null()
-        })
+        .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
@@ -1010,16 +1211,20 @@ fn run_program_in_operation_with_mode(
     thread::spawn(move || {
         let _ = stderr_tx.send(read_bounded(stderr));
     });
-    if let Some(input) = input.take() {
-        let write_result = child
-            .stdin
-            .take()
-            .ok_or(HardwareError::Io)
-            .and_then(|mut stdin| stdin.write_all(&input).map_err(|_| HardwareError::Io));
-        if let Err(error) = write_result {
+    let Some(mut stdin) = child.stdin.take() else {
+        terminate_process_tree(&mut child);
+        let _ = collect_pipes(&stdout_rx, &stderr_rx);
+        return Err(HardwareError::Io);
+    };
+    if let Err(error) = stdin.write_all(&input) {
+        // A command can reject the request and close stdin before this
+        // writer is scheduled. BrokenPipe is therefore part of the
+        // command-exit path, not an HWI transport failure; the bounded
+        // wait below still classifies its exit status and output.
+        if error.kind() != std::io::ErrorKind::BrokenPipe {
             terminate_process_tree(&mut child);
             let _ = collect_pipes(&stdout_rx, &stderr_rx);
-            return Err(error);
+            return Err(HardwareError::Io);
         }
     }
     let status = loop {
@@ -1053,7 +1258,11 @@ fn run_program_in_operation_with_mode(
         // HWI stderr can contain device paths and transaction details. It is deliberately
         // discarded here; callers expose a stable error without leaking it to the webview.
         drop(stderr);
-        return Err(HardwareError::CommandFailed(hwi_error_code(&stdout)));
+        return Err(if hwi_reports_wrong_network(&stdout) {
+            HardwareError::WrongNetwork
+        } else {
+            HardwareError::CommandFailed(hwi_error_code(&stdout))
+        });
     }
     Ok(stdout)
 }
@@ -1139,7 +1348,7 @@ fn trusted_executable(program: &Path, source: &HwiSource) -> Result<PathBuf, Har
     }
     match source {
         HwiSource::External => {
-            if release_hwi_verification_required(crate::build_network::NETWORK) {
+            if release_hwi_verification_required(crate::build_network::network()) {
                 verify_release_hwi(&canonical, &metadata)?;
             }
         }
@@ -1260,9 +1469,10 @@ fn verify_macos_code_signature(path: &Path, app_bundle: bool) -> Result<(), Hard
 
 #[cfg(target_os = "macos")]
 fn macos_app_signing_requirement() -> Result<String, HardwareError> {
-    let Some(team_id) = option_env!("GROOT_MACOS_SIGNING_TEAM_ID") else {
+    let team_id = env!("GROOT_COMPILED_MACOS_SIGNING_TEAM_ID");
+    if team_id == "REHEARSAL_ONLY" {
         return Ok("always".to_owned());
-    };
+    }
     if team_id.len() != 10 || !team_id.bytes().all(|byte| byte.is_ascii_alphanumeric()) {
         return Err(HardwareError::Unavailable);
     }
@@ -1270,6 +1480,13 @@ fn macos_app_signing_requirement() -> Result<String, HardwareError> {
         "anchor apple generic and certificate leaf[subject.OU] = \"{team_id}\""
     ))
 }
+
+#[cfg(target_os = "macos")]
+#[used]
+static GROOT_COMPILED_SIGNING_TEAM_MARKER: &str = concat!(
+    "GROOT_COMPILED_MACOS_SIGNING_TEAM_ID:",
+    env!("GROOT_COMPILED_MACOS_SIGNING_TEAM_ID")
+);
 
 #[cfg(unix)]
 fn verify_release_hwi(canonical: &Path, metadata: &std::fs::Metadata) -> Result<(), HardwareError> {
@@ -1308,6 +1525,138 @@ fn verify_release_hwi(_: &Path, _: &std::fs::Metadata) -> Result<(), HardwareErr
 mod tests {
     use super::*;
 
+    #[test]
+    fn passive_hid_inventory_admits_only_approved_endpoints_and_models() {
+        let bitbox =
+            passive_hid_candidate(0x03eb, 0x2402, 0, 0, Some("BitBox02BTC"), "bitbox-path")
+                .unwrap();
+        assert_eq!(bitbox.device_type, "bitbox02");
+        assert_eq!(bitbox.model, "bitbox02_btconly");
+
+        let nova = passive_hid_candidate(
+            0x03eb,
+            0x2403,
+            1,
+            0xffff,
+            Some("BitBox02 Nova BTC-only"),
+            "nova-path",
+        )
+        .unwrap();
+        assert_eq!(nova.model, "bitbox02_nova_btconly");
+        assert!(
+            passive_hid_candidate(0x03eb, 0x2402, 0, 0, Some("BitBox02"), "multi-path",).is_none()
+        );
+
+        let coldcard = passive_hid_candidate(0xd13e, 0xcc10, 0, 0, None, "coldcard-path").unwrap();
+        assert_eq!(coldcard.model, "coldcard");
+
+        let ledger = passive_hid_candidate(0x2c97, 0x5011, 0, 0, None, "ledger-path").unwrap();
+        assert_eq!(ledger.model, "ledger_nano_s_plus");
+        assert!(passive_hid_candidate(0x2c97, 0x4011, 0, 0, None, "nano-x-path").is_none());
+
+        let trezor = passive_hid_candidate(0x534c, 0x0001, 0, 0, None, "trezor-hid-path").unwrap();
+        assert_eq!(trezor.model, "trezor_1");
+        assert_eq!(trezor.path, "hid:trezor-hid-path");
+    }
+
+    #[test]
+    fn passive_webusb_inventory_keeps_ambiguous_trezor_out_of_mainnet() {
+        let safe_3 = passive_trezor_webusb_candidate(
+            Network::Bitcoin,
+            PassiveTrezorUsbObservation {
+                device_id: (0x1209, 0x53c1),
+                device_version: 0x0200,
+                manufacturer: Some("Trezor Company"),
+                product: Some("Trezor Safe 3"),
+                interface_zero_is_vendor_class: true,
+                bus_number: 7,
+                port_chain: &[2, 4],
+            },
+        )
+        .unwrap();
+        assert_eq!(safe_3.model, "trezor_t3b1");
+        assert_eq!(safe_3.path, "webusb:007:2:4");
+
+        let model_one = passive_trezor_webusb_candidate(
+            Network::Bitcoin,
+            PassiveTrezorUsbObservation {
+                device_id: (0x1209, 0x53c1),
+                device_version: 0x0100,
+                manufacturer: Some("SatoshiLabs"),
+                product: Some("TREZOR"),
+                interface_zero_is_vendor_class: true,
+                bus_number: 7,
+                port_chain: &[3],
+            },
+        )
+        .unwrap();
+        assert_eq!(model_one.model, "trezor_1");
+        assert_eq!(model_one.path, "webusb:007:3");
+
+        assert!(passive_trezor_webusb_candidate(
+            Network::Bitcoin,
+            PassiveTrezorUsbObservation {
+                device_id: (0x1209, 0x53c1),
+                device_version: 0x0200,
+                manufacturer: Some("SatoshiLabs"),
+                product: Some("TREZOR"),
+                interface_zero_is_vendor_class: true,
+                bus_number: 7,
+                port_chain: &[2],
+            },
+        )
+        .is_none());
+        let testnet_candidate = passive_trezor_webusb_candidate(
+            Network::Testnet4,
+            PassiveTrezorUsbObservation {
+                device_id: (0x1209, 0x53c1),
+                device_version: 0x0200,
+                manufacturer: Some("SatoshiLabs"),
+                product: Some("TREZOR"),
+                interface_zero_is_vendor_class: true,
+                bus_number: 7,
+                port_chain: &[2],
+            },
+        )
+        .unwrap();
+        assert_eq!(testnet_candidate.model, "trezor_candidate");
+        assert!(passive_trezor_webusb_candidate(
+            Network::Testnet4,
+            PassiveTrezorUsbObservation {
+                device_id: (0x1209, 0x53c1),
+                device_version: 0x0200,
+                manufacturer: Some("SatoshiLabs"),
+                product: Some("TREZOR"),
+                interface_zero_is_vendor_class: false,
+                bus_number: 7,
+                port_chain: &[2],
+            },
+        )
+        .is_none());
+    }
+
+    #[test]
+    fn passive_jade_inventory_uses_only_hwi_ids_and_macos_callout_paths() {
+        let jade = passive_jade_serial_candidate(0x10c4, 0xea60, "/dev/cu.usbserial-1")
+            .expect("approved Jade serial adapter");
+        assert_eq!(jade.device_type, "jade");
+        assert_eq!(jade.path, "/dev/cu.usbserial-1");
+        assert!(passive_jade_serial_candidate(0x10c4, 0xea60, "/dev/tty.usbserial-1").is_none());
+        assert!(passive_jade_serial_candidate(0xffff, 0xffff, "/dev/cu.usbserial-1").is_none());
+    }
+
+    #[test]
+    #[ignore = "requires a connected Trezor Model One on macOS"]
+    fn connected_model_one_is_passively_inventoried_without_hwi() {
+        for _ in 0..20 {
+            let candidates = passive_hardware_inventory(Network::Bitcoin)
+                .expect("macOS passive hardware inventory should be available");
+            assert!(candidates.iter().any(|candidate| {
+                candidate.device_type == "trezor" && candidate.model == "trezor_1"
+            }));
+        }
+    }
+
     #[cfg(unix)]
     fn test_script(name: &str, body: &str) -> PathBuf {
         use std::os::unix::fs::PermissionsExt as _;
@@ -1320,6 +1669,32 @@ mod tests {
         std::fs::write(&path, format!("#!/bin/sh\n{body}\n")).unwrap();
         std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
         path
+    }
+
+    #[cfg(target_os = "linux")]
+    fn process_is_effectively_alive(pid: i32) -> bool {
+        let Ok(stat) = std::fs::read_to_string(format!("/proc/{pid}/stat")) else {
+            return false;
+        };
+        let Some((_, fields)) = stat.rsplit_once(") ") else {
+            return true;
+        };
+        !matches!(fields.as_bytes().first(), Some(b'Z' | b'X'))
+    }
+
+    #[cfg(all(unix, not(target_os = "linux")))]
+    fn process_is_effectively_alive(pid: i32) -> bool {
+        // SAFETY: signal zero only probes whether the test process still exists.
+        unsafe { libc::kill(pid, 0) == 0 }
+    }
+
+    #[cfg(unix)]
+    fn process_stops_within(pid: i32, timeout: Duration) -> bool {
+        let started = Instant::now();
+        while process_is_effectively_alive(pid) && started.elapsed() < timeout {
+            thread::sleep(Duration::from_millis(10));
+        }
+        !process_is_effectively_alive(pid)
     }
 
     #[test]
@@ -1469,51 +1844,46 @@ mod tests {
     }
 
     #[test]
-    fn bitbox_display_reopens_by_fingerprint_without_a_cached_path() {
+    fn selected_bitbox_display_uses_only_the_exact_device_path() {
         let script = test_script(
-            "bitbox-display-selector",
+            "bitbox-display-exact-path",
             "IFS= read -r command\nprintf '%s\\n' \"$command\"",
         );
         let hwi = HwiCli::for_test_program(script.clone());
         let operation = hwi.begin_interactive_operation().unwrap();
         let output = hwi
-            .display_bitbox_descriptor_address_in_operation(
+            .display_descriptor_address_in_operation(
                 &operation,
-                "a1b2c3d4",
+                "bitbox02",
+                "opaque-selected-bitbox-path",
                 "wpkh([a1b2c3d4/84h/1h/0h]tpub-fixture/0/7)",
             )
             .unwrap();
         let command = String::from_utf8(output).unwrap();
         assert!(command.contains("--device-type"));
         assert!(command.contains("bitbox02"));
-        assert!(command.contains("--fingerprint"));
-        assert!(command.contains("a1b2c3d4"));
+        assert!(command.contains("--device-path"));
+        assert!(command.contains("opaque-selected-bitbox-path"));
         assert!(command.contains("displayaddress"));
         assert!(command.contains("--desc"));
-        assert!(!command.contains("--device-path"));
-        assert_eq!(
-            hwi.display_bitbox_descriptor_address_in_operation(
-                &operation,
-                "not-a-fingerprint",
-                "wpkh(fixture)",
-            ),
-            Err(HardwareError::InvalidArgument)
-        );
+        assert!(!command.contains("--fingerprint"));
         std::fs::remove_file(script).unwrap();
     }
 
     #[test]
     fn reports_failure_timeout_and_missing_executable_without_output_leaks() {
-        assert_eq!(
-            run_program(
-                Path::new("/usr/bin/false"),
-                &HwiSource::External,
-                &["test".to_owned()],
-                Duration::from_secs(1),
-                None,
-            ),
-            Err(HardwareError::CommandFailed(None))
-        );
+        for _ in 0..64 {
+            assert_eq!(
+                run_program(
+                    Path::new("/usr/bin/false"),
+                    &HwiSource::External,
+                    &["test".to_owned()],
+                    Duration::from_secs(1),
+                    None,
+                ),
+                Err(HardwareError::CommandFailed(None))
+            );
+        }
         let slow = test_script("slow", "IFS= read -r command\n/bin/sleep 1");
         assert_eq!(
             run_program(
@@ -1652,9 +2022,8 @@ mod tests {
             .trim()
             .parse::<i32>()
             .unwrap();
-        let descendant_alive = unsafe { libc::kill(pid, 0) } == 0;
         assert!(
-            !descendant_alive,
+            process_stops_within(pid, Duration::from_secs(2)),
             "the timed-out descendant survived cleanup"
         );
         std::fs::remove_file(script).unwrap();
@@ -1697,7 +2066,10 @@ mod tests {
             .trim()
             .parse::<i32>()
             .unwrap();
-        assert_ne!(unsafe { libc::kill(pid, 0) }, 0);
+        assert!(
+            process_stops_within(pid, Duration::from_secs(2)),
+            "the inherited-pipe descendant survived cleanup"
+        );
         drop(operation);
 
         let fast = test_script(
@@ -1731,6 +2103,7 @@ mod tests {
             (HardwareError::Unavailable, "hardware_unavailable"),
             (HardwareError::TimedOut, "hardware_timeout"),
             (HardwareError::OutputTooLarge, "hardware_response_too_large"),
+            (HardwareError::WrongNetwork, "hardware_wrong_network"),
             (
                 HardwareError::CommandFailed(Some(-12)),
                 "hardware_command_failed",
@@ -1740,6 +2113,41 @@ mod tests {
         for (error, code) in errors {
             assert_eq!(error.code(), code);
         }
+    }
+
+    #[test]
+    fn classifies_only_the_known_hwi_network_mismatch_message() {
+        assert!(hwi_reports_wrong_network(
+            br#"{"error":"Jade returned error: Network type inconsistent with prior usage","code":-3}"#
+        ));
+        assert!(!hwi_reports_wrong_network(
+            br#"{"error":"Device is locked","code":-3}"#
+        ));
+        assert!(!hwi_reports_wrong_network(b"not json"));
+    }
+
+    #[test]
+    fn failed_hwi_process_returns_the_sanitized_network_mismatch() {
+        let script = test_script(
+            "wrong-network",
+            "IFS= read -r command\nprintf '%s\\n' '{\"error\":\"Jade returned error: Network type inconsistent with prior usage\",\"code\":-3}'\nexit 1",
+        );
+        let operation =
+            HardwareOperation::acquire(HardwareOperationKind::Interactive, Duration::from_secs(5))
+                .unwrap();
+        assert_eq!(
+            run_program_in_operation(
+                &script,
+                &HwiSource::External,
+                &["enumerate".into()],
+                &operation,
+                None,
+                None,
+            ),
+            Err(HardwareError::WrongNetwork)
+        );
+        drop(operation);
+        std::fs::remove_file(script).unwrap();
     }
 
     #[test]
@@ -1823,8 +2231,9 @@ mod tests {
             Err(HardwareError::InvalidArgument)
         );
 
-        let arguments =
-            HwiCli::default().device_command_without_value("trezor", "usb-device-path", "--stdin");
+        let arguments = HwiCli::default()
+            .device_command_without_value("trezor", "usb-device-path", "--stdin")
+            .unwrap();
         assert!(!arguments.iter().any(|argument| argument.contains("719")));
         assert_eq!(arguments.last().map(String::as_str), Some("--stdin"));
     }
@@ -1881,7 +2290,8 @@ mod tests {
 
         let test = HwiCli::for_chain(HwiChain::Test);
         assert_eq!(
-            test.device_command("coldcard", "usb:1", "getxpub", "m/48'/1'/0'/2'"),
+            test.device_command("coldcard", "usb:1", "getxpub", "m/48'/1'/0'/2'")
+                .unwrap(),
             [
                 "--chain",
                 "test",
@@ -1893,19 +2303,14 @@ mod tests {
                 "m/48'/1'/0'/2'"
             ]
         );
-        let arguments = test.device_command("coldcard", "usb:1", "signtx", "cHNidP8=");
+        let arguments = test
+            .device_command("coldcard", "usb:1", "signtx", "cHNidP8=")
+            .unwrap();
         assert_eq!(arguments[6], "signtx");
         assert_eq!(arguments[7], "cHNidP8=");
         assert_eq!(
             test.device_command("jade", "", "getxpub", "m/48'/1'/0'/2'"),
-            [
-                "--chain",
-                "test",
-                "--device-type",
-                "jade",
-                "getxpub",
-                "m/48'/1'/0'/2'"
-            ]
+            Err(HardwareError::InvalidArgument)
         );
         assert_eq!(
             test.device_command(
@@ -1914,19 +2319,13 @@ mod tests {
                 "displayaddress",
                 "wsh(sortedmulti(2,...))#checksum"
             ),
-            [
-                "--chain",
-                "test",
-                "--device-type",
-                "jade",
-                "displayaddress",
-                "wsh(sortedmulti(2,...))#checksum"
-            ]
+            Err(HardwareError::InvalidArgument)
         );
 
         let main = HwiCli::for_chain(HwiChain::Main);
         assert_eq!(
-            main.device_command("coldcard", "usb:2", "getxpub", "m/48'/0'/0'/2'")[..2],
+            main.device_command("coldcard", "usb:2", "getxpub", "m/48'/0'/0'/2'")
+                .unwrap()[..2],
             ["--chain", "main"]
         );
         assert_eq!(HwiChain::Main.as_hwi_argument(), "main");
@@ -1934,15 +2333,21 @@ mod tests {
         assert_eq!(HwiChain::Testnet4.as_hwi_argument(), "testnet4");
         let testnet4 = HwiCli::for_chain(HwiChain::Testnet4);
         assert_eq!(
-            testnet4.device_command("jade", "usb:jade", "getxpub", "m/84'/1'/0'")[1],
+            testnet4
+                .device_command("jade", "usb:jade", "getxpub", "m/84'/1'/0'")
+                .unwrap()[1],
             "test"
         );
         assert_eq!(
-            testnet4.device_command("ledger", "usb:ledger", "getxpub", "m/84'/1'/0'")[1],
+            testnet4
+                .device_command("ledger", "usb:ledger", "getxpub", "m/84'/1'/0'")
+                .unwrap()[1],
             "testnet4"
         );
         assert_eq!(
-            testnet4.device_command("bitbox02", "usb:bitbox", "getxpub", "m/84'/1'/0'")[1],
+            testnet4
+                .device_command("bitbox02", "usb:bitbox", "getxpub", "m/84'/1'/0'")
+                .unwrap()[1],
             "testnet4"
         );
         assert_eq!(HwiChain::Regtest.as_hwi_argument(), "regtest");

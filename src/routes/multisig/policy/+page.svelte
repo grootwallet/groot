@@ -4,6 +4,7 @@
   import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
   import Button from '$lib/components/Button.svelte';
+  import WarningNotice from '$lib/components/WarningNotice.svelte';
   import { formatInteger, locale } from '$lib/i18n';
   import {
     walletService,
@@ -91,27 +92,21 @@
 <div class="page coordinator-page policy-lab" class:policy-lab-loading={loading}>
   <header class="page-header">
     <div>
-      <p class="eyebrow">{translate($locale, 'V2 POLICY LAB')}</p>
       <h1>{translate($locale, 'Guided recovery policy')}</h1>
-      <p class="subtitle">
-        {translate(
-          $locale,
-          'Compare reviewed Miniscript paths using this wallet’s public signers. Analysis never changes the selected wallet.'
-        )}
-      </p>
     </div>
     <Button variant="secondary" href="/multisig">{translate($locale, 'Back to policy')}</Button>
   </header>
   {#if wallet}<div class="coordinator-grid">
       <section class="form-card">
-        <div class="warning-box policy-lab-notice" role="note">
-          <strong>{translate($locale, 'Experimental analysis only')}</strong><span
-            >{translate(
-              $locale,
-              'Compiling previews public descriptors and spending paths. To use a different policy, create and back up a separate recovery wallet.'
-            )}</span
-          >
-        </div>
+        <WarningNotice
+          class="policy-lab-notice"
+          role="note"
+          title={translate($locale, 'Experimental analysis only')}
+          body={translate(
+            $locale,
+            'Compiling previews public descriptors and spending paths. To use a different policy, create and back up a separate recovery wallet.'
+          )}
+        />
         <label class="field"
           ><span>{translate($locale, 'Template')}</span><select
             aria-label={translate($locale, 'Policy template')}
@@ -185,23 +180,25 @@
               )}</small
             ></label
           >{/if}
-        {#if kind === 'recovery' && !canUseSeparateRecoveryKey}<div class="warning-box danger">
-            <strong>{translate($locale, 'Separate recovery key required')}</strong><span
-              >{translate(
-                $locale,
-                'Recovery cannot reuse one of this wallet’s operational signers. Create a recovery\n              wallet with three primary keys plus an independent fourth key.'
-              )}</span
+        {#if kind === 'recovery' && !canUseSeparateRecoveryKey}<WarningNotice
+            tone="danger"
+            title={translate($locale, 'Separate recovery key required')}
+            body={translate(
+              $locale,
+              'Recovery cannot reuse one of this wallet’s operational signers. Create a recovery\n              wallet with three primary keys plus an independent fourth key.'
+            )}
             ><Button variant="secondary" href="/multisig/new"
               >{translate($locale, 'Create recovery wallet')}</Button
             >
-          </div>{/if}
-        {#if kind === 'expanding' && wallet.cosigners.length < 4}<div class="warning-box danger">
-            <strong>{translate($locale, 'One more signer is required.')}</strong>
-            {translate(
+          </WarningNotice>{/if}
+        {#if kind === 'expanding' && wallet.cosigners.length < 4}<WarningNotice
+            tone="danger"
+            title={translate($locale, 'One more signer is required.')}
+            body={translate(
               $locale,
               'Expanding multisig needs an additional key that\n            is not eligible in the immediate path.'
             )}
-          </div>{/if}
+          />{/if}
         {#if error}<p class="form-error" aria-live="polite">
             {translate(
               $locale,
@@ -246,9 +243,9 @@
           </div>
           <span class="ready-badge">{translate($locale, 'Sanity checked')}</span>
         </div>
-        {#each analysis.warnings as warning}<div class="warning-box danger">
+        {#each analysis.warnings as warning}<WarningNotice tone="danger">
             <AlertTriangle size={16} /><strong>{warning.message}</strong>
-          </div>{/each}
+          </WarningNotice>{/each}
         <div class="policy-timeline">
           {#each analysis.paths as path, index}<article class:active={activePath === path}>
               <span>{index + 1}</span>

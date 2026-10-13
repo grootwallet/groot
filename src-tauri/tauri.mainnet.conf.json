@@ -1,0 +1,13 @@
+{
+  "productName": "Groot Mainnet",
+  "identifier": "app.groot.wallet.mainnet",
+  "build": {
+    "beforeDevCommand": "pnpm dev --mode mainnet",
+    "beforeBuildCommand": "pnpm build:mainnet"
+  },
+  "bundle": {
+    "resources": {
+      ".release-stage/hwi": "hwi"
+    }
+  }
+}

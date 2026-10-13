@@ -1,25 +1,28 @@
 <script lang="ts">
   import { locale } from '$lib/i18n';
   import { translate } from '$lib/i18n-catalog';
-  import { AlertTriangle, ChevronRight, Cpu, ShieldCheck } from '@lucide/svelte';
+  import { Cpu, ShieldCheck } from '@lucide/svelte';
   import { onDestroy } from 'svelte';
   import Button from '$lib/components/Button.svelte';
   import HardwareActionPrompt from '$lib/components/HardwareActionPrompt.svelte';
   import HardwareAddressComparison from '$lib/components/HardwareAddressComparison.svelte';
   import HardwareDeviceEmptyState from '$lib/components/HardwareDeviceEmptyState.svelte';
+  import HardwareDeviceList from '$lib/components/HardwareDeviceList.svelte';
   import Modal from '$lib/components/Modal.svelte';
   import TrezorPinModal from '$lib/components/TrezorPinModal.svelte';
+  import WarningNotice from '$lib/components/WarningNotice.svelte';
   import { copyText } from '$lib/clipboard';
   import {
-    hasAmbiguousUnidentifiedHardware,
     localizedReceiveVerificationFailure,
     receiveVerificationIntent
   } from '$lib/hardware/receive-verification';
-  import { hardwareDeviceDisplayName, type SavedHardwareSignerName } from '$lib/hardware/discovery';
+  import { hardwareWalletMembership, type SavedHardwareSignerName } from '$lib/hardware/discovery';
   import { toast } from '$lib/stores/toasts';
   import { walletService, type HardwareDevice, type WalletErrorCode } from '$lib/wallet';
   import { hardwareAddressComparison } from '$lib/wallet/hardware-display';
   import type { ReceiveAddress } from '$lib/types';
+  import type { SignerPolicyVerification } from '$lib/wallet/contracts';
+  import { matchingPolicyVerification, requiresPolicySetup } from '$lib/hardware/policy-readiness';
 
   type Props = {
     address: ReceiveAddress;
@@ -43,7 +46,9 @@
   let verifyOpen = $state(false);
   let verifyBusy = $state(false);
   let verifyError = $state('');
+  let verifyErrorTitle = $state('Hardware verification failed');
   let devices = $state<HardwareDevice[]>([]);
+  let policyVerifications = $state<SignerPolicyVerification[]>([]);
   let verificationDevice = $state<HardwareDevice | null>(null);
   let verificationAction = $state<'scan' | 'unlock' | 'approve'>('scan');
   let cancelRequested = $state(false);
@@ -60,6 +65,10 @@
   let standardWalletDevice = $state<HardwareDevice | null>(null);
   let hardwareScanGeneration = 0;
   let hardwareCancellation: Promise<void> | null = null;
+  let rejectedDeviceIds = $state<string[]>([]);
+  const membershipOverrides = $derived(
+    Object.fromEntries(rejectedDeviceIds.map((id) => [id, 'unrelated' as const]))
+  );
 
   const verificationDeviceIdentity = $derived(
     `${savedDeviceIdentity ?? ''} ${verificationDevice?.label ?? ''} ${verificationDevice?.model ?? ''}`
@@ -135,69 +144,34 @@
     }
   }
 
-  function eligibleDevices(discovered: HardwareDevice[]) {
-    const fingerprints = new Set(
-      eligibleFingerprints.map((fingerprint) => fingerprint.trim().toLowerCase())
-    );
-    return discovered.filter(
-      (device) => device.fingerprint === null || fingerprints.has(device.fingerprint.toLowerCase())
-    );
-  }
-
-  function isTrezor(device: HardwareDevice) {
-    return `${device.label} ${device.model}`.toLowerCase().includes('trezor');
-  }
-
   function isColdcard(device: HardwareDevice) {
     return `${device.label} ${device.model}`.toLowerCase().includes('coldcard');
   }
 
-  async function runScan(afterPin: boolean) {
+  async function runScan() {
     const generation = ++hardwareScanGeneration;
     verifyOpen = true;
     verificationAction = 'scan';
     cancelRequested = false;
     verifyBusy = true;
     verifyError = '';
+    verifyErrorTitle = 'Hardware verification failed';
     verificationDevice = null;
+    rejectedDeviceIds = [];
     try {
       await waitForHardwareCancellation();
       if (generation !== hardwareScanGeneration || !verifyOpen) return;
-      let discovered = await walletService.listHardwareDevicesForTypes(eligibleDeviceTypes);
+      const [discovered, verifications] = await Promise.all([
+        walletService.listHardwareDevices(),
+        isMultisig ? walletService.multisigSignerPolicyVerifications() : Promise.resolve([])
+      ]);
       if (generation !== hardwareScanGeneration || !verifyOpen) return;
-      let eligible = eligibleDevices(discovered);
-      if (
-        afterPin &&
-        eligible.some(
-          (device) => isTrezor(device) && receiveVerificationIntent(device) === 'prompt_pin'
-        )
-      ) {
-        await new Promise((resolve) => setTimeout(resolve, 500));
-        if (generation !== hardwareScanGeneration || !verifyOpen) return;
-        discovered = await walletService.listHardwareDevicesForTypes(eligibleDeviceTypes);
-        if (generation !== hardwareScanGeneration || !verifyOpen) return;
-        eligible = eligibleDevices(discovered);
-      }
-      devices = eligible;
-      if (hasAmbiguousUnidentifiedHardware(devices)) {
-        devices = [];
-        verifyError = translate(
-          $locale,
-          'More than one locked wallet of an eligible type is connected. Disconnect the extra device, then scan again.'
-        );
-      } else if (afterPin) {
-        const trezors = devices.filter(isTrezor);
-        if (trezors.length === 1 && trezors[0].action === 'confirm_empty_passphrase') {
-          standardWalletDevice = trezors[0];
-          standardWalletOpen = true;
-          verifyOpen = false;
-        } else if (trezors.length === 1 && receiveVerificationIntent(trezors[0]) === 'verify') {
-          await verifyAddress(trezors[0]);
-        }
-      }
+      devices = discovered;
+      policyVerifications = verifications;
     } catch (cause) {
       if (generation !== hardwareScanGeneration) return;
       devices = [];
+      verifyErrorTitle = 'Hardware scan failed';
       verifyError = localizedReceiveVerificationFailure(
         cause,
         $locale,
@@ -209,20 +183,30 @@
   }
 
   async function scan() {
-    await runScan(false);
+    await runScan();
   }
 
-  async function scanAfterPin() {
-    await runScan(true);
-  }
-
-  async function chooseDevice(device: HardwareDevice) {
+  async function chooseDevice(device: HardwareDevice, pinResolved = false) {
+    if (
+      hardwareWalletMembership(device, eligibleFingerprints, eligibleDeviceTypes, savedSigners) ===
+      'unrelated'
+    )
+      return;
+    if (pinResolved) {
+      await verifyAddress(device);
+      return;
+    }
     switch (receiveVerificationIntent(device)) {
       case 'prompt_pin':
         await startPin(device);
         return;
       case 'unlock':
         await verifyAddress(device, true);
+        return;
+      case 'confirm_standard_wallet':
+        standardWalletDevice = device;
+        standardWalletOpen = true;
+        verifyOpen = false;
         return;
       case 'unavailable':
         verifyError = translate($locale, device.message);
@@ -233,31 +217,34 @@
   }
 
   async function startPin(device: HardwareDevice) {
-    const retrying = pinOpen;
     verifyBusy = true;
-    pinBusy = retrying;
+    pinBusy = true;
     verifyError = '';
     pinError = '';
     pinErrorCode = '';
     pinPositions = '';
     pinChallenge = '';
+    pinDevice = device;
+    verifyOpen = false;
+    pinOpen = true;
     try {
-      pinChallenge = await walletService.promptHardwarePin(device.id);
-      pinDevice = device;
-      verifyOpen = false;
-      pinOpen = true;
+      const prompt = await walletService.promptHardwarePin(device.id);
+      if (!prompt.pinRequired) {
+        pinOpen = false;
+        pinDevice = null;
+        verifyOpen = true;
+        await chooseDevice(device, true);
+        return;
+      }
+      pinChallenge = prompt.challengeId ?? '';
     } catch (cause) {
       const failure = localizedReceiveVerificationFailure(
         cause,
         $locale,
         'Could not start the PIN matrix.'
       );
-      if (retrying) {
-        pinErrorCode = failure.code;
-        pinError = failure.message;
-      } else {
-        verifyError = failure.message;
-      }
+      pinErrorCode = failure.code;
+      pinError = failure.message;
     } finally {
       verifyBusy = false;
       pinBusy = false;
@@ -271,6 +258,7 @@
     pinError = '';
     pinErrorCode = '';
     const positions = pinPositions;
+    const unlockedDevice = pinDevice;
     pinPositions = '';
     try {
       await walletService.sendHardwarePin(pinChallenge, positions);
@@ -278,7 +266,13 @@
       pinOpen = false;
       pinDevice = null;
       verifyOpen = true;
-      await scanAfterPin();
+      toast({
+        title: translate($locale, 'Hardware signer unlocked'),
+        description: translate($locale, 'Refreshing device identity. Select the signer to verify.'),
+        tone: 'success'
+      });
+      if (unlockedDevice) await chooseDevice(unlockedDevice, true);
+      else await runScan();
     } catch (cause) {
       pinChallenge = '';
       const failure = localizedReceiveVerificationFailure(
@@ -302,6 +296,7 @@
     cancelRequested = false;
     verifyBusy = true;
     verifyError = '';
+    verifyErrorTitle = 'Hardware verification failed';
     try {
       const verified = isMultisig
         ? await walletService.verifyMultisigAddress(device.id, targetAddressId)
@@ -325,11 +320,18 @@
         finishVerificationClose(false);
         return;
       }
-      verifyError = localizedReceiveVerificationFailure(
+      const failure = localizedReceiveVerificationFailure(
         cause,
         $locale,
         'The device could not verify this address.'
-      ).message;
+      );
+      verifyError = failure.message;
+      if (failure.code === 'unknown_signer') {
+        rejectedDeviceIds = [...new Set([...rejectedDeviceIds, device.id])];
+        verifyErrorTitle = 'Signer is not part of this wallet';
+      } else if (failure.code === 'hardware_ambiguous') {
+        verifyErrorTitle = 'Choose one signer';
+      }
     } finally {
       if (generation === hardwareScanGeneration) verifyBusy = false;
     }
@@ -387,6 +389,8 @@
     {comparison}
     derivationPath={address.derivationPath}
     addressIndex={address.id}
+    hardwareVerifiedAt={address.hardwareVerifiedAt}
+    hardwareVerifiedBy={address.hardwareVerifiedBy}
     {copied}
     oncopy={copyVerificationAddress}
   />
@@ -409,16 +413,14 @@
       detail={translate(
         $locale,
         cancelRequested
-          ? 'Reject or cancel the pending request on the device. Groot will close this dialog after the device responds.'
+          ? 'Reject the request on the device.'
           : verificationAction !== 'scan'
             ? coldcardReturnsAddressAutomatically
               ? 'Coldcard has no approval step. Compare the address while Groot verifies it automatically.'
               : verificationAction === 'unlock'
                 ? 'Complete the login or unlock on-device, then compare the complete address above and approve it.'
                 : 'Compare the complete address above, then approve it on the device.'
-            : isMultisig
-              ? 'Groot checks only signer types saved in this wallet policy and ignores other connected device families.'
-              : 'Groot checks only this saved signer type and ignores other connected device families.'
+            : 'Choose a signer for this wallet.'
       )}
       label={translate(
         $locale,
@@ -434,43 +436,25 @@
       )}
     />
   {:else if devices.length}
-    <div class="source-list hardware-device-list">
-      {#each devices as device}
-        <button
-          disabled={device.action === 'none' || device.action === 'retry'}
-          onclick={() => chooseDevice(device)}
-        >
-          <Cpu size={18} />
-          <span>
-            <strong>{hardwareDeviceDisplayName(device, savedSigners)}</strong>
-            <small>{translate($locale, device.fingerprint ?? device.message)}</small>
-            <em
-              class:ready={device.status === 'ready' || device.status === 'detected'}
-              class:attention={device.action === 'prompt_pin' ||
-                device.action === 'confirm_empty_passphrase'}
-              >{translate(
-                $locale,
-                device.action === 'prompt_pin'
-                  ? 'Unlock'
-                  : device.action === 'unlock'
-                    ? 'Unlock & continue'
-                    : device.action === 'confirm_empty_passphrase'
-                      ? 'Standard wallet'
-                      : device.action === 'retry'
-                        ? 'Unlock, then scan again'
-                        : device.status === 'ready' || device.status === 'detected'
-                          ? 'Ready'
-                          : 'Unavailable'
-              )}</em
-            >
-          </span>
-          {#if device.action !== 'none'}<ChevronRight size={15} />{/if}
-        </button>
-      {/each}
+    <div class="verification-device-list" class:with-error={Boolean(verifyError)}>
+      <HardwareDeviceList
+        {devices}
+        emptyMessage=""
+        onselect={chooseDevice}
+        onrescan={scan}
+        showRescan
+        detailedStatus
+        {savedSigners}
+        {eligibleFingerprints}
+        {eligibleDeviceTypes}
+        {membershipOverrides}
+        policyUnverified={(device) =>
+          isMultisig &&
+          requiresPolicySetup(device) &&
+          !!device.fingerprint &&
+          !matchingPolicyVerification({ fingerprint: device.fingerprint }, policyVerifications)}
+      />
     </div>
-    <Button class="verification-rescan" variant="secondary" onclick={scan}
-      >{translate($locale, 'Scan again')}</Button
-    >
   {:else}
     <HardwareDeviceEmptyState
       title={translate(
@@ -486,17 +470,21 @@
       onretry={scan}
     />
   {/if}
-  {#if verifyError}<div class="hardware-inline-error" role="alert" aria-live="polite">
-      <AlertTriangle size={18} /><span
-        ><strong>{translate($locale, 'Device needs attention')}</strong><small>{verifyError}</small
-        ></span
-      >
+  {#if verifyError}<WarningNotice
+      tone="danger"
+      icon
+      role="alert"
+      ariaLive="polite"
+      class="inline-action"
+      title={translate($locale, verifyErrorTitle)}
+      body={verifyError}
+    >
       {#if verificationDevice}
         <Button variant="secondary" onclick={retryVerificationDevice}>
           {translate($locale, 'Try this signer again')}
         </Button>
       {/if}
-    </div>{/if}
+    </WarningNotice>{/if}
 </Modal>
 
 <Modal
@@ -540,3 +528,9 @@
   }}
   onclose={closePin}
 />
+
+<style>
+  .verification-device-list.with-error {
+    margin-bottom: 10px;
+  }
+</style>

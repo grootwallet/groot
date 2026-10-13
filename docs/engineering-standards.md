@@ -8,12 +8,35 @@ Dependencies point inward. Routes never select adapters. Rust commands translate
 
 ## Change shape
 
-1. State the invariant and acceptance criteria.
-2. Change the smallest owning layer.
-3. Add pure unit tests first, then adapter/command integration, then the minimum E2E proof.
-4. Update product, architecture, flow, implementation-status, testing, and ADR documents that own the changed claim.
-5. Run `pnpm format` after editing supported frontend, configuration, or documentation files.
-6. Run `pnpm validate`; add Rust and visual checks when applicable.
+1. Confirm the live tracking issue and state the invariant and acceptance criteria.
+2. Branch from the current default branch and reference the issue from commits and the pull request.
+3. Change the smallest owning layer.
+4. Add pure unit tests first, then adapter/command integration, then the minimum E2E proof.
+5. Update product, architecture, flow, implementation-status, testing, and ADR documents that own the changed claim.
+   Update [`bip-support.md`](bip-support.md) whenever the change adds, removes,
+   expands, narrows, or changes evidence for a BIP; record an explicit no-impact
+   assessment when no BIP is affected.
+6. Run `pnpm format` after editing supported frontend, configuration, or documentation files.
+7. Run `pnpm validate`; add Rust and visual checks when applicable.
+
+## Issue-linked work
+
+- Use a GitHub issue as the durable tracker for every non-trivial bug, feature,
+  security hardening item, maintenance task, or release campaign. Verify its live
+  state and acceptance criteria before implementation.
+- Commits use `Refs #N` or an equivalent issue trailer. Pull requests link the
+  issue and use `Closes #N` only when the complete acceptance criteria are met.
+  Partial delivery uses `Refs #N`, records what remains, and leaves the issue open.
+- Close an issue only after the implementing change is merged and its result is
+  read back, or when an accepted ADR explicitly rejects or supersedes the work.
+  Leave a concise close reason with the commit, pull request, release, or ADR.
+- Do not put an unpatched vulnerability or exploit detail in a public issue.
+  Track sensitive work in a draft security advisory or other owner-approved
+  private tracker and use only a sanitized reference in public commits and PRs.
+- A purely editorial typo may omit an issue when it changes no behavior, policy,
+  release claim, dependency, or security statement. An emergency fix may begin
+  before issue triage only when delay would increase risk; create or update its
+  tracker as soon as disclosure and incident constraints permit.
 
 ## Persisted-format compatibility
 
@@ -52,9 +75,11 @@ Dependencies point inward. Routes never select adapters. Rust commands translate
 - GitHub Actions use immutable commit SHAs, job permissions stay read-only by default, and checkout credentials are not persisted. CI must not publish release artifacts from pull-request jobs.
 - Vendored Rust code is reviewable source, not implicitly trusted source. Changes under `src-tauri/vendor/`, either lockfile, CI workflows, package-manager configuration, Tauri capabilities, or release scripts require an explicit supply-chain/security review.
 - Advisory scanners are one signal. A green scan does not replace provenance, license review, feature review, maintainer-risk review, reproducible builds, SBOMs, signed artifacts, or independent review.
-- `pnpm test:sbom` must deterministically regenerate a target-specific CycloneDX inventory from the locked, installed Node graph and Cargo metadata. Registry components require their lockfile integrity/checksum and every dependency requires declared license metadata. Metadata binds the inventory to the exact Git commit, both lockfile digests, and, for a package/release build, the built executable digest. Generated SBOMs are build evidence and are never committed; the gate rejects tracked CycloneDX or SPDX output so a stale repository copy cannot become authoritative. A Cargo `license-file` declaration is embedded as bounded license evidence rather than guessed into an SPDX expression. The application license is a release-owner decision and must not be inferred by tooling.
+- `pnpm test:sbom` must deterministically regenerate a target-specific CycloneDX inventory from the locked, installed Node graph and Cargo metadata. Registry components require their lockfile integrity/checksum and every dependency requires declared license metadata. Metadata binds the inventory to the exact Git commit, both lockfile digests, and, for a package/release build, the built executable digest. Generated SBOMs are build evidence and are never committed; the gate rejects tracked CycloneDX or SPDX output so a stale repository copy cannot become authoritative. A Cargo `license-file` declaration is embedded as bounded license evidence rather than guessed into an SPDX expression. The application component must report the manifest-declared Apache-2.0 license from ADR 0080; tooling must not infer or overwrite third-party terms.
 - `pnpm test:supply-chain` enforces exact direct Node/Rust and toolchain versions, disabled lifecycle scripts, store-integrity settings, immutable GitHub Action SHAs, read-only CI permissions, and non-persisted checkout credentials.
-- Do not run a wallet release from an unreviewed CI artifact. Mainnet release provenance and signing remain blocked by the canonical checklist.
+- Do not run a wallet release from an unreviewed CI artifact. Every public
+  Mainnet release requires a completed checklist, accepted version/tag ADR,
+  provenance, signing, and authorization record.
 
 ## Test pyramid
 

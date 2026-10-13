@@ -86,6 +86,7 @@ run_lib_test funded_regtest_reorg_restart_reanchor_and_false_positive_are_consis
 GROOT_RUN_REGTEST=1 run_lib_test funded_rbf_and_cpfp_cross_groot_proposal_boundaries
 GROOT_RUN_REGTEST=1 run_lib_test clean_storage_descriptor_recovery_restores_known_history_and_survives_reopen
 GROOT_RUN_REGTEST=1 run_lib_test current_tip_initial_scan_allows_later_bitcoin_core_sync
+GROOT_RUN_REGTEST=1 run_lib_test explicit_rescan_waits_when_core_falls_behind_the_wallet_checkpoint
 GROOT_RUN_REGTEST=1 run_lib_test birthday_only_checkpoint_recovers_after_a_deep_reorg
 GROOT_RUN_REGTEST=1 run_lib_test existing_wallet_can_repeat_full_rescan_from_an_earlier_birthday
 GROOT_RUN_REGTEST=1 run_lib_test funded_delayed_policy_tracks_each_coin_restarts_and_rearms_after_reorg
@@ -93,6 +94,13 @@ GROOT_RUN_REGTEST=1 run_lib_test funded_delayed_policy_tracks_each_coin_restarts
 # Large rescans and repeated reorgs need a clean resource baseline. Keep the descriptor
 # suite independent from state and loaded wallets accumulated by the preceding tests.
 bash "${PROJECT_DIR}/scripts/regtest/stop.sh"
+if [[ "${GROOT_RUST_COVERAGE:-0}" != "1" ]]; then
+  # The preceding tests intentionally compile the Groot package under several
+  # isolated environment contracts. Retain dependency artifacts, but release
+  # those package variants before the second Core fixture so hosted runners do
+  # not exhaust their disk while archiving the descriptor-suite binary.
+  cargo clean --manifest-path "${PROJECT_DIR}/src-tauri/Cargo.toml" --package groot
+fi
 DESCRIPTOR_REGTEST_DIR="$(mktemp -d "${TEST_TMP_ROOT%/}/groot-regtest-test.XXXXXX")"
 export GROOT_REGTEST_DIR="${DESCRIPTOR_REGTEST_DIR}"
 bash "${PROJECT_DIR}/scripts/regtest/start.sh"

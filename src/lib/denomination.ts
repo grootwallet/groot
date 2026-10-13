@@ -39,6 +39,10 @@ export function amountInputValue(sats: number, unit: Denomination): string {
   return unit === 'btc' ? (sats / 100_000_000).toFixed(8) : String(sats);
 }
 
+export function hasOnlyAmountInputCharacters(value: string, unit: Denomination): boolean {
+  return unit === 'btc' ? /^[0-9.,]*$/.test(value) : /^[0-9,]*$/.test(value);
+}
+
 export function convertAmountInput(
   value: string,
   from: Denomination,
@@ -53,11 +57,12 @@ export function parseAmountInput(value: string, unit: Denomination): number {
   const trimmed = value.trim();
   if (!trimmed) return 0;
   if (unit === 'sats') {
+    if (!/^(?:\d+|\d{1,3}(?:,\d{3})+)$/.test(trimmed)) return Number.NaN;
     const parsed = Number(trimmed.replaceAll(',', ''));
     return Number.isSafeInteger(parsed) ? parsed : Number.NaN;
   }
-  if (!/^\d+(?:\.\d{0,8})?$/.test(trimmed)) return Number.NaN;
-  const [whole, fraction = ''] = trimmed.split('.');
+  if (!/^\d+(?:[.,]\d{0,8})?$/.test(trimmed)) return Number.NaN;
+  const [whole, fraction = ''] = trimmed.split(/[.,]/);
   const parsed = Number(whole) * 100_000_000 + Number(fraction.padEnd(8, '0'));
   return Number.isSafeInteger(parsed) ? parsed : Number.NaN;
 }

@@ -2,6 +2,7 @@
   import { translate, localizedError } from '$lib/i18n-catalog';
   import {
     AlertTriangle,
+    Check,
     ChevronDown,
     CircleDot,
     Copy,
@@ -42,6 +43,7 @@
   import Modal from '$lib/components/Modal.svelte';
   import PermanentLabelTags from '$lib/components/PermanentLabelTags.svelte';
   import InsightTip from '$lib/components/InsightTip.svelte';
+  import WarningNotice from '$lib/components/WarningNotice.svelte';
   import { goto } from '$app/navigation';
 
   const walletShell = useWalletShellContext();
@@ -64,6 +66,7 @@
   let selectionMenuRoot = $state<HTMLDivElement | null>(null);
   let selectionMenuTrigger = $state<HTMLButtonElement | null>(null);
   let expanded = $state<string[]>([]);
+  let copiedValue = $state('');
   let busy = $state(false);
   let syncing = $state(false);
   let multisig = $state(false);
@@ -278,10 +281,14 @@
   async function copy(value: string, label: string, content: 'bitcoin-address' | 'identifier') {
     try {
       await copyText(value, content);
+      copiedValue = value;
       toast({
         title: translate($locale, '{label} copied', { label: translate($locale, label) }),
         tone: 'success'
       });
+      setTimeout(() => {
+        if (copiedValue === value) copiedValue = '';
+      }, 1_500);
     } catch {
       toast({ title: 'Copy failed', description: 'Select and copy it manually.', tone: 'danger' });
     }
@@ -301,6 +308,7 @@
     if (!intent || intent.outpoints.length === 0) return;
     busy = true;
     try {
+      await walletShell.pauseAutomaticSync();
       const update = multisig
         ? walletService.setMultisigCoinFrozen.bind(walletService)
         : walletService.setCoinFrozen.bind(walletService);
@@ -325,6 +333,7 @@
       });
     } finally {
       busy = false;
+      walletShell.resumeAutomaticSync();
     }
   }
 
@@ -366,13 +375,15 @@
 <div class="page">
   <header class="page-header">
     <div>
-      <p class="eyebrow">{translate($locale, 'COINS')}</p>
       <h1>{translate($locale, 'Coins')}</h1>
-      <p class="subtitle">{translate($locale, 'Choose exactly what a payment may spend.')}</p>
     </div>
     <div class="stat-pill">
       <span>{utxos.length} {translate($locale, 'coins')}</span><strong
-        ><Amount value={utxos.reduce((a, u) => a + u.amount, 0)} hidden={$discreetMode} /></strong
+        ><Amount
+          value={utxos.reduce((a, u) => a + u.amount, 0)}
+          hidden={$discreetMode}
+          interactive
+        /></strong
       >
     </div>
   </header>
@@ -381,7 +392,7 @@
     <div>
       {#key selected.length}<span class="coin-selection-count" in:fly={{ y: -4, duration: 140 }}
           ><strong>{selected.length} {translate($locale, 'selected')}</strong><span
-            ><Amount value={selectedTotal} hidden={$discreetMode} />
+            ><Amount value={selectedTotal} hidden={$discreetMode} interactive />
             {translate($locale, 'selected')}</span
           ></span
         >{/key}
@@ -490,7 +501,11 @@
     />
   {:else if sortedUtxos.length}
     <section class="coin-list selectable">
-      {#if maturitySummary}<aside class="warning-box coin-timeline-note" aria-live="polite">
+      {#if maturitySummary}<WarningNotice
+          element="aside"
+          class="coin-timeline-note"
+          ariaLive="polite"
+        >
           <AlertTriangle size={15} />
           <span>
             <strong>{translate($locale, 'Each coin has its own protection timeline.')}</strong>
@@ -511,7 +526,7 @@
                 onclick={syncNow}><RefreshCw size={14} />{translate($locale, 'Sync now')}</Button
               >{/if}
           </span>
-        </aside>{/if}
+        </WarningNotice>{/if}
       {#each sortedUtxos as utxo (utxo.outpoint)}
         {@const reuse = reuseFor(utxo.outpoint)}
         {@const linkedCoins = linkedCoinsFor(utxo.outpoint)}
@@ -521,7 +536,16 @@
           class="coin-row"
           class:frozen={utxo.frozen}
           class:reused={Boolean(reuse)}
+          class:selected={selected.includes(utxo.outpoint)}
         >
+          <button
+            type="button"
+            class="coin-row-selection"
+            aria-label={translate($locale, 'Select {coin}', { coin: coinName(utxo) })}
+            aria-pressed={selected.includes(utxo.outpoint)}
+            disabled={utxo.frozen || busy}
+            onclick={() => toggle(utxo.outpoint, !selected.includes(utxo.outpoint))}
+          ></button>
           <label class="coin-check"
             ><input
               type="checkbox"
@@ -879,7 +903,9 @@
                       <code>{compactAddress(utxo.address)}</code><button
                         aria-label={translate($locale, 'Copy address')}
                         onclick={() => copy(utxo.address, 'Address', 'bitcoin-address')}
-                        ><Copy size={13} /></button
+                        >{#if copiedValue === utxo.address}<Check size={13} />{:else}<Copy
+                            size={13}
+                          />{/if}</button
                       >
                     </dd>
                   </div>
@@ -889,7 +915,9 @@
                       <code>{compactAddress(utxo.outpoint, 18, 10)}</code><button
                         aria-label={translate($locale, 'Copy outpoint')}
                         onclick={() => copy(utxo.outpoint, 'Outpoint', 'identifier')}
-                        ><Copy size={13} /></button
+                        >{#if copiedValue === utxo.outpoint}<Check size={13} />{:else}<Copy
+                            size={13}
+                          />{/if}</button
                       >
                     </dd>
                   </div>

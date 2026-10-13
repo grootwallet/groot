@@ -3,6 +3,8 @@ export const WALLET_ERROR_CODES = [
   'entropy_unavailable',
   'invalid_supplemental_entropy',
   'invalid_address',
+  'invalid_transaction',
+  'explorer_unavailable',
   'invalid_amount',
   'invalid_coin',
   'coin_unavailable',
@@ -13,15 +15,23 @@ export const WALLET_ERROR_CODES = [
   'acceleration_unavailable',
   'address_not_discardable',
   'address_not_found',
+  'address_context_changed',
   'network_unavailable',
+  'node_syncing',
+  'node_history_unavailable',
+  'node_admission_required',
   'fee_estimate_unavailable',
   'wallet_locked',
   'invalid_inactivity_timeout',
   'wallet_not_found',
   'wallet_selection_changed',
+  'history_changed',
   'wallet_policy_changed',
   'invalid_mnemonic',
   'invalid_label',
+  'label_export_invalid',
+  'label_import_invalid',
+  'label_import_conflict',
   'wallet_already_exists',
   'wallet_corrupt',
   'secure_storage_unavailable',
@@ -42,16 +52,25 @@ export const WALLET_ERROR_CODES = [
   'invalid_fingerprint',
   'invalid_derivation_path',
   'wrong_network',
+  'network_switch_unavailable',
+  'invalid_network',
+  'unsafe_network_selection',
+  'network_selection_failed',
+  'unsafe_test_root',
   'invalid_node_config',
   'invalid_scan_settings',
-  'invalid_payjoin_uri',
+  'invalid_payment_request',
   'hardware_unavailable',
   'hardware_pairing_required',
   'hardware_policy_unsupported',
+  'hardware_policy_name_conflict',
+  'hardware_verification_invalid',
+  'hardware_not_approved',
   'hardware_timeout',
   'hardware_busy',
   'hardware_cancelled',
   'hardware_response_too_large',
+  'hardware_wrong_network',
   'invalid_hardware_response',
   'hardware_command_failed',
   'hardware_io_error',
@@ -61,6 +80,7 @@ export const WALLET_ERROR_CODES = [
   'hardware_pin_rejected',
   'hardware_challenge_expired',
   'hardware_scan_expired',
+  'hardware_scan_superseded',
   'hardware_wallet_selection_required',
   'malformed_psbt',
   'psbt_too_large',
@@ -76,6 +96,8 @@ export const WALLET_ERROR_CODES = [
   'sync_cancelled',
   'unknown_signer',
   'no_new_signatures',
+  'no_inputs',
+  'psbt_merge_failed',
   'signature_not_found',
   'hardware_signature_missing',
   'unsupported_sighash',
@@ -87,6 +109,7 @@ export const WALLET_ERROR_CODES = [
   'invalid_ur',
   'backup_too_large',
   'backup_mismatch',
+  'backup_export_failed',
   'file_reveal_unavailable',
   'confirmation_mismatch',
   'invalid_timeline',
@@ -96,14 +119,26 @@ export const WALLET_ERROR_CODES = [
   'duplicate_signer',
   'recovery_signer_reused',
   'unknown_spending_path',
+  'immature_spending_path',
   'invalid_delay',
   'invalid_key',
   'policy_too_complex',
   'policy_compilation_failed',
+  'unsupported_wallet_policy',
+  'mainnet_disabled',
+  'diagnostics_unavailable',
   'internal_error'
 ] as const;
 
 export type WalletErrorCode = (typeof WALLET_ERROR_CODES)[number];
+
+export type WalletErrorDetails = {
+  retryAfterSeconds?: number;
+  requestedBirthdayBlock?: number;
+  requiredBlock?: number;
+  earliestRetainedBlock?: number;
+  minimumBirthdayBlock?: number;
+};
 
 const walletErrorCodes = new Set<string>(WALLET_ERROR_CODES);
 
@@ -117,7 +152,8 @@ export class WalletError extends Error {
   constructor(
     public readonly code: WalletErrorCode,
     message: string,
-    public readonly existingWalletId: string | null = null
+    public readonly existingWalletId: string | null = null,
+    public readonly details: WalletErrorDetails | null = null
   ) {
     super(message);
     this.name = 'WalletError';

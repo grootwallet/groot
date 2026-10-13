@@ -1,11 +1,11 @@
-use super::{api_error, internal, ApiResult, NETWORK_NAME};
+use super::{api_error, internal, network_name, ApiResult};
 use bdk_wallet::bitcoin::Txid;
 use std::str::FromStr;
 use tauri::AppHandle;
 use tauri_plugin_opener::OpenerExt;
 
 pub(crate) fn transaction_explorer_url(txid: &str) -> ApiResult<Option<String>> {
-    transaction_explorer_url_for_network(NETWORK_NAME, txid)
+    transaction_explorer_url_for_network(network_name(), txid)
 }
 
 fn transaction_explorer_url_for_network(network: &str, txid: &str) -> ApiResult<Option<String>> {
@@ -14,9 +14,10 @@ fn transaction_explorer_url_for_network(network: &str, txid: &str) -> ApiResult<
     if network == "regtest" {
         return Ok(None);
     }
-    let network_path = match network {
-        "signet" => "signet",
-        "testnet4" => "testnet4",
+    let path = match network {
+        "mainnet" => format!("https://mempool.space/tx/{txid}"),
+        "signet" => format!("https://mempool.space/signet/tx/{txid}"),
+        "testnet4" => format!("https://mempool.space/testnet4/tx/{txid}"),
         _ => {
             return Err(api_error(
                 "explorer_unavailable",
@@ -24,9 +25,7 @@ fn transaction_explorer_url_for_network(network: &str, txid: &str) -> ApiResult<
             ))
         }
     };
-    Ok(Some(format!(
-        "https://mempool.space/{network_path}/tx/{txid}"
-    )))
+    Ok(Some(path))
 }
 
 #[tauri::command]
@@ -72,10 +71,8 @@ mod tests {
             None
         );
         assert_eq!(
-            transaction_explorer_url_for_network("mainnet", &txid)
-                .unwrap_err()
-                .code,
-            "explorer_unavailable"
+            transaction_explorer_url_for_network("mainnet", &txid).unwrap(),
+            Some(format!("https://mempool.space/tx/{txid}"))
         );
     }
 }

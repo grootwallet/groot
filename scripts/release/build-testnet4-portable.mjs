@@ -97,7 +97,7 @@ try {
   execFileSync('codesign', ['--force', '--sign', '-', '--timestamp=none', app], {
     stdio: 'inherit'
   });
-  const result = verifyPackagedHwi(app, { manifestPath });
+  const result = verifyPackagedHwi(app, { manifestPath, requireProductionSigning: false });
   rmSync(sbom, { force: true });
   execFileSync(
     process.execPath,

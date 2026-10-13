@@ -37,7 +37,7 @@
     display: grid;
     place-items: center;
     border: 1px solid var(--border-strong);
-    border-radius: 8px;
+    border-radius: var(--radius-control);
     color: var(--muted);
     background: var(--surface-control);
     cursor: pointer;

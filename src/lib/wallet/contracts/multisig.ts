@@ -25,7 +25,9 @@ export type MultisigPreview = {
   internalDescriptor: string;
 };
 
-export type MultisigProposal = PaymentProposal & {
+export type MultisigProposal = Omit<PaymentProposal, 'reviewBinding'> & {
+  /** False when an ordinary proposal references a coin missing from the current wallet UTXO set. */
+  inputsAvailable?: boolean;
   psbt: string;
   signed: number;
   required: number;

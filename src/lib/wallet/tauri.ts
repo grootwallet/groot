@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import type { ReceiveAddress } from '$lib/types';
+import type { SwitchableNetwork } from '$lib/config';
 import {
   WalletError,
   walletErrorCode,
@@ -24,6 +25,7 @@ import type {
 import type {
   CosignerHealthCheck,
   HardwareDevice,
+  HardwareIdentity,
   HardwareHealthCheckRecord,
   MultisigPreview,
   MultisigCreation,
@@ -42,7 +44,7 @@ import type {
 import type {
   CoreNodeConfig,
   NodeStatus,
-  PayjoinUriInspection,
+  PaymentRequestInspection,
   WalletSyncSource,
   WalletSyncStatus
 } from './contracts';
@@ -54,7 +56,12 @@ import {
 } from './multisig-setup';
 import type { PaymentDraft } from './payment-draft';
 
-type BackendError = { code?: string; message?: string; existingWalletId?: string };
+type BackendError = {
+  code?: string;
+  message?: string;
+  existingWalletId?: string;
+  details?: import('./contracts').WalletErrorDetails;
+};
 type NotificationEnvelope = { id: string; event: WalletEvent };
 const NOTIFICATION_BATCH_SIZE = 256;
 const MAX_NOTIFICATION_BATCHES_PER_DRAIN = 32;
@@ -67,7 +74,8 @@ async function command<T>(name: string, args?: Record<string, unknown>): Promise
     throw new WalletError(
       walletErrorCode(backend?.code),
       backend?.message ?? (typeof error === 'string' ? error : 'The wallet command failed.'),
-      typeof backend?.existingWalletId === 'string' ? backend.existingWalletId : null
+      typeof backend?.existingWalletId === 'string' ? backend.existingWalletId : null,
+      backend?.details && typeof backend.details === 'object' ? backend.details : null
     );
   }
 }
@@ -135,14 +143,22 @@ function serializeMultisigSetupDraft(
 
 export class TauriWalletAdapter implements WalletPort {
   #listeners = new Set<(event: WalletEvent) => void>();
-  #last: WalletSnapshot | null = null;
   #selectedWalletId: string | null = null;
-  #notificationDrains = new Map<boolean, Promise<void>>();
+  #selectedWalletKind: WalletProfile['kind'] | null = null;
+  #generation = 0;
+  #registryRequest = 0;
+  #notificationDrains = new Map<string, Promise<void>>();
   #hardwareListRequest: Promise<HardwareDevice[]> | null = null;
   #typedHardwareListRequests = new Map<string, Promise<HardwareDevice[]>>();
 
   paymentDraft() {
     return command<PaymentDraft | null>('payment_draft');
+  }
+  diagnostics() {
+    return command<import('./contracts').DiagnosticRecord[]>('diagnostics_list');
+  }
+  exportDiagnostics(format: 'json' | 'csv') {
+    return command<import('./contracts').SavedFileResult>('diagnostics_export', { format });
   }
   savePaymentDraft(draft: PaymentDraft) {
     return command<PaymentDraft>('payment_draft_save', { draft });
@@ -154,13 +170,23 @@ export class TauriWalletAdapter implements WalletPort {
   runtimePlatform() {
     return command<RuntimePlatform>('runtime_platform');
   }
+  async switchNetwork(network: SwitchableNetwork) {
+    await command<void>('bitcoin_network_switch', { selectedNetwork: network });
+  }
 
   exists() {
     return command<boolean>('wallet_exists');
   }
   async profiles() {
+    const generation = this.#generation;
+    const request = ++this.#registryRequest;
     const registry = await command<WalletRegistry>('wallet_profiles');
-    this.#selectedWalletId = registry.selectedWalletId;
+    if (generation === this.#generation && request === this.#registryRequest) {
+      if (this.#selectedWalletId !== registry.selectedWalletId) this.#generation++;
+      this.#selectedWalletId = registry.selectedWalletId;
+      this.#selectedWalletKind =
+        registry.wallets.find((profile) => profile.id === registry.selectedWalletId)?.kind ?? null;
+    }
     return registry;
   }
   async renameWallet(name: string) {
@@ -171,12 +197,19 @@ export class TauriWalletAdapter implements WalletPort {
   saveInactivityTimeout(minutes: number) {
     return command<WalletRegistry>('wallet_inactivity_timeout_save', { minutes });
   }
-  session() {
-    return command<WalletSelection>('wallet_session');
+  async session() {
+    const generation = this.#generation;
+    const selection = await command<WalletSelection>('wallet_session');
+    if (generation === this.#generation && !selection.unlocked) this.#generation++;
+    return selection;
   }
   async selectWallet(walletId: string) {
+    const generation = ++this.#generation;
     const selection = await command<WalletSelection>('wallet_select', { walletId });
-    this.#selectedWalletId = selection.profile.id;
+    if (generation === this.#generation) {
+      this.#selectedWalletId = selection.profile.id;
+      this.#selectedWalletKind = selection.profile.kind;
+    }
     return selection;
   }
   async generateMnemonic(
@@ -187,11 +220,22 @@ export class TauriWalletAdapter implements WalletPort {
     });
     return { mode: 'native', backupVerified };
   }
-  cancelOnboarding() {
-    return command<void>('wallet_cancel_onboarding');
+  cancelOnboarding(preserveMainnetAdmission = false) {
+    this.#generation++;
+    return command<void>('wallet_cancel_onboarding', { preserveMainnetAdmission });
   }
-  createWallet(name: string, credential: string, _backupVerified: boolean) {
-    return command<void>('wallet_create', { name, credential });
+  createWallet(
+    name: string,
+    credential: string,
+    _backupVerified: boolean,
+    networkSetupSourceWalletId?: string
+  ) {
+    this.#generation++;
+    return command<import('./contracts').SoftwareWalletCreation>('wallet_create', {
+      name,
+      credential,
+      networkSetupSourceWalletId
+    });
   }
   verifyBackup(credential: string) {
     return command<boolean>('wallet_verify_backup', { credential });
@@ -200,6 +244,7 @@ export class TauriWalletAdapter implements WalletPort {
     return command<boolean>('wallet_reveal_and_verify_backup', { credential });
   }
   recoverWallet(name: string, credential: string) {
+    this.#generation++;
     return command<void>('wallet_recover', { name, credential });
   }
   profileCompatibility() {
@@ -208,25 +253,42 @@ export class TauriWalletAdapter implements WalletPort {
     );
   }
   unlock(credential: string) {
+    this.#generation++;
     return command<void>('wallet_unlock', { credential });
   }
   lock() {
+    this.#generation++;
     return command<void>('wallet_lock');
   }
   deleteWallet(credential: string, confirmation: string) {
+    this.#generation++;
     return command<void>('wallet_delete', { credential, confirmation });
   }
   resetRegtestWallet(confirmation: string) {
+    this.#generation++;
     return command<void>('wallet_reset_regtest', { confirmation });
   }
   nodeConfig() {
     return command<CoreNodeConfig>('node_config');
+  }
+  publicNetworkStatus() {
+    return command<import('./contracts').PublicNetworkStatus>('network_public_status');
+  }
+  admitMainnetCore(
+    config: CoreNodeConfig,
+    password: string,
+    purpose: 'open_existing_wallet' | 'create_new_wallet'
+  ) {
+    return command<NodeStatus>('mainnet_core_admit', { config, password, purpose });
   }
   networkSetupSources() {
     return command<import('./contracts').NetworkSetupSource[]>('network_setup_sources');
   }
   adoptNetworkSetup(sourceWalletId: string, credential: string) {
     return command<NodeStatus>('network_setup_adopt', { sourceWalletId, credential });
+  }
+  configureManagedNode(credential: string) {
+    return command<NodeStatus>('managed_node_configure', { credential });
   }
   saveNodeConfig(config: CoreNodeConfig, password: string, credential: string) {
     return command<NodeStatus>('node_config_save', { config, password, credential });
@@ -243,8 +305,8 @@ export class TauriWalletAdapter implements WalletPort {
   saveSyncSource(source: WalletSyncSource, credential: string) {
     return command<WalletSyncSource>('wallet_sync_source_save', { source, credential });
   }
-  inspectPayjoinUri(value: string) {
-    return command<PayjoinUriInspection>('payjoin_uri_inspect', { value });
+  inspectPaymentRequest(value: string) {
+    return command<PaymentRequestInspection>('payment_request_inspect', { value });
   }
   recoveryScanSettings() {
     return command<import('./contracts').RecoveryScanSettings>('recovery_scan_settings');
@@ -260,13 +322,13 @@ export class TauriWalletAdapter implements WalletPort {
     return command<import('./contracts').RecoveryScanStatus>('recovery_scan_status');
   }
   async fullRescan(credential: string) {
+    const generation = this.#generation;
     const walletId = this.#selectedWalletId;
     const snapshot = normalizeSnapshot(
       await command<WalletSnapshot>('wallet_full_rescan', { credential })
     );
-    if (walletId && walletId === this.#selectedWalletId) {
-      this.#last = snapshot;
-      await this.#drainNotifications(false);
+    if (walletId && this.#isCurrent(walletId, generation)) {
+      this.#scheduleNotifications(false, walletId, generation);
       this.#emit({ type: 'wallet_updated', walletId, walletKind: 'single_key', snapshot });
     }
     return snapshot;
@@ -275,17 +337,53 @@ export class TauriWalletAdapter implements WalletPort {
     return command<import('./contracts').RecoveryScanStatus>('wallet_full_rescan_cancel');
   }
   async snapshot() {
+    const generation = this.#generation;
+    const walletId = this.#selectedWalletId;
     const snapshot = normalizeSnapshot(await command<WalletSnapshot>('wallet_snapshot'));
-    this.#last = snapshot;
-    await this.#drainNotifications(false);
+    this.#scheduleNotifications(false, walletId, generation);
     return snapshot;
   }
-  async sync() {
+  async overview(walletId: string) {
+    const generation = this.#generation;
+    const overview = await command<import('./contracts').WalletOverview>('wallet_overview', {
+      walletId
+    });
+    if (!this.#isCurrent(walletId, generation))
+      throw new WalletError('wallet_selection_changed', 'The selected wallet changed.');
+    if (this.#selectedWalletKind)
+      this.#scheduleNotifications(this.#selectedWalletKind === 'multisig', walletId, generation);
+    return {
+      ...overview,
+      syncedAt: normalizeTimestamp(overview.syncedAt),
+      chainTip: {
+        ...overview.chainTip,
+        observedAt: normalizeTimestamp(overview.chainTip.observedAt)
+      },
+      transactions: overview.transactions.map((tx) => ({
+        ...tx,
+        date: normalizeTimestamp(tx.date) ?? tx.date
+      }))
+    };
+  }
+  async activity(request: import('./contracts').ActivityRequest) {
+    const generation = this.#generation;
+    const page = await command<import('./contracts').ActivityPage>('wallet_activity', { request });
+    if (!this.#isCurrent(request.walletId, generation))
+      throw new WalletError('wallet_selection_changed', 'The selected wallet changed.');
+    return {
+      ...page,
+      transactions: page.transactions.map((tx) => ({
+        ...tx,
+        date: normalizeTimestamp(tx.date) ?? tx.date
+      }))
+    };
+  }
+  async sync(automatic = false) {
+    const generation = this.#generation;
     const walletId = this.#selectedWalletId;
-    const snapshot = normalizeSnapshot(await command<WalletSnapshot>('wallet_sync'));
-    if (walletId && walletId === this.#selectedWalletId) {
-      this.#last = snapshot;
-      await this.#drainNotifications(false);
+    const snapshot = normalizeSnapshot(await command<WalletSnapshot>('wallet_sync', { automatic }));
+    if (walletId && this.#isCurrent(walletId, generation)) {
+      this.#scheduleNotifications(false, walletId, generation);
       this.#emit({ type: 'wallet_updated', walletId, walletKind: 'single_key', snapshot });
     }
     return snapshot;
@@ -323,7 +421,7 @@ export class TauriWalletAdapter implements WalletPort {
   maxSpend(recipient: string, feeRate: FeeRate, coinSelection: CoinSelection = { mode: 'auto' }) {
     return command<import('./contracts').MaxSpend>('tx_max_spend', {
       recipient,
-      feeRate,
+      feeRate: String(feeRate),
       coinSelection
     });
   }
@@ -334,7 +432,7 @@ export class TauriWalletAdapter implements WalletPort {
   ) {
     return command<import('./contracts').MaxSpend>('multisig_tx_max_spend', {
       recipient,
-      feeRate,
+      feeRate: String(feeRate),
       coinSelection
     });
   }
@@ -349,7 +447,7 @@ export class TauriWalletAdapter implements WalletPort {
       recipient,
       labels,
       amount,
-      feeRate,
+      feeRate: String(feeRate),
       coinSelection
     });
   }
@@ -372,18 +470,28 @@ export class TauriWalletAdapter implements WalletPort {
   }
   quoteRbf(txid: string, feeRate?: FeeRate) {
     return command<import('./contracts').AccelerationQuote>('rbf_acceleration_quote', {
+      walletId: this.#selectedWalletId,
       txid,
       feeRate: feeRate == null ? null : String(feeRate)
     });
   }
-  async signAndBroadcast(proposalId: string, credential: string) {
+  quoteCpfp(txid: string, feeRate?: FeeRate) {
+    return command<import('./contracts').CpfpAccelerationQuote>('cpfp_acceleration_quote', {
+      walletId: this.#selectedWalletId,
+      txid,
+      feeRate: feeRate == null ? null : String(feeRate)
+    });
+  }
+  async signAndBroadcast(proposalId: string, reviewBinding: string, credential: string) {
+    const generation = this.#generation;
+    const walletId = this.#selectedWalletId;
     const result = await command<BroadcastResult>('tx_sign_and_broadcast', {
       proposalId,
+      reviewBinding,
       credential
     });
     result.snapshot = normalizeSnapshot(result.snapshot);
-    this.#last = result.snapshot;
-    await this.#drainNotifications(false);
+    this.#scheduleNotifications(false, walletId, generation);
     return result;
   }
   openTransactionExplorer(txid: string) {
@@ -395,10 +503,10 @@ export class TauriWalletAdapter implements WalletPort {
   importLabels() {
     return command<import('./contracts').LabelImportResult | null>('bip329_labels_import');
   }
-  cancelHardwareOperations() {
+  cancelHardwareOperations(preserveMainnetAdmission = false) {
     this.#hardwareListRequest = null;
     this.#typedHardwareListRequests.clear();
-    return command<void>('hardware_cancel_operations');
+    return command<void>('hardware_cancel_operations', { preserveMainnetAdmission });
   }
   listHardwareDevices() {
     if (this.#hardwareListRequest) return this.#hardwareListRequest;
@@ -441,15 +549,23 @@ export class TauriWalletAdapter implements WalletPort {
     });
   }
   promptHardwarePin(deviceId: string) {
-    return command<string>('hardware_prompt_pin', { deviceId });
+    return command<import('./contracts').HardwarePinPrompt>('hardware_prompt_pin', { deviceId });
   }
   sendHardwarePin(challengeId: string, pinPositions: string) {
     return command<void>('hardware_send_pin', { challengeId, pinPositions });
   }
-  async checkHardwareCosigner(cosigner: PolicyDraft['cosigners'][number], deviceId: string) {
+  identifySavedHardwareDevice(deviceId: string) {
+    return command<HardwareIdentity>('hardware_identify_saved_device', { deviceId });
+  }
+  async checkHardwareCosigner(
+    cosigner: PolicyDraft['cosigners'][number],
+    deviceId: string,
+    draft = false
+  ) {
     const result = await command<CosignerHealthCheck>('hardware_check_cosigner', {
       cosigner,
-      deviceId
+      deviceId,
+      draft
     });
     return { ...result, checkedAt: normalizeTimestamp(result.checkedAt) ?? result.checkedAt };
   }
@@ -530,6 +646,7 @@ export class TauriWalletAdapter implements WalletPort {
     });
   }
   createExternalSignerWallet(name: string, signer: ExternalSigner, credential: string) {
+    this.#generation++;
     return command<ExternalSignerWallet>('external_signer_create', { name, signer, credential });
   }
   externalSignerWallet() {
@@ -569,14 +686,15 @@ export class TauriWalletAdapter implements WalletPort {
     reviewedPsbt: string,
     credential: string
   ) {
+    const generation = this.#generation;
+    const walletId = this.#selectedWalletId;
     const result = await command<BroadcastResult>('external_signer_proposal_broadcast', {
       proposalId,
       reviewedPsbt,
       credential
     });
     result.snapshot = normalizeSnapshot(result.snapshot);
-    this.#last = result.snapshot;
-    await this.#drainNotifications(false);
+    this.#scheduleNotifications(false, walletId, generation);
     return result;
   }
   cancelExternalSignerProposal(proposalId: string) {
@@ -611,6 +729,7 @@ export class TauriWalletAdapter implements WalletPort {
     return command<RecoveryPolicyAnalysis>('recovery_policy_analyze', { template, cosigners });
   }
   createMultisig(policy: PolicyDraft, credential: string, networkSetupSourceWalletId?: string) {
+    this.#generation++;
     return command<MultisigCreation>('multisig_create', {
       policy,
       credential,
@@ -624,6 +743,7 @@ export class TauriWalletAdapter implements WalletPort {
     credential: string,
     networkSetupSourceWalletId?: string
   ) {
+    this.#generation++;
     return command<MultisigCreation>('multisig_recovery_create', {
       name,
       template,
@@ -660,6 +780,7 @@ export class TauriWalletAdapter implements WalletPort {
     return command<RecoveryDrill>('multisig_bsms_inspect', { encodedBackup });
   }
   recoverMultisigBsms(name: string, encodedBackup: string, credential: string) {
+    this.#generation++;
     return command<MultisigWallet>('multisig_recover_bsms', { name, encodedBackup, credential });
   }
   recoveryDrill(encodedBackup: string) {
@@ -669,22 +790,28 @@ export class TauriWalletAdapter implements WalletPort {
     return command<boolean>('multisig_recovery_drill_status');
   }
   recoverMultisig(encodedBackup: string, credential: string) {
+    this.#generation++;
     return command<MultisigWallet>('multisig_recover', { encodedBackup, credential });
   }
   deleteMultisig(credential: string, confirmation: string) {
+    this.#generation++;
     return command<void>('multisig_delete', { credential, confirmation });
   }
   async multisigSnapshot() {
+    const generation = this.#generation;
+    const walletId = this.#selectedWalletId;
     const snapshot = normalizeSnapshot(await command<WalletSnapshot>('multisig_snapshot'));
-    await this.#drainNotifications(true);
+    this.#scheduleNotifications(true, walletId, generation);
     return snapshot;
   }
-  async syncMultisig() {
+  async syncMultisig(automatic = false) {
+    const generation = this.#generation;
     const walletId = this.#selectedWalletId;
-    const snapshot = normalizeSnapshot(await command<WalletSnapshot>('multisig_sync'));
-    if (walletId && walletId === this.#selectedWalletId) {
-      this.#last = snapshot;
-      await this.#drainNotifications(true);
+    const snapshot = normalizeSnapshot(
+      await command<WalletSnapshot>('multisig_sync', { automatic })
+    );
+    if (walletId && this.#isCurrent(walletId, generation)) {
+      this.#scheduleNotifications(true, walletId, generation);
       this.#emit({ type: 'wallet_updated', walletId, walletKind: 'multisig', snapshot });
     }
     return snapshot;
@@ -717,7 +844,7 @@ export class TauriWalletAdapter implements WalletPort {
       recipient,
       labels,
       amount,
-      feeRate,
+      feeRate: String(feeRate),
       coinSelection
     });
   }
@@ -726,7 +853,7 @@ export class TauriWalletAdapter implements WalletPort {
     return command<MultisigProposal>('multisig_policy_renewal_prepare', {
       outpoint,
       labels,
-      feeRate: Number(feeRate)
+      feeRate: String(feeRate)
     });
   }
   prepareMultisigDelayedSpend(
@@ -739,7 +866,7 @@ export class TauriWalletAdapter implements WalletPort {
       outpoint,
       recipient,
       labels,
-      feeRate: Number(feeRate)
+      feeRate: String(feeRate)
     });
   }
   prepareMultisigAcceleration(
@@ -778,13 +905,15 @@ export class TauriWalletAdapter implements WalletPort {
     });
   }
   async broadcastMultisigProposal(proposalId: string, reviewedPsbt: string, credential: string) {
+    const generation = this.#generation;
+    const walletId = this.#selectedWalletId;
     const result = await command<BroadcastResult>('multisig_proposal_broadcast', {
       proposalId,
       reviewedPsbt,
       credential
     });
     result.snapshot = normalizeSnapshot(result.snapshot);
-    await this.#drainNotifications(true);
+    this.#scheduleNotifications(true, walletId, generation);
     return result;
   }
   cancelMultisigProposal(proposalId: string) {
@@ -806,29 +935,51 @@ export class TauriWalletAdapter implements WalletPort {
     this.#listeners.add(listener);
     return () => this.#listeners.delete(listener);
   }
-  async #drainNotifications(multisig: boolean) {
-    const pendingDrain = this.#notificationDrains.get(multisig);
+  #isCurrent(walletId: string, generation: number) {
+    return walletId === this.#selectedWalletId && generation === this.#generation;
+  }
+  #scheduleNotifications(multisig: boolean, walletId: string | null, generation: number) {
+    if (!walletId || !this.#isCurrent(walletId, generation) || !this.#listeners.size) return;
+    // Durable rows retry on the next read/sync. Delivery failure must never
+    // turn a successful snapshot or broadcast into a false operation failure.
+    void this.#drainNotifications(multisig, walletId, generation).catch(() => undefined);
+  }
+  async #drainNotifications(multisig: boolean, walletId: string, generation: number) {
+    const key = `${walletId}:${multisig}:${generation}`;
+    const pendingDrain = this.#notificationDrains.get(key);
     if (pendingDrain) return pendingDrain;
     const drain = (async () => {
       for (let batch = 0; batch < MAX_NOTIFICATION_BATCHES_PER_DRAIN; batch += 1) {
-        const envelopes = await command<NotificationEnvelope[]>('wallet_notifications', {
-          multisig
+        if (!this.#isCurrent(walletId, generation) || !this.#listeners.size) return;
+        const { sessionId, envelopes } = await command<{
+          sessionId: string;
+          envelopes: NotificationEnvelope[];
+        }>('wallet_notifications', {
+          multisig,
+          walletId
         });
-        for (const event of coalesceNotificationEvents(envelopes.map((envelope) => envelope.event)))
+        for (const event of coalesceNotificationEvents(
+          envelopes.map((envelope) => envelope.event)
+        )) {
+          if (!this.#isCurrent(walletId, generation) || !this.#listeners.size) return;
           this.#emit(event);
+        }
+        if (!this.#isCurrent(walletId, generation) || !this.#listeners.size) return;
         if (!envelopes.length) break;
         await command<void>('wallet_notifications_ack', {
           multisig,
+          walletId,
+          sessionId,
           ids: envelopes.map((envelope) => envelope.id)
         });
         if (envelopes.length < NOTIFICATION_BATCH_SIZE) break;
       }
     })();
-    this.#notificationDrains.set(multisig, drain);
+    this.#notificationDrains.set(key, drain);
     try {
       await drain;
     } finally {
-      this.#notificationDrains.delete(multisig);
+      this.#notificationDrains.delete(key);
     }
   }
   #emit(event: WalletEvent) {

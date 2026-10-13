@@ -1,6 +1,17 @@
 import type { CatalogSection } from './types';
 
 export const sendCopy = {
+  Intent: { fr: 'Intention', es: 'Intención' },
+  'Amount & fee': { fr: 'Montant et frais', es: 'Importe y comisión' },
+  'Review & sign': { fr: 'Vérifier et signer', es: 'Revisar y firmar' },
+  'Preparing fee acceleration': {
+    fr: 'Préparation de l’accélération des frais',
+    es: 'Preparando la aceleración de comisión'
+  },
+  'Reading the original transaction and current fee policy from Bitcoin Core.': {
+    fr: 'Lecture de la transaction d’origine et de la politique de frais actuelle depuis Bitcoin Core.',
+    es: 'Leyendo la transacción original y la política de comisiones actual desde Bitcoin Core.'
+  },
   'Self-transfer': { fr: 'Transfert interne', es: 'Transferencia interna' },
   Consolidating: { fr: 'Consolidation', es: 'Consolidación' },
   'Self-transfer recipient': {
@@ -136,6 +147,35 @@ export const sendCopy = {
   'Review frozen coins': {
     fr: 'Examiner les pièces gelées',
     es: 'Revisar monedas congeladas'
+  },
+  'Maximum spendable amount selected': {
+    fr: 'Montant maximal disponible sélectionné',
+    es: 'Importe máximo disponible seleccionado'
+  },
+  'Check amount': { fr: 'Vérifiez le montant', es: 'Comprueba el importe' },
+  'Amount plus fee exceeds your available balance.': {
+    fr: 'Le montant et les frais dépassent votre solde disponible.',
+    es: 'El importe más la comisión supera tu saldo disponible.'
+  },
+  'Frozen coins remain in this wallet.': {
+    fr: 'Les pièces gelées restent dans ce portefeuille.',
+    es: 'Las monedas congeladas permanecen en esta cartera.'
+  },
+  'Frozen coins remain in this wallet. Unfreeze them first to include them.': {
+    fr: 'Les pièces gelées restent dans ce portefeuille. Dégelez-les d’abord pour les inclure.',
+    es: 'Las monedas congeladas permanecen en esta cartera. Descongélalas primero para incluirlas.'
+  },
+  'The amount uses all spendable coins after the network fee.': {
+    fr: 'Le montant utilise toutes les pièces disponibles après les frais de réseau.',
+    es: 'El importe usa todas las monedas disponibles después de la comisión de red.'
+  },
+  'Maximum spendable amount selected. Frozen coins remain in this wallet.': {
+    fr: 'Montant maximal disponible sélectionné. Les pièces gelées restent dans ce portefeuille.',
+    es: 'Importe máximo disponible seleccionado. Las monedas congeladas permanecen en esta cartera.'
+  },
+  'Maximum spendable amount selected after the network fee.': {
+    fr: 'Montant maximal disponible sélectionné après les frais de réseau.',
+    es: 'Importe máximo disponible seleccionado después de la comisión de red.'
   },
   '{count} more signature required': {
     fr: 'Encore {count} signature requise',
@@ -322,10 +362,10 @@ export const sendCopy = {
     fr: 'Saisissez un taux de frais',
     es: 'Introduce una tasa de comisión'
   },
-  'This replacement keeps the recipient amount unchanged. Available change and the wallet’s other spendable coins cannot cover the higher fee. Receive another coin and wait for it to confirm, then try again—or wait for this transaction to confirm.':
+  'Not enough bitcoin to raise the fee. Receive more and wait for it to confirm, or wait for this transaction to confirm.':
     {
-      fr: 'Ce remplacement conserve le montant du destinataire. La monnaie disponible et les autres pièces dépensables du portefeuille ne couvrent pas les frais supplémentaires. Recevez une autre pièce et attendez sa confirmation avant de réessayer, ou attendez la confirmation de cette transaction.',
-      es: 'Este reemplazo conserva el importe del destinatario. El cambio disponible y las demás monedas gastables de la cartera no cubren la comisión más alta. Recibe otra moneda y espera a que se confirme antes de volver a intentarlo, o espera a que se confirme esta transacción.'
+      fr: 'Pas assez de bitcoins pour augmenter les frais. Recevez-en davantage et attendez sa confirmation, ou attendez la confirmation de cette transaction.',
+      es: 'No hay suficiente bitcoin para aumentar la comisión. Recibe más y espera a que se confirme, o espera a que se confirme esta transacción.'
     },
   Rescan: { fr: 'Rechercher à nouveau', es: 'Volver a buscar' },
   'Return to the saved policy reference without interrupting this signing request.': {
@@ -426,6 +466,10 @@ export const sendCopy = {
       fr: 'Vérifiez l’adresse, le montant et les frais sur le signataire. Groot ne reçoit jamais sa clé privée ni sa phrase secrète matérielle.',
       es: 'Verifica la dirección, el importe y la comisión en el firmante. Groot nunca recibe su clave privada ni su frase de contraseña.'
     },
+  'Verify and approve on the device.': {
+    fr: 'Vérifiez et approuvez sur l’appareil.',
+    es: 'Verifica y aprueba en el dispositivo.'
+  },
   'View policy reference': {
     fr: 'Afficher la référence de politique',
     es: 'Ver referencia de política'
@@ -550,6 +594,10 @@ export const sendCopy = {
     fr: 'Confirmez les frais supplémentaires. Le montant du paiement et le destinataire restent inchangés.',
     es: 'Confirma la comisión adicional. El importe del pago y el destinatario no cambian.'
   },
+  'Confirm the additional fee, then continue to sign.': {
+    fr: 'Confirmez les frais supplémentaires, puis continuez pour signer.',
+    es: 'Confirma la comisión adicional y continúa para firmar.'
+  },
   'You will spend this much more': {
     fr: 'Vous dépenserez ce montant en plus',
     es: 'Gastarás este importe adicional'
@@ -557,6 +605,10 @@ export const sendCopy = {
   'Your payment amount and recipient will not change.': {
     fr: 'Le montant de votre paiement et le destinataire ne changeront pas.',
     es: 'El importe del pago y el destinatario no cambiarán.'
+  },
+  'This child fee helps the parent and child confirm together.': {
+    fr: 'Ces frais de l’enfant aident le parent et l’enfant à être confirmés ensemble.',
+    es: 'Esta comisión de la transacción hija ayuda a confirmar juntas ambas transacciones.'
   },
   'Change fee rate': {
     fr: 'Modifier le taux de frais',
@@ -569,7 +621,34 @@ export const sendCopy = {
   'Original fee rate': { fr: 'Taux de frais initial', es: 'Tasa de comisión original' },
   'Minimum fee rate': { fr: 'Taux de frais minimum', es: 'Tasa de comisión mínima' },
   'New fee rate': { fr: 'Nouveau taux de frais', es: 'Nueva tasa de comisión' },
+  'Package fee rate': { fr: 'Taux de frais du paquet', es: 'Tasa de comisión del paquete' },
+  'Parent fee rate': {
+    fr: 'Taux de frais du parent',
+    es: 'Tasa de comisión de la transacción madre'
+  },
+  'Minimum package rate': {
+    fr: 'Taux minimum du paquet',
+    es: 'Tasa mínima del paquete'
+  },
+  'Target package rate': { fr: 'Taux cible du paquet', es: 'Tasa objetivo del paquete' },
+  'Child network fee': {
+    fr: 'Frais réseau de l’enfant',
+    es: 'Comisión de red de la transacción hija'
+  },
+  'Package network fee': { fr: 'Frais réseau du paquet', es: 'Comisión de red del paquete' },
+  'Effective package rate': {
+    fr: 'Taux effectif du paquet',
+    es: 'Tasa efectiva del paquete'
+  },
   'New network fee': { fr: 'Nouveaux frais de réseau', es: 'Nueva comisión de red' },
+  'New total network fee': {
+    fr: 'Nouveaux frais de réseau totaux',
+    es: 'Nueva comisión de red total'
+  },
+  'New package fee rate': {
+    fr: 'Nouveau taux de frais du paquet',
+    es: 'Nueva tasa de comisión del paquete'
+  },
   'Additional fee': { fr: 'Frais supplémentaires', es: 'Comisión adicional' },
   'Effective fee rate': { fr: 'Taux de frais effectif', es: 'Tasa de comisión efectiva' },
   'Minimum {rate} sat/vB': {
@@ -580,6 +659,10 @@ export const sendCopy = {
   'The payment amount stays the same.': {
     fr: 'Le montant du paiement reste inchangé.',
     es: 'El importe del pago no cambia.'
+  },
+  'The child fee helps both transactions confirm together.': {
+    fr: 'Les frais de l’enfant aident les deux transactions à être confirmées ensemble.',
+    es: 'La comisión de la transacción hija ayuda a confirmar juntas ambas transacciones.'
   },
   'Transaction accelerated': {
     fr: 'Transaction accélérée',
@@ -604,5 +687,33 @@ export const sendCopy = {
   'The system browser could not open the explorer.': {
     fr: 'Le navigateur du système n’a pas pu ouvrir l’explorateur.',
     es: 'El navegador del sistema no pudo abrir el explorador.'
+  },
+  'Scan Bitcoin payment QR': {
+    fr: 'Scanner le QR de paiement Bitcoin',
+    es: 'Escanear QR de pago de Bitcoin'
+  },
+  'Scan payment request': {
+    fr: 'Scanner la demande de paiement',
+    es: 'Escanear solicitud de pago'
+  },
+  'Scan a Bitcoin address or payment URI. You will review every imported detail before sending.': {
+    fr: 'Scannez une adresse Bitcoin ou un URI de paiement. Vous vérifierez chaque détail importé avant l’envoi.',
+    es: 'Escanea una dirección de Bitcoin o un URI de pago. Revisarás cada dato importado antes de enviar.'
+  },
+  'Point the camera at a Bitcoin payment QR': {
+    fr: 'Pointez la caméra vers un QR de paiement Bitcoin',
+    es: 'Apunta la cámara a un QR de pago de Bitcoin'
+  },
+  'Reading payment request…': {
+    fr: 'Lecture de la demande de paiement…',
+    es: 'Leyendo solicitud de pago…'
+  },
+  'Payment request scanned': {
+    fr: 'Demande de paiement scannée',
+    es: 'Solicitud de pago escaneada'
+  },
+  'QR code rejected': {
+    fr: 'Code QR refusé',
+    es: 'Código QR rechazado'
   }
 } as const satisfies CatalogSection;

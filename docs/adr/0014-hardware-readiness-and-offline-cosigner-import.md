@@ -20,3 +20,10 @@ Air-gapped signers also need a public-data path that does not imply USB support.
 ## Consequences
 
 Locked devices remain visible and recoverable without weakening identity checks. The Trezor PIN positions cross the existing trusted Satchel webview-to-Rust command boundary but are minimized, masked, bounded, single-use, and cleared; a future platform-native entry surface may further narrow that boundary. SD-card import is functional for Satchel and compatible Coldcard-style public JSON records, but it does not imply universal vendor-file compatibility. No physical device is certified by simulator or unit evidence.
+
+## Supersession note — 2026-09-03
+
+KeepKey and legacy Digital BitBox are no longer supported device families and are
+rejected before discovery results can reach the UI. The PIN-matrix behavior above
+now applies only to Trezor devices. This note preserves the historical decision
+while recording the narrower current boundary.

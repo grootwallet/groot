@@ -5,20 +5,27 @@
     ArrowLeft,
     ArrowRight,
     Check,
+    ChevronRight,
+    Copy,
     Cpu,
     Eye,
     EyeOff,
     KeyRound,
     Network,
+    Settings,
     ShieldCheck,
     X
   } from '@lucide/svelte';
   import Button from '$lib/components/Button.svelte';
   import FieldCounter from '$lib/components/FieldCounter.svelte';
+  import InsightTip from '$lib/components/InsightTip.svelte';
+  import ReadableIdentifier from '$lib/components/ReadableIdentifier.svelte';
   import BrandMark from '$lib/components/BrandMark.svelte';
   import BrandLockup from '$lib/components/BrandLockup.svelte';
   import PasswordField from '$lib/components/PasswordField.svelte';
   import SetupProgress from '$lib/components/SetupProgress.svelte';
+  import { copyText } from '$lib/clipboard';
+  import { combineDescriptorBranches } from '$lib/descriptors';
   import { toast } from '$lib/stores/toasts';
   import { defaultConfig, networkName } from '$lib/config';
   import {
@@ -30,9 +37,9 @@
     type NetworkSetupSource,
     type SupplementalEntropyInput
   } from '$lib/wallet';
-  import { goto } from '$app/navigation';
+  import { beforeNavigate, goto } from '$app/navigation';
   import { page } from '$app/state';
-  import { onDestroy, onMount } from 'svelte';
+  import { onDestroy, onMount, tick } from 'svelte';
   import {
     MAX_WALLET_PASSPHRASE_BYTES,
     MIN_NEW_WALLET_PASSPHRASE_CHARACTERS,
@@ -42,9 +49,9 @@
     utf8ByteLength,
     type RecoveryWord
   } from '$lib/mnemonic-verification';
-  let mode = $state<'home' | 'choose' | 'create' | 'words' | 'verify' | 'passphrase' | 'recover'>(
-    'home'
-  );
+  let mode = $state<
+    'home' | 'choose' | 'create' | 'words' | 'verify' | 'passphrase' | 'created' | 'recover'
+  >('home');
   let revealed = $state(false);
   let passphrase = $state('');
   let confirmation = $state('');
@@ -52,7 +59,7 @@
   let nativeBackup = $state(false);
   let busy = $state(false);
   let error = $state('');
-  let walletName = $state('My wallet');
+  let walletName = $state('');
   let hasExistingWallet = $state(false);
   let backupAcknowledged = $state(false);
   let backupVerified = $state(false);
@@ -64,6 +71,11 @@
   let supplementalOutcomes = $state('');
   let networkSetupSource = $state<NetworkSetupSource | null>(null);
   let reuseNetworkSetup = $state(true);
+  let createdMasterFingerprint = $state('');
+  let createdWalletDescriptor = $state('');
+  let fingerprintCopied = $state(false);
+  let descriptorCopied = $state(false);
+  let createdWalletDetailsOpen = $state(false);
   const softwareSteps = ['Generate', 'Back up', 'Protect'];
   let passphraseError = $derived(
     utf8ByteLength(passphrase) > MAX_WALLET_PASSPHRASE_BYTES
@@ -96,8 +108,9 @@
       }
     }
   });
+  beforeNavigate(() => undefined);
   onDestroy(() => {
-    void walletService.cancelOnboarding();
+    void walletService.cancelOnboarding(false);
     words = [];
     passphrase = '';
     confirmation = '';
@@ -185,6 +198,11 @@
     verificationWords = [];
     backupVerified = true;
     mode = 'passphrase';
+    toast({
+      title: 'Recovery backup verified',
+      description: 'Your written words matched this wallet.',
+      tone: 'success'
+    });
   }
 
   function verifyLater() {
@@ -214,26 +232,43 @@
     }
   }
 
+  function beginExternalWalletSetup(next: '/hardware/new' | '/multisig/new') {
+    void goto(next);
+  }
+
   async function finishCreate() {
     busy = true;
     error = '';
+    // Let the loading state reach the screen before native key derivation and
+    // persistence begin. Some WebKit builds otherwise paint only after IPC.
+    await tick();
     try {
-      await walletService.createWallet(walletName, passphrase, backupVerified);
-      const networkSetupCopied = await adoptNetworkSetup(passphrase);
+      const creation = await walletService.createWallet(
+        walletName,
+        passphrase,
+        backupVerified,
+        reuseNetworkSetup ? networkSetupSource?.walletId : undefined
+      );
+      createdMasterFingerprint = creation.masterFingerprint;
+      createdWalletDescriptor =
+        combineDescriptorBranches(creation.externalDescriptor, creation.internalDescriptor) ??
+        creation.externalDescriptor;
+      mode = 'created';
       words = [];
       passphrase = '';
       confirmation = '';
       backupAcknowledged = false;
       toast({
         title: 'Wallet created',
-        description: !networkSetupCopied
+        description: !creation.networkSetupCopied
           ? 'Network setup was not copied. Configure it in Settings.'
           : backupVerified
-            ? 'Your regtest wallet is ready.'
+            ? translate($locale, 'Your {network} wallet is ready.', {
+                network: networkName(defaultConfig.network)
+              })
             : 'Your wallet is ready. Verify its recovery backup soon.',
-        tone: networkSetupCopied ? 'success' : 'default'
+        tone: creation.networkSetupCopied ? 'success' : 'default'
       });
-      await goto('/');
     } catch (cause) {
       error = localizedError(cause, $locale, 'Could not create wallet.');
     } finally {
@@ -242,6 +277,24 @@
       words = [];
       busy = false;
     }
+  }
+
+  async function copyCreatedFingerprint() {
+    await copyText(createdMasterFingerprint, 'identifier');
+    fingerprintCopied = true;
+    toast({ title: translate($locale, 'Master fingerprint copied'), tone: 'success' });
+    setTimeout(() => (fingerprintCopied = false), 1_500);
+  }
+
+  async function copyCreatedDescriptor() {
+    await copyText(createdWalletDescriptor, 'public-wallet-data');
+    descriptorCopied = true;
+    toast({
+      title: translate($locale, 'Wallet descriptor copied'),
+      description: 'Public watch-only descriptor copied.',
+      tone: 'success'
+    });
+    setTimeout(() => (descriptorCopied = false), 1_500);
   }
 
   async function recoverWallet() {
@@ -258,7 +311,7 @@
           : 'Network setup was not copied. Configure it in Settings.',
         tone: networkSetupCopied ? 'success' : 'default'
       });
-      await goto('/');
+      await goto('/?initial=recovered');
     } catch (cause) {
       error = localizedError(cause, $locale, 'Could not recover wallet.');
     } finally {
@@ -278,6 +331,8 @@
   <header class="onboarding-brand">
     <span class="onboarding-brand-lockup"><BrandLockup /></span><small
       >{networkName(defaultConfig.network).toUpperCase()}</small
+    ><a class="onboarding-settings" href="/settings" aria-label={translate($locale, 'Settings')}
+      ><Settings size={17} /></a
     >{#if hasExistingWallet}<button
         class="onboarding-exit"
         aria-label={translate($locale, 'Close wallet setup')}
@@ -323,20 +378,32 @@
               >{translate($locale, 'Create and back up your keys in Groot.')}</small
             ></span
           >
-          <span class="wallet-type-meta">{translate($locale, 'On this device')}</span>
-          <ArrowRight class="wallet-type-arrow" size={17} />
+          <span class="wallet-type-footer"
+            ><span class="wallet-type-meta">{translate($locale, 'On this device')}</span><ArrowRight
+              class="wallet-type-arrow"
+              size={17}
+            /></span
+          >
         </button>
-        <a class="wallet-type-card hardware" href="/hardware/new">
+        <button
+          class="wallet-type-card hardware"
+          onclick={() => beginExternalWalletSetup('/hardware/new')}
+        >
           <span class="wallet-type-icon"><Cpu size={20} /></span>
           <span class="wallet-type-copy"
             ><strong>{translate($locale, 'Hardware signer')}</strong><small
               >{translate($locale, 'Connect a device you already trust.')}</small
             ></span
           >
-          <span class="wallet-type-meta">{translate($locale, 'Separate device')}</span>
-          <ArrowRight class="wallet-type-arrow" size={17} />
-        </a>
-        <a class="wallet-type-card multisig" href="/multisig/new">
+          <span class="wallet-type-footer"
+            ><span class="wallet-type-meta">{translate($locale, 'Separate device')}</span
+            ><ArrowRight class="wallet-type-arrow" size={17} /></span
+          >
+        </button>
+        <button
+          class="wallet-type-card multisig"
+          onclick={() => beginExternalWalletSetup('/multisig/new')}
+        >
           <span class="wallet-type-icon"><ShieldCheck size={20} /></span>
           <span class="wallet-type-copy"
             ><strong>{translate($locale, 'Multisig wallet')}</strong><small
@@ -346,9 +413,11 @@
               )}</small
             ></span
           >
-          <span class="wallet-type-meta">{translate($locale, 'Flexible security')}</span>
-          <ArrowRight class="wallet-type-arrow" size={17} />
-        </a>
+          <span class="wallet-type-footer"
+            ><span class="wallet-type-meta">{translate($locale, 'Flexible security')}</span
+            ><ArrowRight class="wallet-type-arrow" size={17} /></span
+          >
+        </button>
       </div>
     {:else if mode === 'create'}
       <button
@@ -649,17 +718,7 @@
           'Choose the BIP39 wallet passphrase that completes this backup. The same passphrase unlocks\n        Groot.'
         )}
       </p>
-      {#if !backupVerified}<div class="backup-unverified-note" role="status">
-          <ShieldCheck size={17} /><span
-            ><strong>{translate($locale, 'Backup not verified yet')}</strong><small
-              >{translate(
-                $locale,
-                'You can use the wallet now, but Groot will keep reminding you to verify the written\n              words.'
-              )}</small
-            ></span
-          >
-        </div>{/if}
-      <div class="credential-form">
+      <div class="credential-form software-credential-form">
         <label class="field">
           <span>{translate($locale, 'Wallet name')}</span>
           <input
@@ -676,7 +735,7 @@
           autocomplete="new-password"
           hint={translate(
             $locale,
-            'Use at least 16 characters. Letters-only passphrases are allowed. Keep it with your recovery words; it also unlocks Groot on this device.'
+            'Use at least 16 characters. Letters-only passphrases are allowed.'
           )}
           error={passphraseError}
         />
@@ -694,7 +753,7 @@
           <strong>{translate($locale, 'Keep it with your backup.')}</strong><span
             >{translate(
               $locale,
-              'I understand this exact passphrase is required with my 24 words. It cannot be reset; a\n            different passphrase opens a different wallet.'
+              'I understand this exact passphrase is required with my 24 words. It cannot be reset; a different passphrase opens a different wallet.'
             )}</span
           >
         </p></label
@@ -728,6 +787,82 @@
         loadingLabel={translate($locale, 'Creating wallet…')}
         onclick={finishCreate}><Check size={17} />{translate($locale, 'Create wallet')}</Button
       >
+    {:else if mode === 'created'}
+      <SetupProgress
+        steps={softwareSteps}
+        current={3}
+        label={translate($locale, 'Software wallet setup progress')}
+        context="SOFTWARE WALLET"
+      />
+      <div class="wallet-created-confirmation">
+        <span class="wallet-created-icon"><Check size={24} /></span>
+        <h1>{translate($locale, 'Wallet created')}</h1>
+        <p>
+          {translate(
+            $locale,
+            'Record this master fingerprint with your recovery words. It identifies the wallet produced by your 24 words and exact passphrase.'
+          )}
+        </p>
+        <div class="master-fingerprint-result">
+          <div class="master-fingerprint-label">
+            <span>{translate($locale, 'Master fingerprint')}</span>
+            <InsightTip
+              label={translate($locale, 'About the master fingerprint')}
+              text={translate(
+                $locale,
+                'A master fingerprint is a public 8-character identifier derived from your recovery words and passphrase. Match it after recovery to confirm you opened the same wallet; it cannot restore the wallet or spend bitcoin.'
+              )}
+            />
+          </div>
+          <ReadableIdentifier
+            value={createdMasterFingerprint}
+            label={translate($locale, 'Master fingerprint')}
+            copied={fingerprintCopied}
+            showHint={false}
+            oncopy={copyCreatedFingerprint}
+          />
+        </div>
+        <p class="fingerprint-check-note">
+          {translate(
+            $locale,
+            'When restoring elsewhere, a matching fingerprint confirms that the recovery words and passphrase opened the same wallet.'
+          )}
+        </p>
+        <details
+          bind:open={createdWalletDetailsOpen}
+          class="proposal-review-details created-wallet-details"
+        >
+          <summary
+            ><ChevronRight size={14} class={createdWalletDetailsOpen ? 'rotated' : ''} />{translate(
+              $locale,
+              createdWalletDetailsOpen ? 'View less details' : 'View more details'
+            )}</summary
+          >
+          <div class="created-wallet-export">
+            <p>
+              {translate(
+                $locale,
+                'Technical recovery tools can import this public descriptor to watch the same wallet.'
+              )}
+            </p>
+            <Button variant="secondary" class="full" onclick={copyCreatedDescriptor}
+              >{#if descriptorCopied}<Check size={16} />{:else}<Copy size={16} />{/if}{translate(
+                $locale,
+                'Copy wallet descriptor'
+              )}</Button
+            >
+            <span>
+              {translate(
+                $locale,
+                'This public watch-only descriptor cannot spend, but it reveals every address in the wallet.'
+              )}
+            </span>
+          </div>
+        </details>
+        <Button size="large" class="full" onclick={() => goto('/?initial=new')}
+          >{translate($locale, 'Open wallet')}<ArrowRight size={17} /></Button
+        >
+      </div>
     {:else}
       <button class="back-link" onclick={() => (mode = 'home')}
         ><ArrowLeft size={16} />{translate($locale, 'Back')}</button
@@ -781,7 +916,4 @@
       >
     {/if}
   </main>
-  <footer class="onboarding-footer">
-    {translate($locale, 'Keys stay on this device · Open source')}
-  </footer>
 </div>

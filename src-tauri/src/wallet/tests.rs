@@ -3,14 +3,1274 @@ use super::multisig_setup_commands::claim_observed_receive_output;
 use super::profile_commands::*;
 use super::transaction_commands::*;
 use super::*;
-use crate::external_signer::{self, ExternalSignerInput, SignerSource, SINGLESIG_ACCOUNT_PATH};
+use crate::external_signer::{self, singlesig_account_path, ExternalSignerInput, SignerSource};
 use crate::multisig::PolicyError;
-use crate::multisig::{CosignerInput, CosignerSource, MULTISIG_ACCOUNT_PATH};
+use crate::multisig::{multisig_account_path, CosignerInput, CosignerSource};
 use crate::recovery::{SpendingPath, TimedSpendingPath};
 use crate::secure_store::SecureStoreError;
 use bdk_wallet::bitcoin::NetworkKind;
+use bdk_wallet::bitcoin::{
+    absolute::LockTime, transaction::Version, ScriptBuf, Sequence, TxOut, Witness,
+};
 use bdk_wallet::error::CreateTxError;
 use std::{net::TcpListener, thread};
+
+struct MempoolBatchFixture {
+    txids: Vec<Txid>,
+    singles: Arc<AtomicU64>,
+    batches: Arc<AtomicU64>,
+    reject_batch: bool,
+}
+
+struct MissingAccelerationOriginalFixture {
+    original_txid: Txid,
+}
+
+impl jsonrpc::client::Transport for MissingAccelerationOriginalFixture {
+    fn send_request(
+        &self,
+        request: jsonrpc::Request<'_>,
+    ) -> Result<jsonrpc::Response, jsonrpc::Error> {
+        assert!(matches!(
+            request.method,
+            "getmempoolentry" | "getrawtransaction"
+        ));
+        let params: Vec<serde_json::Value> =
+            serde_json::from_str(request.params.expect("transaction parameters").get())?;
+        assert_eq!(params[0], self.original_txid.to_string());
+        Ok(serde_json::from_value(serde_json::json!({
+            "result": null,
+            "error": { "code": -5, "message": "Transaction not found" },
+            "id": request.id,
+            "jsonrpc": "2.0"
+        }))?)
+    }
+
+    fn send_batch(
+        &self,
+        _requests: &[jsonrpc::Request<'_>],
+    ) -> Result<Vec<jsonrpc::Response>, jsonrpc::Error> {
+        Err(jsonrpc::Error::WrongBatchResponseSize)
+    }
+
+    fn fmt_target(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("missing acceleration original fixture")
+    }
+}
+
+struct BlockFilterBatchFixture {
+    genesis: BlockHash,
+    block_hash: BlockHash,
+    filter: GetBlockFilterResult,
+    batches: Arc<AtomicU64>,
+    batch_methods: Arc<Mutex<Vec<String>>>,
+    scan_params: Arc<Mutex<Vec<serde_json::Value>>>,
+}
+
+struct DescriptorActivityFixture {
+    transaction: Transaction,
+    activity_params: Arc<Mutex<Vec<serde_json::Value>>>,
+}
+
+struct RemoteCapabilityFixture {
+    batches: Arc<AtomicU64>,
+    supported: bool,
+}
+
+struct ManagedHistoryFixture {
+    tip_height: u32,
+    entries: Vec<serde_json::Value>,
+}
+
+struct AnchorReconciliationFixture {
+    genesis: BlockHash,
+    block: bdk_wallet::bitcoin::Block,
+}
+
+// A pruned node still has active-chain hashes, but no historical block body.
+struct PrunedCheckpointFixture(BTreeMap<u32, BlockHash>);
+
+impl jsonrpc::client::Transport for PrunedCheckpointFixture {
+    fn send_request(
+        &self,
+        request: jsonrpc::Request<'_>,
+    ) -> Result<jsonrpc::Response, jsonrpc::Error> {
+        assert_eq!(
+            request.method, "getblockhash",
+            "checkpoint agreement must not request pruned bodies"
+        );
+        let params: Vec<u32> = serde_json::from_str(request.params.unwrap().get())?;
+        BlockFilterBatchFixture::response(&request, serde_json::to_value(self.0[&params[0]])?)
+    }
+
+    fn send_batch(
+        &self,
+        _: &[jsonrpc::Request<'_>],
+    ) -> Result<Vec<jsonrpc::Response>, jsonrpc::Error> {
+        Err(jsonrpc::Error::WrongBatchResponseSize)
+    }
+
+    fn fmt_target(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("pruned checkpoint fixture")
+    }
+}
+
+#[test]
+fn checkpoint_agreement_works_without_pruned_bodies_and_rejects_stale_hashes() {
+    let (wallet, tip, _, _) = anchor_reconciliation_wallet(50, 22, 32);
+    let genesis = genesis_block(Network::Regtest).block_hash();
+    for (active_tip, expected_height, rewound) in [
+        (tip.hash(), 2, false),
+        (BlockHash::from_byte_array([33; 32]), 0, true),
+    ] {
+        let rpc = Client::from_jsonrpc(jsonrpc::client::Client::with_transport(
+            PrunedCheckpointFixture(BTreeMap::from([(0, genesis), (2, active_tip)])),
+        ));
+        let (agreement, actual_rewound) = rewind_stale_core_checkpoints(&rpc, &wallet).unwrap();
+        assert_eq!(agreement.height(), expected_height);
+        assert_eq!(actual_rewound, rewound);
+    }
+}
+
+impl jsonrpc::client::Transport for AnchorReconciliationFixture {
+    fn send_request(
+        &self,
+        request: jsonrpc::Request<'_>,
+    ) -> Result<jsonrpc::Response, jsonrpc::Error> {
+        match request.method {
+            "getblockhash" => {
+                let params: Vec<u64> =
+                    serde_json::from_str(request.params.expect("block-height parameters").get())?;
+                let hash = match params.as_slice() {
+                    [0] => self.genesis,
+                    [1] => self.block.block_hash(),
+                    other => panic!("unexpected block-height parameters: {other:?}"),
+                };
+                BlockFilterBatchFixture::response(&request, serde_json::to_value(hash)?)
+            }
+            "getblock" => BlockFilterBatchFixture::response(
+                &request,
+                serde_json::json!(bdk_wallet::bitcoin::consensus::encode::serialize_hex(
+                    &self.block
+                )),
+            ),
+            other => panic!("unexpected anchor-reconciliation RPC: {other}"),
+        }
+    }
+
+    fn send_batch(
+        &self,
+        _requests: &[jsonrpc::Request<'_>],
+    ) -> Result<Vec<jsonrpc::Response>, jsonrpc::Error> {
+        Err(jsonrpc::Error::WrongBatchResponseSize)
+    }
+
+    fn fmt_target(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("anchor-reconciliation fixture")
+    }
+}
+
+fn anchor_reconciliation_wallet(
+    entropy_byte: u8,
+    previous_tx_byte: u8,
+    tip_hash_byte: u8,
+) -> (Wallet, CheckPoint, bdk_wallet::bitcoin::Block, Txid) {
+    use bdk_wallet::bitcoin::{
+        absolute::LockTime,
+        block::{Header, Version as BlockVersion},
+        transaction::Version,
+        CompactTarget, ScriptBuf, Sequence, TxMerkleNode, TxOut, Witness,
+    };
+    use bdk_wallet::chain::TxUpdate;
+
+    let mnemonic = Mnemonic::from_entropy(&[entropy_byte; 32]).unwrap();
+    let master = root_key(&mnemonic, "anchor reconciliation fixture").unwrap();
+    let mut wallet = Wallet::create(
+        Bip84(master, KeychainKind::External),
+        Bip84(master, KeychainKind::Internal),
+    )
+    .network(Network::Regtest)
+    .create_wallet_no_persist()
+    .unwrap();
+    let receive_script = wallet
+        .reveal_next_address(KeychainKind::External)
+        .address
+        .script_pubkey();
+    let genesis = genesis_block(Network::Regtest).block_hash();
+    let transaction = Transaction {
+        version: Version::TWO,
+        lock_time: LockTime::ZERO,
+        input: vec![TxIn {
+            previous_output: OutPoint {
+                txid: Txid::from_byte_array([previous_tx_byte; 32]),
+                vout: 0,
+            },
+            script_sig: ScriptBuf::new(),
+            sequence: Sequence::MAX,
+            witness: Witness::new(),
+        }],
+        output: vec![TxOut {
+            value: Amount::from_sat(20_000),
+            script_pubkey: receive_script,
+        }],
+    };
+    let block = bdk_wallet::bitcoin::Block {
+        header: Header {
+            version: BlockVersion::ONE,
+            prev_blockhash: genesis,
+            merkle_root: TxMerkleNode::all_zeros(),
+            time: 1,
+            bits: CompactTarget::from_consensus(0),
+            nonce: 0,
+        },
+        txdata: vec![transaction.clone()],
+    };
+    let txid = transaction.compute_txid();
+    let sparse_tip = CheckPoint::new(BlockId {
+        height: 0,
+        hash: genesis,
+    })
+    .push(BlockId {
+        height: 2,
+        hash: BlockHash::from_byte_array([tip_hash_byte; 32]),
+    })
+    .unwrap();
+    let mut tx_update = TxUpdate::default();
+    tx_update.txs.push(Arc::new(transaction));
+    tx_update.anchors.insert((
+        ConfirmationBlockTime {
+            block_id: BlockId {
+                height: 1,
+                hash: block.block_hash(),
+            },
+            confirmation_time: 1,
+        },
+        txid,
+    ));
+    tx_update.seen_ats.insert((txid, 1));
+    wallet
+        .apply_update(Update {
+            chain: Some(sparse_tip.clone()),
+            tx_update,
+            ..Default::default()
+        })
+        .unwrap();
+    (wallet, sparse_tip, block, txid)
+}
+
+fn canonical_prevout_psbt(wallet: &Wallet, txid: Txid) -> Psbt {
+    let previous = wallet.get_tx(txid).unwrap().tx_node.tx.as_ref().clone();
+    let transaction = Transaction {
+        version: Version::TWO,
+        lock_time: LockTime::ZERO,
+        input: vec![TxIn {
+            previous_output: OutPoint::new(txid, 0),
+            script_sig: ScriptBuf::new(),
+            sequence: Sequence::ENABLE_RBF_NO_LOCKTIME,
+            witness: Witness::new(),
+        }],
+        output: vec![TxOut {
+            value: Amount::from_sat(19_000),
+            script_pubkey: ScriptBuf::new(),
+        }],
+    };
+    let mut psbt = Psbt::from_unsigned_tx(transaction).unwrap();
+    psbt.inputs[0].witness_utxo = Some(previous.output[0].clone());
+    psbt
+}
+
+#[test]
+fn canonical_prevout_binding_enables_default_bdk_signing() {
+    let (wallet, _, _, txid) = anchor_reconciliation_wallet(51, 24, 33);
+    let mut psbt = canonical_prevout_psbt(&wallet, txid);
+
+    bind_psbt_inputs_to_wallet(&wallet, &mut psbt).unwrap();
+
+    assert_eq!(
+        psbt.inputs[0]
+            .non_witness_utxo
+            .as_ref()
+            .unwrap()
+            .compute_txid(),
+        txid
+    );
+    assert!(wallet.sign(&mut psbt, SignOptions::default()).unwrap());
+}
+
+#[test]
+fn canonical_prevout_binding_rejects_tampering_without_mutation() {
+    let (wallet, _, _, txid) = anchor_reconciliation_wallet(52, 25, 34);
+    let mut wrong_output = canonical_prevout_psbt(&wallet, txid);
+    wrong_output.inputs[0].witness_utxo.as_mut().unwrap().value += Amount::from_sat(1);
+    let before = wrong_output.clone();
+
+    let error = bind_psbt_inputs_to_wallet(&wallet, &mut wrong_output).unwrap_err();
+    assert_eq!(error.code, "proposal_mismatch");
+    assert_eq!(wrong_output, before);
+
+    let mut wrong_transaction = canonical_prevout_psbt(&wallet, txid);
+    wrong_transaction.inputs[0].non_witness_utxo = Some(Transaction {
+        version: Version::TWO,
+        lock_time: LockTime::ZERO,
+        input: Vec::new(),
+        output: Vec::new(),
+    });
+    let before = wrong_transaction.clone();
+    let error = bind_psbt_inputs_to_wallet(&wallet, &mut wrong_transaction).unwrap_err();
+    assert_eq!(error.code, "proposal_mismatch");
+    assert_eq!(wrong_transaction, before);
+
+    let mut missing = canonical_prevout_psbt(&wallet, txid);
+    missing.unsigned_tx.input[0].previous_output = OutPoint::new(Txid::all_zeros(), 0);
+    let before = missing.clone();
+    let error = bind_psbt_inputs_to_wallet(&wallet, &mut missing).unwrap_err();
+    assert_eq!(error.code, "proposal_mismatch");
+    assert_eq!(missing, before);
+}
+
+#[test]
+fn canonical_prevout_binding_accepts_equivalent_witness_variant() {
+    let (wallet, _, _, txid) = anchor_reconciliation_wallet(53, 26, 35);
+    let mut psbt = canonical_prevout_psbt(&wallet, txid);
+    let mut witness_variant = wallet.get_tx(txid).unwrap().tx_node.tx.as_ref().clone();
+    witness_variant.input[0].witness.push([1_u8]);
+    assert_eq!(witness_variant.compute_txid(), txid);
+    psbt.inputs[0].non_witness_utxo = Some(witness_variant);
+
+    bind_psbt_inputs_to_wallet(&wallet, &mut psbt).unwrap();
+
+    assert_eq!(
+        psbt.inputs[0].non_witness_utxo.as_ref().unwrap(),
+        wallet.get_tx(txid).unwrap().tx_node.tx.as_ref()
+    );
+}
+
+#[test]
+fn canonical_prevout_binding_rejects_duplicate_inputs_without_mutation() {
+    let (wallet, _, _, txid) = anchor_reconciliation_wallet(54, 27, 36);
+    let mut psbt = canonical_prevout_psbt(&wallet, txid);
+    psbt.unsigned_tx
+        .input
+        .push(psbt.unsigned_tx.input[0].clone());
+    psbt.inputs.push(psbt.inputs[0].clone());
+    let before = psbt.clone();
+
+    let error = bind_psbt_inputs_to_wallet(&wallet, &mut psbt).unwrap_err();
+
+    assert_eq!(error.code, "proposal_mismatch");
+    assert_eq!(psbt, before);
+}
+
+#[test]
+fn unavailable_external_proposal_inputs_fail_before_signing() {
+    assert!(hardware_commands::require_external_proposal_inputs_available(true).is_ok());
+    assert_eq!(
+        hardware_commands::require_external_proposal_inputs_available(false)
+            .unwrap_err()
+            .code,
+        "coin_unavailable"
+    );
+}
+
+#[test]
+fn hardware_signature_import_rechecks_inputs_under_operation_guard_before_mutation() {
+    let source = include_str!("hardware_commands.rs");
+    let import = source
+        .split("fn import_external_proposal_in_db")
+        .nth(1)
+        .unwrap()
+        .split("#[tauri::command]")
+        .next()
+        .unwrap();
+    let reload = import.find("load_external_proposal(db").unwrap();
+    let availability = import
+        .find("require_external_proposal_inputs_available(current.inputs_available)")
+        .unwrap();
+    let decode = import.find("decode_psbt(signed_psbt)").unwrap();
+    let persist = import.find("UPDATE groot_proposals SET psbt").unwrap();
+    assert!(reload < availability);
+    assert!(availability < decode);
+    assert!(decode < persist);
+
+    let command = source
+        .split("pub async fn hardware_sign_external")
+        .nth(1)
+        .unwrap()
+        .split("pub async fn external_signer_proposal_broadcast")
+        .next()
+        .unwrap();
+    let device_sign = command.find("sign_psbt_in_operation").unwrap();
+    let guard = command.rfind("operation_guard(&state)").unwrap();
+    let import = command.find("import_external_proposal_in_db").unwrap();
+    assert!(device_sign < guard);
+    assert!(guard < import);
+}
+
+impl jsonrpc::client::Transport for ManagedHistoryFixture {
+    fn send_request(
+        &self,
+        request: jsonrpc::Request<'_>,
+    ) -> Result<jsonrpc::Response, jsonrpc::Error> {
+        assert_eq!(request.method, "groot_getscripthistory");
+        let params: Vec<serde_json::Value> =
+            serde_json::from_str(request.params.expect("history parameters").get())?;
+        let hashes = params[1].as_array().unwrap();
+        BlockFilterBatchFixture::response(
+            &request,
+            serde_json::json!({
+                "version": 1,
+                "tip_height": self.tip_height,
+                "histories": hashes.iter().map(|hash| serde_json::json!({
+                    "scripthash": hash,
+                    "entries": self.entries,
+                })).collect::<Vec<_>>(),
+            }),
+        )
+    }
+
+    fn send_batch(
+        &self,
+        _requests: &[jsonrpc::Request<'_>],
+    ) -> Result<Vec<jsonrpc::Response>, jsonrpc::Error> {
+        Err(jsonrpc::Error::WrongBatchResponseSize)
+    }
+
+    fn fmt_target(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("managed history fixture")
+    }
+}
+
+impl jsonrpc::client::Transport for RemoteCapabilityFixture {
+    fn send_request(
+        &self,
+        request: jsonrpc::Request<'_>,
+    ) -> Result<jsonrpc::Response, jsonrpc::Error> {
+        panic!("unexpected capability fixture request: {}", request.method)
+    }
+
+    fn send_batch(
+        &self,
+        requests: &[jsonrpc::Request<'_>],
+    ) -> Result<Vec<jsonrpc::Response>, jsonrpc::Error> {
+        self.batches.fetch_add(1, Ordering::Relaxed);
+        if !self.supported {
+            return requests
+                .iter()
+                .map(|request| {
+                    serde_json::from_value(serde_json::json!({
+                        "result": null,
+                        "error": {
+                            "code": -32601,
+                            "message": "Method not found"
+                        },
+                        "id": request.id,
+                        "jsonrpc": "2.0"
+                    }))
+                    .map_err(jsonrpc::Error::Json)
+                })
+                .collect();
+        }
+        requests
+            .iter()
+            .map(|request| {
+                assert_eq!(request.method, "help");
+                let params: Vec<String> =
+                    serde_json::from_str(request.params.expect("help parameters").get())?;
+                assert!(matches!(
+                    params.as_slice(),
+                    [method] if method == "scanblocks" || method == "getdescriptoractivity"
+                ));
+                BlockFilterBatchFixture::response(request, serde_json::json!("supported"))
+            })
+            .collect()
+    }
+
+    fn fmt_target(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("remote capability fixture")
+    }
+}
+
+impl jsonrpc::client::Transport for DescriptorActivityFixture {
+    fn send_request(
+        &self,
+        request: jsonrpc::Request<'_>,
+    ) -> Result<jsonrpc::Response, jsonrpc::Error> {
+        match request.method {
+            "getdescriptoractivity" => {
+                let params: Vec<serde_json::Value> = serde_json::from_str(
+                    request
+                        .params
+                        .expect("descriptor activity parameters")
+                        .get(),
+                )?;
+                *self.activity_params.lock().unwrap() = params;
+                BlockFilterBatchFixture::response(
+                    &request,
+                    serde_json::json!({
+                        "activity": [{
+                            "type": "receive",
+                            "txid": self.transaction.compute_txid()
+                        }]
+                    }),
+                )
+            }
+            "getrawtransaction" => BlockFilterBatchFixture::response(
+                &request,
+                serde_json::json!(bdk_wallet::bitcoin::consensus::encode::serialize_hex(
+                    &self.transaction
+                )),
+            ),
+            other => panic!("unexpected descriptor-activity fixture RPC: {other}"),
+        }
+    }
+
+    fn send_batch(
+        &self,
+        _requests: &[jsonrpc::Request<'_>],
+    ) -> Result<Vec<jsonrpc::Response>, jsonrpc::Error> {
+        Err(jsonrpc::Error::WrongBatchResponseSize)
+    }
+
+    fn fmt_target(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("descriptor-activity fixture")
+    }
+}
+
+impl BlockFilterBatchFixture {
+    fn response(
+        request: &jsonrpc::Request<'_>,
+        result: serde_json::Value,
+    ) -> Result<jsonrpc::Response, jsonrpc::Error> {
+        Ok(serde_json::from_value(serde_json::json!({
+            "result": result,
+            "error": null,
+            "id": request.id,
+            "jsonrpc": "2.0"
+        }))?)
+    }
+
+    fn block_hash_for_request(&self, request: &jsonrpc::Request<'_>) -> BlockHash {
+        let params: Vec<u64> =
+            serde_json::from_str(request.params.expect("block-height parameters").get()).unwrap();
+        match params.as_slice() {
+            [0] => self.genesis,
+            [1] => self.block_hash,
+            other => panic!("unexpected block-height parameters: {other:?}"),
+        }
+    }
+
+    fn block_info(&self) -> serde_json::Value {
+        serde_json::json!({
+            "hash": self.block_hash,
+            "confirmations": 1,
+            "size": 80,
+            "weight": 320,
+            "height": 1,
+            "version": 1,
+            "merkleroot": bdk_wallet::bitcoin::TxMerkleNode::all_zeros(),
+            "tx": [],
+            "time": 1,
+            "nonce": 0,
+            "bits": "207fffff",
+            "difficulty": 1.0,
+            "chainwork": "00",
+            "nTx": 0,
+            "previousblockhash": self.genesis
+        })
+    }
+}
+
+impl jsonrpc::client::Transport for BlockFilterBatchFixture {
+    fn send_request(
+        &self,
+        request: jsonrpc::Request<'_>,
+    ) -> Result<jsonrpc::Response, jsonrpc::Error> {
+        match request.method {
+            "getindexinfo" => Self::response(
+                &request,
+                serde_json::json!({
+                    "basic block filter index": {
+                        "synced": true,
+                        "best_block_height": 1
+                    }
+                }),
+            ),
+            "getblockhash" => {
+                let hash = self.block_hash_for_request(&request);
+                Self::response(&request, serde_json::to_value(hash)?)
+            }
+            "getblockfilter" => Self::response(&request, serde_json::to_value(&self.filter)?),
+            "scanblocks" => {
+                let params: Vec<serde_json::Value> =
+                    serde_json::from_str(request.params.expect("scanblocks parameters").get())?;
+                *self.scan_params.lock().unwrap() = params;
+                Self::response(
+                    &request,
+                    serde_json::json!({
+                        "from_height": 1,
+                        "to_height": 1,
+                        "relevant_blocks": [self.block_hash],
+                        "completed": true
+                    }),
+                )
+            }
+            other => panic!("unexpected fixture RPC: {other}"),
+        }
+    }
+
+    fn send_batch(
+        &self,
+        requests: &[jsonrpc::Request<'_>],
+    ) -> Result<Vec<jsonrpc::Response>, jsonrpc::Error> {
+        self.batches.fetch_add(1, Ordering::Relaxed);
+        self.batch_methods
+            .lock()
+            .unwrap()
+            .extend(requests.iter().map(|request| request.method.to_owned()));
+        requests
+            .iter()
+            .map(|request| match request.method {
+                "getblockhash" => {
+                    let hash = self.block_hash_for_request(request);
+                    Self::response(request, serde_json::to_value(hash)?)
+                }
+                "getblockfilter" => Self::response(request, serde_json::to_value(&self.filter)?),
+                "getblock" => Self::response(request, self.block_info()),
+                other => panic!("unexpected fixture batch RPC: {other}"),
+            })
+            .collect()
+    }
+
+    fn fmt_target(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("block-filter fixture")
+    }
+}
+
+#[test]
+fn core_filter_plan_batches_filters_and_keeps_matching_blocks() {
+    use bdk_wallet::bitcoin::{
+        absolute::LockTime,
+        bip158::BlockFilter,
+        block::{Header, Version as BlockVersion},
+        transaction::Version,
+        CompactTarget, FilterHash, ScriptBuf, Sequence, TxMerkleNode, TxOut, Witness,
+    };
+
+    assert_eq!(CORE_BLOCK_HASH_BATCH_SIZE, 256);
+    assert_eq!(CORE_BLOCK_FILTER_BATCH_SIZE, 8);
+
+    let mnemonic = Mnemonic::from_entropy(&[42; 32]).unwrap();
+    let master = root_key(&mnemonic, "filter fixture").unwrap();
+    let mut wallet = Wallet::create(
+        Bip84(master, KeychainKind::External),
+        Bip84(master, KeychainKind::Internal),
+    )
+    .network(Network::Regtest)
+    .create_wallet_no_persist()
+    .unwrap();
+    let receive_script = wallet
+        .reveal_next_address(KeychainKind::External)
+        .address
+        .script_pubkey();
+    let genesis = genesis_block(Network::Regtest).block_hash();
+    let transaction = Transaction {
+        version: Version::TWO,
+        lock_time: LockTime::ZERO,
+        input: vec![TxIn {
+            previous_output: OutPoint {
+                txid: Txid::from_byte_array([9; 32]),
+                vout: 0,
+            },
+            script_sig: ScriptBuf::new(),
+            sequence: Sequence::MAX,
+            witness: Witness::new(),
+        }],
+        output: vec![TxOut {
+            value: Amount::from_sat(50_000),
+            script_pubkey: receive_script,
+        }],
+    };
+    let block = bdk_wallet::bitcoin::Block {
+        header: Header {
+            version: BlockVersion::ONE,
+            prev_blockhash: genesis,
+            merkle_root: TxMerkleNode::all_zeros(),
+            time: 1,
+            bits: CompactTarget::from_consensus(0),
+            nonce: 0,
+        },
+        txdata: vec![transaction],
+    };
+    let block_hash = block.block_hash();
+    let filter = BlockFilter::new_script_filter(&block, |_| {
+        Ok::<ScriptBuf, bdk_wallet::bitcoin::bip158::Error>(ScriptBuf::new())
+    })
+    .unwrap();
+    let batches = Arc::new(AtomicU64::new(0));
+    let fixture = BlockFilterBatchFixture {
+        genesis,
+        block_hash,
+        filter: GetBlockFilterResult {
+            header: FilterHash::all_zeros(),
+            filter: filter.content,
+        },
+        batches: Arc::clone(&batches),
+        batch_methods: Arc::new(Mutex::new(Vec::new())),
+        scan_params: Arc::new(Mutex::new(Vec::new())),
+    };
+    let rpc = Client::from_jsonrpc(jsonrpc::client::Client::with_transport(fixture));
+    let status = Arc::new(Mutex::new(None));
+    let plan =
+        try_core_filter_block_plan(&rpc, &wallet, &wallet.latest_checkpoint(), 1, None, &status)
+            .unwrap()
+            .unwrap();
+
+    assert_eq!(plan.checkpoint.height(), 1);
+    assert_eq!(plan.checkpoint.hash(), block_hash);
+    assert_eq!(plan.matched_blocks, vec![(1, block_hash, genesis)]);
+    assert_eq!(batches.load(Ordering::Relaxed), 2);
+}
+
+#[test]
+fn remote_core_scan_sends_only_bounded_raw_scripts_and_keeps_matching_blocks() {
+    use bdk_wallet::bitcoin::{hashes::Hash, FilterHash};
+
+    let mnemonic = Mnemonic::from_entropy(&[43; 32]).unwrap();
+    let master = root_key(&mnemonic, "server scan fixture").unwrap();
+    let mut wallet = Wallet::create(
+        Bip84(master, KeychainKind::External),
+        Bip84(master, KeychainKind::Internal),
+    )
+    .network(Network::Regtest)
+    .create_wallet_no_persist()
+    .unwrap();
+    wallet.reveal_next_address(KeychainKind::External);
+    let genesis = genesis_block(Network::Regtest).block_hash();
+    let block_hash = BlockHash::from_byte_array([7; 32]);
+    let scan_params = Arc::new(Mutex::new(Vec::new()));
+    let batch_methods = Arc::new(Mutex::new(Vec::new()));
+    let fixture = BlockFilterBatchFixture {
+        genesis,
+        block_hash,
+        filter: GetBlockFilterResult {
+            header: FilterHash::all_zeros(),
+            filter: Vec::<u8>::new(),
+        },
+        batches: Arc::new(AtomicU64::new(0)),
+        batch_methods: Arc::clone(&batch_methods),
+        scan_params: Arc::clone(&scan_params),
+    };
+    let rpc = Client::from_jsonrpc(jsonrpc::client::Client::with_transport(fixture));
+    let plan = core_server_scan_block_plan(
+        &rpc,
+        &rpc,
+        &wallet,
+        &wallet.latest_checkpoint(),
+        1,
+        None,
+        |_| Ok(()),
+    )
+    .unwrap();
+
+    assert_eq!(plan.checkpoint.height(), 1);
+    assert_eq!(plan.checkpoint.hash(), block_hash);
+    assert_eq!(plan.matched_blocks, vec![(1, block_hash, genesis)]);
+    let params = scan_params.lock().unwrap();
+    assert_eq!(params[0], "start");
+    let scripts = params[1].as_array().unwrap();
+    assert!(!scripts.is_empty());
+    assert!(scripts.len() <= MAX_CORE_SCAN_SCRIPTS);
+    assert!(scripts.iter().all(|script| {
+        let script = script.as_str().unwrap();
+        script.starts_with("raw(") && script.ends_with(')') && !script.contains("pub")
+    }));
+    assert_eq!(params[2], 1);
+    assert_eq!(params[3], 1);
+    assert_eq!(params[4], "basic");
+    assert_eq!(
+        batch_methods.lock().unwrap().as_slice(),
+        ["getblock"],
+        "the indexed remote path must not walk every height with batched getblockhash calls"
+    );
+}
+
+#[test]
+fn remote_core_scans_large_ranges_in_gateway_safe_progress_chunks() {
+    let ranges = core_server_scan_ranges(1, 967_562);
+    assert_eq!(ranges.len(), 10);
+    assert_eq!(ranges[0], (1, 100_000));
+    assert_eq!(ranges[8], (800_001, 900_000));
+    assert_eq!(ranges[9], (900_001, 967_562));
+    assert_eq!(
+        core_server_scan_ranges(967_500, 967_562),
+        vec![(967_500, 967_562)]
+    );
+}
+
+#[test]
+fn remote_core_capabilities_use_one_batch_and_fail_closed() {
+    let batches = Arc::new(AtomicU64::new(0));
+    let rpc = Client::from_jsonrpc(jsonrpc::client::Client::with_transport(
+        RemoteCapabilityFixture {
+            batches: Arc::clone(&batches),
+            supported: true,
+        },
+    ));
+    ensure_remote_core_sync_capabilities(&rpc, false).unwrap();
+    assert_eq!(batches.load(Ordering::Relaxed), 1);
+
+    let rpc = Client::from_jsonrpc(jsonrpc::client::Client::with_transport(
+        RemoteCapabilityFixture {
+            batches: Arc::new(AtomicU64::new(0)),
+            supported: false,
+        },
+    ));
+    let error = ensure_remote_core_sync_capabilities(&rpc, false).unwrap_err();
+    assert_eq!(error.code, "invalid_node_config");
+    assert_eq!(error.message, RPC_REMOTE_CAPABILITY_MESSAGE);
+}
+
+#[test]
+fn managed_history_uses_electrum_scripthashes_and_requires_core_tip_agreement() {
+    let script = bdk_wallet::bitcoin::ScriptBuf::new();
+    assert_eq!(
+        electrum_scripthash(&script),
+        "55b852781b9995a44c939b64e441ae2724b96f99c8f4fb9a141cfc9842c4b0e3"
+    );
+    let txid = Txid::all_zeros();
+    let rpc = Client::from_jsonrpc(jsonrpc::client::Client::with_transport(
+        ManagedHistoryFixture {
+            tip_height: 42,
+            entries: vec![serde_json::json!({"txid": txid, "height": 21})],
+        },
+    ));
+    let histories = managed_history_for_scripts(&rpc, &[(7, script.clone())], 42).unwrap();
+    assert_eq!(histories.len(), 1);
+    assert_eq!(histories[0].0, 7);
+    assert_eq!(histories[0].1[0].txid, txid);
+
+    let stale = Client::from_jsonrpc(jsonrpc::client::Client::with_transport(
+        ManagedHistoryFixture {
+            tip_height: 41,
+            entries: Vec::new(),
+        },
+    ));
+    let error = managed_history_for_scripts(&stale, &[(7, script)], 42).unwrap_err();
+    assert_eq!(error.code, "network_unavailable");
+}
+
+#[test]
+fn remote_core_mempool_requests_only_wallet_script_activity() {
+    use bdk_wallet::bitcoin::{
+        absolute::LockTime, transaction::Version, ScriptBuf, Sequence, TxOut, Witness,
+    };
+
+    let mnemonic = Mnemonic::from_entropy(&[44; 32]).unwrap();
+    let master = root_key(&mnemonic, "descriptor activity fixture").unwrap();
+    let mut wallet = Wallet::create(
+        Bip84(master, KeychainKind::External),
+        Bip84(master, KeychainKind::Internal),
+    )
+    .network(Network::Regtest)
+    .create_wallet_no_persist()
+    .unwrap();
+    let receive_script = wallet
+        .reveal_next_address(KeychainKind::External)
+        .address
+        .script_pubkey();
+    let transaction = Transaction {
+        version: Version::TWO,
+        lock_time: LockTime::ZERO,
+        input: vec![TxIn {
+            previous_output: OutPoint {
+                txid: Txid::from_byte_array([10; 32]),
+                vout: 0,
+            },
+            script_sig: ScriptBuf::new(),
+            sequence: Sequence::MAX,
+            witness: Witness::new(),
+        }],
+        output: vec![TxOut {
+            value: Amount::from_sat(21_000),
+            script_pubkey: receive_script,
+        }],
+    };
+    let txid = transaction.compute_txid();
+    let activity_params = Arc::new(Mutex::new(Vec::new()));
+    let fixture = DescriptorActivityFixture {
+        transaction,
+        activity_params: Arc::clone(&activity_params),
+    };
+    let rpc = Client::from_jsonrpc(jsonrpc::client::Client::with_transport(fixture));
+
+    sync_remote_core_mempool(&rpc, &mut wallet, &[], None).unwrap();
+
+    assert!(wallet
+        .transactions()
+        .any(|canonical| canonical.tx_node.txid == txid));
+    let params = activity_params.lock().unwrap();
+    assert_eq!(params[0], serde_json::json!([]));
+    assert_eq!(params[2], true);
+    assert!(params[1].as_array().unwrap().iter().all(|script| {
+        let script = script.as_str().unwrap();
+        script.starts_with("raw(") && script.ends_with(')') && !script.contains("pub")
+    }));
+}
+
+impl jsonrpc::client::Transport for MempoolBatchFixture {
+    fn send_request(
+        &self,
+        request: jsonrpc::Request<'_>,
+    ) -> Result<jsonrpc::Response, jsonrpc::Error> {
+        let result = match request.method {
+            "getrawmempool" => serde_json::to_value(&self.txids)?,
+            "getrawtransaction" => {
+                self.singles.fetch_add(1, Ordering::Relaxed);
+                let params: Vec<serde_json::Value> =
+                    serde_json::from_str(request.params.expect("transaction parameters").get())?;
+                params[0].clone()
+            }
+            other => panic!("unexpected fixture RPC: {other}"),
+        };
+        Ok(serde_json::from_value(serde_json::json!({
+            "result": result,
+            "error": null,
+            "id": request.id,
+            "jsonrpc": "2.0"
+        }))?)
+    }
+
+    fn send_batch(
+        &self,
+        requests: &[jsonrpc::Request<'_>],
+    ) -> Result<Vec<jsonrpc::Response>, jsonrpc::Error> {
+        self.batches.fetch_add(1, Ordering::Relaxed);
+        if self.reject_batch {
+            return Err(jsonrpc::Error::WrongBatchResponseSize);
+        }
+        requests
+            .iter()
+            .map(|request| self.send_request_for_batch(request))
+            .collect()
+    }
+
+    fn fmt_target(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("mempool fixture")
+    }
+}
+
+impl MempoolBatchFixture {
+    fn send_request_for_batch(
+        &self,
+        request: &jsonrpc::Request<'_>,
+    ) -> Result<jsonrpc::Response, jsonrpc::Error> {
+        assert_eq!(request.method, "getrawtransaction");
+        let params: Vec<serde_json::Value> =
+            serde_json::from_str(request.params.expect("transaction parameters").get())?;
+        Ok(serde_json::from_value(serde_json::json!({
+            "result": params[0],
+            "error": null,
+            "id": request.id,
+            "jsonrpc": "2.0"
+        }))?)
+    }
+}
+
+#[test]
+fn core_mempool_transactions_are_batched_and_direct_rpc_remains_a_fallback() {
+    for reject_batch in [false, true] {
+        let txids = (1u16..=257)
+            .map(|number| {
+                let mut bytes = [0u8; 32];
+                bytes[..2].copy_from_slice(&number.to_be_bytes());
+                Txid::from_byte_array(bytes)
+            })
+            .collect::<Vec<_>>();
+        let singles = Arc::new(AtomicU64::new(0));
+        let batches = Arc::new(AtomicU64::new(0));
+        let fixture = MempoolBatchFixture {
+            txids: txids.clone(),
+            singles: Arc::clone(&singles),
+            batches: Arc::clone(&batches),
+            reject_batch,
+        };
+        let rpc = Client::from_jsonrpc(jsonrpc::client::Client::with_transport(fixture));
+        let cancelled = AtomicBool::new(false);
+        let client = CancellableCoreClient {
+            client: &rpc,
+            cancel: &cancelled,
+            prior_mempool: None,
+            expected_wallet_mempool: HashSet::new(),
+            observed_mempool: Mutex::new(None),
+            mempool: Mutex::new(MempoolPrefetch::default()),
+        };
+        assert_eq!(client.get_raw_mempool().unwrap(), txids);
+        for txid in &txids {
+            assert_eq!(
+                client.get_raw_transaction_hex(txid, None).unwrap(),
+                txid.to_string()
+            );
+        }
+        if reject_batch {
+            assert_eq!(batches.load(Ordering::Relaxed), 1);
+            assert_eq!(singles.load(Ordering::Relaxed), 257);
+        } else {
+            assert_eq!(batches.load(Ordering::Relaxed), 2);
+            assert_eq!(singles.load(Ordering::Relaxed), 0);
+        }
+    }
+}
+
+#[test]
+fn core_mempool_batch_starts_at_first_unknown_transaction() {
+    let txids = (1u8..=65)
+        .map(|byte| Txid::from_byte_array([byte; 32]))
+        .collect::<Vec<_>>();
+    let singles = Arc::new(AtomicU64::new(0));
+    let batches = Arc::new(AtomicU64::new(0));
+    let fixture = MempoolBatchFixture {
+        txids: txids.clone(),
+        singles: Arc::clone(&singles),
+        batches: Arc::clone(&batches),
+        reject_batch: false,
+    };
+    let rpc = Client::from_jsonrpc(jsonrpc::client::Client::with_transport(fixture));
+    let cancelled = AtomicBool::new(false);
+    let client = CancellableCoreClient {
+        client: &rpc,
+        cancel: &cancelled,
+        prior_mempool: None,
+        expected_wallet_mempool: HashSet::new(),
+        observed_mempool: Mutex::new(None),
+        mempool: Mutex::new(MempoolPrefetch::default()),
+    };
+    assert_eq!(client.get_raw_mempool().unwrap(), txids);
+    // BDK already knows the earlier mempool transactions and never requests them.
+    assert_eq!(
+        client.get_raw_transaction_hex(&txids[64], None).unwrap(),
+        txids[64].to_string()
+    );
+    assert_eq!(batches.load(Ordering::Relaxed), 1);
+    assert_eq!(singles.load(Ordering::Relaxed), 0);
+}
+
+#[test]
+fn warm_core_mempool_scan_keeps_only_delta_and_wallet_pending_transactions() {
+    let unchanged = Txid::from_byte_array([1; 32]);
+    let wallet_pending = Txid::from_byte_array([2; 32]);
+    let newly_seen = Txid::from_byte_array([3; 32]);
+    let all = vec![unchanged, wallet_pending, newly_seen];
+    let prior = HashSet::from([unchanged, wallet_pending]);
+    let expected_wallet_mempool = HashSet::from([wallet_pending]);
+
+    assert_eq!(
+        mempool_delta_for_wallet(all.clone(), Some(&prior), &expected_wallet_mempool),
+        vec![wallet_pending, newly_seen]
+    );
+    assert_eq!(
+        mempool_delta_for_wallet(all.clone(), None, &expected_wallet_mempool),
+        all
+    );
+}
+
+#[test]
+fn warm_core_client_prefetches_only_new_mempool_transactions() {
+    let txids = (1u8..=65)
+        .map(|byte| Txid::from_byte_array([byte; 32]))
+        .collect::<Vec<_>>();
+    let prior_mempool = txids[..64].iter().copied().collect::<HashSet<_>>();
+    let expected_wallet_mempool = HashSet::from([txids[0]]);
+    let singles = Arc::new(AtomicU64::new(0));
+    let batches = Arc::new(AtomicU64::new(0));
+    let fixture = MempoolBatchFixture {
+        txids: txids.clone(),
+        singles: Arc::clone(&singles),
+        batches: Arc::clone(&batches),
+        reject_batch: false,
+    };
+    let rpc = Client::from_jsonrpc(jsonrpc::client::Client::with_transport(fixture));
+    let cancelled = AtomicBool::new(false);
+    let client = CancellableCoreClient {
+        client: &rpc,
+        cancel: &cancelled,
+        prior_mempool: Some(prior_mempool),
+        expected_wallet_mempool,
+        observed_mempool: Mutex::new(None),
+        mempool: Mutex::new(MempoolPrefetch::default()),
+    };
+
+    assert_eq!(client.get_raw_mempool().unwrap(), vec![txids[0], txids[64]]);
+    assert_eq!(client.observed_mempool_snapshot().unwrap().len(), 65);
+    assert_eq!(
+        client.get_raw_transaction_hex(&txids[64], None).unwrap(),
+        txids[64].to_string()
+    );
+    assert_eq!(batches.load(Ordering::Relaxed), 1);
+    assert_eq!(singles.load(Ordering::Relaxed), 0);
+}
+
+#[test]
+fn persisted_snapshot_and_activity_can_read_while_sync_stages_a_write() {
+    let path = std::env::temp_dir().join(format!("groot-sync-read-{}.sqlite", Uuid::new_v4()));
+    let mut writer = Connection::open(&path).unwrap();
+    init_app_schema(&writer).unwrap();
+    let mnemonic = Mnemonic::from_entropy(&[0; 32]).unwrap();
+    let master = root_key(&mnemonic, "persisted read fixture").unwrap();
+    let mut wallet = Wallet::create(
+        Bip84(master, KeychainKind::External),
+        Bip84(master, KeychainKind::Internal),
+    )
+    .network(network())
+    .create_wallet(&mut writer)
+    .unwrap();
+    wallet.persist(&mut writer).unwrap();
+    drop(wallet);
+
+    writer.execute_batch("BEGIN IMMEDIATE TRANSACTION").unwrap();
+    let mut reader = Connection::open_with_flags(&path, OpenFlags::SQLITE_OPEN_READ_ONLY).unwrap();
+    let loaded = load_wallet(&mut reader).unwrap();
+    let snapshot = snapshot_for_view(&loaded, &reader, None, false, None, false, false).unwrap();
+    assert_eq!(snapshot.balance.total, 0);
+    let request = serde_json::from_value(serde_json::json!({
+        "walletId": Uuid::nil(), "filter": "all", "query": "", "sort": "newest", "limit": 50, "cursor": null
+    }))
+    .unwrap();
+    let page =
+        activity::activity_from_wallet(&loaded, &reader, &request, Uuid::nil(), false).unwrap();
+    assert!(serde_json::to_value(page).unwrap()["transactions"]
+        .as_array()
+        .unwrap()
+        .is_empty());
+    drop(loaded);
+    drop(reader);
+    writer.execute_batch("ROLLBACK").unwrap();
+    drop(writer);
+    std::fs::remove_file(path).unwrap();
+}
+
+#[test]
+fn foreground_sync_read_gate_closes_before_the_writer_commits() {
+    let state = AppState::default();
+    let wallet_id = Uuid::new_v4();
+    let reads_safe = Arc::new(AtomicBool::new(true));
+    state
+        .foreground_sync
+        .lock()
+        .unwrap()
+        .replace(ActiveForegroundSync {
+            wallet_id,
+            cancel: Arc::new(AtomicBool::new(false)),
+            persisted_reads_safe: Arc::clone(&reads_safe),
+        });
+    let reader = foreground_persisted_read_guard(&state, wallet_id)
+        .unwrap()
+        .unwrap();
+    assert!(state.persisted_sync_reads.try_write().is_err());
+    drop(reader);
+    let _writer = stop_persisted_sync_reads(&state).unwrap();
+    assert!(!reads_safe.load(Ordering::Acquire));
+    assert!(foreground_persisted_read_guard(&state, wallet_id)
+        .unwrap()
+        .is_none());
+}
+
+#[test]
+fn metadata_operations_do_not_wait_for_the_selected_wallet_sync() {
+    let state = AppState::default();
+    let wallet_id = Uuid::new_v4();
+    state
+        .foreground_sync
+        .lock()
+        .unwrap()
+        .replace(ActiveForegroundSync {
+            wallet_id,
+            cancel: Arc::new(AtomicBool::new(false)),
+            persisted_reads_safe: Arc::new(AtomicBool::new(true)),
+        });
+    let _sync_operation = state.operations.lock().unwrap();
+
+    assert!(metadata_operation_guard(&state, wallet_id)
+        .unwrap()
+        ._operation
+        .is_none());
+}
+
+#[test]
+fn metadata_operations_serialize_when_the_wallet_is_idle() {
+    let state = AppState::default();
+    assert!(metadata_operation_guard(&state, Uuid::new_v4())
+        .unwrap()
+        ._operation
+        .is_some());
+}
+
+#[test]
+fn metadata_fast_path_serializes_selected_wallet_mutations() {
+    use std::{sync::mpsc, time::Duration};
+
+    let state = AppState::default();
+    let wallet_id = Uuid::new_v4();
+    state
+        .foreground_sync
+        .lock()
+        .unwrap()
+        .replace(ActiveForegroundSync {
+            wallet_id,
+            cancel: Arc::new(AtomicBool::new(false)),
+            persisted_reads_safe: Arc::new(AtomicBool::new(true)),
+        });
+    let _sync_operation = state.operations.lock().unwrap();
+    let first = metadata_operation_guard(&state, wallet_id).unwrap();
+    let (sender, receiver) = mpsc::channel();
+
+    thread::scope(|scope| {
+        scope.spawn(|| {
+            let guard = metadata_operation_guard(&state, wallet_id).unwrap();
+            sender.send(guard._operation.is_none()).unwrap();
+        });
+        assert!(receiver.recv_timeout(Duration::from_millis(100)).is_err());
+        drop(first);
+        assert!(receiver.recv_timeout(Duration::from_secs(1)).unwrap());
+    });
+}
+
+#[test]
+fn ordinary_operations_wait_for_in_flight_metadata_mutations() {
+    use std::{sync::mpsc, time::Duration};
+
+    let state = AppState::default();
+    let wallet_id = Uuid::new_v4();
+    state
+        .foreground_sync
+        .lock()
+        .unwrap()
+        .replace(ActiveForegroundSync {
+            wallet_id,
+            cancel: Arc::new(AtomicBool::new(false)),
+            persisted_reads_safe: Arc::new(AtomicBool::new(true)),
+        });
+    let sync_operation = state.operations.lock().unwrap();
+    let metadata = metadata_operation_guard(&state, wallet_id).unwrap();
+    let (sender, receiver) = mpsc::channel();
+
+    thread::scope(|scope| {
+        scope.spawn(|| {
+            let _operation = operation_guard(&state).unwrap();
+            sender.send(()).unwrap();
+        });
+        drop(sync_operation);
+        assert!(receiver.recv_timeout(Duration::from_millis(100)).is_err());
+        drop(metadata);
+        receiver.recv_timeout(Duration::from_secs(1)).unwrap();
+    });
+}
+
+#[test]
+fn mainnet_core_admission_rejects_initial_block_download() {
+    let error = ensure_mainnet_core_ready_for_admission(true).unwrap_err();
+    assert_eq!(error.code, "node_syncing");
+    assert!(ensure_mainnet_core_ready_for_admission(false).is_ok());
+}
 
 #[test]
 fn transaction_observation_time_is_stable_across_snapshot_refreshes() {
@@ -40,6 +1300,25 @@ fn transaction_observation_time_is_stable_across_snapshot_refreshes() {
 
     assert_eq!(transaction_observed_at(&db, "funding").unwrap(), Some(42));
     assert_eq!(transaction_observed_at(&db, "funding").unwrap(), Some(42));
+}
+
+#[test]
+fn confirmed_activity_prefers_first_observation_over_future_block_time() {
+    let anchor = ConfirmationBlockTime {
+        block_id: BlockId {
+            height: 100,
+            hash: BlockHash::from_byte_array([7; 32]),
+        },
+        confirmation_time: 500,
+    };
+    let position = ChainPosition::Confirmed {
+        anchor,
+        transitively: None,
+    };
+    let (count, block, displayed_time) = confirmations(&position, 100, Some(300));
+    assert_eq!(count, 1);
+    assert_eq!(block, Some(100));
+    assert_eq!(displayed_time, "300");
 }
 
 #[test]
@@ -157,7 +1436,7 @@ fn hardware_and_multisig_profiles_count_as_existing_without_software_secret_stor
         .add(WalletProfile {
             id: Uuid::new_v4(),
             name: "Hardware policy".to_owned(),
-            network: NETWORK_NAME.to_owned(),
+            network: network_name().to_owned(),
             kind: WalletKind::Multisig,
             descriptor_checksum: "abcd1234".to_owned(),
             created_at: 1,
@@ -173,7 +1452,7 @@ fn compiled_network_rejects_foreign_registry_and_public_reset() {
     registry.wallets.push(WalletProfile {
         id: Uuid::new_v4(),
         name: "Foreign wallet".to_owned(),
-        network: if NETWORK_NAME == "signet" {
+        network: if network_name() == "signet" {
             "testnet4"
         } else {
             "signet"
@@ -196,7 +1475,10 @@ fn compiled_network_rejects_foreign_registry_and_public_reset() {
         "wrong_network"
     );
 
-    let correct = format!(r#"{{"version":1,"network":"{NETWORK_NAME}","descriptor":"wpkh(key)"}}"#);
+    let correct = format!(
+        r#"{{"version":1,"network":"{}","descriptor":"wpkh(key)"}}"#,
+        network_name()
+    );
     assert!(validate_external_signer_import_network(&correct).is_ok());
     assert_eq!(
         validate_external_signer_import_network(
@@ -209,9 +1491,10 @@ fn compiled_network_rejects_foreign_registry_and_public_reset() {
 }
 
 #[test]
-fn core_fee_rates_fail_closed_and_round_up_to_integer_sat_per_vbyte() {
-    assert_eq!(core_fee_rate(Some(Amount::from_sat(1_001))).unwrap(), 2.0);
+fn core_fee_rates_fail_closed_and_preserve_sub_sat_per_vbyte_precision() {
+    assert_eq!(core_fee_rate(Some(Amount::from_sat(1_001))).unwrap(), 1.001);
     assert_eq!(core_fee_rate(Some(Amount::from_sat(1_000))).unwrap(), 1.0);
+    assert_eq!(core_fee_rate(Some(Amount::from_sat(200))).unwrap(), 0.2);
     for unavailable in [None, Some(Amount::ZERO)] {
         assert_eq!(
             core_fee_rate(unavailable).unwrap_err().code,
@@ -240,6 +1523,10 @@ fn core_fee_rates_fail_closed_and_round_up_to_integer_sat_per_vbyte() {
     );
     assert_eq!(sparse_mempool_fee_rate([(0, 1_000)]), None);
     assert_eq!(
+        sparse_mempool_fee_rate([(100, (MAX_BACKEND_FEE_RATE_SAT_VB + 1) * 100)]),
+        None
+    );
+    assert_eq!(
         sparse_mempool_fee_rate([(SPARSE_MEMPOOL_LIMIT_VBYTES + 1, 1_000)]),
         None
     );
@@ -258,6 +1545,7 @@ fn foreground_sync_cancellation_is_immediate_and_idempotent() {
         .replace(ActiveForegroundSync {
             wallet_id: Uuid::new_v4(),
             cancel: Arc::clone(&cancel),
+            persisted_reads_safe: Arc::new(AtomicBool::new(false)),
         });
 
     assert!(cancel_foreground_sync(&state).unwrap());
@@ -341,6 +1629,68 @@ fn exact_drain_preview_amount_can_be_prepared_at_the_same_fee_rate() {
     assert_eq!(max_amount + max_fee, Amount::from_sat(143_622));
 }
 
+#[test]
+fn an_external_spend_invalidates_a_saved_psbt_without_erasing_it() {
+    use bdk_wallet::bitcoin::{
+        absolute::LockTime, hashes::Hash, transaction::Version, ScriptBuf, Sequence, TxIn, TxOut,
+        Witness,
+    };
+
+    let mnemonic = Mnemonic::parse(WORDS).unwrap();
+    let master = root_key(&mnemonic, "external-spend-guard").unwrap();
+    let mut wallet = Wallet::create(
+        Bip84(master, KeychainKind::External),
+        Bip84(master, KeychainKind::Internal),
+    )
+    .network(Network::Regtest)
+    .create_wallet_no_persist()
+    .unwrap();
+    let receive = wallet.reveal_next_address(KeychainKind::External).address;
+    let funding = Transaction {
+        version: Version::TWO,
+        lock_time: LockTime::ZERO,
+        input: vec![TxIn {
+            previous_output: OutPoint::new(Txid::from_byte_array([23; 32]), 0),
+            script_sig: ScriptBuf::new(),
+            sequence: Sequence::ENABLE_RBF_NO_LOCKTIME,
+            witness: Witness::new(),
+        }],
+        output: vec![TxOut {
+            value: Amount::from_sat(50_000),
+            script_pubkey: receive.script_pubkey(),
+        }],
+    };
+    let funding_outpoint = OutPoint::new(funding.compute_txid(), 0);
+    wallet.apply_unconfirmed_txs([(funding, 1)]);
+    let destination = wallet.next_unused_address(KeychainKind::Internal).address;
+    let mut builder = wallet.build_tx();
+    builder
+        .drain_wallet()
+        .drain_to(destination.script_pubkey())
+        .fee_rate(FeeRate::from_sat_per_vb(1).unwrap());
+    let saved_psbt = builder.finish().unwrap();
+    assert!(proposal_inputs_available(&wallet, &saved_psbt));
+
+    let outside_spend = Transaction {
+        version: Version::TWO,
+        lock_time: LockTime::ZERO,
+        input: vec![TxIn {
+            previous_output: funding_outpoint,
+            ..Default::default()
+        }],
+        output: vec![TxOut {
+            value: Amount::from_sat(49_000),
+            script_pubkey: ScriptBuf::new(),
+        }],
+    };
+    wallet.apply_unconfirmed_txs([(outside_spend, 2)]);
+    assert!(!proposal_inputs_available(&wallet, &saved_psbt));
+    assert_eq!(
+        saved_psbt.unsigned_tx.input[0].previous_output,
+        funding_outpoint
+    );
+}
+
 const WORDS: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art";
 
 fn serve_one_http_response(response: Option<&'static [u8]>) -> String {
@@ -359,7 +1709,8 @@ fn serve_one_http_response(response: Option<&'static [u8]>) -> String {
     format!("http://{address}")
 }
 
-fn serve_one_json(body: &'static str) -> String {
+fn serve_one_json(body: impl AsRef<str>) -> String {
+    let body = body.as_ref();
     let response = format!(
         "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
         body.len()
@@ -383,7 +1734,7 @@ fn core_fee_estimator_uses_rpc_and_never_falls_back() {
     let client = build_rpc_client(&available, Auth::None, None).unwrap();
     assert_eq!(
         estimate_core_fee(&client, 2, EstimateMode::Conservative).unwrap(),
-        2.0
+        1.001
     );
 
     let unavailable = serve_one_json(
@@ -420,10 +1771,163 @@ fn core_replacement_policy_uses_mempool_incremental_relay_fee() {
 fn core_sync_progress_is_relative_to_the_persisted_wallet_tip() {
     assert_eq!(core_sync_progress_percent(20, 20, 120), 0);
     assert_eq!(core_sync_progress_percent(20, 70, 120), 50);
-    assert_eq!(core_sync_progress_percent(20, 120, 120), 100);
-    assert_eq!(core_sync_progress_percent(20, 130, 120), 100);
+    assert_eq!(core_sync_progress_percent(20, 120, 120), 99);
+    assert_eq!(core_sync_progress_percent(20, 130, 120), 99);
     assert_eq!(core_sync_progress_percent(20, 10, 120), 0);
-    assert_eq!(core_sync_progress_percent(120, 120, 120), 100);
+    assert_eq!(core_sync_progress_percent(120, 120, 120), 99);
+}
+
+#[test]
+fn cancelled_core_emitter_stops_before_a_remote_rpc_call() {
+    let client = build_rpc_client("http://127.0.0.1:1", Auth::None, None).unwrap();
+    let cancelled = AtomicBool::new(true);
+    let client = CancellableCoreClient {
+        client: &client,
+        cancel: &cancelled,
+        prior_mempool: None,
+        expected_wallet_mempool: HashSet::new(),
+        observed_mempool: Mutex::new(None),
+        mempool: Mutex::new(MempoolPrefetch::default()),
+    };
+    let error = client.get_block_count().unwrap_err();
+    assert!(matches!(error, CoreRpcError::Io(io) if io.kind() == std::io::ErrorKind::Interrupted));
+    let result = retry_transient_core_rpc(
+        || client.get_block_count(),
+        |_| panic!("Cancellation must not retry an interrupted request"),
+    );
+    assert_eq!(result.unwrap_err().code, "sync_cancelled");
+}
+
+#[test]
+fn wallet_history_waits_for_core_to_reach_the_verified_checkpoint() {
+    assert!(ensure_core_ready_for_wallet_history(150_700, false, 150_570).is_ok());
+
+    let behind = ensure_core_ready_for_wallet_history(150_500, false, 150_570).unwrap_err();
+    assert_eq!(behind.code, "node_syncing");
+    assert!(behind.message.contains("last verified block"));
+
+    let initial_download =
+        ensure_core_ready_for_wallet_history(150_700, true, 150_570).unwrap_err();
+    assert_eq!(initial_download.code, "node_syncing");
+}
+
+#[test]
+fn wallet_history_rejects_only_blocks_absent_from_a_pruned_node() {
+    assert!(ensure_core_history_available(false, None, 0).is_ok());
+    assert!(ensure_core_history_available(true, Some(140_000), 140_000).is_ok());
+    assert!(ensure_core_history_available(true, Some(140_000), 150_000).is_ok());
+
+    let unavailable = ensure_core_history_available(true, Some(140_000), 0).unwrap_err();
+    assert_eq!(unavailable.code, "node_history_unavailable");
+    assert!(unavailable.message.contains("archival node"));
+    let details = unavailable.details.unwrap();
+    assert_eq!(details.required_block, Some(0));
+    assert_eq!(details.earliest_retained_block, Some(140_000));
+}
+
+#[test]
+fn core_sync_restores_verified_transaction_anchors_missing_from_a_sparse_checkpoint() {
+    let (mut wallet, sparse_tip, block, txid) = anchor_reconciliation_wallet(47, 17, 23);
+    assert!(wallet
+        .transactions()
+        .find(|tx| tx.tx_node.txid == txid)
+        .unwrap()
+        .chain_position
+        .is_unconfirmed());
+
+    let rpc = Client::from_jsonrpc(jsonrpc::client::Client::with_transport(
+        AnchorReconciliationFixture {
+            genesis: genesis_block(Network::Regtest).block_hash(),
+            block: block.clone(),
+        },
+    ));
+    let reconciled =
+        reconcile_known_active_anchors(&rpc, &mut wallet, sparse_tip, true, Some(1)).unwrap();
+
+    assert_eq!(reconciled.get(1).unwrap().hash(), block.block_hash());
+    assert!(wallet
+        .transactions()
+        .find(|tx| tx.tx_node.txid == txid)
+        .unwrap()
+        .chain_position
+        .is_confirmed());
+}
+
+#[test]
+fn core_sync_does_not_restore_an_anchor_from_a_pruned_block() {
+    let (mut wallet, sparse_tip, block, _) = anchor_reconciliation_wallet(48, 19, 29);
+    let rpc = Client::from_jsonrpc(jsonrpc::client::Client::with_transport(
+        AnchorReconciliationFixture {
+            genesis: genesis_block(Network::Regtest).block_hash(),
+            block,
+        },
+    ));
+
+    let error =
+        reconcile_known_active_anchors(&rpc, &mut wallet, sparse_tip, true, Some(2)).unwrap_err();
+    assert_eq!(error.code, "node_history_unavailable");
+    assert_eq!(error.details.unwrap().required_block, Some(1));
+}
+
+#[test]
+fn core_sync_rejects_a_persisted_anchor_without_transaction_inclusion() {
+    let (mut wallet, sparse_tip, mut block, _) = anchor_reconciliation_wallet(49, 21, 31);
+    block.txdata.clear();
+    let rpc = Client::from_jsonrpc(jsonrpc::client::Client::with_transport(
+        AnchorReconciliationFixture {
+            genesis: genesis_block(Network::Regtest).block_hash(),
+            block,
+        },
+    ));
+
+    let error =
+        reconcile_known_active_anchors(&rpc, &mut wallet, sparse_tip, false, None).unwrap_err();
+    assert_eq!(error.code, "wallet_corrupt");
+    assert!(error.message.contains("does not match"));
+}
+
+#[test]
+fn recovery_scan_anchors_immediately_before_the_birthday() {
+    assert_eq!(recovery_scan_anchor_height(0), 0);
+    assert_eq!(recovery_scan_anchor_height(1), 0);
+    assert_eq!(recovery_scan_anchor_height(965_600), 965_599);
+
+    assert!(ensure_recovery_scan_history_available(true, Some(960_062), 965_600).is_ok());
+    let boundary =
+        ensure_recovery_scan_history_available(true, Some(960_062), 960_062).unwrap_err();
+    assert_eq!(boundary.code, "node_history_unavailable");
+    assert!(boundary.message.contains("above the retained prune height"));
+    let details = boundary.details.unwrap();
+    assert_eq!(details.requested_birthday_block, Some(960_062));
+    assert_eq!(details.required_block, Some(960_061));
+    assert_eq!(details.earliest_retained_block, Some(960_062));
+    assert_eq!(details.minimum_birthday_block, Some(960_063));
+
+    let anchor_hash = "1111111111111111111111111111111111111111111111111111111111111111";
+    let endpoint = serve_one_json(format!(
+        r#"{{"result":"{anchor_hash}","error":null,"id":"groot"}}"#
+    ));
+    let client = build_rpc_client(&endpoint, Auth::None, None).unwrap();
+    let genesis = genesis_block(Network::Bitcoin).block_hash();
+    let genesis_checkpoint = CheckPoint::new(BlockId {
+        height: 0,
+        hash: genesis,
+    });
+    let retained_hash = "2222222222222222222222222222222222222222222222222222222222222222"
+        .parse()
+        .unwrap();
+    let retained = genesis_checkpoint
+        .push(BlockId {
+            height: 960_000,
+            hash: retained_hash,
+        })
+        .unwrap();
+    let checkpoint = recovery_scan_checkpoint(&client, retained, 965_600).unwrap();
+    assert_eq!(checkpoint.height(), 965_599);
+    assert_eq!(checkpoint.hash().to_string(), anchor_hash);
+    let base = checkpoint.prev().unwrap();
+    assert_eq!(base.height(), 960_000);
+    assert_eq!(base.hash(), retained_hash);
 }
 
 #[test]
@@ -525,6 +2029,55 @@ fn rpc_whitelist_rejection_is_actionable_without_exposing_core_details() {
 }
 
 #[test]
+fn missing_remote_sync_method_is_actionable_without_exposing_core_details() {
+    let error = rpc_api_error(CoreRpcError::JsonRpc(jsonrpc::Error::Rpc(
+        jsonrpc::error::RpcError {
+            code: -32601,
+            message: "Method not found: getdescriptoractivity".to_owned(),
+            data: None,
+        },
+    )));
+
+    assert_eq!(error.code, "invalid_node_config");
+    assert_eq!(error.message, RPC_REMOTE_CAPABILITY_MESSAGE);
+    assert!(!error.message.contains("getdescriptoractivity"));
+}
+
+#[test]
+fn pruned_block_rpc_failure_is_actionable_without_exposing_core_details() {
+    let error = rpc_api_error(CoreRpcError::JsonRpc(jsonrpc::Error::Rpc(
+        jsonrpc::error::RpcError {
+            code: -1,
+            message: "Block not available (pruned data)".to_owned(),
+            data: None,
+        },
+    )));
+
+    assert_eq!(error.code, "node_history_unavailable");
+    assert_eq!(error.message, RPC_PRUNED_HISTORY_MESSAGE);
+    for internal_detail in ["JSON-RPC", "code -1", "Block not available"] {
+        assert!(!error.message.contains(internal_detail));
+    }
+}
+
+#[test]
+fn concurrent_remote_scan_is_transient_without_becoming_a_connection_error() {
+    let core_busy = rpc_api_error(CoreRpcError::JsonRpc(jsonrpc::Error::Rpc(
+        jsonrpc::error::RpcError {
+            code: -8,
+            message: "Scan already in progress, use action 'abort' or 'status'".to_owned(),
+            data: None,
+        },
+    )));
+    assert_eq!(core_busy.code, "scan_in_progress");
+    assert_eq!(core_busy.message, RPC_BUSY_MESSAGE);
+
+    let gateway_busy = rejected_http_api_error(503).expect("gateway busy is recognized");
+    assert_eq!(gateway_busy.code, "scan_in_progress");
+    assert_eq!(gateway_busy.message, RPC_BUSY_MESSAGE);
+}
+
+#[test]
 fn core_scanner_retries_transient_transport_failures_and_sanitizes_exhaustion() {
     let mut attempts = 0;
     let mut pauses = Vec::new();
@@ -539,15 +2092,15 @@ fn core_scanner_retries_transient_transport_failures_and_sanitizes_exhaustion() 
     )
     .unwrap_err();
 
-    assert_eq!(attempts, NODE_HEALTH_ATTEMPTS);
-    assert_eq!(pauses, vec![NODE_HEALTH_RETRY_DELAY; 2]);
+    assert_eq!(attempts, CORE_RPC_ATTEMPTS);
+    assert_eq!(pauses, vec![NODE_HEALTH_RETRY_DELAY; CORE_RPC_ATTEMPTS - 1]);
     assert_sanitized_rpc_error(result);
 
     let mut recovering_attempts = 0;
     let recovered = retry_transient_core_rpc(
         || {
             recovering_attempts += 1;
-            if recovering_attempts < NODE_HEALTH_ATTEMPTS {
+            if recovering_attempts < CORE_RPC_ATTEMPTS {
                 Err(CoreRpcError::JsonRpc(jsonrpc::Error::Transport(Box::new(
                     std::io::Error::other("temporary transport detail"),
                 ))))
@@ -562,24 +2115,20 @@ fn core_scanner_retries_transient_transport_failures_and_sanitizes_exhaustion() 
 }
 
 #[test]
-fn node_health_retries_only_transient_transport_failures() {
+fn node_health_uses_one_bounded_attempt_and_never_retries_policy_failures() {
     let mut attempts = 0;
     let mut pauses = Vec::new();
-    let result = retry_transient_node_health(
+    let error = retry_transient_node_health(
         || {
             attempts += 1;
-            if attempts < NODE_HEALTH_ATTEMPTS {
-                Err(rpc_unavailable())
-            } else {
-                Ok(149_142_u64)
-            }
+            Err::<(), _>(rpc_unavailable())
         },
         |delay| pauses.push(delay),
     )
-    .unwrap();
-    assert_eq!(result, 149_142);
+    .unwrap_err();
+    assert_eq!(error.code, "network_unavailable");
     assert_eq!(attempts, NODE_HEALTH_ATTEMPTS);
-    assert_eq!(pauses, vec![NODE_HEALTH_RETRY_DELAY; 2]);
+    assert!(pauses.is_empty());
 
     let mut attempts = 0;
     let error = retry_transient_node_health(
@@ -643,8 +2192,14 @@ fn saved_file_reveal_tokens_are_bounded_expiring_and_single_use() {
 #[test]
 fn external_signer_labels_are_normalized_and_bounded() {
     assert_eq!(
-        normalize_external_signer_label("  Travel   signing\tkey  ").unwrap(),
+        normalize_external_signer_label("  Travel   signing key  ").unwrap(),
         "Travel signing key"
+    );
+    assert_eq!(
+        normalize_external_signer_label("Travel\tsigning key")
+            .unwrap_err()
+            .code,
+        "invalid_label"
     );
     assert_eq!(
         normalize_external_signer_label("").unwrap_err().code,
@@ -901,8 +2456,9 @@ fn transaction_kind_distinguishes_fee_only_self_spends_from_payments() {
 
 #[test]
 fn authentication_throttle_round_trips_through_wallet_storage() {
-    let mut db = Connection::open_in_memory().unwrap();
+    let db = Connection::open_in_memory().unwrap();
     init_app_schema(&db).unwrap();
+    let mut db = AuthenticationDatabase(db);
     let mut throttle = AuthThrottle::default();
     for _ in 0..7 {
         throttle.failed(100);
@@ -917,6 +2473,7 @@ fn authentication_throttle_round_trips_through_wallet_storage() {
 fn recovery_scan_settings_default_and_persist_with_safe_bounds() {
     let db = Connection::open_in_memory().unwrap();
     init_app_schema(&db).unwrap();
+    assert!(!has_saved_recovery_scan_settings(&db).unwrap());
     assert_eq!(
         load_recovery_scan_settings(&db).unwrap(),
         RecoveryScanSettingsDto {
@@ -924,18 +2481,20 @@ fn recovery_scan_settings_default_and_persist_with_safe_bounds() {
             gap_limit: 20,
         }
     );
-    db.execute(
-        "INSERT INTO groot_recovery_settings (singleton, birthday_height, gap_limit) VALUES (1, 840000, 250)",
-        [],
-    )
-    .unwrap();
+    persist_initial_recovery_scan_settings(&db, 840_000).unwrap();
+    assert!(has_saved_recovery_scan_settings(&db).unwrap());
     assert_eq!(
         load_recovery_scan_settings(&db).unwrap(),
         RecoveryScanSettingsDto {
             birthday_height: 840_000,
-            gap_limit: 250,
+            gap_limit: MIN_RECOVERY_GAP_LIMIT,
         }
     );
+    db.execute(
+        "UPDATE groot_recovery_settings SET gap_limit = 250 WHERE singleton = 1",
+        [],
+    )
+    .unwrap();
     assert!(db
         .execute(
             "UPDATE groot_recovery_settings SET gap_limit = 19 WHERE singleton = 1",
@@ -1005,6 +2564,73 @@ fn notification_acknowledgement_command_bounds_are_inclusive() {
 }
 
 #[test]
+fn stale_notification_context_cannot_acknowledge_another_wallets_colliding_row() {
+    let first_id = Uuid::new_v4();
+    let second_id = Uuid::new_v4();
+    let mut first = Connection::open_in_memory().unwrap();
+    let mut second = Connection::open_in_memory().unwrap();
+    for db in [&first, &second] {
+        notifications::init(db).unwrap();
+        notifications::enqueue(
+            db,
+            &WalletNotification::PaymentReceived {
+                txid: "synthetic".into(),
+                amount: 1,
+                balance: 1,
+            },
+            1,
+        )
+        .unwrap();
+    }
+    let ids: Vec<_> = notifications::pending(&first)
+        .unwrap()
+        .into_iter()
+        .map(|row| row.id)
+        .collect();
+    assert_eq!(ids[0], notifications::pending(&second).unwrap()[0].id);
+    let ack = |current, expected, db: &mut Connection| -> ApiResult<()> {
+        validate_read_wallet(current, expected)?;
+        notifications::acknowledge(db, &ids).map_err(internal)?;
+        Ok(())
+    };
+    assert_eq!(
+        ack(second_id, first_id, &mut second).unwrap_err().code,
+        "wallet_selection_changed"
+    );
+    assert_eq!(notifications::pending(&second).unwrap().len(), 1);
+    ack(first_id, first_id, &mut first).unwrap();
+    assert!(notifications::pending(&first).unwrap().is_empty());
+    assert_eq!(notifications::pending(&second).unwrap().len(), 1);
+}
+
+#[test]
+fn queued_reads_and_notification_acknowledgements_reject_a_replaced_unlock_session() {
+    let wallet_id = Uuid::new_v4();
+    let mut sessions = WalletSessions::default();
+    sessions.unlock(wallet_id);
+    let first = sessions.identity(wallet_id).unwrap();
+    assert_eq!(
+        validate_read_session(sessions.identity(wallet_id), Some(first)).unwrap(),
+        first
+    );
+    sessions.lock(wallet_id);
+    assert_eq!(
+        validate_read_session(sessions.identity(wallet_id), Some(first))
+            .unwrap_err()
+            .code,
+        "wallet_locked"
+    );
+    sessions.unlock(wallet_id);
+    assert_eq!(
+        validate_read_session(sessions.identity(wallet_id), Some(first))
+            .unwrap_err()
+            .code,
+        "wallet_selection_changed"
+    );
+    assert!(validate_read_session(sessions.identity(wallet_id), None).is_ok());
+}
+
+#[test]
 fn recovery_scan_progress_is_persisted_and_terminal_transitions_are_guarded() {
     let db = Connection::open_in_memory().unwrap();
     init_app_schema(&db).unwrap();
@@ -1026,20 +2652,14 @@ fn recovery_scan_progress_is_persisted_and_terminal_transitions_are_guarded() {
     assert_eq!(progress.status.current_height, 34);
     assert_eq!(progress.status.processed_blocks, 25);
 
-    db.execute(
-        "UPDATE groot_recovery_scans SET status = 'cancelling' WHERE singleton = 1",
-        [],
-    )
-    .unwrap();
-    update_recovery_scan_progress(&db, "run-one", 35, 26).unwrap();
-    finish_recovery_scan_record(&db, "run-one", "cancelled").unwrap();
+    finish_recovery_scan_record(&db, "run-one", "completed").unwrap();
     assert_eq!(
         load_recovery_scan_record(&db)
             .unwrap()
             .unwrap()
             .status
             .status,
-        "cancelled"
+        "completed"
     );
     assert_eq!(
         update_recovery_scan_progress(&db, "run-one", 36, 27)
@@ -1056,7 +2676,7 @@ fn recovery_scan_progress_is_persisted_and_terminal_transitions_are_guarded() {
 }
 
 #[test]
-fn recovery_scan_resume_preserves_saved_progress_and_extends_the_target() {
+fn cancelled_recovery_scan_discards_progress_and_legacy_cancelled_state() {
     let db = Connection::open_in_memory().unwrap();
     init_app_schema(&db).unwrap();
     let settings = RecoveryScanSettingsDto {
@@ -1065,23 +2685,52 @@ fn recovery_scan_resume_preserves_saved_progress_and_extends_the_target() {
     };
     start_recovery_scan_record(&db, "first-run", &settings, 109).unwrap();
     update_recovery_scan_progress(&db, "first-run", 39, 30).unwrap();
-    finish_recovery_scan_record(&db, "first-run", "cancelled").unwrap();
+    db.execute(
+        "UPDATE groot_recovery_scans SET status = 'cancelling' WHERE singleton = 1",
+        [],
+    )
+    .unwrap();
+    discard_recovery_scan_record(&db, "first-run").unwrap();
+    assert!(load_recovery_scan_record(&db).unwrap().is_none());
 
-    let previous = load_recovery_scan_record(&db).unwrap().unwrap().status;
-    let resumed = resume_recovery_scan_record(&db, "second-run", &previous, 119).unwrap();
-    assert_eq!(resumed.status, "running");
-    assert_eq!(resumed.current_height, 39);
-    assert_eq!(resumed.processed_blocks, 30);
-    assert_eq!(resumed.total_blocks, 110);
-    assert_eq!(resumed.started_at, previous.started_at);
-    let persisted = load_recovery_scan_record(&db).unwrap().unwrap();
-    assert_eq!(persisted.run_id, "second-run");
-    assert_eq!(persisted.status.current_height, 39);
-    assert_eq!(persisted.status.processed_blocks, 30);
+    start_recovery_scan_record(&db, "legacy-run", &settings, 109).unwrap();
+    db.execute(
+        "UPDATE groot_recovery_scans SET status = 'cancelled' WHERE singleton = 1",
+        [],
+    )
+    .unwrap();
+    assert!(reconcile_recovery_scan_record(&db, None).unwrap().is_none());
+    assert!(load_recovery_scan_record(&db).unwrap().is_none());
 }
 
 #[test]
-fn recovery_scan_restart_marks_persisted_work_interrupted() {
+fn incomplete_recovery_scan_records_are_discarded_before_a_fresh_retry() {
+    let db = Connection::open_in_memory().unwrap();
+    init_app_schema(&db).unwrap();
+    let settings = RecoveryScanSettingsDto {
+        birthday_height: 10,
+        gap_limit: 20,
+    };
+    start_recovery_scan_record(&db, "first-run", &settings, 109).unwrap();
+    update_recovery_scan_progress(&db, "first-run", 39, 30).unwrap();
+    finish_recovery_scan_record(&db, "first-run", "interrupted").unwrap();
+
+    assert!(reconcile_recovery_scan_record(&db, None).unwrap().is_none());
+    assert!(load_recovery_scan_record(&db).unwrap().is_none());
+
+    let restarted = start_recovery_scan_record(&db, "second-run", &settings, 119).unwrap();
+    assert_eq!(restarted.status, "running");
+    assert_eq!(restarted.current_height, 9);
+    assert_eq!(restarted.processed_blocks, 0);
+    assert_eq!(restarted.total_blocks, 110);
+    let persisted = load_recovery_scan_record(&db).unwrap().unwrap();
+    assert_eq!(persisted.run_id, "second-run");
+    assert_eq!(persisted.status.current_height, 9);
+    assert_eq!(persisted.status.processed_blocks, 0);
+}
+
+#[test]
+fn recovery_scan_restart_discards_persisted_partial_work() {
     let directory = std::env::temp_dir().join(format!("groot-scan-restart-{}", Uuid::new_v4()));
     fs::create_dir_all(&directory).unwrap();
     let path = directory.join("wallet.sqlite");
@@ -1102,11 +2751,8 @@ fn recovery_scan_restart_marks_persisted_work_interrupted() {
     {
         let db = Connection::open(&path).unwrap();
         init_app_schema(&db).unwrap();
-        let interrupted = reconcile_recovery_scan_record(&db, None).unwrap().unwrap();
-        assert_eq!(interrupted.run_id, "persisted-run");
-        assert_eq!(interrupted.status.status, "interrupted");
-        assert_eq!(interrupted.status.current_height, 124);
-        assert_eq!(interrupted.status.processed_blocks, 25);
+        assert!(reconcile_recovery_scan_record(&db, None).unwrap().is_none());
+        assert!(load_recovery_scan_record(&db).unwrap().is_none());
     }
     fs::remove_dir_all(directory).unwrap();
 }
@@ -1148,7 +2794,7 @@ fn transaction_change_cannot_cross_the_configured_recovery_gap() {
         Bip84(master, KeychainKind::External),
         Bip84(master, KeychainKind::Internal),
     )
-    .network(Network::Regtest)
+    .network(network())
     .create_wallet_no_persist()
     .unwrap();
     let change = (0..=MIN_RECOVERY_GAP_LIMIT)
@@ -1184,7 +2830,7 @@ fn proposal_review_rejects_any_non_recipient_output_not_owned_by_the_wallet() {
             Bip84(master, KeychainKind::External),
             Bip84(master, KeychainKind::Internal),
         )
-        .network(Network::Regtest)
+        .network(network())
         .create_wallet_no_persist()
         .unwrap()
     }
@@ -1289,6 +2935,14 @@ fn proposal_review_rejects_any_non_recipient_output_not_owned_by_the_wallet() {
         proposal_fee_amount(&overspend).unwrap_err().code,
         "proposal_mismatch"
     );
+    let funding_outpoint = psbt.unsigned_tx.input[0].previous_output;
+    validate_psbt_excludes_frozen(&psbt, &[]).unwrap();
+    assert_eq!(
+        validate_psbt_excludes_frozen(&psbt, &[funding_outpoint])
+            .unwrap_err()
+            .code,
+        "coin_unavailable"
+    );
 
     let mut redirected = psbt.clone();
     redirected.unsigned_tx.output[1].script_pubkey = attacker.script_pubkey();
@@ -1315,22 +2969,68 @@ fn proposal_review_rejects_any_non_recipient_output_not_owned_by_the_wallet() {
 }
 
 #[test]
-fn acceleration_rates_and_error_classes_fail_closed() {
+fn cpfp_ownership_requires_one_descriptor_derived_wallet_output() {
+    use bdk_wallet::bitcoin::{
+        absolute::LockTime, transaction::Version, ScriptBuf, Sequence, TxIn, TxOut, Witness,
+    };
+
+    let mnemonic = Mnemonic::parse(WORDS).unwrap();
+    let master = root_key(&mnemonic, "cpfp ownership").unwrap();
+    let wallet = Wallet::create(
+        Bip84(master, KeychainKind::External),
+        Bip84(master, KeychainKind::Internal),
+    )
+    .network(network())
+    .create_wallet_no_persist()
+    .unwrap();
+    let destination = wallet.peek_address(KeychainKind::Internal, 0).address;
+    let transaction = Transaction {
+        version: Version::TWO,
+        lock_time: LockTime::ZERO,
+        input: vec![TxIn {
+            previous_output: OutPoint::null(),
+            script_sig: ScriptBuf::new(),
+            sequence: Sequence::ENABLE_RBF_NO_LOCKTIME,
+            witness: Witness::new(),
+        }],
+        output: vec![TxOut {
+            value: Amount::from_sat(900),
+            script_pubkey: destination.script_pubkey(),
+        }],
+    };
+    let mut psbt = Psbt::from_unsigned_tx(transaction).unwrap();
+    validate_cpfp_output_ownership(&wallet, &psbt, &destination.to_string()).unwrap();
+
+    psbt.unsigned_tx
+        .output
+        .push(psbt.unsigned_tx.output[0].clone());
+    psbt.outputs.push(psbt.outputs[0].clone());
+    assert!(validate_cpfp_output_ownership(&wallet, &psbt, &destination.to_string()).is_err());
+}
+
+#[test]
+fn fee_rates_preserve_decimal_and_sub_one_precision_and_errors_fail_closed() {
     for invalid in ["NaN", "inf", "-1", "0", "10000.1"] {
         assert_eq!(
-            validate_acceleration_rate(invalid).unwrap_err().code,
+            validate_fee_rate(invalid).unwrap_err().code,
             "invalid_amount"
         );
     }
-    let (applied, rate) = validate_acceleration_rate("1.01").unwrap();
+    let (applied, rate) = validate_fee_rate("1.01").unwrap();
     assert_eq!(applied, 1.012);
     assert_eq!(rate.to_sat_per_kwu(), 253);
-    let (applied, rate) = validate_acceleration_rate("2.5").unwrap();
+    let (applied, rate) = validate_fee_rate("2.5").unwrap();
     assert_eq!(applied, 2.5);
     assert_eq!(rate.to_sat_per_kwu(), 625);
-    let (applied, rate) = validate_acceleration_rate("2.501").unwrap();
+    let (applied, rate) = validate_fee_rate("2.501").unwrap();
     assert_eq!(applied, 2.504);
     assert_eq!(rate.to_sat_per_kwu(), 626);
+    let (applied, rate) = validate_fee_rate("2.45").unwrap();
+    assert_eq!(applied, 2.452);
+    assert_eq!(rate.to_sat_per_kwu(), 613);
+    let (applied, rate) = validate_fee_rate("0.5").unwrap();
+    assert_eq!(applied, 0.5);
+    assert_eq!(rate.to_sat_per_kwu(), 125);
     assert_eq!(
         acceleration_error("transaction confirmed").code,
         "transaction_confirmed"
@@ -1354,6 +3054,23 @@ fn acceleration_rates_and_error_classes_fail_closed() {
         .contains("keeps the recipient amount unchanged"));
     assert_eq!(
         acceleration_error("unknown parent").code,
+        "acceleration_unavailable"
+    );
+}
+
+#[test]
+fn rbf_replacement_must_preserve_the_original_recipient_and_amount() {
+    validate_rbf_recipient_unchanged(Some("recipient"), 42, "recipient", 42).unwrap();
+    assert_eq!(
+        validate_rbf_recipient_unchanged(Some("recipient"), 42, "recipient", 43)
+            .unwrap_err()
+            .code,
+        "proposal_mismatch"
+    );
+    assert_eq!(
+        validate_rbf_recipient_unchanged(None, 42, "recipient", 42)
+            .unwrap_err()
+            .code,
         "acceleration_unavailable"
     );
 }
@@ -1391,6 +3108,80 @@ fn cpfp_uses_core_mempool_fee_when_an_incoming_parent_has_unknown_inputs() {
 }
 
 #[test]
+fn cpfp_missing_parent_distinguishes_confirmed_from_unknown() {
+    let confirmed = cpfp_parent_missing_from_mempool(true);
+    assert_eq!(confirmed.code, "transaction_confirmed");
+    assert!(!confirmed.message.contains("Bitcoin Core"));
+
+    let unknown = cpfp_parent_missing_from_mempool(false);
+    assert_eq!(unknown.code, "acceleration_unavailable");
+    assert!(unknown
+        .message
+        .contains("may have confirmed or left the mempool"));
+    assert!(!unknown.message.contains("Bitcoin Core"));
+}
+
+#[test]
+fn final_broadcast_refuses_cpfp_and_rbf_when_original_left_mempool() {
+    let original_txid = Txid::from_byte_array([37; 32]);
+    let db = Connection::open_in_memory().unwrap();
+    db.execute_batch(
+        "CREATE TABLE groot_accelerations (
+            proposal_id TEXT PRIMARY KEY, method TEXT NOT NULL, original_txid TEXT NOT NULL
+        );",
+    )
+    .unwrap();
+    let transaction = Transaction {
+        version: Version::TWO,
+        lock_time: LockTime::ZERO,
+        input: vec![],
+        output: vec![],
+    };
+    for method in [AccelerationMethod::Cpfp, AccelerationMethod::Rbf] {
+        db.execute(
+            "INSERT INTO groot_accelerations (proposal_id, method, original_txid)
+             VALUES (?1, ?2, ?3)",
+            params![method.as_str(), method.as_str(), original_txid.to_string()],
+        )
+        .unwrap();
+        let rpc = Client::from_jsonrpc(jsonrpc::client::Client::with_transport(
+            MissingAccelerationOriginalFixture { original_txid },
+        ));
+        let error =
+            broadcast_proposal_transaction_with_rpc(&rpc, &db, method.as_str(), &transaction)
+                .unwrap_err();
+        assert_eq!(error.code, "acceleration_unavailable");
+        assert!(!error.message.contains("Bitcoin Core"));
+    }
+    assert_eq!(
+        acceleration_original_missing_from_mempool(AccelerationMethod::Cpfp, true).code,
+        "transaction_confirmed"
+    );
+    assert_eq!(
+        acceleration_original_missing_from_mempool(AccelerationMethod::Rbf, true).code,
+        "transaction_confirmed"
+    );
+}
+
+#[test]
+fn hardware_identity_requires_wallet_unlock_before_saved_signer_read() {
+    let source = include_str!("hardware_commands.rs");
+    let command = source
+        .split("pub async fn hardware_identify_saved_device(")
+        .nth(1)
+        .unwrap()
+        .split("#[tauri::command]")
+        .next()
+        .unwrap();
+    let unlock = command
+        .find("begin_unlocked_user_operation(&app, &state)")
+        .unwrap();
+    let metadata = command.find("read_multisig_metadata(&app)").unwrap();
+    assert!(unlock < metadata);
+    assert!(command.contains("selected.id != initiating_wallet_id"));
+}
+
+#[test]
 fn cpfp_builds_from_an_incoming_parent_without_foreign_prevouts() {
     use bdk_wallet::bitcoin::{
         absolute::LockTime, hashes::Hash, transaction::Version, ScriptBuf, Sequence, TxIn, TxOut,
@@ -1417,10 +3208,16 @@ fn cpfp_builds_from_an_incoming_parent_without_foreign_prevouts() {
             sequence: Sequence::ENABLE_RBF_NO_LOCKTIME,
             witness: Witness::new(),
         }],
-        output: vec![TxOut {
-            value: Amount::from_sat(100_000),
-            script_pubkey: receive.address.script_pubkey(),
-        }],
+        output: vec![
+            TxOut {
+                value: Amount::from_sat(100_000),
+                script_pubkey: receive.address.script_pubkey(),
+            },
+            TxOut {
+                value: Amount::from_sat(50_000),
+                script_pubkey: receive.address.script_pubkey(),
+            },
+        ],
     };
     let parent_txid = parent.compute_txid();
     wallet.apply_unconfirmed_txs([(parent.clone(), 1)]);
@@ -1431,11 +3228,35 @@ fn cpfp_builds_from_an_incoming_parent_without_foreign_prevouts() {
         parent_txid,
         Amount::from_sat(1_000),
         FeeRate::from_sat_per_vb(5).unwrap(),
+        &[],
     )
     .unwrap();
     assert_eq!(child.unsigned_tx.input.len(), 1);
     assert_eq!(child.unsigned_tx.input[0].previous_output.txid, parent_txid);
+    assert_eq!(child.unsigned_tx.input[0].previous_output.vout, 0);
     assert!(child.fee_amount().unwrap() > Amount::ZERO);
+    let largest = OutPoint::new(parent_txid, 0);
+    let fallback = build_cpfp(
+        &mut wallet,
+        parent_txid,
+        Amount::from_sat(1_000),
+        FeeRate::from_sat_per_vb(5).unwrap(),
+        &[largest],
+    )
+    .unwrap();
+    assert_eq!(fallback.unsigned_tx.input[0].previous_output.vout, 1);
+    assert_eq!(
+        build_cpfp(
+            &mut wallet,
+            parent_txid,
+            Amount::from_sat(1_000),
+            FeeRate::from_sat_per_vb(5).unwrap(),
+            &[largest, OutPoint::new(parent_txid, 1)],
+        )
+        .unwrap_err()
+        .code,
+        "acceleration_unavailable"
+    );
 }
 
 #[test]
@@ -1512,6 +3333,7 @@ fn command_boundary_error_translation_is_complete_and_stable() {
         HardwareError::Unavailable,
         HardwareError::TimedOut,
         HardwareError::OutputTooLarge,
+        HardwareError::WrongNetwork,
         HardwareError::CommandFailed(Some(-12)),
         HardwareError::Io,
     ] {
@@ -1662,7 +3484,7 @@ fn descriptor_checksum_collision_is_not_an_exact_wallet_identity_match() {
     let profile = WalletProfile {
         id: Uuid::new_v4(),
         name: "Existing wallet".to_owned(),
-        network: NETWORK_NAME.to_owned(),
+        network: network_name().to_owned(),
         kind: WalletKind::WatchOnly,
         descriptor_checksum: "same0001".to_owned(),
         created_at: 1,
@@ -1684,7 +3506,7 @@ fn exact_identity_finder_scans_all_profiles_and_fails_closed_on_stale_checksums(
     let first = WalletProfile {
         id: Uuid::new_v4(),
         name: "First".to_owned(),
-        network: NETWORK_NAME.to_owned(),
+        network: network_name().to_owned(),
         kind: WalletKind::WatchOnly,
         descriptor_checksum: "first001".to_owned(),
         created_at: 1,
@@ -1738,12 +3560,20 @@ fn exact_identity_inspection_never_creates_a_missing_wallet_database() {
     fs::create_dir_all(&directory).unwrap();
     let database = directory.join("wallet.sqlite");
 
-    let error = open_existing_wallet_database_read_only(&database).unwrap_err();
+    let permit = database_open_permit_for_test();
+    let error = open_existing_wallet_database_read_only(&database, &permit).unwrap_err();
 
     assert_eq!(error.code, "internal_error");
     assert!(!database.exists());
     assert_eq!(fs::read_dir(&directory).unwrap().count(), 0);
     fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn offline_identity_inspection_does_not_require_node_session_state() {
+    let permit = database_open_permit_for_offline_identity_inspection()
+        .expect("public descriptor identity checks remain available offline");
+    assert!(validate_database_open_permit(&permit).is_ok());
 }
 
 #[test]
@@ -1789,6 +3619,8 @@ fn loaded_hardware_wallet_descriptors_must_match_receive_and_change_identity() {
 #[test]
 fn cached_hwi_connection_identity_must_match_the_saved_signer() {
     let device = HwiDevice {
+        passive: false,
+        observed_unlocked: false,
         capability: "opaque-device".to_owned(),
         fingerprint: Some("d34db33f".to_owned()),
         device_type: "trezor".to_owned(),
@@ -1833,11 +3665,22 @@ fn hwi_response_codes_become_safe_actionable_errors() {
         "coldcard",
         Some(-7),
         "The device did not return a signed PSBT.",
+        true,
     );
     assert_eq!(coldcard_policy.code, "hardware_command_failed");
     assert!(coldcard_policy
         .message
-        .contains("does not recognize this multisig wallet"));
+        .contains("rejected this multisig transaction"));
+
+    let coldcard_single = missing_hardware_psbt(
+        "coldcard",
+        Some(-7),
+        "The device did not return a signed PSBT.",
+        false,
+    );
+    assert_eq!(coldcard_single.code, "hardware_command_failed");
+    assert!(coldcard_single.message.contains("high-fee CPFP"));
+    assert!(!coldcard_single.message.contains("multisig"));
 
     let bitbox = hardware_device_api_error(HardwareError::CommandFailed(Some(-12)), "bitbox02");
     assert_eq!(bitbox.code, "hardware_command_failed");
@@ -1878,6 +3721,13 @@ fn hwi_response_codes_become_safe_actionable_errors() {
     assert!(trezor_timeout
         .message
         .contains("proposal and its signatures are unchanged"));
+
+    let jade_network = hardware_device_api_error(HardwareError::WrongNetwork, "jade");
+    assert_eq!(jade_network.code, "hardware_wrong_network");
+    assert!(jade_network
+        .message
+        .contains("Jade is set to another network"));
+    assert!(jade_network.message.contains("factory-reset"));
 
     let ledger = missing_hardware_xpub("ledger", "m/48'/1'/0'/2'", None, None, "fallback");
     assert_eq!(ledger.code, "hardware_unavailable");
@@ -1983,7 +3833,100 @@ fn hwi_response_codes_become_safe_actionable_errors() {
 
 #[test]
 fn not_ready_hardware_remains_visible_with_safe_device_specific_actions() {
+    let passive_trezor = hardware_device_dto(HwiDevice {
+        passive: true,
+        observed_unlocked: false,
+        capability: "opaque-passive-trezor".to_owned(),
+        fingerprint: None,
+        device_type: "trezor".to_owned(),
+        model: "trezor_candidate".to_owned(),
+        path: "webusb:007:4".to_owned(),
+        code: None,
+        error: None,
+        needs_pin_sent: false,
+        needs_passphrase_sent: false,
+        warnings: vec![],
+    });
+    assert_eq!(passive_trezor.label, "Trezor");
+    assert_eq!(passive_trezor.status, "detected");
+    assert_eq!(passive_trezor.action, "unlock");
+    assert!(passive_trezor.fingerprint.is_none());
+
+    let passive_safe_3 = hardware_device_dto(HwiDevice {
+        passive: true,
+        observed_unlocked: false,
+        capability: "opaque-passive-safe-3".to_owned(),
+        fingerprint: None,
+        device_type: "trezor".to_owned(),
+        model: "trezor_t3b1".to_owned(),
+        path: "webusb:007:5".to_owned(),
+        code: None,
+        error: None,
+        needs_pin_sent: false,
+        needs_passphrase_sent: false,
+        warnings: vec![],
+    });
+    assert_eq!(passive_safe_3.label, "Trezor Safe 3");
+    assert_eq!(passive_safe_3.status, "detected");
+    assert_eq!(passive_safe_3.action, "unlock");
+    assert!(passive_safe_3.fingerprint.is_none());
+
+    let passive_model_one = hardware_device_dto(HwiDevice {
+        passive: true,
+        observed_unlocked: false,
+        model: "trezor_1".to_owned(),
+        capability: "opaque-passive-model-one".to_owned(),
+        fingerprint: None,
+        device_type: "trezor".to_owned(),
+        path: "hid:model-one".to_owned(),
+        code: None,
+        error: None,
+        needs_pin_sent: false,
+        needs_passphrase_sent: false,
+        warnings: vec![],
+    });
+    assert_eq!(passive_model_one.status, "needs_pin");
+    assert_eq!(passive_model_one.action, "prompt_pin");
+
+    let passive_coldcard = hardware_device_dto(HwiDevice {
+        passive: true,
+        observed_unlocked: false,
+        capability: "opaque-passive-coldcard".to_owned(),
+        fingerprint: None,
+        device_type: "coldcard".to_owned(),
+        model: "coldcard".to_owned(),
+        path: "coldcard-path".to_owned(),
+        code: None,
+        error: None,
+        needs_pin_sent: false,
+        needs_passphrase_sent: false,
+        warnings: vec![],
+    });
+    assert_eq!(passive_coldcard.status, "detected");
+    assert_eq!(passive_coldcard.action, "import");
+    assert!(!passive_coldcard.message.contains("coldcard-path"));
+
+    let safe_3 = hardware_device_dto(HwiDevice {
+        passive: false,
+        observed_unlocked: false,
+        capability: "opaque-safe-3".to_owned(),
+        fingerprint: Some("a1b2c3d4".to_owned()),
+        device_type: "trezor".to_owned(),
+        model: "trezor_safe 3".to_owned(),
+        path: "webusb:sensitive-safe-3-path".to_owned(),
+        code: None,
+        error: None,
+        needs_pin_sent: false,
+        needs_passphrase_sent: false,
+        warnings: vec![],
+    });
+    assert_eq!(safe_3.label, "Trezor Safe 3");
+    assert_eq!(safe_3.status, "ready");
+    assert!(!safe_3.message.contains("sensitive-safe-3-path"));
+
     let unsupported_safe_3 = hardware_device_dto(HwiDevice {
+        passive: false,
+        observed_unlocked: false,
         capability: "opaque-device".to_owned(),
         fingerprint: None,
         device_type: "trezor".to_owned(),
@@ -2004,6 +3947,8 @@ fn not_ready_hardware_remains_visible_with_safe_device_specific_actions() {
     assert!(!unsupported_safe_3.message.contains("webusb:sensitive-path"));
 
     let trezor = hardware_device_dto(HwiDevice {
+        passive: false,
+        observed_unlocked: false,
         capability: "opaque-device".to_owned(),
         fingerprint: None,
         device_type: "trezor".to_owned(),
@@ -2021,6 +3966,8 @@ fn not_ready_hardware_remains_visible_with_safe_device_specific_actions() {
     assert!(!trezor.message.contains("sensitive-usb-path"));
 
     let locked_passphrase_trezor = hardware_device_dto(HwiDevice {
+        passive: false,
+        observed_unlocked: false,
         capability: "opaque-device".to_owned(),
         fingerprint: None,
         device_type: "trezor".to_owned(),
@@ -2039,6 +3986,8 @@ fn not_ready_hardware_remains_visible_with_safe_device_specific_actions() {
     assert!(locked_passphrase_trezor.fingerprint.is_none());
 
     let bitbox = hardware_device_dto(HwiDevice {
+        passive: false,
+        observed_unlocked: false,
         capability: "opaque-device".to_owned(),
         fingerprint: None,
         device_type: "bitbox02".to_owned(),
@@ -2055,6 +4004,8 @@ fn not_ready_hardware_remains_visible_with_safe_device_specific_actions() {
     assert!(bitbox.message.contains("password again"));
 
     let locked_nova = hardware_device_dto(HwiDevice {
+        passive: false,
+        observed_unlocked: false,
         capability: "opaque-device".to_owned(),
         fingerprint: None,
         device_type: "bitbox02".to_owned(),
@@ -2074,6 +4025,8 @@ fn not_ready_hardware_remains_visible_with_safe_device_specific_actions() {
     assert!(!locked_nova.message.contains("sensitive-nova-path"));
 
     let ready_nova = hardware_device_dto(HwiDevice {
+        passive: false,
+        observed_unlocked: false,
         capability: "opaque-device".to_owned(),
         fingerprint: Some("deadbeef".to_owned()),
         device_type: "bitbox02".to_owned(),
@@ -2090,6 +4043,8 @@ fn not_ready_hardware_remains_visible_with_safe_device_specific_actions() {
     assert_eq!(ready_nova.action, "import");
 
     let jade = hardware_device_dto(HwiDevice {
+        passive: false,
+        observed_unlocked: false,
         capability: "opaque-device".to_owned(),
         fingerprint: None,
         device_type: "jade".to_owned(),
@@ -2106,6 +4061,8 @@ fn not_ready_hardware_remains_visible_with_safe_device_specific_actions() {
     assert!(jade.message.contains("enter your PIN on Jade"));
 
     let ledger = hardware_device_dto(HwiDevice {
+        passive: false,
+        observed_unlocked: false,
         capability: "opaque-device".to_owned(),
         fingerprint: Some("f00dbabe".to_owned()),
         device_type: "ledger".to_owned(),
@@ -2126,6 +4083,8 @@ fn not_ready_hardware_remains_visible_with_safe_device_specific_actions() {
         ("coldcard", "USB communication", "retry"),
     ] {
         let device = hardware_device_dto(HwiDevice {
+            passive: false,
+            observed_unlocked: false,
             capability: "opaque-device".to_owned(),
             fingerprint: None,
             device_type: device_type.to_owned(),
@@ -2143,6 +4102,8 @@ fn not_ready_hardware_remains_visible_with_safe_device_specific_actions() {
     }
 
     let keepkey = hardware_device_dto(HwiDevice {
+        passive: false,
+        observed_unlocked: false,
         capability: "opaque-device".to_owned(),
         fingerprint: None,
         device_type: "keepkey".to_owned(),
@@ -2154,10 +4115,16 @@ fn not_ready_hardware_remains_visible_with_safe_device_specific_actions() {
         needs_passphrase_sent: false,
         warnings: vec![],
     });
-    assert_eq!(keepkey.status, "needs_pin");
-    assert_eq!(keepkey.action, "prompt_pin");
+    assert_eq!(keepkey.status, "not_ready");
+    assert_eq!(keepkey.action, "retry");
+    assert_eq!(
+        keepkey.message,
+        "This hardware signer is not supported by Groot."
+    );
 
     let ready = hardware_device_dto(HwiDevice {
+        passive: false,
+        observed_unlocked: false,
         capability: "opaque-device".to_owned(),
         fingerprint: Some("f00dbabe".to_owned()),
         device_type: "coldcard".to_owned(),
@@ -2176,6 +4143,8 @@ fn not_ready_hardware_remains_visible_with_safe_device_specific_actions() {
 #[test]
 fn trezor_passphrase_warning_requires_explicit_standard_wallet_selection() {
     let hwi_device = HwiDevice {
+        passive: false,
+        observed_unlocked: false,
         capability: "opaque-device".to_owned(),
         fingerprint: Some("emptywallet".to_owned()),
         device_type: "trezor".to_owned(),
@@ -2209,7 +4178,7 @@ fn native_boundary_rejects_browser_only_virtual_cosigners() {
         label: "Browser fixture".to_owned(),
         fingerprint: "00000000".to_owned(),
         xpub: "fixture".to_owned(),
-        derivation_path: MULTISIG_ACCOUNT_PATH.to_owned(),
+        derivation_path: multisig_account_path().to_owned(),
         source: CosignerSource::Virtual,
         device_type: None,
     };
@@ -2363,7 +4332,7 @@ fn persisted_descriptors_are_watch_only() {
     let (external, internal_template) =
         watch_templates(&mnemonic, "public-regtest-pin").expect("templates");
     let wallet = Wallet::create(external, internal_template)
-        .network(NETWORK)
+        .network(network())
         .create_wallet_no_persist()
         .expect("wallet");
     for keychain in [KeychainKind::External, KeychainKind::Internal] {
@@ -2371,6 +4340,19 @@ fn persisted_descriptors_are_watch_only() {
         assert!(descriptor.contains("tpub"));
         assert!(!descriptor.contains("prv"));
     }
+}
+
+#[test]
+fn software_master_fingerprint_is_stable_and_bound_to_the_wallet_passphrase() {
+    let mnemonic = Mnemonic::parse(WORDS).expect("valid public test mnemonic");
+    let first = software_wallet_master_fingerprint(&mnemonic, "wallet passphrase").unwrap();
+    let repeated = software_wallet_master_fingerprint(&mnemonic, "wallet passphrase").unwrap();
+    let alternate = software_wallet_master_fingerprint(&mnemonic, "different passphrase").unwrap();
+
+    assert_eq!(first.len(), 8);
+    assert!(first.bytes().all(|byte| byte.is_ascii_hexdigit()));
+    assert_eq!(first, repeated);
+    assert_ne!(first, alternate);
 }
 
 #[test]
@@ -2403,6 +4385,24 @@ fn labels_are_mandatory_and_bounded() {
         normalize_label(&"🌱".repeat(49)).unwrap_err().code,
         "invalid_label"
     );
+    for label in [
+        "invoice\nreplacement",
+        "invoice\u{200b}replacement",
+        "invoice\u{202e}replacement",
+        "invoice\u{2066}replacement",
+        "invoice\u{feff}replacement",
+        "invoice\u{0600}replacement",
+        "invoice\u{2028}replacement",
+        "invoice\u{115f}replacement",
+        "invoice\u{3164}replacement",
+        "invoice\u{fe0f}replacement",
+        "invoice\u{e0001}replacement",
+        "invoice\u{e007f}replacement",
+        "invoice\u{e0100}replacement",
+        "invoice\u{e01ef}replacement",
+    ] {
+        assert_eq!(normalize_label(label).unwrap_err().code, "invalid_label");
+    }
 }
 
 #[test]
@@ -2441,11 +4441,17 @@ fn manual_selection_rejects_empty_malformed_duplicate_and_frozen_outpoints() {
             .code,
         "coin_unavailable"
     );
+    assert_eq!(
+        validate_manual_outpoints(&vec!["x".to_owned(); 10_001], &[])
+            .unwrap_err()
+            .code,
+        "invalid_coin"
+    );
 }
 
 fn descriptor_backup() -> MultisigBackupDto {
     let secp = Secp256k1::new();
-    let path = DerivationPath::from_str(MULTISIG_ACCOUNT_PATH).unwrap();
+    let path = DerivationPath::from_str(multisig_account_path()).unwrap();
     let cosigners = (1_u8..=4)
         .map(|index| {
             let master = Xpriv::new_master(NetworkKind::Test, &[index; 32]).unwrap();
@@ -2455,7 +4461,7 @@ fn descriptor_backup() -> MultisigBackupDto {
                 label: format!("Key {index}"),
                 fingerprint: master.fingerprint(&secp).to_string(),
                 xpub: Xpub::from_priv(&secp, &account).to_string(),
-                derivation_path: MULTISIG_ACCOUNT_PATH.to_owned(),
+                derivation_path: multisig_account_path().to_owned(),
                 source: CosignerSource::Manual,
                 device_type: None,
             }
@@ -2579,7 +4585,7 @@ fn legacy_hardware_profiles_are_explicitly_unsupported_without_current_lock_file
     let mut profile = WalletProfile {
         id: Uuid::new_v4(),
         name: "Legacy".to_owned(),
-        network: NETWORK_NAME.to_owned(),
+        network: network_name().to_owned(),
         kind: WalletKind::WatchOnly,
         descriptor_checksum: "abcd1234".to_owned(),
         created_at: 1,
@@ -2698,6 +4704,18 @@ fn descriptor_backup_round_trips_and_reconstructs_a_stable_address() {
     assert_eq!(
         first_multisig_address(&validated.wallet).unwrap(),
         first_multisig_address(&backup.wallet).unwrap()
+    );
+}
+
+#[test]
+fn descriptor_backup_rejects_new_invisible_signer_labels() {
+    let mut backup = descriptor_backup();
+    backup.wallet.cosigners[0].label = "Signer\u{e0020}hidden".to_owned();
+    assert_eq!(
+        validate_multisig_backup(&serde_json::to_string(&backup).unwrap())
+            .unwrap_err()
+            .code,
+        "invalid_label"
     );
 }
 
@@ -2830,7 +4848,8 @@ fn wallet_database_is_owner_only_and_uses_defensive_settings() {
     let dir = std::env::temp_dir().join(format!("groot-db-test-{}", Uuid::new_v4()));
     fs::create_dir_all(&dir).unwrap();
     let path = dir.join("wallet.sqlite");
-    let db = open_wallet_database(&path).unwrap();
+    let permit = database_open_permit_for_test();
+    let db = open_wallet_database(&path, &permit).unwrap();
     assert!(db.db_config(DbConfig::SQLITE_DBCONFIG_DEFENSIVE).unwrap());
     assert!(db.db_config(DbConfig::SQLITE_DBCONFIG_ENABLE_FKEY).unwrap());
     let trusted: bool = db
@@ -2854,12 +4873,13 @@ fn exact_identity_inspection_reads_an_existing_wallet_database_without_mutating_
     let dir = std::env::temp_dir().join(format!("groot-db-identity-read-{}", Uuid::new_v4()));
     fs::create_dir_all(&dir).unwrap();
     let path = dir.join("wallet.sqlite");
-    let mut writable = open_wallet_database(&path).unwrap();
+    let permit = database_open_permit_for_test();
+    let mut writable = open_wallet_database(&path, &permit).unwrap();
     init_app_schema(&writable).unwrap();
     let mnemonic = Mnemonic::parse(WORDS).unwrap();
     let (external, internal) = watch_templates(&mnemonic, "identity read only").unwrap();
     let wallet = Wallet::create(external, internal)
-        .network(NETWORK)
+        .network(network())
         .create_wallet(&mut writable)
         .unwrap();
     let expected = wallet.public_descriptor(KeychainKind::External).to_string();
@@ -2872,7 +4892,8 @@ fn exact_identity_inspection_reads_an_existing_wallet_database_without_mutating_
         .collect::<Vec<_>>();
     entries_before.sort();
 
-    let mut read_only = open_existing_wallet_database_read_only(&path).unwrap();
+    let permit = database_open_permit_for_test();
+    let mut read_only = open_existing_wallet_database_read_only(&path, &permit).unwrap();
     let loaded = load_wallet(&mut read_only).unwrap();
     assert_eq!(
         loaded.public_descriptor(KeychainKind::External).to_string(),
@@ -2905,10 +4926,97 @@ fn wallet_database_rejects_symlink_storage() {
     let link = dir.join("wallet.sqlite");
     symlink(&target, &link).unwrap();
     assert_eq!(
-        open_wallet_database(&link).unwrap_err().code,
+        open_wallet_database(&link, &database_open_permit_for_test())
+            .unwrap_err()
+            .code,
         "internal_error"
     );
     fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn mainnet_node_admission_lifetime_is_monotonic_and_bounded() {
+    let created_at = Instant::now();
+    assert!(mainnet_node_admission_is_current_at(created_at, created_at));
+    assert!(mainnet_node_admission_is_current_at(
+        created_at,
+        created_at + MAINNET_NODE_ADMISSION_LIFETIME
+    ));
+    assert!(!mainnet_node_admission_is_current_at(
+        created_at,
+        created_at + MAINNET_NODE_ADMISSION_LIFETIME + Duration::from_nanos(1)
+    ));
+    assert!(!mainnet_node_admission_is_current_at(
+        created_at,
+        created_at - Duration::from_nanos(1)
+    ));
+}
+
+#[test]
+fn new_wallet_admission_cleanup_invalidates_the_attempt() {
+    let state = AppState::default();
+    *state.pending_mainnet_node_admission.lock().unwrap() = Some(PendingMainnetNodeAdmission {
+        config: default_node_config(),
+        password: Zeroizing::new("disposable-test-password".to_owned()),
+        created_at: Instant::now(),
+        scope: MainnetNodeAdmissionScope::NewWallet,
+    });
+
+    let cleanup = clear_new_wallet_admission_on_exit(&state);
+    assert!(state
+        .pending_mainnet_node_admission
+        .lock()
+        .unwrap()
+        .is_some());
+    drop(cleanup);
+    assert!(state
+        .pending_mainnet_node_admission
+        .lock()
+        .unwrap()
+        .is_none());
+}
+
+fn test_mainnet_admission(
+    scope: MainnetNodeAdmissionScope,
+    config: CoreNodeConfig,
+) -> PendingMainnetNodeAdmission {
+    PendingMainnetNodeAdmission {
+        config,
+        password: Zeroizing::new("disposable-test-password".to_owned()),
+        created_at: Instant::now(),
+        scope,
+    }
+}
+
+#[test]
+fn selected_wallet_admission_rejects_a_different_wallet() {
+    let selected = Uuid::new_v4();
+    let config = default_node_config();
+    let admission = test_mainnet_admission(
+        MainnetNodeAdmissionScope::ExistingWallet(Uuid::new_v4()),
+        config.clone(),
+    );
+    assert!(!admission_allows_selected_wallet(
+        &admission, selected, &config
+    ));
+}
+
+#[test]
+fn selected_wallet_admission_rejects_changed_core_configuration() {
+    let selected = Uuid::new_v4();
+    let config = default_node_config();
+    let admission = test_mainnet_admission(
+        MainnetNodeAdmissionScope::ExistingWallet(selected),
+        config.clone(),
+    );
+    let mut changed = config.clone();
+    changed.username = Some("different-test-user".to_owned());
+    assert!(admission_allows_selected_wallet(
+        &admission, selected, &config
+    ));
+    assert!(!admission_allows_selected_wallet(
+        &admission, selected, &changed
+    ));
 }
 
 #[test]
@@ -2936,11 +5044,21 @@ fn regtest_app_data_override_is_limited_to_named_temporary_directories() {
 }
 
 #[test]
+#[cfg(groot_network = "regtest")]
 fn default_regtest_directory_is_independent_of_process_working_directory() {
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     assert_eq!(
         default_regtest_dir().unwrap(),
         manifest_dir.parent().unwrap().join(".regtest")
+    );
+}
+
+#[test]
+#[cfg(not(groot_network = "regtest"))]
+fn public_network_build_has_no_compiled_regtest_repository_path() {
+    assert_eq!(
+        default_regtest_dir().unwrap_err().code,
+        "invalid_node_config"
     );
 }
 
@@ -3052,6 +5170,7 @@ fn synced_snapshots_enqueue_received_and_first_confirmation_events_once() {
         .to_owned(),
         confirmations,
         date: "1".to_owned(),
+        block_timestamp: None,
         address: Some("bcrt1qnotificationfixture".to_owned()),
         label: "Test deposit".to_owned(),
         block: (confirmations > 0).then_some(1),
@@ -3156,7 +5275,7 @@ fn compact_filter_update_and_app_metadata_roll_back_at_every_commit_stage() {
     let mnemonic = Mnemonic::parse(WORDS).unwrap();
     let (external, internal) = watch_templates(&mnemonic, "atomic compact filters").unwrap();
     let wallet = Wallet::create(external, internal)
-        .network(NETWORK)
+        .network(network())
         .create_wallet(&mut db)
         .unwrap();
     let original_tip = wallet.latest_checkpoint();
@@ -3226,6 +5345,7 @@ fn transaction_dto_serializes_authoritative_detail_fields() {
         status: "pending".to_owned(),
         confirmations: 0,
         date: "1".to_owned(),
+        block_timestamp: None,
         address: None,
         label: "Self-spend".to_owned(),
         block: None,
@@ -3285,6 +5405,7 @@ fn replacement_history_collapses_a_confirmed_replacement_into_one_payment_row() 
         status: "confirmed".to_owned(),
         confirmations: 1,
         date: "2".to_owned(),
+        block_timestamp: None,
         address: Some("bcrt1qfixture".to_owned()),
         label: "Original payment".to_owned(),
         block: Some(101),
@@ -3358,6 +5479,7 @@ fn replacement_history_keeps_a_canonical_original_counted_when_it_wins_the_race(
         status: "confirmed".to_owned(),
         confirmations: 42,
         date: "3".to_owned(),
+        block_timestamp: None,
         address: Some("bcrt1qfixture".to_owned()),
         label: "Original payment".to_owned(),
         block: Some(101),
@@ -3493,6 +5615,7 @@ fn restart_restores_proposals_frozen_coins_and_acknowledged_notifications() {
         persist_proposal(
             &db,
             &PaymentProposalDto {
+                review_binding: "fixture-review-binding".to_owned(),
                 proposal_id: proposal_id.clone(),
                 recipient: "bcrt1qrestartfixture".into(),
                 recipient_testnet_alias: None,
@@ -3743,7 +5866,7 @@ fn prepared_wallet_proposal_and_acceleration_roll_back_as_one_unit() {
     let mnemonic = Mnemonic::parse(WORDS).unwrap();
     let (external, internal) = watch_templates(&mnemonic, "atomic prepare").unwrap();
     Wallet::create(external, internal)
-        .network(NETWORK)
+        .network(network())
         .create_wallet(&mut db)
         .unwrap();
 
@@ -3755,6 +5878,7 @@ fn prepared_wallet_proposal_and_acceleration_roll_back_as_one_unit() {
     })
     .unwrap();
     let proposal = PaymentProposalDto {
+        review_binding: "fixture-review-binding".to_owned(),
         proposal_id: "atomic-proposal".into(),
         recipient: "bcrt1qatomicfixture".into(),
         recipient_testnet_alias: None,
@@ -3800,6 +5924,7 @@ fn prepared_wallet_proposal_and_acceleration_roll_back_as_one_unit() {
         status: "pending".into(),
         confirmations: 0,
         date: "1".into(),
+        block_timestamp: None,
         address: Some("bcrt1qoriginalfixture".into()),
         label: "Original".into(),
         block: None,
@@ -4017,14 +6142,14 @@ fn public_exports_atomically_replace_regular_files_with_owner_only_permissions()
 #[test]
 fn external_signer_json_backup_is_directly_importable() {
     let secp = Secp256k1::new();
-    let path = DerivationPath::from_str(SINGLESIG_ACCOUNT_PATH).unwrap();
+    let path = DerivationPath::from_str(singlesig_account_path()).unwrap();
     let master = Xpriv::new_master(NetworkKind::Test, &[42_u8; 32]).unwrap();
     let account = master.derive_priv(&secp, &path).unwrap();
     let signer = ExternalSignerInput {
         label: "Ledger".to_owned(),
         fingerprint: master.fingerprint(&secp).to_string(),
         xpub: Xpub::from_priv(&secp, &account).to_string(),
-        derivation_path: SINGLESIG_ACCOUNT_PATH.to_owned(),
+        derivation_path: singlesig_account_path().to_owned(),
         source: SignerSource::Usb,
         device_type: Some("ledger".to_owned()),
     };
@@ -4041,7 +6166,7 @@ fn external_signer_json_backup_is_directly_importable() {
 fn external_signer_command_rejects_oversized_json_before_network_parsing() {
     let oversized = format!(
         "{{\"version\":1,\"network\":\"{}\",\"descriptor\":\"{}\"}}",
-        NETWORK_NAME,
+        network_name(),
         "x".repeat(external_signer::MAX_IMPORT_BYTES)
     );
     let error = external_signer_parse_import(oversized, "Signer".to_owned(), SignerSource::File)
@@ -4083,6 +6208,66 @@ fn protected_rpc_password_is_bound_to_the_complete_node_config() {
         decode_protected_node_auth(b"legacy plaintext password", &config)
             .unwrap()
             .is_none()
+    );
+}
+
+#[test]
+fn restored_mainnet_node_auth_requires_fresh_verification_before_database_open() {
+    let config = CoreNodeConfig {
+        backend: ChainBackend::LocalCore {
+            url: "http://127.0.0.1:8332".to_owned(),
+        },
+        auth: RpcAuthMode::UserPass,
+        username: Some("groot".to_owned()),
+        tor_proxy: None,
+    };
+    let mut session = NodeAuthSession {
+        config: config.clone(),
+        password: Zeroizing::new("secret".to_owned()),
+        mainnet_node_verified: false,
+    };
+    assert!(!node_auth_session_allows_database_open(&session, &config));
+
+    session.mainnet_node_verified = true;
+    assert!(node_auth_session_allows_database_open(&session, &config));
+
+    let mut changed = config.clone();
+    changed.username = Some("other".to_owned());
+    assert!(!node_auth_session_allows_database_open(&session, &changed));
+}
+
+#[test]
+fn authentication_database_permit_is_short_lived_and_does_not_require_node_admission() {
+    let permit = authentication_database_open_permit().unwrap();
+    validate_authentication_database_open_permit(&permit).unwrap();
+
+    let directory = std::env::temp_dir().join(format!("groot-auth-db-test-{}", Uuid::new_v4()));
+    fs::create_dir_all(&directory).unwrap();
+    let path = directory.join("wallet.sqlite");
+    let wallet_db = open_wallet_database(&path, &database_open_permit_for_test()).unwrap();
+    wallet_db
+        .execute_batch(
+            "CREATE TABLE groot_auth_throttle (
+                singleton INTEGER PRIMARY KEY CHECK(singleton = 1),
+                failures INTEGER NOT NULL CHECK(failures >= 0),
+                retry_at INTEGER NOT NULL CHECK(retry_at >= 0)
+            );",
+        )
+        .unwrap();
+    drop(wallet_db);
+    let auth_db = open_authentication_database(&path, &permit).unwrap();
+    assert_eq!(load_auth_throttle(&auth_db).unwrap().snapshot(), (0, 0));
+    drop(auth_db);
+    fs::remove_dir_all(directory).unwrap();
+
+    let expired = AuthenticationDatabaseOpenPermit {
+        issued_at: Instant::now() - MAINNET_NODE_ADMISSION_LIFETIME - Duration::from_secs(1),
+    };
+    assert_eq!(
+        validate_authentication_database_open_permit(&expired)
+            .unwrap_err()
+            .code,
+        "internal_error"
     );
 }
 
@@ -4203,13 +6388,82 @@ fn coldcard_policy_acknowledgement_is_distinct_from_address_evidence() {
 }
 
 #[test]
+fn mainnet_receive_requires_a_verified_spendable_quorum_and_coldcard_import() {
+    let mut wallet = descriptor_backup().wallet;
+    wallet.cosigners[0].device_type = Some("ledger".to_owned());
+    wallet.cosigners[1].device_type = Some("bitbox02".to_owned());
+    wallet.cosigners[2].device_type = Some("coldcard".to_owned());
+    wallet.cosigners[3].device_type = Some("jade".to_owned());
+    let first_address = first_multisig_address(&wallet).unwrap();
+    let evidence = |index: usize, address: &str| SignerPolicyVerificationDto {
+        signer_fingerprint: wallet.cosigners[index].fingerprint.clone(),
+        device_type: wallet.cosigners[index].device_type.clone().unwrap(),
+        verified_at: "1".to_owned(),
+        scope: "policy_and_address",
+        displayed_address: Some(address.to_owned()),
+    };
+    let coldcard_import = SignerPolicyVerificationDto {
+        signer_fingerprint: wallet.cosigners[2].fingerprint.clone(),
+        device_type: "coldcard".to_owned(),
+        verified_at: "1".to_owned(),
+        scope: "policy_file_acknowledgement",
+        displayed_address: None,
+    };
+    assert!(require_multisig_receive_readiness(Network::Regtest, &wallet, &[]).is_ok());
+    assert!(require_multisig_receive_readiness(Network::Bitcoin, &wallet, &[]).is_err());
+    assert!(require_multisig_receive_readiness(
+        Network::Bitcoin,
+        &wallet,
+        &[evidence(0, &first_address), coldcard_import.clone()]
+    )
+    .is_err());
+    assert!(require_multisig_receive_readiness(
+        Network::Bitcoin,
+        &wallet,
+        &[evidence(0, &first_address), evidence(1, &first_address)]
+    )
+    .is_err());
+    assert!(require_multisig_receive_readiness(
+        Network::Bitcoin,
+        &wallet,
+        &[
+            evidence(0, &first_address),
+            evidence(1, &first_address),
+            coldcard_import.clone()
+        ]
+    )
+    .is_err());
+    assert!(require_multisig_receive_readiness(
+        Network::Bitcoin,
+        &wallet,
+        &[
+            evidence(0, &first_address),
+            evidence(1, &first_address),
+            evidence(3, &first_address),
+            coldcard_import.clone()
+        ]
+    )
+    .is_ok());
+    assert!(require_multisig_receive_readiness(
+        Network::Bitcoin,
+        &wallet,
+        &[
+            evidence(0, &first_address),
+            evidence(1, "bc1qwrong"),
+            coldcard_import
+        ]
+    )
+    .is_err());
+}
+
+#[test]
 fn coldcard_policy_acknowledgement_accepts_recognized_and_legacy_file_imports() {
     let signer = |source, device_type: Option<&str>| CosignerInput {
         id: "signer".to_owned(),
         label: "Coldcard MK4".to_owned(),
         fingerprint: "f00dbabe".to_owned(),
         xpub: "tpub-public".to_owned(),
-        derivation_path: MULTISIG_ACCOUNT_PATH.to_owned(),
+        derivation_path: multisig_account_path().to_owned(),
         source,
         device_type: device_type.map(str::to_owned),
     };

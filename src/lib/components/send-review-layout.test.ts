@@ -2,6 +2,11 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 const appCss = readFileSync(new URL('../../app.css', import.meta.url), 'utf8');
+const amount = readFileSync(new URL('./Amount.svelte', import.meta.url), 'utf8');
+const reviewDetails = readFileSync(
+  new URL('./TransactionReviewDetails.svelte', import.meta.url),
+  'utf8'
+);
 const overview = readFileSync(new URL('../../routes/+page.svelte', import.meta.url), 'utf8');
 const singleSend = readFileSync(new URL('../../routes/send/+page.svelte', import.meta.url), 'utf8');
 const multisigSend = readFileSync(
@@ -10,6 +15,87 @@ const multisigSend = readFileSync(
 );
 
 describe('send review layout', () => {
+  it('keeps the desktop send heading and progress compact near the top edge', () => {
+    expect(appCss).toMatch(/\.send-page\.signing-page\s*\{[^}]*padding-top:\s*24px;/s);
+    expect(appCss).toMatch(
+      /\.send-page\.signing-page > \.page-header\s*\{[^}]*min-height:\s*56px;[^}]*margin-bottom:\s*18px;/s
+    );
+  });
+
+  it('restores the shell-safe top inset for both mobile send routes', () => {
+    expect(appCss).toMatch(
+      /@media \(max-width: 760px\)[\s\S]*?\.send-page\.signing-page\s*\{[^}]*padding-top:\s*max\(68px, calc\(env\(safe-area-inset-top\) \+ 56px\)\);/s
+    );
+    expect(appCss).toMatch(
+      /\.app-shell\.prototype-shell \.send-page\.signing-page\s*\{[^}]*padding-top:\s*max\(120px, calc\(env\(safe-area-inset-top\) \+ 108px\)\);/s
+    );
+  });
+
+  it('stacks the signer rail before cards become narrow and expands a lone mobile signer', () => {
+    expect(appCss).toMatch(
+      /@media \(min-width: 761px\) and \(max-width: 1050px\)[\s\S]*?\.send-flow-layout\.with-signers,[\s\S]*?\.multisig-signing-layout\s*\{[^}]*grid-template-columns:\s*1fr;/s
+    );
+    expect(appCss).toMatch(
+      /@media \(max-width: 760px\)[\s\S]*?\.send-signer-list article:only-child\s*\{[^}]*flex-basis:\s*100%;/s
+    );
+  });
+
+  it('returns a completed multisig payment to the selected wallet overview', () => {
+    expect(multisigSend).toContain(
+      `<Button href="/">{translate($locale, 'Return to wallet')}</Button>`
+    );
+    expect(multisigSend).not.toContain(
+      `<Button href="/multisig">{translate($locale, 'Return to wallet')}</Button>`
+    );
+  });
+
+  it('gives derivation paths breathable separated rows and aligns the input total', () => {
+    expect(reviewDetails.match(/class="transaction-review-path-row"/g)?.length).toBe(3);
+    expect(reviewDetails).toContain('class="transaction-review-input-total"');
+    expect(appCss).toMatch(
+      /\.details-list > \.transaction-review-path-row\s*\{[^}]*padding-block: 12px/s
+    );
+    expect(appCss).toMatch(
+      /\.hardware-review-details > dl > \.transaction-review-path-row\s*\{[^}]*padding-block: 12px;/s
+    );
+    expect(reviewDetails).toContain('<dl class="details-list">');
+    expect(appCss).toMatch(/\.transaction-review-input-total\s*\{[^}]*align-items: baseline;/s);
+    expect(appCss).toMatch(/\.derivation-paths code\s*\{[^}]*font-size: 1em;/s);
+  });
+
+  it('coalesces manual coin previews while the amount changes in either send flow', () => {
+    for (const source of [singleSend, multisigSend]) {
+      expect(source).toContain('window.setTimeout(() => {');
+      expect(source).toContain('}, 200);');
+      expect(source).toContain('return () => window.clearTimeout(timer);');
+    }
+  });
+  it('keeps the denomination separated from the amount', () => {
+    expect(amount).toMatch(
+      /\.formatted-amount\s*\{[^}]*display: inline-flex;[^}]*align-items: baseline;/s
+    );
+    expect(amount).toMatch(/\.formatted-amount\s*\{[^}]*gap: 0;/s);
+    expect(amount).toMatch(/\.formatted-amount > small\s*\{[^}]*margin-inline-start: 0\.5rem;/s);
+    expect(appCss).toMatch(/\.formatted-amount small\s*\{[^}]*margin-inline-start: 0\.5rem;/s);
+    expect(appCss).toMatch(/\.review-amount\s*\{[^}]*align-items: center;/s);
+    expect(appCss).toMatch(/\.review-amount > span\s*\{/s);
+  });
+
+  it('separates adjacent setup warnings', () => {
+    expect(appCss).toMatch(
+      /\.initial-history-scan \+ \.backup-verification-banner,[\s\S]*?\.sync-progress \+ \.backup-verification-banner\s*\{[^}]*margin-top: 0;/s
+    );
+    expect(appCss).not.toContain('.backup-unverified-note');
+  });
+
+  it('loads the authoritative selected profile before wallet-kind operations', () => {
+    const registryRead = overview.indexOf('const registry = await walletService.profiles()');
+    const proposalRead = overview.indexOf('walletService.paymentProposals()', registryRead);
+    expect(registryRead).toBeGreaterThan(-1);
+    expect(proposalRead).toBeGreaterThan(registryRead);
+    expect(overview).not.toContain('const shellWallets = walletShell.profiles()');
+  });
+
   it('keeps wrapped permanent labels clear of review separators', () => {
     expect(singleSend.match(/class="label-details-row"/g)?.length).toBeGreaterThanOrEqual(3);
     expect(multisigSend).toContain('class="label-details-row"');
@@ -35,10 +121,48 @@ describe('send review layout', () => {
     expect(singleSend.match(/<TransactionReviewDetails[\s\S]*?interactiveAmounts/g)?.length).toBe(
       4
     );
-    expect(singleSend.match(/<Amount value=\{proposal\.amount\} interactive \/>/g)?.length).toBe(4);
+    expect(
+      singleSend.match(/<Amount\s+value=\{proposal\.amount\}\s+interactive\s*\/>/g)?.length
+    ).toBe(4);
     expect(multisigSend).toContain('<Amount value={Number(proposal.amount)} interactive />');
     expect(multisigSend.match(/<TransactionReviewDetails[\s\S]*?interactiveAmounts/g)?.length).toBe(
       2
+    );
+  });
+
+  it('keeps funding privacy context inside optional review details', () => {
+    expect(reviewDetails).toContain('class="transaction-review-funding"');
+    expect(reviewDetails).toContain('labels={proposal.selectionImpact.fundingLabels}');
+    expect(reviewDetails).toContain('hidden={$discreetMode}');
+    expect(reviewDetails).not.toContain('new cluster link');
+    expect(singleSend).not.toContain('class:warning={proposalHasPrivacyWarning}');
+    expect(multisigSend).not.toContain('class:warning={proposalHasPrivacyWarning}');
+  });
+
+  it('keeps manual coin selection compact and directly interactive', () => {
+    for (const route of [singleSend, multisigSend]) {
+      expect(route).not.toContain("translate($locale, 'Funding labels')");
+      expect(route).not.toContain("translate($locale, 'Input details')");
+      expect(route).not.toContain('estimatedInputWeight');
+    }
+    expect(appCss).toMatch(/\.send-coin-picker label\s*\{[^}]*cursor: pointer;/s);
+    expect(appCss).toMatch(
+      /\.send-coin-picker label:not\(\.frozen\):hover,[\s\S]*?background: var\(--surface-hover\);/
+    );
+    expect(appCss).toMatch(/\.selection-recommendation > button\s*\{[^}]*font-weight: 500;/s);
+    expect(appCss).toMatch(
+      /\.automatic-strategies button\.active\s*\{[^}]*border-color: var\(--link\);[^}]*box-shadow: inset 0 0 0 1px var\(--link\);/s
+    );
+  });
+
+  it('uses the signer sidebar throughout ordinary send steps', () => {
+    for (const route of [singleSend, multisigSend]) {
+      expect(route).toContain('class="send-flow-layout"');
+      expect(route).toContain('class="signer-side-panel"');
+      expect(route).toContain('class="send-stage-heading compact"');
+    }
+    expect(appCss).toMatch(
+      /\.send-flow-layout\.with-signers\s*\{[^}]*grid-template-columns: minmax\(0, 1fr\) 250px/s
     );
   });
 
@@ -65,13 +189,45 @@ describe('send review layout', () => {
     for (const route of [singleSend, multisigSend]) {
       expect(route).toContain("'You will spend this much more'");
       expect(route).toContain('class="acceleration-default-choice"');
-      expect(route).toContain('class="acceleration-optional-control"');
-      expect(route).toContain("'Change fee rate'");
-      expect(route).toContain("'View fee details'");
+      expect(route).toContain('class="acceleration-optional-control acceleration-more-details"');
+      expect(route).toContain("'View more details'");
+      expect(route).toContain("'View less details'");
+      expect(route).toContain("'New total network fee'");
+      expect(route).not.toContain("'Change fee rate'");
+      expect(route).not.toContain("'View fee details'");
       expect(route).toContain("'Transaction accelerated'");
       expect(route).toContain('class="success-amount"');
       expect(route).toContain('variant="secondary" href="/activity"');
     }
     expect(appCss).toMatch(/\.success-state \.success-amount\s*\{[^}]*font-size: 24px/s);
+  });
+
+  it('shows an explicit fee-acceleration loading state before quote details are ready', () => {
+    for (const route of [singleSend, multisigSend]) {
+      expect(route).toContain('let accelerationLoading = $state(Boolean(initialAcceleration))');
+      expect(route).toContain('class="form-card send-stage-card acceleration-loading-card"');
+      expect(route).toContain("'Preparing fee acceleration'");
+      expect(route).toContain(
+        "'Reading the original transaction and current fee policy from Bitcoin Core.'"
+      );
+    }
+    expect(appCss).toMatch(/\.acceleration-loading-card\s*\{[^}]*min-height: 260px/s);
+    expect(appCss).toMatch(
+      /\.send-signers\.loading::after\s*\{[^}]*skeleton-shimmer 1\.15s linear/s
+    );
+  });
+
+  it('fails closed with a separated warning when an acceleration quote is unavailable', () => {
+    for (const route of [singleSend, multisigSend]) {
+      expect(route).toContain('let accelerationQuoteFailed = $state(false)');
+      expect(route).toContain('function scheduleAccelerationQuote()');
+      expect(route).toContain('queueMicrotask(scheduleAccelerationQuote)');
+      expect(route).toContain('onclick={() => refreshAccelerationQuote()}');
+      expect(route).not.toContain('onclick={() => window.location.reload()}');
+      expect(route).toContain('class="acceleration-unavailable-notice inline-action"');
+      expect(route).toContain('disabled={!customFeeValid || accelerationQuoteFailed}');
+      expect(route).toContain("tone: 'warning'");
+    }
+    expect(appCss).toMatch(/\.acceleration-unavailable-notice\s*\{[^}]*margin:\s*18px 0;/s);
   });
 });

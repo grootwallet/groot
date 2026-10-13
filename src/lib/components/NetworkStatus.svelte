@@ -1,6 +1,6 @@
 <script lang="ts">
   import { translate } from '$lib/i18n-catalog';
-  import { Blocks, Gauge, LockKeyhole, Network, Route, Server } from '@lucide/svelte';
+  import { Blocks, Gauge, LockKeyhole, Network, Route, Server, X } from '@lucide/svelte';
   import { networkName, type SupportedNetwork } from '$lib/config';
   import { formatInteger, locale } from '$lib/i18n';
   import { walletService } from '$lib/wallet';
@@ -15,6 +15,7 @@
   let nodeConfig = $state<CoreNodeConfig | null>(null);
   let syncSource = $state<WalletSyncSource | null>(null);
   let nodeReachable = $state<boolean | null>(null);
+  let statusRoot: HTMLDivElement;
 
   const backendLabel = $derived(
     translate(
@@ -23,7 +24,9 @@
         ? 'Trusted remote node'
         : nodeConfig?.backend.type === 'local_core'
           ? 'Local Bitcoin Core'
-          : 'Available after unlock'
+          : locked && network === 'mainnet'
+            ? 'Bitcoin Core'
+            : 'Available after unlock'
     )
   );
   const transportLabel = $derived(
@@ -33,7 +36,9 @@
         ? nodeConfig.torProxy
           ? 'Tor configured'
           : 'Direct connection'
-        : 'Available after unlock'
+        : locked && network === 'mainnet'
+          ? 'Local or remote TLS'
+          : 'Available after unlock'
     )
   );
   const syncLabel = $derived(
@@ -43,7 +48,9 @@
         ? 'P2P compact filters'
         : syncSource?.type === 'bitcoin_core'
           ? 'Bitcoin Core RPC'
-          : 'Available after unlock'
+          : locked && network === 'mainnet'
+            ? 'Bitcoin Core RPC'
+            : 'Available after unlock'
     )
   );
 
@@ -52,35 +59,40 @@
     loading = true;
     try {
       try {
-        const fees = await walletService.estimateFees();
-        priorityFee = Number(fees.priority);
+        const status = await walletService.publicNetworkStatus();
+        priorityFee = status.priorityFee;
+        nodeHeight = status.networkTip;
       } catch {
         priorityFee = null;
-      }
-      if (locked) {
         nodeHeight = null;
+      }
+      try {
+        nodeConfig = await walletService.nodeConfig();
+      } catch {
         nodeConfig = null;
+      }
+      try {
+        syncSource = await walletService.syncSource();
+      } catch {
         syncSource = null;
-        nodeReachable = null;
-      } else {
+      }
+      if (!locked) {
         try {
-          syncSource = await walletService.syncSource();
+          const fees = await walletService.estimateFees();
+          priorityFee = Number(fees.priority);
         } catch {
-          syncSource = null;
+          priorityFee = null;
         }
         try {
-          const [config, status] = await Promise.all([
-            walletService.nodeConfig(),
-            walletService.testNodeConnection()
-          ]);
-          nodeConfig = config;
+          const status = await walletService.testNodeConnection();
           nodeHeight = status.blocks;
           nodeReachable = status.connected;
         } catch {
           nodeHeight = null;
-          nodeConfig = null;
           nodeReachable = false;
         }
+      } else {
+        nodeReachable = null;
       }
     } finally {
       checked = true;
@@ -101,15 +113,27 @@
   $effect(() => {
     if (locked) {
       checked = false;
+      priorityFee = null;
       nodeHeight = null;
       nodeConfig = null;
       syncSource = null;
       nodeReachable = null;
     }
   });
+
+  $effect(() => {
+    if (!locked && !checked) void refresh();
+  });
 </script>
 
+<svelte:window
+  onpointerdown={(event) => {
+    if (open && !statusRoot?.contains(event.target as Node)) open = false;
+  }}
+/>
+
 <div
+  bind:this={statusRoot}
   class="network-status"
   class:open
   role="group"
@@ -129,7 +153,11 @@
     aria-haspopup="dialog"
     onclick={activate}
   >
-    <i class:online={nodeReachable === true} class:offline={nodeReachable === false}></i>
+    <i
+      class:mainnet={network === 'mainnet'}
+      class:online={nodeReachable === true}
+      class:offline={nodeReachable === false}
+    ></i>
     <span>{networkName(network)}</span>
   </button>
   {#if open}
@@ -147,6 +175,12 @@
                   : translate($locale, 'Checking node…')}</small
           >
         </div>
+        <button
+          type="button"
+          class="network-popover-close"
+          aria-label={translate($locale, 'Close')}
+          onclick={() => (open = false)}><X size={15} /></button
+        >
       </header>
       <dl>
         <div>
@@ -160,12 +194,10 @@
           </dd>
         </div>
         <div>
-          <dt><Blocks size={14} /><span>{translate($locale, 'Core service tip')}</span></dt>
+          <dt><Blocks size={14} /><span>{translate($locale, 'Network tip')}</span></dt>
           <dd>
             {nodeHeight === null
-              ? locked
-                ? translate($locale, 'Unlock to check')
-                : translate($locale, 'Unavailable')
+              ? translate($locale, 'Unavailable')
               : formatInteger(nodeHeight, $locale)}
           </dd>
         </div>

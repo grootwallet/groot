@@ -1,6 +1,41 @@
 import type { CatalogSection } from './types';
 
 export const componentCopy = {
+  'Open existing wallet': {
+    fr: 'Ouvrir le portefeuille existant',
+    es: 'Abrir la cartera existente'
+  },
+  'Coins spent together': { fr: 'Pièces dépensées ensemble', es: 'Monedas gastadas juntas' },
+  'Spending these coins together publicly links their sources. Their labels are shown below.': {
+    fr: 'Dépenser ces pièces ensemble relie publiquement leurs sources. Leurs libellés figurent ci-dessous.',
+    es: 'Gastar estas monedas juntas vincula públicamente sus orígenes. Sus etiquetas aparecen abajo.'
+  },
+  'This payment spends one coin. Its labels are shown below.': {
+    fr: 'Ce paiement dépense une pièce. Ses libellés figurent ci-dessous.',
+    es: 'Este pago gasta una moneda. Sus etiquetas aparecen abajo.'
+  },
+  'No local labels': { fr: 'Aucun libellé local', es: 'Sin etiquetas locales' },
+  'Some coin sources are unknown.': {
+    fr: 'Certaines sources de pièces sont inconnues.',
+    es: 'Se desconocen algunos orígenes de las monedas.'
+  },
+  'Some coins come from a reused address.': {
+    fr: 'Certaines pièces proviennent d’une adresse réutilisée.',
+    es: 'Algunas monedas proceden de una dirección reutilizada.'
+  },
+  'Enter a new device-local account name. Review the details on your device.': {
+    fr: 'Saisissez un nouveau nom de compte local à l’appareil. Vérifiez les détails sur votre appareil.',
+    es: 'Introduce un nuevo nombre de cuenta local al dispositivo. Revisa los detalles en tu dispositivo.'
+  },
+  'Build information copied': {
+    fr: 'Informations de version copiées',
+    es: 'Información de compilación copiada'
+  },
+  'Copy build information': {
+    fr: 'Copier les informations de version',
+    es: 'Copiar información de compilación'
+  },
+  'Copying…': { fr: 'Copie…', es: 'Copiando…' },
   '{label} copied': { fr: '{label} copié', es: '{label} copiado' },
   'Select and copy the {label} manually.': {
     fr: 'Sélectionnez et copiez manuellement {label}.',
@@ -36,11 +71,15 @@ export const componentCopy = {
   'Direct connection': { fr: 'Connexion directe', es: 'Conexión directa' },
   'P2P compact filters': { fr: 'Filtres compacts P2P', es: 'Filtros compactos P2P' },
   'Bitcoin Core RPC': { fr: 'RPC Bitcoin Core', es: 'RPC de Bitcoin Core' },
+  'Bitcoin Core': { fr: 'Bitcoin Core', es: 'Bitcoin Core' },
+  'Local or remote TLS': { fr: 'Local ou TLS distant', es: 'Local o TLS remoto' },
   'Wallet locked': { fr: 'Portefeuille verrouillé', es: 'Cartera bloqueada' },
   'Node reachable': { fr: 'Nœud accessible', es: 'Nodo accesible' },
   'Checking node…': { fr: 'Vérification du nœud…', es: 'Comprobando nodo…' },
   'Checking…': { fr: 'Vérification…', es: 'Comprobando…' },
   'Unlock to check': { fr: 'Déverrouillez pour vérifier', es: 'Desbloquea para comprobar' },
+  'View less details': { fr: 'Voir moins de détails', es: 'Ver menos detalles' },
+  'Network tip': { fr: 'Sommet du réseau', es: 'Altura de la red' },
   'Check again': { fr: 'Vérifier à nouveau', es: 'Comprobar de nuevo' },
   'Label hidden': { fr: 'Libellé masqué', es: 'Etiqueta oculta' },
   '{network} network status': { fr: 'État du réseau {network}', es: 'Estado de la red {network}' },
@@ -90,6 +129,14 @@ export const componentCopy = {
   Confirmations: { fr: 'Confirmations', es: 'Confirmaciones' },
   Connection: { fr: 'Connexion', es: 'Conexión' },
   'Continue to signing': { fr: 'Continuer vers la signature', es: 'Continuar a la firma' },
+  'Complete policy registration': {
+    fr: 'Terminer l’enregistrement de la politique',
+    es: 'Completar el registro de la política'
+  },
+  'Inspect fingerprints, paths, and xpubs before approving.': {
+    fr: 'Vérifiez les empreintes, chemins et xpubs avant d’approuver.',
+    es: 'Comprueba huellas, rutas y xpubs antes de aprobar.'
+  },
   'Copy change descriptor': {
     fr: 'Copier le descripteur de monnaie',
     es: 'Copiar descriptor de cambio'
@@ -314,17 +361,17 @@ export const componentCopy = {
     fr: 'Clés de signataires à comparer',
     es: 'Claves de firmantes para comparar'
   },
-  'Signer key reference': {
-    fr: 'Référence des clés de signature',
-    es: 'Referencia de claves de firma'
+  'Review all signer public keys': {
+    fr: 'Vérifier toutes les clés publiques des signataires',
+    es: 'Revisar todas las claves públicas de los firmantes'
   },
   'Open while reviewing the values shown by the device.': {
     fr: 'Ouvrez pendant la vérification des valeurs affichées par l’appareil.',
     es: 'Ábrela mientras revisas los valores mostrados por el dispositivo.'
   },
-  'Open the signer key reference below while Ledger shows each key.': {
-    fr: 'Ouvrez la référence des clés de signataire ci-dessous pendant que Ledger affiche chaque clé.',
-    es: 'Abre la referencia de claves de firmantes mientras Ledger muestra cada clave.'
+  'Review all signer public keys below while Ledger shows each key.': {
+    fr: 'Vérifiez toutes les clés publiques des signataires ci-dessous pendant que Ledger affiche chaque clé.',
+    es: 'Revisa todas las claves públicas de los firmantes mientras Ledger muestra cada clave.'
   },
   'First address reference': {
     fr: 'Référence de la première adresse',
@@ -333,6 +380,14 @@ export const componentCopy = {
   'Compare this when it appears on the device.': {
     fr: 'Comparez-la lorsqu’elle apparaît sur l’appareil.',
     es: 'Compárala cuando aparezca en el dispositivo.'
+  },
+  'Compare every signer key and the first address on Ledger.': {
+    fr: 'Comparez chaque clé de signataire et la première adresse sur Ledger.',
+    es: 'Compara cada clave de firmante y la primera dirección en Ledger.'
+  },
+  'Review & sign on {device}': {
+    fr: 'Vérifier et signer sur {device}',
+    es: 'Revisar y firmar en {device}'
   },
   '{device} shows this after policy approval.': {
     fr: '{device} l’affiche après l’approbation de la politique.',
@@ -422,6 +477,10 @@ export const componentCopy = {
       fr: 'Référence de vérification uniquement. N’alimentez pas cette adresse directement ; après la création du portefeuille, utilisez Recevoir pour créer une demande de paiement avec un libellé permanent.',
       es: 'Solo como referencia de verificación. No envíes fondos directamente a esta dirección; tras crear la cartera, usa Recibir para crear una solicitud de pago con etiqueta permanente.'
     },
+  'Verification only. Create payment addresses in Receive.': {
+    fr: 'Vérification uniquement. Créez les adresses de paiement dans Recevoir.',
+    es: 'Solo para verificación. Crea las direcciones de pago en Recibir.'
+  },
   'Verified on hardware': { fr: 'Vérifiée sur le matériel', es: 'Verificada en el dispositivo' },
   'View completed step': { fr: 'Afficher l’étape terminée', es: 'Ver paso completado' },
   'View on mempool.space': { fr: 'Afficher sur mempool.space', es: 'Ver en mempool.space' },

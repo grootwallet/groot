@@ -52,8 +52,13 @@ The source review and automated gates do not replace:
 
 - physical-iPhone verification of capture transitions, VoiceOver output, keyboard behavior, backgrounding, screenshots, and app-switcher snapshots;
 - physical hardware-wallet certification and external coordinator interoperability;
-- signed/notarized package, crash-artifact, update, and reproducible-build evidence;
+- signed/notarized package, crash-artifact, and update evidence; the unsigned
+  reproducibility evidence was later completed for frozen commit `2110eaf` and
+  is recorded in
+  [`reproducible-mainnet-builds-2026-09-04.md`](reproducible-mainnet-builds-2026-09-04.md);
 - funded Signet and Testnet4 rehearsal, recovery, reorg, and lifecycle evidence;
 - a final independent review of the exact release candidate and the full penetration-test scope.
 
-Mainnet remains absent from the build allowlist and the canonical release checklist remains blocked.
+At the time of this review, mainnet remained absent from the build allowlist.
+Mainnet is now compile-time enabled only for the separately gated candidate,
+and the canonical release checklist remains blocked by its other open rows.

@@ -10,6 +10,8 @@ const jadeMessage = (model, rawError) => {
   return `${model}: detected; log in on Jade and keep it connected over USB`;
 };
 
+const supportedDeviceTypes = new Set(['bitbox02', 'coldcard', 'jade', 'ledger', 'trezor']);
+
 export const summarizeEnumeration = (input) => {
   let devices;
   try {
@@ -28,6 +30,10 @@ export const summarizeEnumeration = (input) => {
   let actionable = 0;
   for (const device of devices) {
     const model = device.model || device.type || 'Unknown device';
+    if (!supportedDeviceTypes.has(device.type)) {
+      lines.push(`${model}: unsupported by Groot`);
+      continue;
+    }
     const warnings = Array.isArray(device.warnings)
       ? device.warnings.flat().join(' ').toLowerCase()
       : '';
@@ -45,10 +51,7 @@ export const summarizeEnumeration = (input) => {
     } else if (device.fingerprint) {
       actionable += 1;
       lines.push(`${model}: ready`);
-    } else if (
-      (device.type === 'trezor' || device.type === 'keepkey') &&
-      (device.needs_pin_sent || device.code === -12)
-    ) {
+    } else if (device.type === 'trezor' && (device.needs_pin_sent || device.code === -12)) {
       actionable += 1;
       lines.push(`${model}: detected; locked (use Groot’s PIN matrix)`);
     } else if (device.type === 'bitbox02' && device.code === -12) {

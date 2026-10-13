@@ -5,7 +5,7 @@ This runbook produces test evidence; it does not enable mainnet. Use disposable 
 ## 1. Clean automated gate
 
 ```sh
-cd /Users/thibm/Documents/Codex/2026-07-17/let
+cd /path/to/groot-app
 corepack enable
 corepack prepare pnpm@11.13.1 --activate
 pnpm install --frozen-lockfile
@@ -17,7 +17,7 @@ pnpm test:regtest
 Rust must also pass directly:
 
 ```sh
-cd /Users/thibm/Documents/Codex/2026-07-17/let/src-tauri
+cd /path/to/groot-app/src-tauri
 cargo fmt --check
 cargo clippy --locked --all-targets --all-features -- -D warnings
 cargo test --locked --all-features
@@ -50,14 +50,14 @@ The canonical finding-to-fix map is [`security-hardening-2026-08-12.md`](securit
 Terminal 1:
 
 ```sh
-cd /Users/thibm/Documents/Codex/2026-07-17/let
+cd /path/to/groot-app
 pnpm regtest:start
 ```
 
 Terminal 2:
 
 ```sh
-cd /Users/thibm/Documents/Codex/2026-07-17/let
+cd /path/to/groot-app
 test_app_data="$(mktemp -d /tmp/groot-regtest-native.XXXXXX)"
 GROOT_REGTEST_APP_DATA_DIR="$test_app_data" \
 GROOT_HWI_PATH=/opt/homebrew/bin/hwi \
@@ -131,7 +131,7 @@ This is the next public-network rehearsal after the isolated Regtest stories pas
 Prepare a local report per model:
 
 ```sh
-cd /Users/thibm/Documents/Codex/2026-07-17/let
+cd /path/to/groot-app
 mkdir -p hardware-certification.local
 cp docs/hardware-certification-template.md hardware-certification.local/coldcard.md
 cp docs/hardware-certification-template.md hardware-certification.local/trezor-model-one.md
@@ -175,7 +175,7 @@ The recovered copy proves functional recovery for that exact model/package/envir
 Use a dedicated least-privilege RPC user, a valid hostname certificate, firewall allow-list/VPN, and a disposable test-chain node. Avoid literal passwords in shell history:
 
 ```sh
-cd /Users/thibm/Documents/Codex/2026-07-17/let
+cd /path/to/groot-app
 export GROOT_RPC_URL='https://node.example.test:8332'
 export GROOT_RPC_USER='groot-test'
 export GROOT_EXPECTED_CHAIN='regtest'
@@ -192,7 +192,7 @@ Then save the same endpoint per wallet in Settings, unlock, sync, compare genesi
 Start and independently verify a loopback Tor SOCKS5 listener, then:
 
 ```sh
-cd /Users/thibm/Documents/Codex/2026-07-17/let
+cd /path/to/groot-app
 export GROOT_RPC_URL='http://examplehiddenservice.onion:8332'
 export GROOT_TOR_PROXY='127.0.0.1:9050'
 export GROOT_RPC_USER='groot-test'
@@ -213,26 +213,26 @@ Before building, verify the deterministic target dependency inventory:
 pnpm test:sbom
 ```
 
-The unsigned build emits `groot.cdx.json`, records the exact compiler, CLI, target, OS, SDK, network, commit, epoch, and lockfile identities in `BUILD-INFO`, embeds the built executable's SHA-256 in the SBOM application component, and includes both the binary and SBOM in `SHA256SUMS`. The SBOM represents packages installed/resolved for that build target; packages locked only for other targets remain visible through the recorded lock count and appear when generated on those targets. Generated SBOMs remain untracked release evidence; `pnpm test:sbom` rejects a committed CycloneDX/SPDX output rather than allowing it to drift.
+The unsigned build emits `groot.cdx.json`, records the exact compiler, CLI, target, macOS product/build, architecture, Xcode version/build, Apple Clang version/target, SDK, network, commit, epoch, and lockfile identities in `BUILD-INFO`, embeds the built executable's SHA-256 in the SBOM application component, and includes both the binary and SBOM in `SHA256SUMS`. It compiles with Tauri's production `custom-protocol` feature so the evidence executable matches the packaged execution mode. It deliberately does not record `uname`'s hardware-family kernel suffix: independent Apple-silicon models may differ while every build input remains exact. It rejects externally supplied Rust flags, clears ambient `RC_UUID_SALT`, remaps the physical checkout, effective Cargo home, and Cargo target to stable `/groot/source`, `/groot/cargo`, and `/groot/target` prefixes, and fails if the resulting executable still contains the checkout, Cargo-home, Cargo-target, or user-home path. Before evidence generation, the builder strictly verifies the linker-generated ad hoc signature, derives a deterministic retained UUID from the pre-signature Mach-O content, recomputes the affected full-SHA-256 CodeDirectory slots, verifies every code slot, atomically replaces the executable, and strictly verifies the resulting ad hoc signature. The normalizer accepts only the reviewed thin arm64 Mach-O and single final ad hoc-signature layout and never creates an identity signature. The SBOM represents packages installed/resolved for that build target; packages locked only for other targets remain visible through the recorded lock count and appear when generated on those targets. Generated SBOMs remain untracked release evidence; `pnpm test:sbom` rejects a committed CycloneDX/SPDX output rather than allowing it to drift.
 
-Run on two clean machines with the pinned Node, pnpm, Rust toolchain, target, OS, Xcode/SDK and dependency lockfiles:
+Run on two genuinely independent clean machines with the pinned Node, pnpm, Rust toolchain, target architecture, exact macOS product/build, Xcode version/build, Apple Clang version/target, SDK, and dependency lockfiles. The Macs need not use the same Apple silicon family:
 
 ```sh
-cd /Users/thibm/Documents/Codex/2026-07-17/let
-pnpm release:unsigned
+cd /absolute/path/to/a/clean/groot/checkout
+pnpm release:unsigned:mainnet
 ```
 
 Transfer only the two output directories to one verification machine, then:
 
 ```sh
-cd /Users/thibm/Documents/Codex/2026-07-17/let
-pnpm release:compare -- /absolute/path/to/build-a /absolute/path/to/build-b
+cd /absolute/path/to/groot
+pnpm release:compare /absolute/path/to/build-a /absolute/path/to/build-b
 ```
 
-The comparator rejects symlinks, unexpected or missing files, stale recorded digests, different build environments, different SBOMs, and different binaries. Resolve any mismatch before signing. `pnpm release:test:compare` exercises those fail-closed boundaries without producing a release. Signing/notarization requires the release owner's Apple identity and protected credentials. Verify the resulting package with:
+The comparator rejects symlinks, unexpected or missing files, stale recorded digests, different build environments, different SBOMs, and different binaries. Resolve any mismatch before signing. `pnpm release:test:compare` exercises those fail-closed boundaries, different linker UUID salts, tampered ad hoc code pages, and synthetic user/checkout/Cargo-home prefixes; it requires content-normalized byte-identical executables with valid ad hoc signatures and proves physical paths do not survive in them. The completed `2110eaf` two-machine run is recorded in [`reproducible-mainnet-builds-2026-09-04.md`](reproducible-mainnet-builds-2026-09-04.md). Signing/notarization requires the release owner's Apple identity and protected credentials. Verify the resulting package with:
 
 ```sh
-cd /Users/thibm/Documents/Codex/2026-07-17/let
+cd /path/to/groot-app
 pnpm release:verify:macos -- /absolute/path/to/Groot.app
 ```
 

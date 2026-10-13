@@ -10,7 +10,7 @@ test('shows security-accurate delayed-policy state across overview, coins, and p
   await expect(overview).toContainText('Next key change in 820 blocks');
   await overview.getByRole('link', { name: 'Review coins' }).click();
 
-  const timelineNote = page.locator('.coin-list > .warning-box.coin-timeline-note');
+  const timelineNote = page.locator('.coin-list > .warning-notice.coin-timeline-note');
   await expect(timelineNote).toContainText('Each coin has its own protection timeline.');
   await expect(timelineNote).toContainText('Your normal keys keep working.');
   await expect(page.getByText('Recovery key can spend', { exact: true }).first()).toBeVisible();
@@ -90,9 +90,7 @@ test('renews one mature coin without merging another coin', async ({ page }) => 
 
   await expect(page.getByText('New protected coin')).toBeVisible();
   await expect(page.getByText('Protection restarts after confirmation')).toBeVisible();
-  await expect(
-    page.locator('.selection-review').filter({ hasText: '1 funding coin' })
-  ).toBeVisible();
+  await expect(page.getByText('Exact strategy comparison')).toHaveCount(0);
   await expect(
     page.getByText(/Only this coin moves. The network fee is the only amount leaving your wallet/)
   ).toBeVisible();

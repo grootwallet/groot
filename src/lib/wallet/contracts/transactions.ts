@@ -20,6 +20,25 @@ export type WalletSnapshot = {
   };
 };
 
+export type WalletOverview = Pick<
+  WalletSnapshot,
+  'network' | 'balance' | 'transactions' | 'utxos' | 'syncedAt' | 'chainTip'
+> & { pendingOutgoing: Sats };
+export type ActivityCursor = { revision: string; after: string };
+export type ActivityRequest = {
+  walletId: string;
+  filter: 'all' | 'received' | 'sent';
+  query: string;
+  sort: 'newest' | 'oldest' | 'largest' | 'smallest';
+  limit: number;
+  cursor: ActivityCursor | null;
+};
+export type ActivityPage = {
+  transactions: Transaction[];
+  nextCursor: ActivityCursor | null;
+  total: number;
+};
+
 export type FeeEstimates = {
   economy: FeeRate;
   standard: FeeRate;
@@ -56,6 +75,7 @@ export type CoinSelectionPreview = {
 
 export type PaymentProposal = {
   proposalId: string;
+  reviewBinding: string;
   recipient: string;
   recipientTestnetAlias: string | null;
   recipientIsWalletOwned?: boolean;
@@ -88,7 +108,8 @@ export type AccelerationReview = {
   minimumFeeRate: FeeRate;
   targetFeeRate: FeeRate;
   incrementalFee: Sats;
-  recommendationSource: 'bitcoin_core' | 'replacement_fallback' | 'custom' | 'legacy';
+  recommendationSource:
+    'bitcoin_core' | 'replacement_fallback' | 'package_fallback' | 'custom' | 'legacy';
 };
 
 export type AccelerationQuote = {
@@ -104,6 +125,22 @@ export type AccelerationQuote = {
   resultingEffectiveFeeRate: FeeRate;
   replacementVsize: number;
   recommendationSource: 'bitcoin_core' | 'replacement_fallback' | 'custom';
+};
+
+export type CpfpAccelerationQuote = {
+  method: 'cpfp';
+  originalTxid: string;
+  parentFee: Sats;
+  parentVsize: number;
+  parentEffectiveFeeRate: FeeRate;
+  minimumFeeRate: FeeRate;
+  targetFeeRate: FeeRate;
+  childFee: Sats;
+  childVsize: number;
+  packageFee: Sats;
+  packageVsize: number;
+  resultingPackageFeeRate: FeeRate;
+  recommendationSource: 'bitcoin_core' | 'package_fallback' | 'custom';
 };
 
 export type LabelExportResult = {

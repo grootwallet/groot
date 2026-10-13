@@ -1,7 +1,27 @@
 export type KeyboardShortcut = {
-  id: 'overview' | 'activity' | 'coins' | 'settings' | 'receive' | 'send' | 'lock';
-  label: 'Overview' | 'Activity' | 'Coins' | 'Settings' | 'Receive' | 'Send' | 'Lock wallet';
-  key: '1' | '2' | '3' | '4' | 'R' | 'S' | 'L';
+  id:
+    | 'overview'
+    | 'activity'
+    | 'coins'
+    | 'settings'
+    | 'receive'
+    | 'send'
+    | 'lock'
+    | 'zoom_in'
+    | 'zoom_out'
+    | 'zoom_reset';
+  label:
+    | 'Overview'
+    | 'Activity'
+    | 'Coins'
+    | 'Settings'
+    | 'Receive'
+    | 'Send'
+    | 'Lock wallet'
+    | 'Zoom in'
+    | 'Zoom out'
+    | 'Reset zoom';
+  key: '1' | '2' | '3' | '4' | 'R' | 'S' | 'L' | '+' | '−' | '0';
   shift?: true;
 };
 
@@ -12,11 +32,23 @@ export const keyboardShortcuts: KeyboardShortcut[] = [
   { id: 'settings', label: 'Settings', key: '4' },
   { id: 'receive', label: 'Receive', key: 'R', shift: true },
   { id: 'send', label: 'Send', key: 'S', shift: true },
-  { id: 'lock', label: 'Lock wallet', key: 'L' }
+  { id: 'lock', label: 'Lock wallet', key: 'L' },
+  { id: 'zoom_in', label: 'Zoom in', key: '+' },
+  { id: 'zoom_out', label: 'Zoom out', key: '−' },
+  { id: 'zoom_reset', label: 'Reset zoom', key: '0' }
 ];
 
 export function usesCommandModifier(platform: string): boolean {
   return /Mac|iPhone|iPad|iPod/i.test(platform);
+}
+
+export function matchZoomShortcut(
+  event: Pick<KeyboardEvent, 'key' | 'code'>
+): 'in' | 'out' | 'reset' | undefined {
+  if (event.key === '+' || event.key === '=' || event.code === 'NumpadAdd') return 'in';
+  if (event.key === '-' || event.key === '_' || event.code === 'NumpadSubtract') return 'out';
+  if (event.key === '0' || event.code === 'Numpad0') return 'reset';
+  return undefined;
 }
 
 export function isDesktopPlatform(

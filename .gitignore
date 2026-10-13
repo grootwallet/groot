@@ -8,6 +8,8 @@ dist/
 !.env.regtest
 !.env.signet
 !.env.testnet4
+!.env.mainnet
+!.env.multi
 .regtest/
 .regtest-test/
 src-tauri/target/
@@ -22,3 +24,5 @@ coverage/
 .vercel
 hardware-certification.local/
 release-artifacts/
+__pycache__/
+*.py[cod]

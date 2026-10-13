@@ -2,7 +2,6 @@
   import { locale } from '$lib/i18n';
   import { translate, localizedError } from '$lib/i18n-catalog';
   import {
-    AlertTriangle,
     ArrowLeft,
     ArrowRight,
     Cable,
@@ -15,6 +14,7 @@
     ShieldCheck
   } from '@lucide/svelte';
   import { goto } from '$app/navigation';
+  import { defaultConfig } from '$lib/config';
   import { onDestroy, onMount } from 'svelte';
   import Button from '$lib/components/Button.svelte';
   import FieldCounter from '$lib/components/FieldCounter.svelte';
@@ -25,6 +25,7 @@
   import PasswordField from '$lib/components/PasswordField.svelte';
   import SetupProgress from '$lib/components/SetupProgress.svelte';
   import TrezorPinModal from '$lib/components/TrezorPinModal.svelte';
+  import WarningNotice from '$lib/components/WarningNotice.svelte';
   import { toast } from '$lib/stores/toasts';
   import { readTransferFile } from '$lib/transfer';
   import { compactIdentifier } from '$lib/address-display';
@@ -41,6 +42,7 @@
 
   const walletShell = useWalletShellContext();
   const hardwareSteps = ['Connect signer', 'Review identity', 'Protect app'];
+  const ledgerAppName = defaultConfig.network === 'mainnet' ? 'Bitcoin' : 'Bitcoin Test';
 
   let step = $state(1),
     busy = $state(false),
@@ -73,12 +75,8 @@
   let isLedger = $derived(Boolean(signer?.deviceType?.toLowerCase().includes('ledger')));
   let isTrezor = $derived(Boolean(signer?.deviceType?.toLowerCase().includes('trezor')));
   let isColdcard = $derived(Boolean(signer?.deviceType?.toLowerCase().includes('coldcard')));
-  let isBitBoxNova = $derived(
-    Boolean(
-      signer?.deviceType?.toLowerCase().includes('bitbox') &&
-      signer.label.toLowerCase().includes('nova')
-    )
-  );
+  let isBitBox = $derived(Boolean(signer?.deviceType?.toLowerCase().includes('bitbox')));
+  let isBitBoxNova = $derived(Boolean(isBitBox && signer?.label.toLowerCase().includes('nova')));
   let isFileImport = $derived(signer?.source === 'file');
   let networkSetupSource = $state<NetworkSetupSource | null>(null);
   let reuseNetworkSetup = $state(true);
@@ -109,6 +107,7 @@
     lastAttemptedDevice = null;
     lastAttemptAllowedEmptyPassphrase = false;
     errorTitle = 'Could not scan hardware';
+    errorCode = '';
     error = '';
     try {
       const discovered = await walletService.listHardwareDevices();
@@ -117,7 +116,16 @@
     } catch (cause) {
       if (generation !== hardwareScanGeneration) return;
       devices = [];
-      error = localizedError(cause, $locale, 'Could not scan hardware.');
+      errorCode = cause instanceof WalletError ? cause.code : 'internal_error';
+      if (errorCode === 'hardware_command_failed') {
+        errorTitle = 'Finish unlocking the signer';
+        error = translate(
+          $locale,
+          'The scan ended during device unlock. Finish on-device, then scan again.'
+        );
+      } else {
+        error = localizedError(cause, $locale, 'Could not scan hardware.');
+      }
     } finally {
       if (generation === hardwareScanGeneration) busy = false;
     }
@@ -126,9 +134,19 @@
     hardwareScanGeneration += 1;
     busy = false;
     scanOpen = false;
+    void walletService.cancelHardwareOperations(true).catch((cause) => {
+      const description = localizedError(cause, $locale, 'Could not stop the hardware scan.');
+      errorTitle = 'Could not stop hardware scan';
+      error = description;
+      toast({ title: translate($locale, errorTitle), description, tone: 'danger' });
+    });
   }
-  async function useDevice(device: HardwareDevice, allowEmptyPassphrase = false) {
-    if (device.action === 'prompt_pin') {
+  async function useDevice(
+    device: HardwareDevice,
+    allowEmptyPassphrase = false,
+    pinResolved = false
+  ) {
+    if (device.action === 'prompt_pin' && !pinResolved) {
       await startHardwarePin(device);
       return;
     }
@@ -142,7 +160,8 @@
       device.status !== 'ready' &&
       device.status !== 'detected' &&
       device.action !== 'unlock' &&
-      !allowEmptyPassphrase
+      !allowEmptyPassphrase &&
+      !pinResolved
     ) {
       error = device.message;
       return;
@@ -151,6 +170,7 @@
     lastAttemptedDevice = device;
     lastAttemptAllowedEmptyPassphrase = allowEmptyPassphrase;
     errorTitle = 'Could not read the account key';
+    errorCode = '';
     hardwareProgress = device.model.startsWith('ledger')
       ? 'Reading the public account key from Ledger…'
       : translate($locale, 'Reading the public account key from {device}…', {
@@ -172,32 +192,51 @@
       lastAttemptedDevice = null;
       lastAttemptAllowedEmptyPassphrase = false;
     } catch (cause) {
+      errorCode = cause instanceof WalletError ? cause.code : 'internal_error';
+      if (errorCode === 'hardware_wallet_selection_required' && pinResolved) {
+        error = '';
+        standardWalletDevice = {
+          ...device,
+          status: 'detected',
+          action: 'import',
+          message: 'Unlocked. Choose the standard wallet or a hidden wallet.'
+        };
+        scanOpen = false;
+        standardWalletOpen = true;
+        return;
+      }
+      if (errorCode === 'hardware_wrong_network') errorTitle = 'Jade is on a different network';
       error = localizedError(cause, $locale, 'Could not import the public account key.');
     } finally {
       busy = false;
     }
   }
   async function startHardwarePin(device: HardwareDevice) {
-    const retrying = pinOpen;
     busy = true;
-    pinBusy = retrying;
+    pinBusy = true;
     errorTitle = 'Could not start hardware unlock';
     error = '';
     pinError = '';
     pinErrorCode = '';
     pinPositions = '';
     pinChallenge = '';
+    pinDevice = device;
+    scanOpen = false;
+    pinOpen = true;
     try {
-      pinChallenge = await walletService.promptHardwarePin(device.id);
-      pinDevice = device;
-      scanOpen = false;
-      pinOpen = true;
+      const prompt = await walletService.promptHardwarePin(device.id);
+      if (!prompt.pinRequired) {
+        pinOpen = false;
+        pinDevice = null;
+        scanOpen = true;
+        await useDevice(device, false, true);
+        return;
+      }
+      pinChallenge = prompt.challengeId ?? '';
     } catch (cause) {
       const message = localizedError(cause, $locale, 'Could not start the PIN matrix.');
-      if (retrying) {
-        pinErrorCode = cause instanceof WalletError ? cause.code : 'internal_error';
-        pinError = message;
-      } else error = message;
+      pinErrorCode = cause instanceof WalletError ? cause.code : 'internal_error';
+      pinError = message;
     } finally {
       busy = false;
       pinBusy = false;
@@ -209,6 +248,7 @@
     pinError = '';
     pinErrorCode = '';
     let positions = pinPositions;
+    const unlockedDevice = pinDevice;
     pinPositions = '';
     try {
       await walletService.sendHardwarePin(pinChallenge, positions);
@@ -217,10 +257,18 @@
       pinDevice = null;
       toast({
         title: 'Hardware signer unlocked',
-        description: 'Now choose its standard or hidden wallet.',
+        description: 'Reading its public account key now.',
         tone: 'success'
       });
-      await scan();
+      if (!unlockedDevice) {
+        await scan();
+      } else {
+        // The opaque scanned capability remains valid after HWI accepts the
+        // one-time PIN challenge. Continue on that exact path instead of
+        // launching another slow aggregate scan across every HWI backend.
+        scanOpen = true;
+        await useDevice(unlockedDevice, false, true);
+      }
     } catch (cause) {
       pinChallenge = '';
       pinErrorCode = cause instanceof WalletError ? cause.code : 'internal_error';
@@ -294,7 +342,7 @@
         tone: networkSetupCopied ? 'success' : 'default'
       });
       await walletShell.refreshProfiles();
-      await goto('/');
+      await goto('/?initial=full');
     } catch (cause) {
       errorCode = cause instanceof WalletError ? cause.code : 'internal_error';
       existingWalletId = cause instanceof WalletError ? cause.existingWalletId : null;
@@ -321,11 +369,7 @@
 <div class="page narrow-page hardware-setup-page">
   <header class="page-header">
     <div>
-      <p class="eyebrow">{translate($locale, 'EXTERNAL SIGNER')}</p>
       <h1>{translate($locale, 'Add hardware signer')}</h1>
-      <p class="subtitle">
-        {translate($locale, 'One key. Signing stays on your hardware device.')}
-      </p>
     </div>
     <Button variant="secondary" href="/welcome?add=1"
       ><ArrowLeft size={16} />{translate($locale, 'Cancel')}</Button
@@ -346,7 +390,7 @@
           <span
             >{translate(
               $locale,
-              'Before connecting, initialize and unlock the signer. Select any hardware passphrase\n            on-device. Groot imports public data only.'
+              'Before connecting, initialize and unlock the signer, select any hardware passphrase\n            on-device, and finish its recovery backup. Groot imports public data only.'
             )}</span
           >
         </p>
@@ -368,7 +412,7 @@
             ><strong>{translate($locale, 'Connect with cable')}</strong><small
               >{translate(
                 $locale,
-                'Jade, BitBox02, Trezor, Ledger, and HWI-compatible devices'
+                'Connect one initialized and unlocked signer directly to this computer'
               )}</small
             ></span
           ><ArrowRight size={17} /></button
@@ -376,7 +420,7 @@
         <label class="source-button"
           ><FileUp size={20} /><span
             ><strong>{translate($locale, 'Import public backup')}</strong><small
-              >{translate($locale, 'From this computer, an SD card, or a connected drive')}</small
+              >{translate($locale, 'Choose a descriptor or signer-export file')}</small
             ></span
           ><ArrowRight size={17} /><input
             aria-label={translate($locale, 'Import public backup file')}
@@ -404,8 +448,12 @@
           ><span>{translate($locale, 'Descriptor or public export')}</span><textarea
             bind:value={encoded}
             rows="5"
-            placeholder={translate($locale, "wpkh([fingerprint/84'/1'/0']tpub…/<0;1>/*)")}
-          ></textarea></label
+            placeholder={translate(
+              $locale,
+              defaultConfig.network === 'mainnet'
+                ? "wpkh([fingerprint/84'/0'/0']xpub…/<0;1>/*)"
+                : "wpkh([fingerprint/84'/1'/0']tpub…/<0;1>/*)"
+            )}></textarea></label
         ><Button
           class="full"
           disabled={!encoded.trim() || !label.trim()}
@@ -500,16 +548,16 @@
             >
           </p>
         </div>
-      {:else if isBitBoxNova}
+      {:else if isBitBox}
         <div class="credential-warning">
           <ShieldCheck size={17} />
           <p>
             <strong
-              >{translate($locale, 'This public identity came from the connected Nova.')}</strong
+              >{translate($locale, 'This public identity came from the connected BitBox.')}</strong
             ><span
               >{translate(
                 $locale,
-                'Nova does not show its fingerprint during this import, so no fingerprint comparison\n              is required here. After setup, verify the first receive address on Nova before\n              accepting bitcoin.'
+                'BitBox does not show its fingerprint during this import. Verify the first receive\n              address on-device before accepting bitcoin.'
               )}</span
             >
           </p>
@@ -593,8 +641,10 @@
               ? 'Use this Ledger wallet'
               : isTrezor
                 ? 'Use this Trezor wallet'
-                : isBitBoxNova
-                  ? 'Use this Nova wallet'
+                : isBitBox
+                  ? isBitBoxNova
+                    ? 'Use this Nova wallet'
+                    : 'Use this BitBox wallet'
                   : isFileImport
                     ? 'Use this public backup'
                     : 'Fingerprint matches'
@@ -644,32 +694,31 @@
           </p></label
         >{/if}
       {#if error}
-        <div class="hardware-inline-error hardware-create-error" role="alert">
-          <AlertTriangle size={18} />
-          <span>
-            <strong
-              >{translate(
-                $locale,
-                errorCode === 'wallet_already_exists'
-                  ? 'This hardware signer is already in Groot'
-                  : 'Could not create the wallet'
-              )}</strong
-            >
-            <small
-              >{translate(
-                $locale,
-                errorCode === 'wallet_already_exists'
-                  ? 'Groot matched the same public descriptor. No duplicate was created and nothing was changed. Open the existing wallet instead.'
-                  : error
-              )}</small
-            >
-          </span>
+        <WarningNotice
+          tone="danger"
+          class="inline-action"
+          icon
+          role="alert"
+          ariaLive="polite"
+          title={translate(
+            $locale,
+            errorCode === 'wallet_already_exists'
+              ? 'This hardware signer is already in Groot'
+              : 'Could not create the wallet'
+          )}
+          body={translate(
+            $locale,
+            errorCode === 'wallet_already_exists'
+              ? 'Groot matched the same public descriptor. No duplicate was created and nothing was changed. Open the existing wallet instead.'
+              : error
+          )}
+        >
           {#if errorCode === 'wallet_already_exists' && existingWalletId}<Button
               variant="secondary"
               size="small"
               onclick={openExistingWallet}>{translate($locale, 'Open wallet')}</Button
             >{/if}
-        </div>
+        </WarningNotice>
       {/if}
       <div class="split-actions">
         <Button
@@ -703,7 +752,10 @@
 <Modal
   open={scanOpen}
   title={translate($locale, 'Connect hardware signer')}
-  description={translate($locale, 'Quit other wallet apps so Groot can use USB.')}
+  description={translate(
+    $locale,
+    'Connect one initialized and unlocked signer directly to this computer.'
+  )}
   onclose={closeHardwareScan}
 >
   {#if busy}<HardwareActionPrompt
@@ -713,7 +765,9 @@
         hardwareProgress.startsWith('Scanning')
           ? 'Follow any unlock prompt on the signer. Keep other wallet apps closed.'
           : hardwareProgress.includes('Ledger')
-            ? 'Keep Bitcoin Test open for Regtest and follow any prompt on the Ledger screen.'
+            ? ledgerAppName === 'Bitcoin'
+              ? 'Keep Bitcoin open and follow any prompt on the Ledger screen.'
+              : 'Keep Bitcoin Test open and follow any prompt on the Ledger screen.'
             : hardwareProgress.toLowerCase().includes('bitbox')
               ? 'BitBox may request its password again for this new secure connection. Enter it only on BitBox.'
               : 'Keep the signer connected and unlocked.'
@@ -731,14 +785,20 @@
       detailedStatus
       showRescan
     />{/if}
-  {#if error}<div class="hardware-inline-error" role="alert">
-      <AlertTriangle size={18} /><span
-        ><strong>{translate($locale, errorTitle)}</strong><small>{error}</small></span
+  {#if error}<WarningNotice
+      tone="danger"
+      icon
+      role="alert"
+      ariaLive="polite"
+      title={translate($locale, errorTitle)}
+      body={error}
       ><Button
         variant="secondary"
         size="small"
         onclick={() => {
-          if (errorTitle === 'Could not read the account key' && lastAttemptedDevice) {
+          if (errorCode === 'hardware_wrong_network') {
+            closeHardwareScan();
+          } else if (errorTitle === 'Could not read the account key' && lastAttemptedDevice) {
             useDevice(lastAttemptedDevice, lastAttemptAllowedEmptyPassphrase);
           } else {
             scan();
@@ -746,12 +806,14 @@
         }}
         >{translate(
           $locale,
-          errorTitle === 'Could not read the account key' && lastAttemptedDevice
-            ? 'Try this signer again'
-            : 'Scan again'
+          errorCode === 'hardware_wrong_network'
+            ? 'Close'
+            : errorTitle === 'Could not read the account key' && lastAttemptedDevice
+              ? 'Try this signer again'
+              : 'Scan again'
         )}</Button
       >
-    </div>{/if}
+    </WarningNotice>{/if}
 </Modal>
 <Modal
   open={standardWalletOpen}
@@ -832,40 +894,42 @@
   title={translate($locale, 'Prepare your signer')}
   description={translate(
     $locale,
-    'Use the device’s own screen to confirm identity and passphrase wallet.'
+    'Supported Mainnet models must be initialized, unlocked, and backed up first.'
   )}
   onclose={() => (guideOpen = false)}
 >
   <div class="guide-list">
     <p>
-      <strong>Jade</strong><span
-        >{translate(
-          $locale,
-          'Log in on Jade, then connect USB or import its BIP84 xpub by QR.'
-        )}</span
+      <strong>{translate($locale, 'Blockstream Jade Classic')}</strong><span
+        >{translate($locale, 'Connect by USB and enter the PIN on-device when prompted.')}</span
       >
     </p>
     <p>
-      <strong>BitBox02</strong><span
+      <strong>{translate($locale, 'BitBox02 Bitcoin-only / Nova Bitcoin-only')}</strong><span
         >{translate($locale, 'Unlock BitBox and quit BitBoxApp, then scan.')}</span
       >
     </p>
     <p>
-      <strong>Trezor</strong><span
+      <strong>{translate($locale, 'Trezor Model One / Safe 3 Bitcoin-only')}</strong><span
         >{translate(
           $locale,
-          'Unlock on-device. Model One hidden-wallet passphrases are not supported.'
+          'Quit Trezor Suite. Model One uses Groot’s PIN matrix; Safe 3 unlocks on-device.'
         )}</span
       >
     </p>
     <p>
-      <strong>Ledger</strong><span
-        >{translate($locale, 'Quit Ledger Live, unlock Ledger, and open Bitcoin Test.')}</span
+      <strong>{translate($locale, 'Ledger Nano S Plus')}</strong><span
+        >{translate(
+          $locale,
+          ledgerAppName === 'Bitcoin'
+            ? 'Quit Ledger Live, unlock the device, and open Bitcoin.'
+            : 'Quit Ledger Live, unlock the device, and open Bitcoin Test.'
+        )}</span
       >
     </p>
     <p>
-      <strong>{translate($locale, 'Passport')}</strong><span
-        >{translate($locale, 'Import a BIP84 descriptor or xpub by microSD or QR.')}</span
+      <strong>{translate($locale, 'Coldcard Mk4')}</strong><span
+        >{translate($locale, 'Sign in, enable USB, and leave the device at its main menu.')}</span
       >
     </p>
   </div>

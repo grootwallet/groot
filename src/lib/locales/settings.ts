@@ -1,6 +1,242 @@
 import type { CatalogSection } from './types';
 
 export const settingsCopy = {
+  '{walletName} settings': {
+    fr: 'Réglages de {walletName}',
+    es: 'Ajustes de {walletName}'
+  },
+  'APP SETTINGS': { fr: 'RÉGLAGES DE L’APP', es: 'AJUSTES DE LA APP' },
+  'Wallet locked · App settings only.': {
+    fr: 'Portefeuille verrouillé · Réglages de l’app uniquement.',
+    es: 'Cartera bloqueada · Solo ajustes de la app.'
+  },
+  'Appearance and Bitcoin network.': {
+    fr: 'Apparence et réseau Bitcoin.',
+    es: 'Apariencia y red Bitcoin.'
+  },
+  'Wallet-specific network details are locked': {
+    fr: 'Les détails réseau du portefeuille sont verrouillés',
+    es: 'Los detalles de red de la cartera están bloqueados'
+  },
+  'Unlock the wallet to view its node route, sync source, credentials, or run a live connection check.':
+    {
+      fr: 'Déverrouillez le portefeuille pour afficher son nœud, sa source de synchronisation et ses identifiants, ou pour tester la connexion en direct.',
+      es: 'Desbloquea la cartera para ver su nodo, fuente de sincronización y credenciales, o para probar la conexión en directo.'
+    },
+  'App logs': { fr: 'Journaux de l’app', es: 'Registros de la app' },
+  'APP LOGS': { fr: 'JOURNAUX DE L’APP', es: 'REGISTROS DE LA APP' },
+  'View app logs': { fr: 'Voir les journaux de l’app', es: 'Ver registros de la app' },
+  Diagnostics: { fr: 'Diagnostics', es: 'Diagnóstico' },
+  'APP DIAGNOSTICS': { fr: 'DIAGNOSTIC DE L’APP', es: 'DIAGNÓSTICO DE LA APP' },
+  'Diagnostic event log': {
+    fr: 'Journal des événements de diagnostic',
+    es: 'Registro de eventos de diagnóstico'
+  },
+  'Review and export sanitized app events without wallet identifiers or secrets.': {
+    fr: 'Consultez et exportez les événements assainis de l’app sans identifiants de portefeuille ni secrets.',
+    es: 'Revisa y exporta eventos depurados de la app sin identificadores de cartera ni secretos.'
+  },
+  'Recorded event types': {
+    fr: 'Types d’événements enregistrés',
+    es: 'Tipos de eventos registrados'
+  },
+  'Only these durable lifecycle and operation categories are recorded. Sensitive values and passive polling are excluded.':
+    {
+      fr: 'Seules ces catégories durables de cycle de vie et d’opération sont enregistrées. Les valeurs sensibles et l’interrogation passive sont exclues.',
+      es: 'Solo se registran estas categorías duraderas de ciclo de vida y operación. Se excluyen los valores sensibles y el sondeo pasivo.'
+    },
+  'Sanitized activity for troubleshooting.': {
+    fr: 'Activité assainie pour le dépannage.',
+    es: 'Actividad depurada para diagnóstico.'
+  },
+  'Diagnostic log summary': {
+    fr: 'Résumé du journal de diagnostic',
+    es: 'Resumen del registro de diagnóstico'
+  },
+  'App log summary': {
+    fr: 'Résumé des journaux de l’app',
+    es: 'Resumen de los registros de la app'
+  },
+  'Browse app logs': {
+    fr: 'Parcourir les journaux de l’app',
+    es: 'Explorar los registros de la app'
+  },
+  'Search logs': { fr: 'Rechercher dans les journaux', es: 'Buscar en los registros' },
+  'Search events and safe context': {
+    fr: 'Rechercher des événements et du contexte sûr',
+    es: 'Buscar eventos y contexto seguro'
+  },
+  'All event types': {
+    fr: 'Tous les types d’événements',
+    es: 'Todos los tipos de eventos'
+  },
+  '{count} event types': {
+    fr: '{count} types d’événements',
+    es: '{count} tipos de eventos'
+  },
+  'All outcomes': { fr: 'Tous les résultats', es: 'Todos los resultados' },
+  '{count} outcomes': { fr: '{count} résultats', es: '{count} resultados' },
+  'Filter by outcome': { fr: 'Filtrer par résultat', es: 'Filtrar por resultado' },
+  'Filter by event type': {
+    fr: 'Filtrer par type d’événement',
+    es: 'Filtrar por tipo de evento'
+  },
+  Done: { fr: 'Terminé', es: 'Listo' },
+  'Date order': { fr: 'Ordre des dates', es: 'Orden de fecha' },
+  'Newest first': { fr: 'Plus récents d’abord', es: 'Más recientes primero' },
+  'Oldest first': { fr: 'Plus anciens d’abord', es: 'Más antiguos primero' },
+  'Log view': { fr: 'Vue des journaux', es: 'Vista de registros' },
+  Table: { fr: 'Tableau', es: 'Tabla' },
+  'Raw JSON': { fr: 'JSON brut', es: 'JSON sin procesar' },
+  'Showing {visible} of {total} events': {
+    fr: 'Affichage de {visible} événements sur {total}',
+    es: 'Mostrando {visible} de {total} eventos'
+  },
+  'No app logs match these filters.': {
+    fr: 'Aucun journal de l’app ne correspond à ces filtres.',
+    es: 'Ningún registro de la app coincide con estos filtros.'
+  },
+  'Clear filters': { fr: 'Effacer les filtres', es: 'Borrar filtros' },
+  'The exact sanitized records shown by the current filters.': {
+    fr: 'Les enregistrements assainis exacts affichés par les filtres actuels.',
+    es: 'Los registros depurados exactos mostrados por los filtros actuales.'
+  },
+  'Raw app log JSON': {
+    fr: 'JSON brut des journaux de l’app',
+    es: 'JSON sin procesar de los registros de la app'
+  },
+  'Copy JSON': { fr: 'Copier le JSON', es: 'Copiar JSON' },
+  'App logs copied': {
+    fr: 'Journaux de l’app copiés',
+    es: 'Registros de la app copiados'
+  },
+  'Could not copy app logs': {
+    fr: 'Impossible de copier les journaux de l’app',
+    es: 'No se pudieron copiar los registros de la app'
+  },
+  '{count} events': { fr: '{count} événements', es: '{count} eventos' },
+  '{network} · {platform} · v{version} · {commit}': {
+    fr: '{network} · {platform} · v{version} · {commit}',
+    es: '{network} · {platform} · v{version} · {commit}'
+  },
+  'Stored locally as append-only JSONL. New records stop at the 16 MiB safety limit.': {
+    fr: 'Stocké localement en JSONL à ajout seul. Les nouveaux enregistrements s’arrêtent à la limite de sécurité de 16 Mio.',
+    es: 'Almacenado localmente como JSONL de solo anexado. Los nuevos registros se detienen en el límite de seguridad de 16 MiB.'
+  },
+  'Export CSV': { fr: 'Exporter en CSV', es: 'Exportar CSV' },
+  'Export JSON': { fr: 'Exporter en JSON', es: 'Exportar JSON' },
+  'Loading diagnostics…': { fr: 'Chargement du diagnostic…', es: 'Cargando diagnóstico…' },
+  'Could not load diagnostics.': {
+    fr: 'Impossible de charger le diagnostic.',
+    es: 'No se pudo cargar el diagnóstico.'
+  },
+  'No diagnostic events have been recorded yet.': {
+    fr: 'Aucun événement de diagnostic enregistré.',
+    es: 'Aún no se registraron eventos de diagnóstico.'
+  },
+  'The sanitized diagnostic log was saved.': {
+    fr: 'Le journal de diagnostic assaini a été enregistré.',
+    es: 'Se guardó el registro de diagnóstico depurado.'
+  },
+  'The sanitized app logs were saved.': {
+    fr: 'Les journaux assainis de l’app ont été enregistrés.',
+    es: 'Se guardaron los registros depurados de la app.'
+  },
+  'Could not export diagnostics': {
+    fr: 'Impossible d’exporter le diagnostic',
+    es: 'No se pudo exportar el diagnóstico'
+  },
+  'Could not export app logs': {
+    fr: 'Impossible d’exporter les journaux de l’app',
+    es: 'No se pudieron exportar los registros de la app'
+  },
+  Time: { fr: 'Heure', es: 'Hora' },
+  Event: { fr: 'Événement', es: 'Evento' },
+  Outcome: { fr: 'Résultat', es: 'Resultado' },
+  'Safe context': { fr: 'Contexte sûr', es: 'Contexto seguro' },
+  'Error details': { fr: 'Détails de l’erreur', es: 'Detalles del error' },
+  'Required block history is unavailable': {
+    fr: 'L’historique de blocs requis est indisponible',
+    es: 'El historial de bloques requerido no está disponible'
+  },
+  'Full rescan failed': { fr: 'Échec du rescannage complet', es: 'Falló el reescaneo completo' },
+  'Wallet-history scan failed': {
+    fr: 'Échec de l’analyse de l’historique du portefeuille',
+    es: 'Falló el escaneo del historial de la cartera'
+  },
+  'Requested birthday': { fr: 'Anniversaire demandé', es: 'Fecha de creación solicitada' },
+  'Required anchor': { fr: 'Ancrage requis', es: 'Ancla requerida' },
+  'Bitcoin Core retains full blocks from': {
+    fr: 'Bitcoin Core conserve les blocs complets à partir de',
+    es: 'Bitcoin Core conserva bloques completos desde'
+  },
+  'Retained full blocks from': {
+    fr: 'Blocs complets conservés à partir de',
+    es: 'Bloques completos conservados desde'
+  },
+  'Earliest usable birthday': {
+    fr: 'Premier anniversaire utilisable',
+    es: 'Primera fecha de creación utilizable'
+  },
+  'Block {height}': { fr: 'Bloc {height}', es: 'Bloque {height}' },
+  'App started': { fr: 'App démarrée', es: 'App iniciada' },
+  'Wallet created': { fr: 'Portefeuille créé', es: 'Cartera creada' },
+  'Wallet recovered': { fr: 'Portefeuille récupéré', es: 'Cartera recuperada' },
+  'Wallet removed': { fr: 'Portefeuille supprimé', es: 'Cartera eliminada' },
+  'Wallet unlocked': { fr: 'Portefeuille déverrouillé', es: 'Cartera desbloqueada' },
+  'Wallet locked': { fr: 'Portefeuille verrouillé', es: 'Cartera bloqueada' },
+  'Wallet sync': { fr: 'Synchronisation du portefeuille', es: 'Sincronización de cartera' },
+  'Transaction prepared': { fr: 'Transaction préparée', es: 'Transacción preparada' },
+  'Transaction signed': { fr: 'Transaction signée', es: 'Transacción firmada' },
+  'Transaction broadcast': { fr: 'Transaction diffusée', es: 'Transacción transmitida' },
+  'Receive address generated': {
+    fr: 'Adresse de réception générée',
+    es: 'Dirección de recepción generada'
+  },
+  receive_address_generated: {
+    fr: 'receive_address_generated',
+    es: 'receive_address_generated'
+  },
+  'Receive address discarded': {
+    fr: 'Adresse de réception écartée',
+    es: 'Dirección de recepción descartada'
+  },
+  'Receive address verified': {
+    fr: 'Adresse de réception vérifiée',
+    es: 'Dirección de recepción verificada'
+  },
+  'Coin frozen': { fr: 'Pièce gelée', es: 'Moneda congelada' },
+  'Coin unfrozen': { fr: 'Pièce dégelée', es: 'Moneda descongelada' },
+  'Backup exported': { fr: 'Sauvegarde exportée', es: 'Copia exportada' },
+  'Backup imported': { fr: 'Sauvegarde importée', es: 'Copia importada' },
+  'Backup verified': { fr: 'Sauvegarde vérifiée', es: 'Copia verificada' },
+  'Recovery tested': { fr: 'Récupération testée', es: 'Recuperación probada' },
+  'Network configuration changed': {
+    fr: 'Configuration réseau modifiée',
+    es: 'Configuración de red modificada'
+  },
+  'Diagnostics exported': { fr: 'Diagnostic exporté', es: 'Diagnóstico exportado' },
+  'App logs exported': {
+    fr: 'Journaux de l’app exportés',
+    es: 'Registros de la app exportados'
+  },
+  started: { fr: 'démarré', es: 'iniciado' },
+  progress: { fr: 'en cours', es: 'en curso' },
+  succeeded: { fr: 'réussi', es: 'correcto' },
+  failed: { fr: 'échoué', es: 'fallido' },
+  cancelled: { fr: 'annulé', es: 'cancelado' },
+  automatic: { fr: 'automatique', es: 'automático' },
+  startup: { fr: 'démarrage', es: 'inicio' },
+  'Trigger: {trigger}': { fr: 'Déclencheur : {trigger}', es: 'Origen: {trigger}' },
+  '{count} permanent labels assigned': {
+    fr: '{count} libellés permanents attribués',
+    es: '{count} etiquetas permanentes asignadas'
+  },
+  '{count} items': { fr: '{count} éléments', es: '{count} elementos' },
+  '{format} export': { fr: 'Export {format}', es: 'Exportación {format}' },
+  software: { fr: 'logiciel', es: 'software' },
+  hardware: { fr: 'matériel', es: 'hardware' },
+  multisig: { fr: 'multisignature', es: 'multifirma' },
   '{walletName} · Local display name only': {
     fr: '{walletName} · Nom d’affichage local uniquement',
     es: '{walletName} · Solo nombre de visualización local'
@@ -19,6 +255,7 @@ export const settingsCopy = {
   },
   Verified: { fr: 'Vérifiée', es: 'Verificada' },
   'Backup required': { fr: 'Sauvegarde requise', es: 'Copia requerida' },
+  'Outside Groot': { fr: 'Hors de Groot', es: 'Fuera de Groot' },
   'Bitcoin Core RPC · confirmed and mempool activity': {
     fr: 'RPC Bitcoin Core · activité confirmée et mempool',
     es: 'RPC de Bitcoin Core · actividad confirmada y de mempool'
@@ -56,6 +293,28 @@ export const settingsCopy = {
     fr: 'Sauvegarde du signataire matériel',
     es: 'Copia del firmante físico'
   },
+  'Signer backup': { fr: 'Sauvegarde du signataire', es: 'Copia del firmante' },
+  'Signer backups': { fr: 'Sauvegardes des signataires', es: 'Copias de los firmantes' },
+  'Completed when the signer was initialized.': {
+    fr: 'Effectuée lors de l’initialisation du signataire.',
+    es: 'Completada al inicializar el firmante.'
+  },
+  'Completed when each signer was initialized.': {
+    fr: 'Effectuées lors de l’initialisation de chaque signataire.',
+    es: 'Completadas al inicializar cada firmante.'
+  },
+  'Available after sync': {
+    fr: 'Disponible après la synchronisation',
+    es: 'Disponible después de sincronizar'
+  },
+  'Policy and signer recovery': {
+    fr: 'Récupération de la politique et des signataires',
+    es: 'Recuperación de la política y los firmantes'
+  },
+  'Hardware signer recovery': {
+    fr: 'Récupération du signataire matériel',
+    es: 'Recuperación del firmante físico'
+  },
   'Recovery words + wallet passphrase': {
     fr: 'Mots de récupération + phrase secrète du portefeuille',
     es: 'Palabras de recuperación + frase de contraseña de la cartera'
@@ -68,6 +327,16 @@ export const settingsCopy = {
     fr: 'Les mots de récupération restent sur le signataire. Le code PIN de l’application protège uniquement les données locales de Groot.',
     es: 'Las palabras de recuperación permanecen en el firmante. El PIN de la aplicación solo protege los datos locales de Groot.'
   },
+  'Signer backups should have been completed when each device was initialized. Export the public descriptor below.':
+    {
+      fr: 'Les sauvegardes des signataires doivent avoir été effectuées lors de l’initialisation de chaque appareil. Exportez le descripteur public ci-dessous.',
+      es: 'Las copias de los firmantes deben haberse realizado al inicializar cada dispositivo. Exporta el descriptor público a continuación.'
+    },
+  'The recovery backup should have been completed when the signer was initialized. Groot cannot create or verify it.':
+    {
+      fr: 'La sauvegarde de récupération doit avoir été effectuée lors de l’initialisation du signataire. Groot ne peut ni la créer ni la vérifier.',
+      es: 'La copia de recuperación debe haberse realizado al inicializar el firmante. Groot no puede crearla ni verificarla.'
+    },
   'Keep both together. Recovery words can be re-presented only in the authenticated native backup flow; the wallet passphrase cannot be displayed or reset.':
     {
       fr: 'Conservez-les ensemble. Les mots de récupération ne peuvent être réaffichés que dans le flux de sauvegarde natif authentifié ; la phrase secrète du portefeuille ne peut être ni affichée ni réinitialisée.',
@@ -79,6 +348,9 @@ export const settingsCopy = {
     es: 'Navega y bloquea sin dejar el teclado.'
   },
   'Lock wallet': { fr: 'Verrouiller le portefeuille', es: 'Bloquear cartera' },
+  'Zoom in': { fr: 'Agrandir', es: 'Acercar' },
+  'Zoom out': { fr: 'Réduire', es: 'Alejar' },
+  'Reset zoom': { fr: 'Réinitialiser le zoom', es: 'Restablecer zoom' },
   'Wallet not locked': { fr: 'Portefeuille non verrouillé', es: 'Cartera no bloqueada' },
   'Could not lock this wallet.': {
     fr: 'Impossible de verrouiller ce portefeuille.',
@@ -102,6 +374,10 @@ export const settingsCopy = {
   'Scanning blocks · {percent}%': {
     fr: 'Analyse des blocs · {percent} %',
     es: 'Escaneando bloques · {percent} %'
+  },
+  'Checking pending transactions…': {
+    fr: 'Vérification des transactions en attente…',
+    es: 'Comprobando transacciones pendientes…'
   },
   unknown: { fr: 'inconnu', es: 'desconocido' },
   'Verify RPC authentication, retained block history, IBD, disk use, and filter-index status.': {
@@ -131,10 +407,15 @@ export const settingsCopy = {
       fr: 'Les identifiants dans les URL sont refusés. TLS utilise les autorités de confiance du système ; Tor accepte uniquement les destinations .onion.',
       es: 'Se rechazan credenciales en las URL. TLS usa las raíces de confianza del sistema; Tor solo acepta destinos .onion.'
     },
-  'Groot uses the RPC node below for confirmed blocks and mempool changes. It does not require Core’s block-filter index. A pruned node can sync while it still retains every block newer than this wallet’s checkpoint; an older rescan needs an archival node or a reindex/re-download with enough history.':
+  'Fast remote sync sends this wallet’s public output scripts to the trusted server. The server can associate those scripts and wallet activity with your connection. No private keys, labels, or signing material are sent. Bitcoin Core 29+ and a synced basic block-filter index are required.':
     {
-      fr: 'Groot utilise le nœud RPC ci-dessous pour les blocs confirmés et les changements de mempool. L’index des filtres de blocs de Core n’est pas requis. Un nœud élagué peut synchroniser tant qu’il conserve tous les blocs postérieurs au point de contrôle du portefeuille ; une analyse plus ancienne nécessite un nœud d’archive ou une réindexation/un nouveau téléchargement avec assez d’historique.',
-      es: 'Groot usa el nodo RPC inferior para bloques confirmados y cambios de mempool. No requiere el índice de filtros de bloques de Core. Un nodo podado puede sincronizar mientras conserve todos los bloques posteriores al punto de control de la cartera; un escaneo más antiguo necesita un nodo de archivo o una reindexación/nueva descarga con suficiente historial.'
+      fr: 'La synchronisation distante rapide envoie les scripts de sortie publics de ce portefeuille au serveur de confiance. Le serveur peut associer ces scripts et l’activité du portefeuille à votre connexion. Aucune clé privée, étiquette ou donnée de signature n’est envoyée. Bitcoin Core 29+ et un index de filtres de blocs de base entièrement synchronisé sont requis.',
+      es: 'La sincronización remota rápida envía los scripts de salida públicos de esta cartera al servidor de confianza. El servidor puede asociar esos scripts y la actividad de la cartera con tu conexión. No se envían claves privadas, etiquetas ni material de firma. Se requieren Bitcoin Core 29+ y un índice básico de filtros de bloques totalmente sincronizado.'
+    },
+  'Local Core sync matches wallet activity on this Mac. A pruned node can sync while it still retains every block newer than this wallet’s checkpoint; an older rescan needs an archival node or a reindex/re-download with enough history.':
+    {
+      fr: 'La synchronisation Core locale recherche l’activité du portefeuille sur ce Mac. Un nœud élagué peut se synchroniser tant qu’il conserve chaque bloc plus récent que le point de contrôle du portefeuille ; une analyse plus ancienne nécessite un nœud d’archive ou une réindexation/un nouveau téléchargement avec suffisamment d’historique.',
+      es: 'La sincronización Core local busca la actividad de la cartera en este Mac. Un nodo podado puede sincronizar mientras conserve todos los bloques posteriores al punto de control de la cartera; un escaneo más antiguo necesita un nodo de archivo o una reindexación/nueva descarga con suficiente historial.'
     },
   'Import this file in a clean disposable Groot profile and confirm the first receive address matches.':
     {
@@ -249,6 +530,30 @@ export const settingsCopy = {
     fr: 'Limite d’écart des adresses',
     es: 'Límite de intervalo de direcciones'
   },
+  'About the address gap limit': {
+    fr: 'À propos de la limite d’écart des adresses',
+    es: 'Acerca del límite de intervalo de direcciones'
+  },
+  'About wallet birthday blocks': {
+    fr: 'À propos des blocs de naissance du portefeuille',
+    es: 'Acerca de los bloques de nacimiento de la cartera'
+  },
+  'Birthday block must be at or below the current chain tip.': {
+    fr: 'Le bloc de naissance doit être inférieur ou égal à la pointe actuelle de la chaîne.',
+    es: 'El bloque de nacimiento debe ser igual o anterior a la punta actual de la cadena.'
+  },
+  'Current {network} chain tip: block {height}': {
+    fr: 'Pointe actuelle de la chaîne {network} : bloc {height}',
+    es: 'Punta actual de la cadena {network}: bloque {height}'
+  },
+  'Full blocks available from {height}. Choose a birthday after this block.': {
+    fr: 'Blocs complets disponibles depuis {height}. Choisissez un bloc de naissance après ce bloc.',
+    es: 'Bloques completos disponibles desde {height}. Elige un bloque de nacimiento posterior.'
+  },
+  'Retained block range unavailable. Check the node connection and reopen this dialog.': {
+    fr: 'Plage de blocs conservés indisponible. Vérifiez la connexion au nœud et rouvrez cette fenêtre.',
+    es: 'Rango de bloques conservados no disponible. Comprueba la conexión al nodo y vuelve a abrir este diálogo.'
+  },
   'Amount display': { fr: 'Affichage des montants', es: 'Visualización de importes' },
   Authentication: { fr: 'Authentification', es: 'Autenticación' },
   'Automatic cookie authentication': {
@@ -298,6 +603,119 @@ export const settingsCopy = {
     fr: 'Nœud de frais et de diffusion',
     es: 'Nodo de comisiones y difusión'
   },
+  'Bitcoin Core connection': {
+    fr: 'Connexion à Bitcoin Core',
+    es: 'Conexión a Bitcoin Core'
+  },
+  'Groot managed · activity, fees, and broadcast': {
+    fr: 'Géré par Groot · activité, frais et diffusion',
+    es: 'Gestionado por Groot · actividad, comisiones y difusión'
+  },
+  'This Mac · activity, fees, and broadcast': {
+    fr: 'Ce Mac · activité, frais et diffusion',
+    es: 'Este Mac · actividad, comisiones y difusión'
+  },
+  'Custom remote · activity, fees, and broadcast': {
+    fr: 'Distant personnalisé · activité, frais et diffusion',
+    es: 'Remoto personalizado · actividad, comisiones y difusión'
+  },
+  'Groot managed · fees and broadcast': {
+    fr: 'Géré par Groot · frais et diffusion',
+    es: 'Gestionado por Groot · comisiones y difusión'
+  },
+  'This Mac · fees and broadcast': {
+    fr: 'Ce Mac · frais et diffusion',
+    es: 'Este Mac · comisiones y difusión'
+  },
+  'Custom remote · fees and broadcast': {
+    fr: 'Distant personnalisé · frais et diffusion',
+    es: 'Remoto personalizado · comisiones y difusión'
+  },
+  'Use compact filters for wallet activity': {
+    fr: 'Utiliser les filtres compacts pour l’activité du portefeuille',
+    es: 'Usar filtros compactos para la actividad de la cartera'
+  },
+  'Optional on rehearsal networks. Bitcoin Core still provides fees and broadcast.': {
+    fr: 'Optionnel sur les réseaux de répétition. Bitcoin Core fournit toujours les frais et la diffusion.',
+    es: 'Opcional en redes de ensayo. Bitcoin Core sigue proporcionando comisiones y difusión.'
+  },
+  'Groot managed': { fr: 'Géré par Groot', es: 'Gestionado por Groot' },
+  'Groot managed node': { fr: 'Nœud géré par Groot', es: 'Nodo gestionado por Groot' },
+  'Custom remote': { fr: 'Distant personnalisé', es: 'Remoto personalizado' },
+  'Custom remote node': { fr: 'Nœud distant personnalisé', es: 'Nodo remoto personalizado' },
+  'Groot provisions isolated access for this wallet. RPC credentials stay encrypted in native code and are never shown here.':
+    {
+      fr: 'Groot fournit un accès isolé pour ce portefeuille. Les identifiants RPC restent chiffrés dans le code natif et ne sont jamais affichés ici.',
+      es: 'Groot proporciona acceso aislado para esta cartera. Las credenciales RPC permanecen cifradas en el código nativo y nunca se muestran aquí.'
+    },
+  'Privacy tradeoff': {
+    fr: 'Compromis de confidentialité',
+    es: 'Compromiso de privacidad'
+  },
+  'The service sees connection timing and wallet scripts queried for history. Recovery words, private keys, and labels stay on this device.':
+    {
+      fr: 'Le service voit les horaires de connexion et les scripts du portefeuille interrogés pour l’historique. Les mots de récupération, clés privées et libellés restent sur cet appareil.',
+      es: 'El servicio ve los tiempos de conexión y los scripts de la cartera consultados para el historial. Las palabras de recuperación, claves privadas y etiquetas permanecen en este dispositivo.'
+    },
+  'Renew managed access': { fr: 'Renouveler l’accès géré', es: 'Renovar acceso gestionado' },
+  'Check managed status': { fr: 'Vérifier l’état géré', es: 'Comprobar estado gestionado' },
+  'Managed-node access renewed': {
+    fr: 'Accès au nœud géré renouvelé',
+    es: 'Acceso al nodo gestionado renovado'
+  },
+  'Groot node connected': { fr: 'Nœud Groot connecté', es: 'Nodo Groot conectado' },
+  'Groot provisioned new wallet-specific access without exposing credentials.': {
+    fr: 'Groot a fourni un nouvel accès propre au portefeuille sans exposer les identifiants.',
+    es: 'Groot proporcionó un nuevo acceso específico para la cartera sin exponer credenciales.'
+  },
+  'Use Groot managed node': {
+    fr: 'Utiliser le nœud géré par Groot',
+    es: 'Usar el nodo gestionado por Groot'
+  },
+  'Bitcoin network': { fr: 'Réseau Bitcoin', es: 'Red de Bitcoin' },
+  'Switching restarts Groot. Each network keeps separate wallets and settings.': {
+    fr: 'Changer de réseau redémarre Groot. Chaque réseau garde ses portefeuilles et réglages séparés.',
+    es: 'Cambiar de red reinicia Groot. Cada red mantiene sus carteras y ajustes separados.'
+  },
+  'Fixed to {network}.': {
+    fr: 'Réseau fixe : {network}.',
+    es: 'Red fija: {network}.'
+  },
+  'Switch to {network}?': {
+    fr: 'Passer à {network} ?',
+    es: '¿Cambiar a {network}?'
+  },
+  'Groot will restart and open only the wallets and node settings saved for that network.': {
+    fr: 'Groot redémarrera et ouvrira uniquement les portefeuilles et réglages de nœud enregistrés pour ce réseau.',
+    es: 'Groot se reiniciará y abrirá únicamente las carteras y los ajustes del nodo guardados para esa red.'
+  },
+  'Mainnet uses real bitcoin.': {
+    fr: 'Mainnet utilise de vrais bitcoins.',
+    es: 'Mainnet usa bitcoins reales.'
+  },
+  'Confirm the Bitcoin Core network and every address before receiving, signing, or broadcasting.':
+    {
+      fr: 'Vérifiez le réseau de Bitcoin Core et chaque adresse avant de recevoir, signer ou diffuser.',
+      es: 'Verifica la red de Bitcoin Core y cada dirección antes de recibir, firmar o transmitir.'
+    },
+  'The current network stays unchanged on disk. Switching back restores its wallets exactly as they were.':
+    {
+      fr: 'Le réseau actuel reste inchangé sur le disque. Y revenir restaure ses portefeuilles exactement dans leur état précédent.',
+      es: 'La red actual permanece sin cambios en el disco. Al volver, sus carteras se restauran exactamente como estaban.'
+    },
+  'Restart in {network}': {
+    fr: 'Redémarrer sur {network}',
+    es: 'Reiniciar en {network}'
+  },
+  'Restarting…': { fr: 'Redémarrage…', es: 'Reiniciando…' },
+  'Groot could not save the Bitcoin network selection.': {
+    fr: 'Groot n’a pas pu enregistrer le choix du réseau Bitcoin.',
+    es: 'Groot no pudo guardar la selección de red de Bitcoin.'
+  },
+  'Network not changed': {
+    fr: 'Réseau non modifié',
+    es: 'Red sin cambios'
+  },
   'from this device.': { fr: 'de cet appareil.', es: 'de este dispositivo.' },
   'Hardware signer identity & health': {
     fr: 'Identité et état du signataire matériel',
@@ -346,20 +764,41 @@ export const settingsCopy = {
     fr: 'Mots de récupération non vérifiés',
     es: 'Palabras de recuperación sin verificar'
   },
-  'Recovery words stay inside the trusted native window.': {
-    fr: 'Les mots de récupération restent dans la fenêtre native de confiance.',
-    es: 'Las palabras de recuperación permanecen en la ventana nativa de confianza.'
+  'Your recovery words stay private': {
+    fr: 'Vos mots de récupération restent privés',
+    es: 'Tus palabras de recuperación siguen siendo privadas'
   },
+  'Groot checks them securely on this device.': {
+    fr: 'Groot les vérifie en toute sécurité sur cet appareil.',
+    es: 'Groot las comprueba de forma segura en este dispositivo.'
+  },
+  'About recovery-word privacy': {
+    fr: 'À propos de la confidentialité des mots de récupération',
+    es: 'Acerca de la privacidad de las palabras de recuperación'
+  },
+  'Groot reveals and verifies the words in a separate trusted native window. They never enter the webview or leave this device.':
+    {
+      fr: 'Groot affiche et vérifie les mots dans une fenêtre native de confiance distincte. Ils n’entrent jamais dans la vue web et ne quittent pas cet appareil.',
+      es: 'Groot muestra y verifica las palabras en una ventana nativa de confianza independiente. Nunca entran en la vista web ni salen de este dispositivo.'
+    },
   'Remote TLS': { fr: 'TLS distant', es: 'TLS remoto' },
   'Remove only': { fr: 'Supprimer uniquement', es: 'Solo eliminar' },
   'Required peers': { fr: 'Pairs requis', es: 'Pares requeridos' },
-  'Revealing or verifying them never sends the words into the webview.': {
-    fr: 'Les afficher ou les vérifier n’envoie jamais les mots dans la vue web.',
-    es: 'Mostrarlas o verificarlas nunca envía las palabras a la vista web.'
-  },
   'RPC URL': { fr: 'URL RPC', es: 'URL RPC' },
   'RPC username': { fr: 'Nom d’utilisateur RPC', es: 'Usuario RPC' },
   'Save & rescan': { fr: 'Enregistrer et analyser', es: 'Guardar y volver a escanear' },
+  'Full rescan cancelled': {
+    fr: 'Nouvelle analyse complète annulée',
+    es: 'Reescaneo completo cancelado'
+  },
+  'No scan progress was kept. The next full rescan will start fresh.': {
+    fr: 'Aucune progression n’a été conservée. La prochaine analyse complète repartira de zéro.',
+    es: 'No se conservó el progreso. El próximo reescaneo completo comenzará de nuevo.'
+  },
+  'Reading current chain tip…': {
+    fr: 'Lecture de la pointe actuelle de la chaîne…',
+    es: 'Leyendo la punta actual de la cadena…'
+  },
   'Save & test': { fr: 'Enregistrer et tester', es: 'Guardar y probar' },
   'Save a watch-only backup for independent recovery.': {
     fr: 'Enregistrez une sauvegarde d’observation pour une récupération indépendante.',
@@ -381,9 +820,9 @@ export const settingsCopy = {
     fr: 'Saisissez DELETE pour confirmer',
     es: 'Escribe DELETE para confirmar'
   },
-  'Use 0 when uncertain. Regtest scans are intentionally cheap.': {
-    fr: 'Utilisez 0 en cas de doute. Les analyses Regtest sont volontairement peu coûteuses.',
-    es: 'Usa 0 si no estás seguro. Los escaneos de Regtest son intencionadamente ligeros.'
+  'Use 0 when uncertain. Earlier scans are safer but take longer.': {
+    fr: 'Utilisez 0 en cas de doute. Une analyse plus ancienne est plus sûre, mais prend plus de temps.',
+    es: 'Usa 0 si no estás seguro. Un escaneo más antiguo es más seguro, pero tarda más.'
   },
   'Use an existing network setup': {
     fr: 'Utiliser une configuration réseau existante',
@@ -395,13 +834,21 @@ export const settingsCopy = {
   },
   'Use setup': { fr: 'Utiliser la configuration', es: 'Usar configuración' },
   'Unlock first': { fr: 'Déverrouiller d’abord', es: 'Desbloquear primero' },
-  'Unlock the source wallet first.': {
-    fr: 'Déverrouillez d’abord le portefeuille source.',
-    es: 'Desbloquea primero la cartera de origen.'
+  'Unlock the source wallet first': {
+    fr: 'Déverrouillez d’abord le portefeuille source',
+    es: 'Desbloquea primero la cartera de origen'
   },
-  'Open and unlock that wallet, then return here. Its saved credentials never enter this screen.': {
-    fr: 'Ouvrez et déverrouillez ce portefeuille, puis revenez ici. Ses identifiants enregistrés ne sont jamais affichés sur cet écran.',
-    es: 'Abre y desbloquea esa cartera y vuelve aquí. Sus credenciales guardadas nunca aparecen en esta pantalla.'
+  'Open that wallet, unlock it, then return here.': {
+    fr: 'Ouvrez ce portefeuille, déverrouillez-le, puis revenez ici.',
+    es: 'Abre esa cartera, desbloquéala y vuelve aquí.'
+  },
+  'About copied network credentials': {
+    fr: 'À propos des identifiants réseau copiés',
+    es: 'Acerca de las credenciales de red copiadas'
+  },
+  'Saved node credentials stay in Groot’s trusted native code and never appear on this screen.': {
+    fr: 'Les identifiants du nœud restent dans le code natif de confiance de Groot et ne sont jamais affichés sur cet écran.',
+    es: 'Las credenciales del nodo permanecen en el código nativo de confianza de Groot y nunca aparecen en esta pantalla.'
   },
   Ready: { fr: 'Prêt', es: 'Listo' },
   'Username and password': { fr: 'Nom d’utilisateur et mot de passe', es: 'Usuario y contraseña' },
@@ -419,12 +866,22 @@ export const settingsCopy = {
     fr: 'Bloc de naissance du portefeuille',
     es: 'Bloque de nacimiento de la cartera'
   },
+  'The first block Groot will inspect. Choose a height at or before the wallet’s first possible payment.':
+    {
+      fr: 'Le premier bloc que Groot inspectera. Choisissez une hauteur antérieure ou égale au premier paiement possible du portefeuille.',
+      es: 'El primer bloque que Groot inspeccionará. Elige una altura igual o anterior al primer pago posible de la cartera.'
+    },
+  'How many consecutive unused addresses Groot derives while searching for wallet activity. Increase it only for wallets that revealed long unused address runs.':
+    {
+      fr: 'Nombre d’adresses inutilisées consécutives que Groot dérive lors de la recherche d’activité. Augmentez-le uniquement pour les portefeuilles ayant révélé de longues séries d’adresses inutilisées.',
+      es: 'Cuántas direcciones consecutivas sin usar deriva Groot al buscar actividad. Auméntalo solo para carteras que hayan revelado largas series de direcciones sin usar.'
+    },
   'Wallet deletion': { fr: 'Suppression du portefeuille', es: 'Eliminación de la cartera' },
   'Wallet details': { fr: 'Détails du portefeuille', es: 'Detalles de la cartera' },
   'Wallet name': { fr: 'Nom du portefeuille', es: 'Nombre de la cartera' },
-  'Wallet security and connection. Appearance is global.': {
-    fr: 'Sécurité et connexion du portefeuille. L’apparence est globale.',
-    es: 'Seguridad y conexión de la cartera. La apariencia es global.'
+  'Security and connection for this wallet.': {
+    fr: 'Sécurité et connexion de ce portefeuille.',
+    es: 'Seguridad y conexión de esta cartera.'
   },
   'WALLET SETTINGS': { fr: 'RÉGLAGES DU PORTEFEUILLE', es: 'AJUSTES DE LA CARTERA' },
   Wallets: { fr: 'Portefeuilles', es: 'Carteras' },
@@ -470,18 +927,26 @@ export const settingsCopy = {
     fr: 'Déplacez les libellés compatibles sans modifier les clés ni les descripteurs de ce portefeuille.',
     es: 'Transfiere etiquetas compatibles sin cambiar las claves ni los descriptores de esta cartera.'
   },
-  'Private financial metadata.': {
-    fr: 'Métadonnées financières privées.',
-    es: 'Metadatos financieros privados.'
+  'Private financial metadata': {
+    fr: 'Métadonnées financières privées',
+    es: 'Metadatos financieros privados'
   },
   'Saved {count} BIP329 label records.': {
     fr: '{count} enregistrements de libellés BIP329 enregistrés.',
     es: 'Se guardaron {count} registros de etiquetas BIP329.'
   },
-  'The file can expose labels, addresses, transaction references, public account keys, and relationships in your wallet history. Store and transfer it privately, then delete copies you no longer need.':
+  'This file can reveal your wallet activity. Keep it private.': {
+    fr: 'Ce fichier peut révéler l’activité de votre portefeuille. Gardez-le privé.',
+    es: 'Este archivo puede revelar la actividad de tu cartera. Mantenlo privado.'
+  },
+  'About label-file privacy': {
+    fr: 'À propos de la confidentialité du fichier de libellés',
+    es: 'Acerca de la privacidad del archivo de etiquetas'
+  },
+  'A BIP329 file can include labels, addresses, transaction references, public account keys, and links in your wallet history. Store and transfer it privately, then delete copies you no longer need.':
     {
-      fr: 'Le fichier peut révéler des libellés, adresses, références de transaction, clés de compte publiques et relations dans l’historique du portefeuille. Stockez-le et transférez-le de manière privée, puis supprimez les copies inutiles.',
-      es: 'El archivo puede revelar etiquetas, direcciones, referencias de transacciones, claves públicas de cuenta y relaciones del historial. Guárdalo y transfiérelo de forma privada, y elimina las copias que ya no necesites.'
+      fr: 'Un fichier BIP329 peut contenir des libellés, des adresses, des références de transaction, des clés de compte publiques et des liens dans l’historique du portefeuille. Stockez-le et transférez-le de manière privée, puis supprimez les copies inutiles.',
+      es: 'Un archivo BIP329 puede incluir etiquetas, direcciones, referencias de transacciones, claves públicas de cuenta y vínculos del historial. Guárdalo y transfiérelo de forma privada, y elimina las copias que ya no necesites.'
     },
   'Use the BIP329 JSONL format with another compatible wallet.': {
     fr: 'Utilisez le format JSONL BIP329 avec un autre portefeuille compatible.',

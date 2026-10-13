@@ -13,6 +13,32 @@ if [[ -n "$(git ls-files --others --exclude-standard)" ]]; then
   exit 1
 fi
 
+platform_name="$(uname -s)"
+architecture="$(uname -m)"
+if [[ "$platform_name" == "Darwin" ]]; then
+  for command_name in sw_vers xcodebuild xcrun; do
+    if ! command -v "$command_name" >/dev/null 2>&1; then
+      echo "macOS release evidence requires ${command_name}." >&2
+      exit 1
+    fi
+  done
+  macos_product_version="$(sw_vers -productVersion)"
+  macos_build_version="$(sw_vers -buildVersion)"
+  xcode_version="$(LC_ALL=C xcodebuild -version | sed -n '1s/^Xcode //p')"
+  xcode_build="$(LC_ALL=C xcodebuild -version | sed -n '2s/^Build version //p')"
+  apple_clang_version="$(LC_ALL=C xcrun clang --version | sed -n '1s/^Apple clang version //p')"
+  apple_clang_target="$(LC_ALL=C xcrun clang --version | sed -n 's/^Target: //p')"
+  sdk_version="$(xcrun --sdk macosx --show-sdk-version)"
+else
+  macos_product_version="unavailable"
+  macos_build_version="unavailable"
+  xcode_version="unavailable"
+  xcode_build="unavailable"
+  apple_clang_version="unavailable"
+  apple_clang_target="unavailable"
+  sdk_version="unavailable"
+fi
+
 release_commit="$(git rev-parse HEAD)"
 export SOURCE_DATE_EPOCH="$(git show -s --format=%ct "$release_commit")"
 export GROOT_BUILD_NETWORK=regtest
@@ -44,12 +70,15 @@ node scripts/release/generate-sbom.mjs "$release_out/groot.cdx.json" "$release_o
   echo "node=$(node --version)"
   echo "pnpm=$(pnpm --version)"
   echo "tauri=$(pnpm exec tauri --version)"
-  echo "os=$(uname -srvmp)"
-  if command -v xcrun >/dev/null 2>&1; then
-    echo "sdk=macOS $(xcrun --sdk macosx --show-sdk-version)"
-  else
-    echo "sdk=unavailable"
-  fi
+  echo "platform=$platform_name"
+  echo "macos_product_version=$macos_product_version"
+  echo "macos_build_version=$macos_build_version"
+  echo "architecture=$architecture"
+  echo "xcode_version=$xcode_version"
+  echo "xcode_build=$xcode_build"
+  echo "apple_clang_version=$apple_clang_version"
+  echo "apple_clang_target=$apple_clang_target"
+  echo "sdk=macOS $sdk_version"
   echo "cargo_lock_sha256=$(shasum -a 256 src-tauri/Cargo.lock | awk '{print $1}')"
   echo "pnpm_lock_sha256=$(shasum -a 256 pnpm-lock.yaml | awk '{print $1}')"
 } > "$release_out/BUILD-INFO"

@@ -1,0 +1,37 @@
+[Unit]
+Description=Groot private Fulcrum history index
+After=network-online.target bitcoind.service
+Wants=network-online.target
+Requires=bitcoind.service
+
+[Service]
+Type=simple
+User=fulcrum
+Group=fulcrum
+SupplementaryGroups=bitcoin
+ExecStart=/opt/groot-fulcrum/Fulcrum /etc/groot-fulcrum/fulcrum.conf
+Restart=on-failure
+RestartSec=10s
+TimeoutStopSec=120s
+LimitNOFILE=65536
+UMask=0027
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=false
+ReadOnlyPaths=/var/lib/bitcoin/blocks /var/lib/bitcoin/.cookie
+ReadWritePaths=/var/lib/bitcoin/fulcrum
+MemoryHigh=2G
+MemoryMax=3G
+TasksMax=256
+
+[Install]
+WantedBy=multi-user.target
