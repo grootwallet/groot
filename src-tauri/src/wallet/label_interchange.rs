@@ -33,6 +33,7 @@ pub struct LabelImportResultDto {
     imported_count: usize,
     unchanged_count: usize,
     ignored_count: usize,
+    matched_signer_count: usize,
     spendability_change_count: usize,
 }
 
@@ -388,7 +389,7 @@ fn import_records(
     signers: &[(String, String)],
 ) -> ApiResult<LabelImportResultDto> {
     let mut transaction = db.transaction().map_err(internal)?;
-    let wallet = load_wallet_transaction(&mut transaction)?;
+    let mut wallet = load_wallet_transaction(&mut transaction)?;
     let unspent = wallet
         .list_unspent()
         .map(|output| output.outpoint.to_string())
@@ -397,6 +398,58 @@ fn import_records(
     let mut spendability = BTreeMap::<String, bool>::new();
     let signer_map = signers.iter().cloned().collect::<BTreeMap<_, _>>();
     let mut ignored = initial_ignored;
+    let mut matched_signers = 0;
+    // Recovered descriptors have no presentation rows. Match public addresses
+    // against native derivation, never the label database alone. Bound work
+    // independently of the hostile record count.
+    let wanted = records
+        .iter()
+        .filter(|record| record.record_type == "addr")
+        .map(|record| record.reference.clone())
+        .collect::<BTreeSet<_>>();
+    let mut recovered_addresses = BTreeMap::<String, u32>::new();
+    let mut missing = BTreeSet::new();
+    for address in &wanted {
+        let exists = transaction
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM groot_addresses WHERE address = ?1)",
+                params![address],
+                |row| row.get::<_, bool>(0),
+            )
+            .map_err(internal)?;
+        if !exists {
+            let parsed = Address::from_str(address)
+                .map_err(|_| api_error("label_import_invalid", "An imported address is invalid."))?
+                .require_network(network())
+                .map_err(|_| {
+                    api_error(
+                        "wrong_network",
+                        "An imported address is for another Bitcoin network.",
+                    )
+                })?;
+            if let Some((KeychainKind::External, index)) =
+                wallet.derivation_of_spk(parsed.script_pubkey())
+            {
+                recovered_addresses.insert(address.clone(), index);
+            } else {
+                missing.insert(address.clone());
+            }
+        }
+    }
+    if !missing.is_empty() {
+        for index in 0..10_000 {
+            let address = wallet
+                .peek_address(KeychainKind::External, index)
+                .address
+                .to_string();
+            if missing.remove(&address) {
+                recovered_addresses.insert(address, index);
+            }
+            if missing.is_empty() {
+                break;
+            }
+        }
+    }
     for record in records {
         match record.record_type.as_str() {
             "addr" => {
@@ -419,12 +472,25 @@ fn import_records(
                     )
                     .optional()
                     .map_err(internal)?
+                    .or_else(|| recovered_addresses.get(&record.reference).copied())
                     .ok_or_else(|| {
                         api_error(
                             "backup_mismatch",
-                            "An imported address does not belong to this wallet.",
+                            "An imported address was not found in this wallet's first 10,000 receive addresses. Check the wallet and network before importing.",
                         )
                     })?;
+                // The row and BDK reveal cursor commit with all label history.
+                // A failed later record rolls them back together.
+                let observed = wallet.list_output().any(|output| {
+                    output.keychain == KeychainKind::External && output.derivation_index == index
+                });
+                transaction.execute(
+                    "INSERT OR IGNORE INTO groot_addresses(idx, address, label, created_at, state, observed) VALUES(?1, ?2, ?3, ?4, ?5, ?6)",
+                    params![index, record.reference, record.label, now(), if observed { "used" } else { "discarded" }, observed],
+                ).map_err(internal)?;
+                let _ = wallet
+                    .reveal_addresses_to(KeychainKind::External, index)
+                    .last();
                 planned
                     .entry(("address".to_owned(), index.to_string()))
                     .or_default()
@@ -500,11 +566,9 @@ fn import_records(
                 }
             }
             "xpub" => match signer_map.get(&record.reference) {
-                Some(existing) if existing == &record.label => ignored += 1,
-                Some(_) => return Err(api_error(
-                    "label_import_conflict",
-                    "An imported signer label conflicts with this wallet's current signer name.",
-                )),
+                // Signer display names are independently editable. Importing
+                // address history must not rename them or fail after recovery.
+                Some(_) => matched_signers += 1,
                 None => {
                     return Err(api_error(
                         "backup_mismatch",
@@ -560,6 +624,7 @@ fn import_records(
             ));
         }
     }
+    wallet.persist(&mut transaction).map_err(internal)?;
     drop(wallet);
     let mut imported = 0;
     let mut unchanged = 0;
@@ -600,6 +665,7 @@ fn import_records(
         imported_count: imported,
         unchanged_count: unchanged,
         ignored_count: ignored,
+        matched_signer_count: matched_signers,
         spendability_change_count: spendability_changes,
     })
 }
@@ -724,6 +790,148 @@ mod tests {
         .unwrap();
         drop(wallet);
         (db, address)
+    }
+
+    #[test]
+    fn clean_descriptor_recovery_restores_labels_and_prevents_address_reuse() {
+        let (mut db, _) = label_wallet("recovered labels");
+        let wallet = load_wallet(&mut db).unwrap();
+        let address = wallet
+            .peek_address(KeychainKind::External, 7)
+            .address
+            .to_string();
+        drop(wallet);
+        db.execute("DELETE FROM groot_addresses", []).unwrap();
+        let record = Bip329Record {
+            record_type: "addr".to_owned(),
+            reference: address.clone(),
+            label: "Recovered payment".to_owned(),
+            spendable: None,
+        };
+        assert_eq!(
+            import_records(&mut db, std::slice::from_ref(&record), 0, &[])
+                .unwrap()
+                .imported_count,
+            1
+        );
+        let wallet = load_wallet(&mut db).unwrap();
+        assert_eq!(wallet.derivation_index(KeychainKind::External), Some(7));
+        assert_eq!(
+            collect_export_records(&db, &wallet, &[]).unwrap(),
+            vec![record.clone()]
+        );
+        drop(wallet);
+        assert_eq!(
+            import_records(&mut db, &[record], 0, &[])
+                .unwrap()
+                .unchanged_count,
+            1
+        );
+        let mut wallet = load_wallet(&mut db).unwrap();
+        assert_eq!(wallet.reveal_next_address(KeychainKind::External).index, 8);
+    }
+
+    #[test]
+    fn restored_two_of_three_multisig_imports_old_address_labels_with_reshared_keys() {
+        use bdk_wallet::bitcoin::bip32::{DerivationPath, Xpriv, Xpub};
+        let secp = Secp256k1::new();
+        let path = DerivationPath::from_str(multisig_account_path()).unwrap();
+        let keys = (1_u8..=3)
+            .map(|index| {
+                let master = Xpriv::new_master(network(), &[index; 32]).unwrap();
+                let account = master.derive_priv(&secp, &path).unwrap();
+                format!(
+                    "[{}/{}]{}",
+                    master.fingerprint(&secp),
+                    multisig_account_path().trim_start_matches("m/"),
+                    Xpub::from_priv(&secp, &account)
+                )
+            })
+            .collect::<Vec<_>>();
+        let descriptor = |keys: &[String], branch| {
+            format!(
+                "wsh(sortedmulti(2,{}))",
+                keys.iter()
+                    .map(|key| format!("{key}/{branch}/*"))
+                    .collect::<Vec<_>>()
+                    .join(",")
+            )
+        };
+        let original = Wallet::create(descriptor(&keys, 0), descriptor(&keys, 1))
+            .network(network())
+            .create_wallet_no_persist()
+            .unwrap();
+        let address = original
+            .peek_address(KeychainKind::External, 23)
+            .address
+            .to_string();
+        let reshared = keys.into_iter().rev().collect::<Vec<_>>();
+        let mut db = Connection::open_in_memory().unwrap();
+        init_app_schema(&db).unwrap();
+        let restored = Wallet::create(descriptor(&reshared, 0), descriptor(&reshared, 1))
+            .network(network())
+            .create_wallet(&mut db)
+            .unwrap();
+        assert_eq!(
+            restored
+                .peek_address(KeychainKind::External, 23)
+                .address
+                .to_string(),
+            address
+        );
+        drop(restored);
+        let record = Bip329Record {
+            record_type: "addr".to_owned(),
+            reference: address,
+            label: "Previous wallet payment".to_owned(),
+            spendable: None,
+        };
+        assert_eq!(
+            import_records(&mut db, std::slice::from_ref(&record), 0, &[])
+                .unwrap()
+                .imported_count,
+            1
+        );
+        let mut restored = load_wallet(&mut db).unwrap();
+        assert_eq!(
+            collect_export_records(&db, &restored, &[]).unwrap(),
+            vec![record]
+        );
+        assert_eq!(
+            restored.reveal_next_address(KeychainKind::External).index,
+            24
+        );
+    }
+
+    #[test]
+    fn failed_recovered_label_import_rolls_back_address_rows_and_reveal_cursor() {
+        let (mut db, _) = label_wallet("atomic restored labels");
+        let wallet = load_wallet(&mut db).unwrap();
+        let address = wallet
+            .peek_address(KeychainKind::External, 6)
+            .address
+            .to_string();
+        drop(wallet);
+        db.execute("DELETE FROM groot_addresses", []).unwrap();
+        let (_, foreign) = label_wallet("different keys");
+        let records = [address, foreign].map(|reference| Bip329Record {
+            record_type: "addr".to_owned(),
+            reference,
+            label: "Do not partially import".to_owned(),
+            spendable: None,
+        });
+        assert_eq!(
+            import_records(&mut db, &records, 0, &[]).unwrap_err().code,
+            "backup_mismatch"
+        );
+        assert_eq!(
+            db.query_row("SELECT COUNT(*) FROM groot_addresses", [], |row| row
+                .get::<_, usize>(0))
+                .unwrap(),
+            0
+        );
+        let wallet = load_wallet(&mut db).unwrap();
+        assert_eq!(wallet.derivation_index(KeychainKind::External), None);
     }
 
     #[test]
@@ -1075,9 +1283,9 @@ mod tests {
     }
 
     #[test]
-    fn signer_conflict_fails_before_any_label_history_changes() {
+    fn recovered_signer_names_do_not_block_address_labels() {
         let (mut db, address) = label_wallet("signer conflict");
-        let error = import_records(
+        let result = import_records(
             &mut db,
             &[
                 Bip329Record {
@@ -1096,11 +1304,10 @@ mod tests {
             0,
             &[("tpub-fixture".to_owned(), "Hardware signer".to_owned())],
         )
-        .unwrap_err();
-        assert_eq!(error.code, "label_import_conflict");
-        assert!(label_provenance::labels_for_subject(&db, "address", "0")
-            .unwrap()
-            .is_empty());
+        .unwrap();
+        assert_eq!(result.imported_count, 1);
+        assert_eq!(result.ignored_count, 0);
+        assert_eq!(result.matched_signer_count, 1);
     }
 
     #[test]

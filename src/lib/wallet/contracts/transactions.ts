@@ -153,6 +153,7 @@ export type LabelImportResult = {
   importedCount: number;
   unchangedCount: number;
   ignoredCount: number;
+  matchedSignerCount: number;
   spendabilityChangeCount: number;
 };
 

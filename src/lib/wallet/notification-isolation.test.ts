@@ -81,7 +81,7 @@ describe('wallet-scoped durable notification delivery', () => {
       if (action === 'switch-back') await wallet.selectWallet('A');
       if (action === 'lock') await wallet.lock();
       if (action === 'expired') await wallet.session();
-      if (action === 'delete') await wallet.deleteWallet('synthetic', 'synthetic');
+      if (action === 'delete') await wallet.deleteWallet('synthetic', 'synthetic', true, true);
       if (action === 'reset') await wallet.resetRegtestWallet('RESET REGTEST');
       pending.resolve({ sessionId: 'session-A', envelopes: [envelope] });
       await settle();

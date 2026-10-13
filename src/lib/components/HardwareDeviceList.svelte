@@ -91,9 +91,8 @@
               >{secondaryLabel}</small
             >{/if}<em
             class:ready={stateLabel === 'Ready'}
-            class:attention={stateLabel !== 'Select to identify' &&
-              stateLabel !== 'Ready' &&
-              stateLabel !== 'Already signed'}>{translate($locale, stateLabel)}</em
+            class:attention={stateLabel !== 'Ready' && stateLabel !== 'Already signed'}
+            >{translate($locale, stateLabel)}</em
           ></span
         >
       </button>

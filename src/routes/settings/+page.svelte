@@ -111,6 +111,44 @@
   let timeoutMenuRoot = $state<HTMLDivElement | null>(null);
   let timeoutMenuTrigger = $state<HTMLButtonElement | null>(null);
   let selectedProfile = $derived(profiles.find((wallet) => wallet.id === selectedWalletId));
+  let pinChangeOpen = $state(false);
+  let pinChangeBusy = $state(false);
+  let currentPin = $state('');
+  let newPin = $state('');
+  let confirmPin = $state('');
+  let pinChangeError = $state('');
+  function closePinChange() {
+    if (pinChangeBusy) return;
+    pinChangeOpen = false;
+    currentPin = newPin = confirmPin = pinChangeError = '';
+  }
+  async function changePin() {
+    const id = selectedProfile?.id;
+    if (!id || pinChangeBusy || newPin !== confirmPin) return;
+    pinChangeBusy = true;
+    pinChangeError = '';
+    try {
+      await walletService.changePin(currentPin, newPin, id);
+      pinChangeOpen = false;
+      toast({
+        title: 'App PIN changed',
+        description: 'Unlock this wallet with your new PIN.',
+        tone: 'success'
+      });
+      await goto('/unlock');
+    } catch (cause) {
+      pinChangeError = localizedError(cause, $locale, 'Could not change the app PIN.');
+      toast({ title: 'App PIN not changed', description: pinChangeError, tone: 'danger' });
+      const session = await walletService.session().catch(() => null);
+      if (session && !session.unlocked) {
+        pinChangeOpen = false;
+        await goto('/unlock');
+      }
+    } finally {
+      currentPin = newPin = confirmPin = '';
+      pinChangeBusy = false;
+    }
+  }
   let isSoftwareWallet = $derived(selectedProfile?.kind === 'single_key');
   let credentialLabel = $derived(
     translate($locale, isSoftwareWallet ? 'Wallet passphrase' : 'App PIN')
@@ -370,7 +408,10 @@
       scan = await walletService.recoveryScanSettings();
       scanDraft = { ...scan };
       scanStatus = await walletService.recoveryScanStatus();
-      if (page.url.searchParams.get('networkSetup') === '1') {
+      if (page.url.searchParams.get('nodeConnection') === '1') {
+        openNodeSettings();
+        replaceState('/settings', {});
+      } else if (page.url.searchParams.get('networkSetup') === '1') {
         if (reusableNetworkSetups.length > 0) openNetworkReuse();
         else openNodeSettings();
         replaceState('/settings', {});
@@ -461,7 +502,7 @@
       if (!result) return;
       labelInterchangeResult = translate(
         $locale,
-        'Imported {imported}; {unchanged} already present; {ignored} unsupported; {spendability} coin settings changed.',
+        'Imported {imported}; {unchanged} already present.',
         {
           imported: result.importedCount,
           unchanged: result.unchangedCount,
@@ -469,6 +510,24 @@
           spendability: result.spendabilityChangeCount
         }
       );
+      if (result.matchedSignerCount)
+        labelInterchangeResult +=
+          ' ' +
+          translate($locale, '{count} signer keys matched; current signer names kept.', {
+            count: result.matchedSignerCount
+          });
+      if (result.ignoredCount)
+        labelInterchangeResult +=
+          ' ' +
+          translate($locale, '{count} unsupported records skipped.', {
+            count: result.ignoredCount
+          });
+      if (result.spendabilityChangeCount)
+        labelInterchangeResult +=
+          ' ' +
+          translate($locale, '{count} coin settings changed.', {
+            count: result.spendabilityChangeCount
+          });
       toast({ title: 'Labels imported', description: labelInterchangeResult, tone: 'success' });
     } catch (cause) {
       labelInterchangeError = localizedError(cause, $locale, 'Could not import wallet labels.');
@@ -483,6 +542,7 @@
   }
   onDestroy(() => {
     destroyed = true;
+    currentPin = newPin = confirmPin = '';
     deleteCredential = '';
     confirmText = '';
     nodePassword = '';
@@ -1035,20 +1095,59 @@
     scanOptionsOpen = false;
     scanOpen = false;
   }
-  function openDeleteWallet() {
+  let deletionBackupConfirmed = $state(false);
+  let deletionPassphraseConfirmed = $state(false);
+  let deletionError = $state('');
+  let deletionChecking = $state(false);
+  let deletionBlocked = $state(false);
+  async function openDeleteWallet() {
     deleteCredential = '';
     confirmText = '';
+    deletionBackupConfirmed = false;
+    deletionPassphraseConfirmed = false;
+    deletionError = '';
+    deletionBlocked = false;
     deleting = true;
+    if (isSoftwareWallet && !selectedProfile?.backupVerified) {
+      const id = selectedWalletId;
+      deletionChecking = true;
+      try {
+        const overview = await walletService.overview(id ?? '');
+        if (deleting && selectedWalletId === id) deletionBlocked = overview.balance.total > 0;
+      } catch (cause) {
+        if (deleting && selectedWalletId === id) {
+          deletionBlocked = true;
+          deletionError = localizedError(cause, $locale);
+        }
+      } finally {
+        deletionChecking = false;
+      }
+    }
   }
   function closeDeleteWallet() {
+    if (busy) return;
     deleteCredential = '';
     confirmText = '';
     deleting = false;
   }
   async function deleteWallet() {
+    if (
+      busy ||
+      deletionChecking ||
+      deletionBlocked ||
+      !deletionBackupConfirmed ||
+      (isSoftwareWallet && !deletionPassphraseConfirmed)
+    )
+      return;
     busy = true;
+    deletionError = '';
     try {
-      await walletService.deleteWallet(deleteCredential, confirmText);
+      await walletService.deleteWallet(
+        deleteCredential,
+        confirmText,
+        deletionBackupConfirmed,
+        deletionPassphraseConfirmed
+      );
       deleting = false;
       confirmText = '';
       deleteCredential = '';
@@ -1060,6 +1159,7 @@
       const registry = await walletService.profiles();
       await goto(registry.wallets.length ? '/unlock' : '/welcome');
     } catch (cause) {
+      deletionError = localizedError(cause, $locale);
       toast({
         title: 'Could not delete wallet',
         description: localizedError(cause, $locale),
@@ -1305,6 +1405,18 @@
             ><small>{translate($locale, 'Lock only this wallet immediately.')}</small></span
           ><ChevronRight size={16} /></button
         >
+        {#if walletUnlocked && selectedProfile && !isSoftwareWallet}<button
+            onclick={() => {
+              closePinChange();
+              pinChangeOpen = true;
+            }}
+          >
+            <span class="setting-icon"><KeyRound size={18} /></span><span
+              ><strong>{translate($locale, 'Change app PIN')}</strong><small
+                >{translate($locale, 'Locks this wallet after changing its PIN.')}</small
+              ></span
+            ><ChevronRight size={16} />
+          </button>{/if}
         <div class="setting-row automatic-lock-row">
           <span class="setting-icon"><Clock3 size={18} /></span><span
             ><strong>{translate($locale, 'Automatic lock')}</strong><small
@@ -1907,9 +2019,22 @@
 >
   <WarningNotice
     tone="danger"
-    title={translate($locale, 'Make sure your recovery phrase is backed up.')}
+    title={translate(
+      $locale,
+      isSoftwareWallet
+        ? 'Make sure your recovery phrase is backed up.'
+        : 'Keep your signer keys and wallet descriptor backed up.'
+    )}
     body={translate($locale, 'Without it, your bitcoin cannot be recovered.')}
   />
+  {#if deletionBlocked && isSoftwareWallet && !selectedProfile?.backupVerified}<Button
+      variant="secondary"
+      onclick={() => {
+        closeDeleteWallet();
+        verifyOpen = true;
+      }}>{translate($locale, 'Verify now')}</Button
+    >{/if}
+  {#if deletionError}<WarningNotice tone="danger" icon role="alert" body={deletionError} />{/if}
   <PasswordField
     label={credentialLabel}
     bind:value={deleteCredential}
@@ -1921,11 +2046,40 @@
       placeholder={translate($locale, 'DELETE')}
     /></label
   >
+  <div class="modal-form">
+    <label class="check-row"
+      ><input type="checkbox" bind:checked={deletionBackupConfirmed} disabled={busy} /><span
+        >{translate(
+          $locale,
+          isSoftwareWallet
+            ? 'I have backed up my recovery words.'
+            : 'I have backed up my signer keys and wallet descriptor.'
+        )}</span
+      ></label
+    >
+    {#if isSoftwareWallet}<label class="check-row"
+        ><input type="checkbox" bind:checked={deletionPassphraseConfirmed} disabled={busy} /><span
+          >{translate($locale, 'I have backed up my wallet passphrase separately.')}</span
+        ></label
+      >
+      {#if deletionBlocked && !selectedProfile?.backupVerified}<WarningNotice
+          title={translate($locale, 'Recovery backup not verified')}
+          body={translate(
+            $locale,
+            'A software wallet with bitcoin cannot be deleted until its recovery backup is verified in Groot. An empty wallet can be deleted.'
+          )}
+        />{/if}{/if}
+  </div>
   <div class="modal-footer">
     <Button variant="secondary" onclick={closeDeleteWallet}>{translate($locale, 'Cancel')}</Button
     ><Button
       variant="danger"
-      disabled={confirmText !== 'DELETE' || !deleteCredential}
+      disabled={deletionChecking ||
+        deletionBlocked ||
+        confirmText !== 'DELETE' ||
+        !deleteCredential ||
+        !deletionBackupConfirmed ||
+        (isSoftwareWallet && !deletionPassphraseConfirmed)}
       loading={busy}
       loadingLabel={translate($locale, 'Deleting…')}
       onclick={deleteWallet}>{translate($locale, 'Delete wallet')}</Button
@@ -2620,5 +2774,46 @@
         loadingLabel={translate($locale, 'Testing connection…')}
         onclick={nodeMode === 'managed' ? configureManagedNode : saveNode}>{nodeSaveLabel()}</Button
       >{/if}
+  </div>
+</Modal>
+
+<Modal
+  open={pinChangeOpen}
+  title={translate($locale, 'Change app PIN')}
+  description={translate(
+    $locale,
+    'Your hardware keys and device passphrase stay the same. This wallet will lock after the change.'
+  )}
+  onclose={closePinChange}
+>
+  <div class="modal-form">
+    <PasswordField
+      label={translate($locale, 'Current app PIN')}
+      bind:value={currentPin}
+      oninput={() => (pinChangeError = '')}
+      autocomplete="current-password"
+    />
+    <PasswordField
+      label={translate($locale, 'New app PIN')}
+      bind:value={newPin}
+      autocomplete="new-password"
+    />
+    <PasswordField
+      label={translate($locale, 'Confirm new app PIN')}
+      bind:value={confirmPin}
+      autocomplete="new-password"
+      error={confirmPin && confirmPin !== newPin ? translate($locale, 'PINs do not match.') : ''}
+    />
+    {#if pinChangeError}<WarningNotice tone="danger" icon role="alert" body={pinChangeError} />{/if}
+  </div>
+  <div class="modal-footer">
+    <Button variant="secondary" disabled={pinChangeBusy} onclick={closePinChange}
+      >{translate($locale, 'Cancel')}</Button
+    ><Button
+      loading={pinChangeBusy}
+      loadingLabel={translate($locale, 'Changing PIN…')}
+      disabled={!currentPin || !newPin || newPin !== confirmPin || newPin === currentPin}
+      onclick={changePin}>{translate($locale, 'Change app PIN')}</Button
+    >
   </div>
 </Modal>

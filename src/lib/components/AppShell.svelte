@@ -15,6 +15,9 @@
   import BuildIdentity from './BuildIdentity.svelte';
   import DiscardMultisigSetupModal from './DiscardMultisigSetupModal.svelte';
   import ToastHost from './ToastHost.svelte';
+  import Modal from './Modal.svelte';
+  import Button from './Button.svelte';
+  import WarningNotice from './WarningNotice.svelte';
   import WalletProfileList from './WalletProfileList.svelte';
   import NetworkStatus from './NetworkStatus.svelte';
   import ThemeToggle from './ThemeToggle.svelte';
@@ -132,6 +135,88 @@
   const showSetupResume = $derived(
     Boolean(multisigSetupDraft) && !onboardingRoute && !diagnosticsRoute
   );
+  let initialApprovalWalletId = $state<string | null>(null);
+  let initialApprovalBusy = $state(false);
+  let initialApprovalError = $state('');
+  let initialApprovalManaged = $state(false);
+  const declinedInitialScans = new Set<string>();
+  function requestInitialHistoryApproval(force = false) {
+    const id = selectedWalletId;
+    if (!id || (!force && declinedInitialScans.has(id)) || initialApprovalBusy) return;
+    if (!force && initialApprovalWalletId === id) return;
+    initialApprovalWalletId = id;
+    initialApprovalError = '';
+    initialApprovalManaged = false;
+    void walletService
+      .nodeConfig()
+      .then((config) => {
+        if (initialApprovalWalletId === id)
+          initialApprovalManaged =
+            config.backend.type === 'remote_core' &&
+            config.backend.url === 'https://bitcoin-rpc.usegroot.com/';
+      })
+      .catch(() => undefined);
+  }
+  async function declineInitialHistoryScan() {
+    if (initialApprovalBusy) return;
+    if (initialApprovalWalletId) declinedInitialScans.add(initialApprovalWalletId);
+    initialApprovalWalletId = null;
+    await goto('/settings?nodeConnection=1');
+  }
+  async function approveInitialHistoryScan() {
+    const id = initialApprovalWalletId;
+    if (!id || initialApprovalBusy) return;
+    initialApprovalBusy = true;
+    initialApprovalError = '';
+    let scanStarted = false;
+    try {
+      await pauseAutomaticSync();
+      const session = await walletService.session();
+      if (!session.unlocked || session.profile.id !== id)
+        throw new WalletError(
+          'wallet_selection_changed',
+          'The selected wallet changed. Open it again before approving the scan.'
+        );
+      const settings = await walletService.recoveryScanSettings();
+      await walletService.saveRecoveryScanSettings(0, settings.gapLimit, '', id);
+      declinedInitialScans.delete(id);
+      const scan = walletService.fullRescan('', id);
+      scanStarted = true;
+      initialApprovalWalletId = null;
+      void scan
+        .then(() => toast({ title: 'Wallet history verified', tone: 'success' }))
+        .catch((cause) => {
+          if (selectedWalletId !== id) return;
+          initialApprovalError = localizedError(
+            cause,
+            $locale,
+            'The wallet-history scan could not start.'
+          );
+          initialApprovalWalletId = id;
+          toast({
+            title: 'Wallet-history scan paused',
+            description: initialApprovalError,
+            tone: 'danger'
+          });
+        })
+        .finally(() => resumeAutomaticSync())
+        .catch(() => undefined);
+    } catch (cause) {
+      initialApprovalError = localizedError(
+        cause,
+        $locale,
+        'The wallet-history scan could not start.'
+      );
+      toast({
+        title: 'Wallet-history scan paused',
+        description: initialApprovalError,
+        tone: 'danger'
+      });
+    } finally {
+      initialApprovalBusy = false;
+      if (!scanStarted) await resumeAutomaticSync();
+    }
+  }
   function handleKeyboardShortcut(event: KeyboardEvent) {
     const primaryModifier = commandModifier
       ? event.metaKey && !event.ctrlKey
@@ -334,7 +419,7 @@
         .catch(() => (selectedWalletUnlocked = false));
     }
     if (!liveSync) return;
-    if (previousPath === '/welcome' || previousPath === '/hardware/new') {
+    if (previousPath && profileMutatingRoutes.has(previousPath)) {
       void resumeAfterWalletCreation(profileRefresh);
       return;
     }
@@ -439,6 +524,7 @@
     selectWallet,
     beginHardwareReview,
     requestUnlockSync,
+    requestInitialHistoryApproval,
     consumeUnlockSync,
     pauseAutomaticSync,
     resumeAutomaticSync
@@ -489,8 +575,10 @@
         await goto('/');
       }
       startupState = 'ready';
-      if (!syncPausedRoute && !isPrototypeWallet && automaticSyncPauseCount === 0)
+      if (!syncPausedRoute && !isPrototypeWallet && automaticSyncPauseCount === 0) {
         liveSync?.start();
+        void liveSync?.runNow();
+      }
     } catch {
       if (!startupFailure)
         startupFailure = translate($locale, 'Groot could not verify the wallet lock state.');
@@ -520,6 +608,8 @@
       () => selectedProfile?.kind ?? null,
       LIVE_SYNC_INTERVAL_MS,
       (cause) => {
+        if (cause instanceof WalletError && cause.code === 'initial_scan_required')
+          requestInitialHistoryApproval();
         if (cause instanceof WalletError && cause.code === 'wallet_locked') {
           liveSync?.stop();
           void goto('/unlock');
@@ -725,6 +815,48 @@
       }}
       onconfirm={discardSetupDraft}
     />
-    <ToastHost />
+    {#if !initialApprovalWalletId}<ToastHost />{/if}
   {/if}
 </div>
+
+<Modal
+  open={Boolean(initialApprovalWalletId) &&
+    selectedWalletId === initialApprovalWalletId &&
+    !walletLocked}
+  title={translate($locale, 'Approve wallet-history scan')}
+  description={translate(
+    $locale,
+    'Use Groot’s network for simplicity and speed, or set up your own node for better privacy.'
+  )}
+  onclose={() => {
+    void declineInitialHistoryScan();
+  }}
+>
+  <div class="modal-form">
+    <WarningNotice
+      title={translate($locale, 'Wallet privacy')}
+      body={translate(
+        $locale,
+        initialApprovalManaged
+          ? 'Groot’s network can see your wallet activity. Your keys stay on your device.'
+          : 'Your own node checks your wallet history. Your keys stay on your device.'
+      )}
+    />
+    {#if initialApprovalError}<WarningNotice
+        tone="danger"
+        icon
+        role="alert"
+        title={translate($locale, 'Scan could not start')}
+        body={initialApprovalError}
+      />{/if}
+  </div>
+  <div class="modal-footer">
+    <Button variant="secondary" disabled={initialApprovalBusy} onclick={declineInitialHistoryScan}
+      >{translate($locale, 'Set up my own node')}</Button
+    ><Button
+      loading={initialApprovalBusy}
+      loadingLabel={translate($locale, 'Starting scan…')}
+      onclick={approveInitialHistoryScan}>{translate($locale, 'Approve and scan')}</Button
+    >
+  </div>
+</Modal>

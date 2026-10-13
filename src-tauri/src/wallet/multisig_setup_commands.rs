@@ -1011,7 +1011,23 @@ pub fn multisig_bsms_inspect(
         },
         None,
     );
+    let (threshold, keys) = record.standard_policy().map_err(bsms_api_error)?;
+    let cosigners = keys
+        .into_iter()
+        .enumerate()
+        .map(|(index, key)| CosignerInput {
+            id: format!("bsms-{}", key.fingerprint),
+            label: format!("Signer {}", index + 1),
+            fingerprint: key.fingerprint.to_string(),
+            xpub: key.xpub.to_string(),
+            derivation_path: key.derivation_path,
+            source: CosignerSource::Manual,
+            device_type: None,
+        })
+        .collect();
     Ok(RecoveryDrillDto {
+        threshold,
+        cosigners,
         first_address: derived_first,
         matches_current_wallet,
     })
@@ -1141,17 +1157,33 @@ pub fn multisig_recovery_drill(
     let _operation = operation_guard(&state)?;
     let backup = validate_multisig_backup(&encoded_backup)?;
     let first_address = first_multisig_address(&backup.wallet)?;
-    let matches_current_wallet = read_multisig_metadata(&app)
-        .and_then(|wallet| first_multisig_address(&wallet))
-        .map(|current| current == first_address)
+    let record = crate::bsms::DescriptorRecord::from_descriptor_pair(
+        &backup.wallet.external_descriptor,
+        &backup.wallet.internal_descriptor,
+        &first_address,
+    )
+    .map_err(bsms_api_error)?;
+    let current_wallet = read_multisig_metadata(&app).ok();
+    let matches_current_wallet = current_wallet
+        .as_ref()
+        .map(|wallet| {
+            record.matches_descriptor_pair(&wallet.external_descriptor, &wallet.internal_descriptor)
+        })
+        .transpose()
+        .map_err(bsms_api_error)?
         .unwrap_or(false);
     if matches_current_wallet {
         let wallet_id = selected_profile_of_kind(&app, WalletKind::Multisig)?.id;
+        let descriptor = current_wallet
+            .as_ref()
+            .ok_or_else(|| api_error("wallet_not_found", "No multisig wallet exists."))?
+            .external_descriptor
+            .clone();
         state
             .verified_recovery
             .lock()
             .map_err(internal)?
-            .insert(wallet_id, backup.wallet.external_descriptor.clone());
+            .insert(wallet_id, descriptor);
     }
     diagnostics::record(
         &app,
@@ -1165,6 +1197,8 @@ pub fn multisig_recovery_drill(
         None,
     );
     Ok(RecoveryDrillDto {
+        threshold: backup.wallet.threshold,
+        cosigners: backup.wallet.cosigners,
         first_address,
         matches_current_wallet,
     })
@@ -1271,60 +1305,73 @@ pub fn multisig_recover(
 }
 
 #[tauri::command]
-pub fn multisig_delete(
+pub async fn multisig_delete(
     app: AppHandle,
-    state: State<'_, AppState>,
     credential: String,
     confirmation: String,
+    backup_confirmed: bool,
+    passphrase_backup_confirmed: bool,
 ) -> ApiResult<()> {
     let credential = Zeroizing::new(credential);
-    let _operation = operation_guard(&state)?;
-    require_unlocked(&app, &state)?;
-    let wallet = read_multisig_metadata(&app)?;
-    let wallet_id = selected_profile_of_kind(&app, WalletKind::Multisig)?.id;
-    let drill_verified = state
-        .verified_recovery
-        .lock()
-        .map_err(internal)?
-        .get(&wallet_id)
-        .is_some_and(|descriptor| descriptor == &wallet.external_descriptor);
-    if !drill_verified {
-        return Err(api_error(
-            "backup_mismatch",
-            "Complete a successful recovery test before deleting this wallet.",
-        ));
-    }
-    if confirmation != wallet.name {
-        return Err(api_error(
-            "confirmation_mismatch",
-            "Type the exact wallet name to delete this coordinator.",
-        ));
-    }
-    check_auth_throttle(&app, &state)?;
-    let verified = verify_multisig_credential(&app, credential.as_str());
-    record_auth_result(&app, &state, &verified)?;
-    verified?;
-    let dir = profile_directory(&app, wallet_id)?;
-    delete_registered_wallet(&app, wallet_id, &dir)?;
-    forget_core_mempool_snapshot(&state, wallet_id);
-    state
-        .verified_recovery
-        .lock()
-        .map_err(internal)?
-        .remove(&wallet_id);
-    lock_wallet(&state, wallet_id)?;
-    diagnostics::record(
-        &app,
-        &state,
-        diagnostics::DiagnosticEventKind::WalletRemoved,
-        diagnostics::DiagnosticOutcome::Succeeded,
-        diagnostics::DiagnosticContext {
-            wallet_kind: Some(diagnostics::DiagnosticWalletKind::Multisig),
-            ..Default::default()
-        },
-        None,
-    );
-    Ok(())
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let _operation = operation_guard(&state)?;
+        require_unlocked(&app, &state)?;
+        let wallet = read_multisig_metadata(&app)?;
+        let wallet_id = selected_profile_of_kind(&app, WalletKind::Multisig)?.id;
+        let drill_verified = state
+            .verified_recovery
+            .lock()
+            .map_err(internal)?
+            .get(&wallet_id)
+            .is_some_and(|descriptor| descriptor == &wallet.external_descriptor);
+        if !drill_verified {
+            return Err(api_error(
+                "backup_mismatch",
+                "Complete a successful recovery test before deleting this wallet.",
+            ));
+        }
+        if confirmation != "DELETE" {
+            return Err(api_error(
+                "confirmation_mismatch",
+                "Type DELETE exactly to remove this wallet.",
+            ));
+        }
+        check_auth_throttle(&app, &state)?;
+        let verified = verify_multisig_credential(&app, credential.as_str());
+        record_auth_result(&app, &state, &verified)?;
+        verified?;
+        validate_wallet_deletion_backup(
+            WalletKind::Multisig,
+            true,
+            0,
+            backup_confirmed,
+            passphrase_backup_confirmed,
+        )?;
+        let dir = profile_directory(&app, wallet_id)?;
+        delete_registered_wallet(&app, wallet_id, &dir)?;
+        forget_core_mempool_snapshot(&state, wallet_id);
+        state
+            .verified_recovery
+            .lock()
+            .map_err(internal)?
+            .remove(&wallet_id);
+        lock_wallet(&state, wallet_id)?;
+        diagnostics::record(
+            &app,
+            &state,
+            diagnostics::DiagnosticEventKind::WalletRemoved,
+            diagnostics::DiagnosticOutcome::Succeeded,
+            diagnostics::DiagnosticContext {
+                wallet_kind: Some(diagnostics::DiagnosticWalletKind::Multisig),
+                ..Default::default()
+            },
+            None,
+        );
+        Ok(())
+    })
+    .await
+    .map_err(internal)?
 }
 
 #[tauri::command]
@@ -1492,9 +1539,10 @@ pub(crate) fn claim_observed_receive_output(
     db: &mut Connection,
     wallet: &Wallet,
     outpoint: &str,
-    raw_label: &str,
+    raw_labels: &[String],
 ) -> ApiResult<ReceiveAddressDto> {
-    let label = normalize_label(raw_label)?;
+    let labels = normalize_labels(raw_labels.to_vec())?;
+    let label = labels[0].clone();
     let outpoint = OutPoint::from_str(outpoint).map_err(|_| {
         api_error(
             "address_not_found",
@@ -1547,9 +1595,9 @@ pub(crate) fn claim_observed_receive_output(
             params![index, address.to_string(), label, created],
         )
         .map_err(internal)?;
-    label_provenance::assign_new_label(
+    label_provenance::assign_labels(
         &transaction,
-        &label,
+        &labels,
         LabelOrigin::Receive,
         "address",
         &index.to_string(),
@@ -1562,7 +1610,7 @@ pub(crate) fn claim_observed_receive_output(
         id: index,
         testnet_alias: regtest_testnet_address_alias(&address.to_string()),
         address: address.to_string(),
-        labels: vec![label.clone()],
+        labels,
         label,
         created: created.to_string(),
         status: "used".to_owned(),
@@ -1577,13 +1625,13 @@ pub fn multisig_address_claim_observed(
     app: AppHandle,
     state: State<'_, AppState>,
     outpoint: String,
-    label: String,
+    labels: Vec<String>,
 ) -> ApiResult<ReceiveAddressDto> {
     let _operation = operation_guard(&state)?;
     require_unlocked(&app, &state)?;
     let mut db = open_multisig_db(&app)?;
     let wallet = load_wallet(&mut db)?;
-    claim_observed_receive_output(&mut db, &wallet, &outpoint, &label)
+    claim_observed_receive_output(&mut db, &wallet, &outpoint, &labels)
 }
 
 #[tauri::command]

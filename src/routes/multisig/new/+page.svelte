@@ -441,6 +441,12 @@
     stage = draft.stage;
     policyStep = draft.stage === 'policy' ? 'configure' : 'choose';
     templateKind = draft.templateKind;
+    if (draft.templateKind !== 'standard') {
+      stage = 'policy';
+      policyStep = 'choose';
+      error =
+        'Timelocked policy creation is not available yet. Choose Standard or keep this setup for a future version.';
+    }
     recoveryDelayBlocks =
       draft.templateKind === 'inheritance'
         ? (draft.recoveryDelayBlocks ?? 52_560)
@@ -703,6 +709,7 @@
   }
 
   function continueToPolicyConfiguration() {
+    if (templateKind !== 'standard') return;
     error = '';
     policyStep = 'configure';
   }
@@ -905,8 +912,9 @@
       preview.externalDescriptor,
       preview.internalDescriptor
     );
-    const content = `Wallet: ${preview.name}\n${portable ? `Portable wallet descriptor:\n${portable}\n\n` : ''}Receive descriptor:\n${preview.externalDescriptor}\n\nChange descriptor:\n${preview.internalDescriptor}\n`;
     try {
+      if (!portable) throw new Error('The wallet descriptor could not be combined.');
+      const content = `${portable}\n`;
       const savedBackup = await walletService.savePublicBackup(
         `${safeTransferFilename(preview.name)}-descriptors.txt`,
         content
@@ -1223,6 +1231,7 @@
   }
 
   async function create() {
+    if (templateKind !== 'standard') return;
     if (
       !preview ||
       !saved ||
@@ -1365,8 +1374,8 @@
             >
             <button
               class="policy-kind-card recovery"
-              class:active={templateKind === 'partner_continuity_v1'}
-              onclick={() => chooseTemplate('partner_continuity_v1')}
+              type="button"
+              disabled
               ><span class="policy-kind-icon"><ShieldCheck size={21} /></span><span
                 class="policy-kind-copy"
                 ><strong>{translate($locale, 'Partner continuity')}</strong><small
@@ -1375,7 +1384,7 @@
                     'Your 2 of 3 now, guided access for your partner later.'
                   )}</small
                 ></span
-              ><span class="policy-kind-meta">{translate($locale, '3 · 9 · 12 months')}</span
+              ><span class="policy-kind-meta">{translate($locale, 'Coming soon')}</span
               >{#if templateKind === 'partner_continuity_v1'}<span
                   class="policy-kind-check"
                   aria-hidden="true"><Check size={16} strokeWidth={3} /></span
@@ -1383,8 +1392,8 @@
             >
             <button
               class="policy-kind-card inheritance"
-              class:active={templateKind === 'family_continuity_v1'}
-              onclick={() => chooseTemplate('family_continuity_v1')}
+              type="button"
+              disabled
               ><span class="policy-kind-icon"><Clock3 size={21} /></span><span
                 class="policy-kind-copy"
                 ><strong>{translate($locale, 'Family continuity')}</strong><small
@@ -1393,7 +1402,7 @@
                     'Parents stay in control; children can assist or inherit later.'
                   )}</small
                 ></span
-              ><span class="policy-kind-meta">{translate($locale, '3 · 12 months')}</span
+              ><span class="policy-kind-meta">{translate($locale, 'Coming soon')}</span
               >{#if templateKind === 'family_continuity_v1'}<span
                   class="policy-kind-check"
                   aria-hidden="true"><Check size={16} strokeWidth={3} /></span
@@ -1935,91 +1944,12 @@
                   </div>
                   <code>{combinedDescriptor}</code>
                 </section>
-                <details>
-                  <summary
-                    >{translate($locale, 'View separate receive and change descriptors')}</summary
-                  >
-                  <section>
-                    <div>
-                      <span>{translate($locale, 'Receive descriptor')}</span><small
-                        >{translate(
-                          $locale,
-                          'Generates addresses shared for incoming payments.'
-                        )}</small
-                      >
-                    </div>
-                    <code>{preview.externalDescriptor}</code><button
-                      aria-label={translate($locale, 'Copy receive descriptor')}
-                      onclick={() => copyDescriptor(preview!.externalDescriptor, 'Receive')}
-                      >{#if copiedDescriptor === preview.externalDescriptor}<Check
-                          size={14}
-                        />{:else}<Copy size={14} />{/if}{translate(
-                        $locale,
-                        'Copy receive descriptor'
-                      )}</button
-                    >
-                  </section>
-                  <section>
-                    <div>
-                      <span>{translate($locale, 'Change descriptor')}</span><small
-                        >{translate(
-                          $locale,
-                          'Generates private change addresses after spending.'
-                        )}</small
-                      >
-                    </div>
-                    <code>{preview.internalDescriptor}</code><button
-                      aria-label={translate($locale, 'Copy change descriptor')}
-                      onclick={() => copyDescriptor(preview!.internalDescriptor, 'Change')}
-                      >{#if copiedDescriptor === preview.internalDescriptor}<Check
-                          size={14}
-                        />{:else}<Copy size={14} />{/if}{translate(
-                        $locale,
-                        'Copy change descriptor'
-                      )}</button
-                    >
-                  </section>
-                </details>
-              {:else}<section>
-                  <div>
-                    <span>{translate($locale, 'Receive descriptor')}</span><small
-                      >{translate(
-                        $locale,
-                        'Generates addresses shared for incoming payments.'
-                      )}</small
-                    >
-                  </div>
-                  <code>{preview.externalDescriptor}</code><button
-                    aria-label={translate($locale, 'Copy receive descriptor')}
-                    onclick={() => copyDescriptor(preview!.externalDescriptor, 'Receive')}
-                    >{#if copiedDescriptor === preview.externalDescriptor}<Check
-                        size={14}
-                      />{:else}<Copy size={14} />{/if}{translate(
-                      $locale,
-                      'Copy receive descriptor'
-                    )}</button
-                  >
-                </section>
-                <section>
-                  <div>
-                    <span>{translate($locale, 'Change descriptor')}</span><small
-                      >{translate(
-                        $locale,
-                        'Generates private change addresses after spending.'
-                      )}</small
-                    >
-                  </div>
-                  <code>{preview.internalDescriptor}</code><button
-                    aria-label={translate($locale, 'Copy change descriptor')}
-                    onclick={() => copyDescriptor(preview!.internalDescriptor, 'Change')}
-                    >{#if copiedDescriptor === preview.internalDescriptor}<Check
-                        size={14}
-                      />{:else}<Copy size={14} />{/if}{translate(
-                      $locale,
-                      'Copy change descriptor'
-                    )}</button
-                  >
-                </section>{/if}
+              {:else}<p class="form-error" role="alert">
+                  {translate(
+                    $locale,
+                    'The wallet descriptor could not be combined. Your saved backup is unchanged.'
+                  )}
+                </p>{/if}
               {#if recoveryTemplate?.type === 'recovery'}<span
                   >{translate($locale, 'Spend paths')}</span
                 ><code

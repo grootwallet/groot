@@ -130,8 +130,8 @@ describe('hardware device display names', () => {
       action: 'unlock' as const,
       status: 'needs_device_unlock' as const
     };
-    expect(hardwareDeviceStateLabel(locked, 'unknown')).toBe('Unlock to identify');
-    expect(hardwareDeviceStateLabel(locked, 'compatible')).toBe('Unlock to identify');
+    expect(hardwareDeviceStateLabel(locked, 'unknown')).toBe('Select to identify');
+    expect(hardwareDeviceStateLabel(locked, 'compatible')).toBe('Select to identify');
     const passivelyDetected = { ...locked, status: 'detected' as const };
     expect(hardwareDeviceStateLabel(passivelyDetected, 'unknown')).toBe('Select to identify');
     expect(hardwareDeviceStateLabel(passivelyDetected, 'compatible')).toBe('Select to identify');

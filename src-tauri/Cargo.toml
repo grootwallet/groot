@@ -1,10 +1,10 @@
 [package]
 name = "groot"
-version = "0.5.1"
+version = "5.2.0-rc02"
 description = "Groot, a minimal onchain Bitcoin wallet"
 edition = "2021"
 license = "Apache-2.0"
-authors = ["Thibaud Marechal <t@thibm.net>"]
+authors = ["Rochal Holdings"]
 repository = "https://github.com/grootwallet/groot"
 
 [lib]

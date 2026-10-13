@@ -60,62 +60,13 @@
               />{/if}{translate($locale, 'Copy wallet descriptor')}</button
           >
         </section>
-        <details>
-          <summary>{translate($locale, 'View separate receive and change descriptors')}</summary>
-          <section>
-            <div>
-              <span>{translate($locale, 'Receive descriptor')}</span><small
-                >{translate($locale, 'Generates addresses shared for incoming payments.')}</small
-              >
-            </div>
-            <code>{wallet.externalDescriptor}</code><button
-              onclick={() => copyDescriptor(wallet!.externalDescriptor, 'Receive')}
-              >{#if copiedDescriptor === wallet.externalDescriptor}<Check size={15} />{:else}<Copy
-                  size={15}
-                />{/if}{translate($locale, 'Copy receive descriptor')}</button
-            >
-          </section>
-          <section>
-            <div>
-              <span>{translate($locale, 'Change descriptor')}</span><small
-                >{translate($locale, 'Generates private change addresses after spending.')}</small
-              >
-            </div>
-            <code>{wallet.internalDescriptor}</code><button
-              onclick={() => copyDescriptor(wallet!.internalDescriptor, 'Change')}
-              >{#if copiedDescriptor === wallet.internalDescriptor}<Check size={15} />{:else}<Copy
-                  size={15}
-                />{/if}{translate($locale, 'Copy change descriptor')}</button
-            >
-          </section>
-        </details>
       {:else}
-        <section>
-          <div>
-            <span>{translate($locale, 'Receive descriptor')}</span><small
-              >{translate($locale, 'Generates addresses shared for incoming payments.')}</small
-            >
-          </div>
-          <code>{wallet.externalDescriptor}</code><button
-            onclick={() => copyDescriptor(wallet!.externalDescriptor, 'Receive')}
-            >{#if copiedDescriptor === wallet.externalDescriptor}<Check size={15} />{:else}<Copy
-                size={15}
-              />{/if}{translate($locale, 'Copy receive descriptor')}</button
-          >
-        </section>
-        <section>
-          <div>
-            <span>{translate($locale, 'Change descriptor')}</span><small
-              >{translate($locale, 'Generates private change addresses after spending.')}</small
-            >
-          </div>
-          <code>{wallet.internalDescriptor}</code><button
-            onclick={() => copyDescriptor(wallet!.internalDescriptor, 'Change')}
-            >{#if copiedDescriptor === wallet.internalDescriptor}<Check size={15} />{:else}<Copy
-                size={15}
-              />{/if}{translate($locale, 'Copy change descriptor')}</button
-          >
-        </section>
+        <p class="form-error" role="alert">
+          {translate(
+            $locale,
+            'The wallet descriptor could not be combined. Your saved backup is unchanged.'
+          )}
+        </p>
       {/if}
       <p>
         <ShieldCheck size={14} />{translate(

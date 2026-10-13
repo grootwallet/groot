@@ -24,8 +24,9 @@ describe('native PDF backup presentation', () => {
   });
 
   it('embeds printable QR codes as vectors without waiting for images to decode', () => {
-    expect(backupRoute).toContain('receivePrintQr = createPrintableQr(current.externalDescriptor)');
-    expect(backupRoute).toContain('changePrintQr = createPrintableQr(current.internalDescriptor)');
+    expect(backupRoute).toContain('receivePrintQr = createPrintableQr(descriptor)');
+    expect(backupRoute).not.toContain('changePrintQr');
+    expect(backupRoute).toContain('combineDescriptorBranches');
     expect(backupRoute).toContain('class="print-qr"');
     expect(backupRoute).toContain('<path d={receivePrintQr.path} />');
     expect(backupRoute).not.toContain('<img src={receiveQr} alt="Receive descriptor QR code" />');

@@ -260,9 +260,19 @@ export class TauriWalletAdapter implements WalletPort {
     this.#generation++;
     return command<void>('wallet_lock');
   }
-  deleteWallet(credential: string, confirmation: string) {
+  deleteWallet(
+    credential: string,
+    confirmation: string,
+    backupConfirmed: boolean,
+    passphraseBackupConfirmed: boolean
+  ) {
     this.#generation++;
-    return command<void>('wallet_delete', { credential, confirmation });
+    return command<void>('wallet_delete', {
+      credential,
+      confirmation,
+      backupConfirmed,
+      passphraseBackupConfirmed
+    });
   }
   resetRegtestWallet(confirmation: string) {
     this.#generation++;
@@ -311,25 +321,38 @@ export class TauriWalletAdapter implements WalletPort {
   recoveryScanSettings() {
     return command<import('./contracts').RecoveryScanSettings>('recovery_scan_settings');
   }
-  saveRecoveryScanSettings(birthdayHeight: number, gapLimit: number, credential: string) {
+  saveRecoveryScanSettings(
+    birthdayHeight: number,
+    gapLimit: number,
+    credential: string,
+    expectedWalletId?: string
+  ) {
     return command<import('./contracts').RecoveryScanSettings>('recovery_scan_settings_save', {
       birthdayHeight,
       gapLimit,
-      credential
+      credential,
+      ...(expectedWalletId ? { expectedWalletId } : {})
     });
   }
   recoveryScanStatus() {
     return command<import('./contracts').RecoveryScanStatus>('recovery_scan_status');
   }
-  async fullRescan(credential: string) {
+  changePin(currentPin: string, newPin: string, expectedWalletId: string) {
+    return command<void>('wallet_pin_change', { currentPin, newPin, expectedWalletId });
+  }
+  async fullRescan(credential: string, expectedWalletId?: string) {
     const generation = this.#generation;
     const walletId = this.#selectedWalletId;
+    const walletKind = this.#selectedWalletKind ?? 'single_key';
     const snapshot = normalizeSnapshot(
-      await command<WalletSnapshot>('wallet_full_rescan', { credential })
+      await command<WalletSnapshot>('wallet_full_rescan', {
+        credential,
+        ...(expectedWalletId ? { expectedWalletId } : {})
+      })
     );
     if (walletId && this.#isCurrent(walletId, generation)) {
-      this.#scheduleNotifications(false, walletId, generation);
-      this.#emit({ type: 'wallet_updated', walletId, walletKind: 'single_key', snapshot });
+      this.#scheduleNotifications(walletKind === 'multisig', walletId, generation);
+      this.#emit({ type: 'wallet_updated', walletId, walletKind, snapshot });
     }
     return snapshot;
   }
@@ -793,9 +816,14 @@ export class TauriWalletAdapter implements WalletPort {
     this.#generation++;
     return command<MultisigWallet>('multisig_recover', { encodedBackup, credential });
   }
-  deleteMultisig(credential: string, confirmation: string) {
+  deleteMultisig(credential: string, confirmation: string, backupConfirmed: boolean) {
     this.#generation++;
-    return command<void>('multisig_delete', { credential, confirmation });
+    return command<void>('multisig_delete', {
+      credential,
+      confirmation,
+      backupConfirmed,
+      passphraseBackupConfirmed: false
+    });
   }
   async multisigSnapshot() {
     const generation = this.#generation;
@@ -819,8 +847,8 @@ export class TauriWalletAdapter implements WalletPort {
   createMultisigAddress(labels: string[]) {
     return command<ReceiveAddress>('multisig_address_create', { labels }).then(normalizeAddress);
   }
-  claimObservedMultisigAddress(outpoint: string, label: string) {
-    return command<ReceiveAddress>('multisig_address_claim_observed', { outpoint, label }).then(
+  claimObservedMultisigAddress(outpoint: string, labels: string[]) {
+    return command<ReceiveAddress>('multisig_address_claim_observed', { outpoint, labels }).then(
       normalizeAddress
     );
   }

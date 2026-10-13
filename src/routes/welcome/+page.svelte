@@ -11,7 +11,6 @@
     Eye,
     EyeOff,
     KeyRound,
-    Network,
     Settings,
     ShieldCheck,
     X
@@ -34,7 +33,6 @@
     MIN_SUPPLEMENTAL_COIN_FLIPS,
     MIN_SUPPLEMENTAL_DICE_ROLLS,
     walletService,
-    type NetworkSetupSource,
     type SupplementalEntropyInput
   } from '$lib/wallet';
   import { beforeNavigate, goto } from '$app/navigation';
@@ -69,8 +67,6 @@
   let draggedWord = $state<RecoveryWord | null>(null);
   let supplementalSource = $state<'none' | 'coin' | 'dice'>('none');
   let supplementalOutcomes = $state('');
-  let networkSetupSource = $state<NetworkSetupSource | null>(null);
-  let reuseNetworkSetup = $state(true);
   let createdMasterFingerprint = $state('');
   let createdWalletDescriptor = $state('');
   let fingerprintCopied = $state(false);
@@ -99,14 +95,6 @@
   onMount(async () => {
     hasExistingWallet = await walletService.exists();
     if (hasExistingWallet && page.url.searchParams.get('add') !== '1') await goto('/unlock');
-    if (hasExistingWallet) {
-      try {
-        networkSetupSource =
-          (await walletService.networkSetupSources()).find((source) => source.ready) ?? null;
-      } catch {
-        networkSetupSource = null;
-      }
-    }
   });
   beforeNavigate(() => undefined);
   onDestroy(() => {
@@ -222,16 +210,6 @@
     mode = 'words';
   }
 
-  async function adoptNetworkSetup(credential: string) {
-    if (!reuseNetworkSetup || !networkSetupSource) return true;
-    try {
-      await walletService.adoptNetworkSetup(networkSetupSource.walletId, credential);
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
   function beginExternalWalletSetup(next: '/hardware/new' | '/multisig/new') {
     void goto(next);
   }
@@ -243,12 +221,7 @@
     // persistence begin. Some WebKit builds otherwise paint only after IPC.
     await tick();
     try {
-      const creation = await walletService.createWallet(
-        walletName,
-        passphrase,
-        backupVerified,
-        reuseNetworkSetup ? networkSetupSource?.walletId : undefined
-      );
+      const creation = await walletService.createWallet(walletName, passphrase, backupVerified);
       createdMasterFingerprint = creation.masterFingerprint;
       createdWalletDescriptor =
         combineDescriptorBranches(creation.externalDescriptor, creation.internalDescriptor) ??
@@ -302,14 +275,11 @@
     error = '';
     try {
       await walletService.recoverWallet(walletName, passphrase);
-      const networkSetupCopied = await adoptNetworkSetup(passphrase);
       passphrase = '';
       toast({
         title: 'Wallet recovered',
-        description: networkSetupCopied
-          ? 'Sync to restore transaction history.'
-          : 'Network setup was not copied. Configure it in Settings.',
-        tone: networkSetupCopied ? 'success' : 'default'
+        description: 'Approve the history scan to restore transaction history.',
+        tone: 'success'
       });
       await goto('/?initial=recovered');
     } catch (cause) {
@@ -758,20 +728,7 @@
           >
         </p></label
       >
-      {#if networkSetupSource}<label class="credential-warning credential-ack"
-          ><input type="checkbox" bind:checked={reuseNetworkSetup} /><Network size={16} />
-          <p>
-            <strong
-              >{translate($locale, 'Use')}
-              {networkSetupSource.walletName}{translate($locale, '’s network setup.')}</strong
-            ><span
-              >{translate(
-                $locale,
-                'Copies its node and sync method. This wallet protects its own copy.'
-              )}</span
-            >
-          </p></label
-        >{/if}
+
       {#if error}<p class="form-error" role="alert">
           {error.replace('passphrase / PIN', 'wallet passphrase')}
         </p>{/if}
@@ -890,20 +847,7 @@
           'This exact BIP39 passphrase is required with the recovery words and also unlocks Groot.'
         )}
         error={passphraseError}
-      />{#if networkSetupSource}<label class="credential-warning credential-ack"
-          ><input type="checkbox" bind:checked={reuseNetworkSetup} /><Network size={16} />
-          <p>
-            <strong
-              >{translate($locale, 'Use')}
-              {networkSetupSource.walletName}{translate($locale, '’s network setup.')}</strong
-            ><span
-              >{translate(
-                $locale,
-                'Copies its node and sync method. This wallet protects its own copy.'
-              )}</span
-            >
-          </p></label
-        >{/if}{#if error}<p class="form-error" role="alert">
+      />{#if error}<p class="form-error" role="alert">
           {error.replace('passphrase / PIN', 'wallet passphrase')}
         </p>{/if}<Button
         size="large"

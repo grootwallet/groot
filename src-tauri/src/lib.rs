@@ -192,6 +192,7 @@ pub fn run() {
             wallet::ur_encode_psbt,
             wallet::ur_decode_psbt,
             wallet::profile_commands::wallet_lock,
+            wallet::pin_change::wallet_pin_change,
             wallet::profile_commands::wallet_profiles,
             wallet::profile_commands::wallet_session,
             wallet::profile_commands::wallet_profile_compatibility,
