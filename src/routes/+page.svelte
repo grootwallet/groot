@@ -15,6 +15,7 @@
     Network,
     RefreshCw,
     ShieldCheck,
+    Smartphone,
     TriangleAlert,
     Trash2
   } from '@lucide/svelte';
@@ -696,6 +697,10 @@
     void pollSyncStatus(token);
   }
   const sync = async (manual = true) => {
+    if (mobileSyncSetupRequired) {
+      if (manual) await goto('/settings#network-services');
+      return;
+    }
     if (manual && networkSetupRequired) {
       await openNetworkSetup();
       return;
@@ -862,7 +867,12 @@
         walletAwaitingAutomaticScan ||
         syncInProgress ||
         recoveryScanIsActive(recoveryStatus)}
-      title={syncButtonTitle}
+      title={mobileSyncSetupRequired
+        ? translate(
+            $locale,
+            'Configure a trusted remote Bitcoin Core node before refreshing this wallet on mobile.'
+          )
+        : syncButtonTitle}
       onclick={() => sync(true)}
       ><RefreshCw
         size={15}
@@ -872,9 +882,19 @@
         recoveryScanIsActive(recoveryStatus)
           ? 'spin'
           : ''}
-      />{syncButtonLabel}</button
+      />{mobileSyncSetupRequired ? translate($locale, 'Set up sync') : syncButtonLabel}</button
     >
   </header>
+  {#if mobileSyncSetupRequired}<WarningNotice
+      title={translate($locale, 'Set up wallet sync')}
+      body={translate(
+        $locale,
+        'Configure a trusted remote Bitcoin Core node before refreshing this wallet on mobile.'
+      )}
+      ><Button size="small" variant="secondary" href="/settings#network-services"
+        >{translate($locale, 'Configure sync')}</Button
+      ></WarningNotice
+    >{/if}
   {#if initialHistoryRequired && !walletAwaitingAutomaticScan && !automaticInitialScanActive}
     <section class="initial-history-scan" aria-live="polite">
       <div>

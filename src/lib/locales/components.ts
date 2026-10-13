@@ -621,5 +621,9 @@ export const componentCopy = {
   'You will need to add the signers again.': {
     fr: 'Vous devrez ajouter à nouveau les signataires.',
     es: 'Tendrás que volver a añadir los firmantes.'
+  },
+  'prefix. Rust verified that it decodes to the identical Bitcoin output script.': {
+    fr: 'comme préfixe. Rust a vérifié qu’il correspond exactement au même script de sortie Bitcoin.',
+    es: 'como prefijo. Rust verificó que corresponde exactamente al mismo script de salida Bitcoin.'
   }
 } as const satisfies CatalogSection;

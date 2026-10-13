@@ -81,3 +81,9 @@ App logs contain allowlisted lifecycle/outcome codes and safe scalar context, ne
 ## Exclusions
 
 No cloud backup, editable permanent labels, Lightning, address book, arbitrary policy editor, terminated-app push or Payjoin sessions. Public platform support and future policy/services require the [roadmap](roadmap.md) gates. The Apache-2.0 core must remain recoverable and usable without paid services.
+
+## Retained mobile coordination track
+
+Refs #6; Regtest/Testnet4 only. A phone creates an independent BIP48 signer using native 24-word backup/recovery and an empty BIP39 passphrase. Its app PIN protects the local signer envelope and does not select another seed. Desktop receives public key material through authenticated BIP129 setup, then sends the exact final policy for phone verification. Signing uses independently reviewed PSBTv0/crypto-PSBT; desktop accepts only signatures against its unchanged persisted proposal. No relay or secret synchronization is implemented.
+
+Phone keys still use a portable PIN envelope, accurately marked testnet-only. Secure Enclave/Keychain wrapping and Android native secret UI remain release blockers. PIN changes for phone signers fail closed until all encrypted files can rotate atomically; existing hardware/coordinator PIN rotation remains available. QR cancellation, staging and replacement-word recovery preserve device-local custody.

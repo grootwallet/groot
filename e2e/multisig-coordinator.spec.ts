@@ -1892,7 +1892,7 @@ test('creates and verifies a simple 2-of-3 descriptor wallet', async ({ page }) 
   await expect(signingPolicyReview.getByText('Policy reference saved in Groot')).toBeVisible();
   await signingPolicyReview.getByRole('button', { name: 'Review & sign on Ledger' }).click();
   await signingPolicyReview
-    .getByRole('button', { name: 'Wallet policy reviewed — show transaction' })
+    .getByRole('button', { name: 'Wallet policy reviewed. Show transaction' })
     .click();
   await expect(signingPolicyReview).toBeHidden();
   await expect(paymentSigners.getByText('1 of 2 collected')).toBeVisible();

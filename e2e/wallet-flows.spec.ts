@@ -1198,7 +1198,7 @@ test('global keyboard shortcuts navigate safely and match the Settings reference
   await expect(page.getByRole('heading', { name: 'App appearance' })).toBeVisible();
 
   const shortcuts = page.locator('.keyboard-shortcut-grid');
-  if (isMobile) {
+  if (testInfo.project.name === 'mobile') {
     await expect(shortcuts).toHaveCount(0);
     return;
   }

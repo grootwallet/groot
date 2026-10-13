@@ -256,7 +256,7 @@
           {/if}
         </section>
       {/if}
-      {#if deviceContext !== DESKTOP_MANAGED_SIGNER_CONTEXT && oncheck}<section
+      {#if deviceContext !== DESKTOP_MANAGED_SIGNER_CONTEXT}<section
           class="health-card"
           aria-live="polite"
         >
@@ -301,12 +301,14 @@
                           : 'Connect and unlock the signer to check it.'))
                 )}
               </p>
-              <Button variant="secondary" class="full" onclick={oncheck}
-                ><RefreshCw size={15} />{translate(
-                  $locale,
-                  deviceContext === LOCAL_MOBILE_SIGNER_CONTEXT ? 'Check phone key' : 'Check signer'
-                )}</Button
-              >
+              {#if oncheck}<Button variant="secondary" class="full" onclick={() => oncheck?.()}
+                  ><RefreshCw size={15} />{translate(
+                    $locale,
+                    deviceContext === LOCAL_MOBILE_SIGNER_CONTEXT
+                      ? 'Check phone key'
+                      : 'Check signer'
+                  )}</Button
+                >{/if}
             {/if}
           </div>
         </section>{/if}

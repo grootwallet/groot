@@ -407,8 +407,10 @@
                 >{translate($locale, 'Add this phone as one signer in a shared wallet.')}</small
               ></span
             >
-            <span class="wallet-type-meta">{translate($locale, 'No account')}</span>
-            <ArrowRight class="wallet-type-arrow" size={17} />
+            <span class="wallet-type-footer"
+              ><span class="wallet-type-meta">{translate($locale, 'No account')}</span>
+              <ArrowRight class="wallet-type-arrow" size={17} /></span
+            >
           </a>
           <a class="wallet-type-card multisig" href="/mobile/recover">
             <span class="wallet-type-icon"><RotateCcw size={20} /></span>
@@ -420,8 +422,10 @@
                 )}</small
               ></span
             >
-            <span class="wallet-type-meta">{translate($locale, 'Replacement phone')}</span>
-            <ArrowRight class="wallet-type-arrow" size={17} />
+            <span class="wallet-type-footer"
+              ><span class="wallet-type-meta">{translate($locale, 'Replacement phone')}</span>
+              <ArrowRight class="wallet-type-arrow" size={17} /></span
+            >
           </a>
           <a class="wallet-type-card hardware" href="/mobile/watch">
             <span class="wallet-type-icon"><Eye size={20} /></span>
@@ -430,8 +434,10 @@
                 >{translate($locale, 'Import a hardware wallet without its signing key.')}</small
               ></span
             >
-            <span class="wallet-type-meta">{translate($locale, 'Watch-only')}</span>
-            <ArrowRight class="wallet-type-arrow" size={17} />
+            <span class="wallet-type-footer"
+              ><span class="wallet-type-meta">{translate($locale, 'Watch-only')}</span>
+              <ArrowRight class="wallet-type-arrow" size={17} /></span
+            >
           </a>{/if}
       </div>
     {:else if mode === 'create'}

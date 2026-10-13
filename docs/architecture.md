@@ -73,3 +73,7 @@ Public descriptor/BSMS/JSON and PSBT/UR imports are bounded, parsed natively, ne
 Allowlisted diagnostics retain stable codes and coarse scalar context, never arbitrary errors or sensitive payloads. Clipboard is explicit and typed; no secret reads or analytics sink. The [security model](security-model.md) owns control details.
 
 [Current status](implementation-status.md) owns capability claims, [ADRs](adr/) own decisions, and the [Mainnet checklist](mainnet-release-checklist.md) owns exact-candidate evidence. Release/source-hash guards, provenance and signatures are independent of runtime tests. Documentation cleanup does not refresh authorization or reviewed-source hashes.
+
+## Retained coordination boundary
+
+BIP129 setup, bounded Groot UR framing, staging reconciliation and PSBT review/signing remain native. The network and BIP48 path come from the active restart-bound network; Mainnet pairing/key derivation fail closed. Credential-intensive pairing resume/completion/await-final and signer check/sign commands run on blocking workers with their existing operation locks and zeroizing credentials. Existing sidecars and protocol versions remain intact. Current secure-store APIs bind new staging ciphertext to its session UUID and completed signer ciphertext to its local wallet UUID, retaining the shared legacy envelope reader.

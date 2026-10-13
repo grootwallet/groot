@@ -236,7 +236,10 @@
   <Button href="/welcome?add=1" variant="secondary" size="large" class="full locked-add-wallet"
     ><Plus size={16} />{translate($locale, 'Add another wallet')}</Button
   >
-  <BuildIdentity runtime={runtimeIdentity} placement="onboarding" />
+  {#if runtimeIdentity?.mobile}<BuildIdentity
+      runtime={runtimeIdentity}
+      placement="onboarding"
+    />{/if}
 </div>
 
 <Modal

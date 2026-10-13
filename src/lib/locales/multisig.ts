@@ -995,5 +995,9 @@ export const multisigCopy = {
     {
       fr: 'La signature matérielle USB est bloquée, car la version HWI intégrée à Groot ne peut pas exécuter cette politique Miniscript en toute sécurité.',
       es: 'La firma con dispositivo USB está bloqueada porque la versión HWI integrada en Groot no puede ejecutar esta política Miniscript de forma segura.'
-    }
+    },
+  'A watch-only wallet whose spending policy is enforced by independent keys.': {
+    fr: 'Un portefeuille en lecture seule dont la politique de dépense repose sur des clés indépendantes.',
+    es: 'Una cartera de solo lectura cuya política de gasto depende de claves independientes.'
+  }
 } as const satisfies CatalogSection;

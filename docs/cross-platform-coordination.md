@@ -4,7 +4,7 @@
 
 This feature is a tightly scoped Regtest/Testnet4 track after the first-mainnet scope was frozen.
 It does not modify the active hardware-certification candidate, package inputs, Bitcoin Core data,
-hardware state, or certification evidence. Mainnet stays compile-time disabled. A future mainnet
+hardware state, or certification evidence. Pairing and mobile-key operations stay blocked on Mainnet, including in the existing multi-network desktop build. A future mainnet
 proposal requires a superseding release ADR, iOS native key-protection completion, physical-device
 evidence, recovery drills, interoperability evidence, and independent security review.
 
@@ -212,3 +212,17 @@ device wrapper, written-word restore, and two independent wallet interoperabilit
 Mainnet requires all of those results attached to a dedicated superseding ADR and threat-model
 review. Until then, the testnet key-protection identifier and compile-time mainnet lock are
 authoritative.
+
+## Current integration and owner checks
+
+Existing registry, public backup, proposal, coordination sidecar and protocol versions are preserved. The current secure-store API reads legacy mobile/staging envelopes and uses its already-reviewed envelope upgrade; this integration adds no separate migration or discard plan. Phone PIN rotation is unavailable until its third encrypted file has an approved atomic rollback design. No Secure Enclave protection claim is added.
+
+| Action after 5.2 GA                                                               | Expected result                                                                                |
+| --------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| Fresh phone: allow/deny camera, create key, cancel and retry.                     | Native secret UI only; durable retry; no orphan funded profile.                                |
+| Pair desktop 2-of-3 with phone plus independent devices.                          | Compare code, exact signer/policy and first address; no device identity inferred from pairing. |
+| Sign a funded proposal; disconnect/background/restart during each step.           | UI stays responsive, locks safely and preserves exact revision; stale responses fail.          |
+| Lose/reinstall phone, then recover from written words plus desktop public policy. | Same signer and first address; remaining threshold recovery remains possible.                  |
+| Try Mainnet pairing or changing the phone signer PIN.                             | Unsupported result, no secret/state mutation and no success claim.                             |
+
+Physical tests require an exact candidate and disposable profiles; existing funded profiles are never reset for testing. Complete device wrapping, recovery and lifecycle evidence before claiming 5.4 readiness.

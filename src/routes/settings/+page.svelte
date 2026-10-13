@@ -662,6 +662,7 @@
   function openNodeSettings() {
     clearNodeCredentials();
     nodeMode = isManagedNodeConfig(node) ? 'managed' : node.torProxy ? 'tor' : node.backend.type;
+    if (mobileRuntime && nodeMode === 'local_core') setNodeLocation('remote_core');
     nodeOpen = true;
   }
   function closeNodeSettings() {
@@ -2285,6 +2286,13 @@
     />
   {:else if syncSourceType === 'compact_filters'}
     <WarningNotice
+      title={translate($locale, 'Experimental test-network feature.')}
+      body={translate(
+        $locale,
+        'Confirmed activity only. The initial scan may repeat after interruption; do not rely on this source for recovery.'
+      )}
+    />
+    <WarningNotice
       title={translate($locale, 'Confirmed activity only.')}
       body={translate(
         $locale,
@@ -2659,10 +2667,10 @@
     {#if defaultConfig.network === 'mainnet'}<button
         class:active={nodeMode === 'managed'}
         onclick={() => setNodeLocation('managed')}>{translate($locale, 'Groot managed')}</button
+      >{/if}{#if !mobileRuntime}<button
+        class:active={nodeMode === 'local_core'}
+        onclick={() => setNodeLocation('local_core')}>{translate($locale, 'This Mac')}</button
       >{/if}<button
-      class:active={nodeMode === 'local_core'}
-      onclick={() => setNodeLocation('local_core')}>{translate($locale, 'This Mac')}</button
-    ><button
       class:active={nodeMode === 'remote_core'}
       onclick={() => setNodeLocation('remote_core')}>{translate($locale, 'Custom remote')}</button
     >{#if defaultConfig.network !== 'mainnet'}<button

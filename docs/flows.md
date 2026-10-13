@@ -77,3 +77,9 @@ Receipt, broadcast and first-confirmation results update durable state. Notifica
 | App logs       | Settings → immediate skeleton → sanitized records → filter/copy/export                            | No identifiers, labels, values, credentials or arbitrary backend messages                                          |
 
 Delete and PIN work run off the native UI thread. Error/loading/cancel/retry remain explicit; no toast is the sole result.
+
+## Retained phone flows
+
+`desktop one-time invitation → phone comparison/native words → encrypted signed public key → desktop policy ceremony → final encrypted policy → phone exact-key/first-address approval`. Cancel removes only exact staging; interruption resumes with the same app PIN. A desktop process restart requires a new invitation.
+
+`desktop persisted PSBT → phone Rust review → local PIN → native signature → QR → desktop exact-proposal signature merge`. Wrong wallet/network/revision fails without signing. Mobile local-Core/compact-filter settings require remote Core setup; first-history consent still applies. Lock/background ends mobile wallet sessions. Physical camera, passcode/biometric, process-kill and replacement-phone tests remain required after 5.2 GA.
