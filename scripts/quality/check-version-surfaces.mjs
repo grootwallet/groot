@@ -1,3 +1,4 @@
+import { isAcceptedReleaseVersion } from '../release/release-version.mjs';
 import { readFile } from 'node:fs/promises';
 
 const packageMetadata = JSON.parse(await readFile('package.json', 'utf8'));
@@ -29,7 +30,7 @@ if (mismatches.length > 0) {
 }
 
 // ADR 0087 changes only this owner's 5.2 release naming; public authorization is independent.
-if (!/^(?:0\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)|5\.2\.0(?:-rc[0-9]{2})?)$/.test(expectedVersion)) {
+if (!isAcceptedReleaseVersion(expectedVersion)) {
   throw new Error(
     `Version gate failed: ${expectedVersion} is outside the accepted release naming decisions.`
   );
