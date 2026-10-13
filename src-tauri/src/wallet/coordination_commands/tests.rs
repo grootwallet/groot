@@ -55,6 +55,34 @@ struct HardwareKey {
     account_public: Xpub,
 }
 
+#[test]
+fn coordination_sidecar_is_bound_to_the_exact_local_wallet_and_supported_version() {
+    let (_, _, _, mut metadata) = coordinated_wallet();
+    let id = Uuid::parse_str(&metadata.wallet_id).unwrap();
+    let encoded = serde_json::to_string(&metadata).unwrap();
+    assert_eq!(
+        parse_coordination_metadata(&encoded, id).unwrap().wallet_id,
+        id.to_string()
+    );
+    assert_eq!(
+        parse_coordination_metadata(&encoded, Uuid::new_v4())
+            .unwrap_err()
+            .code,
+        "wallet_policy_mismatch"
+    );
+    metadata.version = 2;
+    assert_eq!(
+        parse_coordination_metadata(&serde_json::to_string(&metadata).unwrap(), id)
+            .unwrap_err()
+            .code,
+        "unsupported_coordination_version"
+    );
+    assert_eq!(
+        parse_coordination_metadata("{", id).unwrap_err().code,
+        "wallet_corrupt"
+    );
+}
+
 struct TemporaryPairingDirectory(PathBuf);
 
 impl TemporaryPairingDirectory {

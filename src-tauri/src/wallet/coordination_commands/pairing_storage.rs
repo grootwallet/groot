@@ -429,6 +429,26 @@ pub(super) fn read_coordination_metadata(
                 "This wallet has no mobile signing identity on this device.",
             )
         })?;
-    serde_json::from_str(&encoded)
-        .map_err(|_| api_error("wallet_corrupt", "The coordination metadata is malformed."))
+    parse_coordination_metadata(&encoded, wallet_id)
+}
+
+pub(super) fn parse_coordination_metadata(
+    encoded: &str,
+    wallet_id: Uuid,
+) -> ApiResult<CoordinationMetadata> {
+    let metadata: CoordinationMetadata = serde_json::from_str(encoded)
+        .map_err(|_| api_error("wallet_corrupt", "The coordination metadata is malformed."))?;
+    if metadata.version != 1 {
+        return Err(api_error(
+            "unsupported_coordination_version",
+            "This coordination metadata version is unsupported.",
+        ));
+    }
+    if metadata.wallet_id != wallet_id.to_string() {
+        return Err(api_error(
+            "wallet_policy_mismatch",
+            "The coordination metadata belongs to another wallet.",
+        ));
+    }
+    Ok(metadata)
 }
