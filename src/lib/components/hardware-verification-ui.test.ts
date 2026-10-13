@@ -308,7 +308,7 @@ describe('hardware receive verification UI', () => {
       "{#if templateKind === 'standard'}<button onclick={scanHardware}"
     );
     expect(multisigSetup).toContain('Jade/Jade Plus, BitBox02, and BitBox02 Nova');
-    expect(multisigSetup).toContain("hardwarePolicyCompatibility(device, 'delayed')");
+    expect(multisigSetup).toContain("if (templateKind !== 'standard')");
     expect(multisigReceive).toContain(
       '{#if !wallet?.recoveryTemplate}<HardwareReceiveVerification'
     );

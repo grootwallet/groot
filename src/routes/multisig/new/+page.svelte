@@ -80,7 +80,6 @@
   } from '$lib/hardware/health-check';
   import {
     matchingPolicyVerification,
-    hardwarePolicyCompatibility,
     policyDeviceName,
     policyReadinessKind,
     policyRegistrationProfile,
@@ -976,11 +975,8 @@
       );
       return;
     }
-    if (
-      (templateKind === 'partner_continuity_v1' || templateKind === 'family_continuity_v1') &&
-      hardwarePolicyCompatibility(device, 'delayed') !== 'firmware_candidate'
-    ) {
-      error = `${profile.name} is not compatible with Groot Continuity policies. Use a certified Ledger, Jade/Jade Plus, BitBox02, or BitBox02 Nova.`;
+    if (templateKind !== 'standard') {
+      error = translate($locale, 'USB hardware signing is not available for delayed policies yet.');
       return;
     }
     const deviceLabel = label.trim() || device.label;
