@@ -10855,7 +10855,9 @@ code {
   .acceleration-quote-details {
     grid-template-columns: 1fr;
   }
-  .locked-add-wallet { display: flex; }
+  .locked-add-wallet {
+    display: flex;
+  }
   .ui-tooltip.insight-tooltip.mobile {
     left: 16px;
     right: 16px;
