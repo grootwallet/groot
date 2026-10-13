@@ -28,8 +28,11 @@ if (mismatches.length > 0) {
   );
 }
 
-if (!/^0\.\d+\.\d+$/.test(expectedVersion)) {
-  throw new Error(`Version gate failed: ${expectedVersion} is not a pre-1.0 semantic version.`);
+// ADR 0087 changes only this owner's 5.2 release naming; public authorization is independent.
+if (!/^(?:0\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)|5\.2\.0(?:-rc[0-9]{2})?)$/.test(expectedVersion)) {
+  throw new Error(
+    `Version gate failed: ${expectedVersion} is outside the accepted release naming decisions.`
+  );
 }
 
 console.log(`Version surface gate: all release surfaces use v${expectedVersion}.`);

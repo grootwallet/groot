@@ -77,3 +77,11 @@ Receipt, broadcast and first-confirmation results update durable state. Notifica
 | App logs       | Settings → immediate skeleton → sanitized records → filter/copy/export                            | No identifiers, labels, values, credentials or arbitrary backend messages                                          |
 
 Delete and PIN work run off the native UI thread. Error/loading/cancel/retry remain explicit; no toast is the sole result.
+
+## Release notes and updates
+
+`first exact version open → localized offline notes → dismiss → exact-version app preference`
+
+`Updates → manual check OR daily opt-in → newer stable offer / no update / offline / rate limit → signed-manifest verification → bounded installer download → digest verification → reveal → explicit user installation`
+
+Closing in-flight work cancels it; failed/cancelled stages are removed. Missing owner trust key disables preparation with an inline reason. Wallet dialogs take precedence; corner actions and release toasts do not overlap them.

@@ -1809,6 +1809,9 @@
       </div>
     </section>{/if}
   <BuildIdentity placement="settings" />
+  <Button variant="secondary" onclick={() => window.dispatchEvent(new Event('groot-open-updates'))}
+    >{translate($locale, 'Updates')}</Button
+  >
 </div>
 
 <Modal

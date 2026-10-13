@@ -1,6 +1,6 @@
 [package]
 name = "groot"
-version = "5.2.0-rc02"
+version = "5.2.0-rc03"
 description = "Groot, a minimal onchain Bitcoin wallet"
 edition = "2021"
 license = "Apache-2.0"
@@ -41,6 +41,9 @@ tauri-plugin-clipboard-manager = "=2.3.2"
 tauri-plugin-dialog = "=2.7.2"
 tauri-plugin-opener = "=2.5.4"
 url = "=2.5.8"
+# ADR 0086: strict raw Ed25519 update-manifest verification; no runtime signing.
+ed25519-dalek = { version = "=2.2.0", default-features = false, features = ["std"] }
+semver = "=1.0.28"
 # Enables the platform-native TLS verifier for the already-transitive, pinned
 # minreq transport. ADR 0020 records why the legacy rustls backend is forbidden.
 minreq = { version = "=2.14.1", features = ["https-native"] }

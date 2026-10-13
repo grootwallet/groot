@@ -142,6 +142,18 @@ function serializeMultisigSetupDraft(
 }
 
 export class TauriWalletAdapter implements WalletPort {
+  checkUpdate() {
+    return invoke<import('./contracts').UpdateOffer | null>('update_check');
+  }
+  downloadUpdate() {
+    return invoke<import('./contracts').PreparedUpdate>('update_download');
+  }
+  cancelUpdate() {
+    return invoke<void>('update_cancel');
+  }
+  revealUpdate(token: string) {
+    return invoke<void>('update_reveal', { token });
+  }
   #listeners = new Set<(event: WalletEvent) => void>();
   #selectedWalletId: string | null = null;
   #selectedWalletKind: WalletProfile['kind'] | null = null;

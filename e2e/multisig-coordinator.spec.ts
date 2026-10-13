@@ -236,7 +236,7 @@ test('keeps multisig receive verification disclosure visibly expandable', async 
   const selectableSigner = dialog.getByRole('button', {
     name: /Trezor c0ffee01 Select to identify/
   });
-  await expect(selectableSigner.locator('em')).not.toHaveClass(/attention/);
+  await expect(selectableSigner.locator('em')).toHaveClass(/attention/);
   const lockedTrezor = dialog.getByRole('button', { name: /Virtual Trezor One/ });
   await expect(lockedTrezor).toBeEnabled();
   await expect(lockedTrezor).toContainText('Unlock to identify');
