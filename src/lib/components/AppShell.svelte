@@ -62,10 +62,14 @@
     }
   }
   function dismissNotes() {
-    if (preference(NOTES_DISMISSED, APP_VERSION)) {
-      notesOpen = false;
-      notesPending = false;
-    }
+    const saved = preference(NOTES_DISMISSED, APP_VERSION);
+    notesOpen = false;
+    notesPending = false;
+    if (!saved)
+      toast({
+        title: translate($locale, 'Could not save the app preference. Try again.'),
+        tone: 'warning'
+      });
   }
   function closeUpdates() {
     updatesOpen = false;
