@@ -45,8 +45,9 @@ describe('startup wallet lock gate', () => {
     expect(appCss).toMatch(
       /\.locked-mobile-utilities\s*\{[\s\S]*?bottom:\s*max\(58px,[\s\S]*?left:\s*50%;/
     );
-    expect(unlockRoute).toContain(
-      '<BuildIdentity runtime={runtimeIdentity} placement="onboarding" />'
+    expect(unlockRoute).toContain('{#if runtimeIdentity?.mobile}');
+    expect(unlockRoute).toMatch(
+      /<BuildIdentity\s+runtime=\{runtimeIdentity\}\s+placement="onboarding"\s*\/>/
     );
   });
 

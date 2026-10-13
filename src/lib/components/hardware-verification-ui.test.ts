@@ -379,9 +379,7 @@ describe('hardware receive verification UI', () => {
     expect(multisigPolicy).toContain("'Managed on desktop'");
     expect(multisigPolicy).toContain('deviceContext={selectedSigner');
     expect(deviceDetails).toContain('deviceContext?: CoordinationSignerContext | null');
-    expect(deviceDetails).toContain(
-      '{#if deviceContext !== DESKTOP_MANAGED_SIGNER_CONTEXT && oncheck}'
-    );
+    expect(deviceDetails).toContain('{#if deviceContext !== DESKTOP_MANAGED_SIGNER_CONTEXT}');
     expect(deviceDetails).toContain("return 'Phone key'");
     expect(deviceDetails).toContain("'Check phone key'");
     expect(multisigPolicy).toContain('walletService.checkMobileSigner(phoneCheckCredential)');
