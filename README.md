@@ -16,7 +16,6 @@ The owner-certified release evidence is summarized in the
 
 This repository, [`grootwallet/groot`](https://github.com/grootwallet/groot), is the wallet application: native desktop/mobile through Tauri plus the browser-based wallet prototype. It does not contain the marketing website.
 
-
 ## Download and verify v0.5.1
 
 Most macOS users need only
