@@ -1,6 +1,6 @@
 # Product behavior
 
-Canonical behavior for the current rc02 source. [Current status](implementation-status.md) separates implementation from release certification. Public Mainnet approval remains bound to v0.5.1 commit `c731fa1c`; later candidates require their own authorization.
+Canonical behavior for the current rc03 source. [Current status](implementation-status.md) separates implementation from release certification. Public Mainnet approval remains bound to v0.5.1 commit `c731fa1c`; later candidates require their own authorization.
 
 ## Wallets and credentials
 
@@ -77,6 +77,12 @@ Deletion requires the selected wallet credential, exact DELETE, and backup ackno
 Appearance/language/discreet/zoom preferences stay local. EN/FR/ES translate product copy, never user/protocol data. Discreet mode hides wallet data and optional actions, not underlying history. Public build version/commit is visible and explicitly copyable.
 
 App logs contain allowlisted lifecycle/outcome codes and safe scalar context, never credentials, keys, descriptors, PSBTs, full identifiers, endpoints, names, labels or amounts. Logs are optional diagnostics, not the wallet ledger. Copy/export and explorer opening are explicit; explorer access discloses the privacy tradeoff.
+
+## App releases
+
+On the first opening of each new exact version, show dismissible baked-in EN/FR/ES notes offline. Dismissal is an app preference, independent of wallet identity. Updates offers a manual GitHub check and an explicit once-daily opt-in; explain IP/app-version disclosure before enabling it. Newer stable releases expose a small corner action without covering wallet modals, toasts or mobile navigation.
+
+Rust selects exact repository/platform assets and verifies the signed Ed25519 manifest and streamed installer digest before offering Reveal installer. No automatic replacement or wallet migration. Missing owner key/signatures fail closed; rc03 contains no production trust key. Offline, no-update, failure, retry, loading and cancellation remain visible. See [update procedure](release-update-rollback.md).
 
 ## Exclusions
 

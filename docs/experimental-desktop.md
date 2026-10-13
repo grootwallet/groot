@@ -1,0 +1,9 @@
+# Experimental Windows/Linux packages
+
+The dispatch-only [packaging workflow](../.github/workflows/experimental-desktop.yml) prepares Windows x64 MSI and Linux x64 DEB builds. It retains validation/native gates and currently stops at the unchanged reviewed-source gate. No artifact has been built or tested on these hosts in this change. After passing every gate it retains supporting package/SBOM/digest/source evidence as a 14-day Actions artifact for owner testing, never a public GitHub release.
+
+These first packages use a separate application identity and **Signet only**. Native recovery-word entry, backup verification and software creation/recovery are unavailable outside macOS. Passive USB inventory is macOS-only. No HWI helper is bundled; Windows production HWI trust is unavailable and Linux requires a separately certified pinned/root-owned helper. File/public-descriptor/BSMS/PSBT paths are implemented, but policy-verification prerequisites still apply; unavailable USB/native operations remain errors, not silent bypasses. Existing public import/transaction tests do not establish platform usability or device certification.
+
+Windows and Linux are experimental and untested on physical machines. They are riskier than macOS and need user testing/feedback. Use disposable Signet data. macOS rc03 is the immediate owner-testing candidate; experimental packages require successful runners, target-specific provenance/SBOM, signatures and exact release review before distributing assets.
+
+Local build prerequisites and runtime libraries follow Tauri 2's platform requirements. Run pinned installation, `pnpm validate`, all native checks, then `GROOT_BUILD_NETWORK=signet pnpm exec tauri build --config src-tauri/tauri.experimental.conf.json --bundles deb` (Linux) or the equivalent `msi` (Windows). Do not bypass failed gates. Compile success is not certification.

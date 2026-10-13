@@ -109,7 +109,7 @@ test('copies the public build identity with inline retry feedback', async ({ pag
   await page.goto('/unlock?fixture-locked-wallet-switch=1');
   const buildIdentity = page.getByRole('button', { name: 'Copy build information' });
   const displayedIdentity = (await buildIdentity.textContent())?.trim();
-  expect(displayedIdentity).toMatch(/^Groot v\d+\.\d+\.\d+ · [a-z0-9-]+$/);
+  expect(displayedIdentity).toMatch(/^Groot v\d+\.\d+\.\d+(?:-rc[0-9]{2})? · [a-z0-9-]+$/);
 
   await buildIdentity.click();
   const copyStatus = page.locator('.build-identity-sidebar .build-copy-status');
@@ -1673,7 +1673,7 @@ test('BIP329 label interchange discloses privacy and keeps durable results', asy
   await expect(page.getByText('Labels exported', { exact: true })).toHaveCount(0);
   await dialog.getByRole('button', { name: 'Import JSONL' }).click();
   await expect(dialog.getByRole('status')).toContainText(
-    'Imported 2; 1 already present; 1 unsupported; 0 coin settings changed.'
+    'Imported 2; 1 already present. 3 signer keys matched; current signer names kept.'
   );
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
     true

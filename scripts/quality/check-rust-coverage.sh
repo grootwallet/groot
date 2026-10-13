@@ -36,6 +36,7 @@ adapter_modules=(
   secure_store.rs
   tor_rpc.rs
   wallet.rs
+  updates.rs
 )
 
 for module in "${core_modules[@]}" "${adapter_modules[@]}"; do

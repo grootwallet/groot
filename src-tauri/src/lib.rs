@@ -26,6 +26,7 @@ mod release_policy;
 mod secure_store;
 mod session;
 mod tor_rpc;
+mod updates;
 pub mod ur_transport;
 mod wallet;
 
@@ -162,6 +163,7 @@ pub fn run() {
                 Err(error) => return Err(error.into()),
             };
             app.manage(lock);
+            updates::cleanup(app.handle());
             #[cfg(desktop)]
             if let Some(window) = app.get_webview_window("main") {
                 window.show()?;
@@ -183,8 +185,13 @@ pub fn run() {
             Ok(())
         })
         .manage(wallet::AppState::default())
+        .manage(updates::UpdateState::default())
         .invoke_handler(tauri::generate_handler![
             runtime_platform,
+            updates::update_check,
+            updates::update_download,
+            updates::update_cancel,
+            updates::update_reveal,
             bitcoin_network_switch,
             wallet::diagnostics::diagnostics_list,
             wallet::diagnostics::diagnostics_export,
