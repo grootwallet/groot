@@ -73,6 +73,10 @@ test('updates handles offline retry, no update, verification failure and prepare
       };
     })
   ).toEqual({ border: '0px', background: 'rgba(0, 0, 0, 0)', font: '13px' });
+  await updates.hover();
+  expect(await updates.evaluate((element) => getComputedStyle(element).backgroundColor)).toBe(
+    'rgba(0, 0, 0, 0)'
+  );
   await footer.scrollIntoViewIfNeeded();
   await page.screenshot({
     path: test.info().outputPath('settings-updates.png'),
