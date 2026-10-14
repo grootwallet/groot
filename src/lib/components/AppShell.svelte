@@ -247,6 +247,7 @@
   let initialApprovalBusy = $state(false);
   let initialApprovalError = $state('');
   let initialApprovalBackend = $state<'loading' | 'managed' | 'private' | 'error'>('loading');
+  let initialApprovalIsManaged = $derived(initialApprovalBackend === 'managed');
   let initialApprovalLookupGeneration = 0;
   const declinedInitialScans = new Set<string>();
   function requestInitialHistoryApproval(force = false) {
@@ -1029,7 +1030,7 @@
         title={translate($locale, 'Wallet privacy')}
         body={translate(
           $locale,
-          initialApprovalBackend === 'managed'
+          initialApprovalIsManaged
             ? 'Groot’s network can see your wallet activity. Your keys stay on your device.'
             : 'Your own node checks your wallet history. Your keys stay on your device.'
         )}
