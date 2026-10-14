@@ -1,10 +1,15 @@
 # Groot
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/brand/lockup-horizontal-reversed.svg" />
+  <img src="assets/brand/lockup-horizontal-ink.svg" alt="Groot" width="240" />
+</picture>
+
 A non-custodial onchain Bitcoin wallet and multisig coordinator built with SvelteKit, Tauri, Rust and BDK. Wallet keys and signing stay in Rust; hardware keys stay on their devices.
 
 ## Download
 
-[Public v0.5.1](https://github.com/grootwallet/groot/releases/tag/v0.5.1) is for macOS Apple silicon. Its Mainnet authorization applies to exact commit `c731fa1c`, not later development builds. The current feedback branch contains internal `5.2.0-rc02` changes; it is not a public release.
+[Public v0.5.1](https://github.com/grootwallet/groot/releases/tag/v0.5.1) is for macOS Apple silicon. Its Mainnet authorization applies to exact commit `c731fa1c`, not later development builds. The current feedback branch contains internal `5.2.0-rc04` changes; it is not a public release.
 
 Download the DMG, open it, and drag Groot into Applications. The release is Developer ID signed, notarized and stapled. Verify a downloaded installer with the [GitHub CLI](https://cli.github.com/):
 
@@ -47,4 +52,4 @@ Historical decisions live in [ADRs](docs/adr/). Read relevant decisions, not the
 
 [Apache-2.0](LICENSE); [NOTICE](NOTICE), [third-party notices](THIRD_PARTY_NOTICES.md), and [contribution terms](CONTRIBUTING.md) apply. The license does not grant rights to Groot's marks.
 
-This repository contains the wallet. Marketing code, public-site copy, screenshots, SEO and deployment belong only in [groot-site](https://github.com/thibistaken/groot-site).
+This repository contains the wallet. Marketing code, public-site copy, screenshots, SEO and deployment belong in the separate marketing repository.
