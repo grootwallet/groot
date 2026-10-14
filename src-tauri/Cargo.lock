@@ -2151,7 +2151,7 @@ dependencies = [
 
 [[package]]
 name = "groot"
-version = "5.2.0-rc03"
+version = "5.2.0-rc04"
 dependencies = [
  "aes-gcm 0.10.3",
  "argon2",

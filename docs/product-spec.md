@@ -1,6 +1,6 @@
 # Product behavior
 
-Canonical behavior for the current rc03 source. [Current status](implementation-status.md) separates implementation from release certification. Public Mainnet approval remains bound to v0.5.1 commit `c731fa1c`; later candidates require their own authorization.
+Canonical behavior for the current rc04 source. [Current status](implementation-status.md) separates implementation from release certification. Public Mainnet approval remains bound to v0.5.1 commit `c731fa1c`; later candidates require their own authorization.
 
 ## Wallets and credentials
 
@@ -80,9 +80,9 @@ App logs contain allowlisted lifecycle/outcome codes and safe scalar context, ne
 
 ## App releases
 
-On the first opening of each new exact version, show dismissible baked-in EN/FR/ES notes offline. Dismissal is an app preference, independent of wallet identity. Updates offers a manual GitHub check and an explicit once-daily opt-in; explain IP/app-version disclosure before enabling it. Newer stable releases expose a small corner action without covering wallet modals, toasts or mobile navigation.
+On the first opening of each new exact version, show dismissible baked-in EN/FR/ES notes offline. Dismissal is an app preference, independent of wallet identity. Updates offers a manual GitHub check and an explicit once-daily opt-in; explain IP/app-version disclosure before enabling it. Settings places a small text Updates action beside the build identity. The side-menu text action appears only for a detected newer stable release. Newer stable releases expose a small corner action without covering wallet modals, toasts or mobile navigation.
 
-Rust selects exact repository/platform assets and verifies the signed Ed25519 manifest and streamed installer digest before offering Reveal installer. No automatic replacement or wallet migration. Missing owner key/signatures fail closed; rc03 contains no production trust key. Offline, no-update, failure, retry, loading and cancellation remain visible. See [update procedure](release-update-rollback.md).
+Rust selects exact repository/platform assets and verifies the signed Ed25519 manifest and streamed installer digest before offering Reveal installer. No automatic replacement or wallet migration. Missing owner key/signatures fail closed; rc04 contains no production trust key. Offline, no-update, failure, retry, loading and cancellation remain visible. See [update procedure](release-update-rollback.md).
 
 ## Exclusions
 

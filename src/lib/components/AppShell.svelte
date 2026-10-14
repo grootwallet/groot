@@ -952,13 +952,16 @@
           locked={walletLocked}
         />
         <BuildIdentity runtime={runtimeIdentity} placement="sidebar" />
-        <Button
-          size="sm"
-          variant="ghost"
-          onclick={() => {
-            updatesOpen = true;
-          }}>{translate($locale, 'Updates')}</Button
-        >
+        {#if updateOffer}
+          <Button
+            size="sm"
+            variant="ghost"
+            class="app-update-text"
+            onclick={() => {
+              updatesOpen = true;
+            }}>{translate($locale, 'Updates')}</Button
+          >
+        {/if}
       </div>
     </aside>
 
