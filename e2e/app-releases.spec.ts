@@ -47,7 +47,38 @@ test('updates handles offline retry, no update, verification failure and prepare
     sessionStorage.setItem('fixture-app-update', 'offline');
   }, process.env.GROOT_E2E_DARK === '1');
   await page.goto('/settings');
-  await page.getByRole('button', { name: 'Updates', exact: true }).last().click();
+  const footer = page.locator('.settings-build-row');
+  const updates = footer.getByRole('button', { name: 'Updates', exact: true });
+  await expect(updates).toBeVisible();
+  await expect(
+    page
+      .locator('.sidebar-bottom')
+      .getByRole('button', { name: 'Updates', exact: true, includeHidden: true })
+  ).toHaveCount(0);
+  const identityBox = await footer
+    .getByRole('button', { name: 'Copy build information' })
+    .boundingBox();
+  const updateBox = await updates.boundingBox();
+  expect(identityBox).not.toBeNull();
+  expect(updateBox).not.toBeNull();
+  expect(Math.abs(identityBox!.y - updateBox!.y)).toBeLessThan(2);
+  expect(updateBox!.x).toBeGreaterThan(identityBox!.x + identityBox!.width);
+  expect(
+    await updates.evaluate((element) => {
+      const style = getComputedStyle(element);
+      return {
+        border: style.borderTopWidth,
+        background: style.backgroundColor,
+        font: style.fontSize
+      };
+    })
+  ).toEqual({ border: '0px', background: 'rgba(0, 0, 0, 0)', font: '13px' });
+  await footer.scrollIntoViewIfNeeded();
+  await page.screenshot({
+    path: test.info().outputPath('settings-updates.png'),
+    animations: 'disabled'
+  });
+  await updates.click();
   const modal = page.getByRole('dialog', { name: 'Updates', exact: true });
   await expect(modal.getByRole('checkbox')).not.toBeChecked();
   await modal.getByRole('button', { name: 'Check for updates', exact: true }).click();
@@ -55,9 +86,19 @@ test('updates handles offline retry, no update, verification failure and prepare
   await page.evaluate(() => sessionStorage.removeItem('fixture-app-update'));
   await modal.getByRole('button', { name: 'Check for updates', exact: true }).click();
   await expect(modal).toContainText('You are up to date.');
+  await expect(
+    page
+      .locator('.sidebar-bottom')
+      .getByRole('button', { name: 'Updates', exact: true, includeHidden: true })
+  ).toHaveCount(0);
   await page.evaluate(() => sessionStorage.setItem('fixture-app-update', 'available'));
   await modal.getByRole('button', { name: 'Check for updates', exact: true }).click();
   await expect(modal).toContainText('New update available');
+  await expect(
+    page
+      .locator('.sidebar-bottom')
+      .getByRole('button', { name: 'Updates', exact: true, includeHidden: true })
+  ).toHaveCount(1);
   await page.evaluate(() =>
     sessionStorage.setItem('fixture-update-download', 'verification_failed')
   );

@@ -1808,10 +1808,16 @@
         >
       </div>
     </section>{/if}
-  <BuildIdentity placement="settings" />
-  <Button variant="secondary" onclick={() => window.dispatchEvent(new Event('groot-open-updates'))}
-    >{translate($locale, 'Updates')}</Button
-  >
+  <div class="settings-build-row">
+    <BuildIdentity placement="settings" />
+    <Button
+      variant="ghost"
+      size="sm"
+      class="app-update-text"
+      onclick={() => window.dispatchEvent(new Event('groot-open-updates'))}
+      >{translate($locale, 'Updates')}</Button
+    >
+  </div>
 </div>
 
 <Modal

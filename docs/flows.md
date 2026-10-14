@@ -1,6 +1,6 @@
 # User flows
 
-State transitions for the current rc02 source. [Product behavior](product-spec.md) owns policy; [design system](design-system.md) owns presentation; [status](implementation-status.md) owns availability. Do not append historical overrides here.
+State transitions for the current rc04 source. [Product behavior](product-spec.md) owns policy; [design system](design-system.md) owns presentation; [status](implementation-status.md) owns availability. Do not append historical overrides here.
 
 ## Create and restore
 
@@ -81,6 +81,8 @@ Delete and PIN work run off the native UI thread. Error/loading/cancel/retry rem
 ## Release notes and updates
 
 `first exact version open → localized offline notes → dismiss → exact-version app preference`
+
+Settings exposes Updates beside build identity; the side menu exposes it only after detecting a newer stable release.
 
 `Updates → manual check OR daily opt-in → newer stable offer / no update / offline / rate limit → signed-manifest verification → bounded installer download → digest verification → reveal → explicit user installation`
 

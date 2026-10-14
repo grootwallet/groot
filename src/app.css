@@ -581,8 +581,42 @@ code {
      existing document scroller and place this control below their content. */
   position: fixed;
 }
-.build-identity-settings {
+.settings-build-row {
   margin-top: 42px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+.settings-build-row .build-identity {
+  min-width: 0;
+  justify-items: start;
+}
+.settings-build-row .build-identity button {
+  text-align: start;
+}
+.button.app-update-text {
+  flex: none;
+  min-height: 38px;
+  padding: 5px 8px;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--muted-2);
+  font-size: var(--font-size-meta);
+  font-weight: 400;
+  line-height: 1.35;
+}
+.button.app-update-text:hover {
+  color: var(--text);
+  background: transparent;
+  text-decoration: underline;
+}
+@media (max-width: 700px) {
+  .settings-build-row .build-identity button,
+  .button.app-update-text {
+    min-height: 44px;
+  }
 }
 .preference-toggles {
   display: flex;
@@ -2605,6 +2639,15 @@ code {
 }
 .password-control input {
   padding-right: 43px;
+}
+.password-control input::-webkit-caps-lock-indicator {
+  /* WebKit stretches this replaced SVG to the input's inner height by default. */
+  width: 17px;
+  height: 17px;
+  max-width: 17px;
+  max-height: 17px;
+  align-self: center;
+  flex: none;
 }
 .password-control button {
   position: absolute;

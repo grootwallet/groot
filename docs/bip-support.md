@@ -57,6 +57,8 @@ Candidates are not commitments. Legacy P2SH multisig, arbitrary scripts, Taproot
 
 Update scope and evidence in the same change that changes standards behavior. Check current upstream records then; do not copy an old Draft/Deployed label into a current claim. Preserve parser bounds, network/private-material rejection and interoperability limitations. This cleanup changes no standards implementation or dependency; BIP impact is **documentation only**.
 
+The rc04 update-control layout and native Caps Lock sizing fixes have **no BIP impact** and preserve existing wallet/profile formats.
+
 App release/update preparation (ADR 0086) and 5.2 naming (ADR 0087) have **no BIP impact**: no key derivation, descriptor, transaction, protocol or wallet backup format changes. Experimental platform packaging does not extend physical interoperability evidence.
 
 ## Retained Continuity evidence

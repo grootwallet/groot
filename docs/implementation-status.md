@@ -1,6 +1,6 @@
 # Current implementation status
 
-This page describes the checked-in `5.2.0-rc03` feedback branch. Public v0.5.1 is authorized only at `c731fa1c` under ADR 0083. Internal candidates do not inherit its release approval.
+This page describes the checked-in `5.2.0-rc04` feedback branch. Public v0.5.1 is authorized only at `c731fa1c` under ADR 0083. Internal candidates do not inherit its release approval.
 
 **Native** means implemented behind Rust/Tauri. **Fixture** means browser demonstration only. Neither is physical-device certification. Exact release/device evidence belongs in the [Mainnet checklist](mainnet-release-checklist.md) and [hardware certification](hardware-certification.md).
 
