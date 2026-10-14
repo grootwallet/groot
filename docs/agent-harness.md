@@ -40,13 +40,13 @@ Use focused checks while iterating, then mandatory validation and applicable ext
 
 Build from a clean tracked/untracked commit. Generate fresh target-specific SBOM/provenance after the executable exists. Generated output remains untracked.
 
-| Purpose                           | Command/boundary                                                                                                                                      |
-| --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Supporting unsigned build         | `pnpm release:unsigned`; fixed Mainnet: `pnpm release:unsigned:mainnet`                                                                               |
-| Production multi-network evidence | `pnpm release:unsigned:multi`; two clean machines, frozen signed HWI input, identical executable                                                      |
-| Freeze signed HWI                 | `pnpm release:prepare:signed-hwi`; pinned upstream digest, approved HWI-only entitlement, timestamp and provenance                                    |
-| Production macOS package          | `pnpm release:package:macos:ga`; compare reproduced executable before outer signing/notarization/stapling; no rebuild or HWI entitlement on Groot     |
-| Private test candidate            | `pnpm build:native:multi:internal` or `pnpm build:native:mainnet:internal`; exact clean commit, pinned HWI, ad-hoc `REHEARSAL_ONLY`, verified app/DMG |
+| Purpose                           | Command/boundary                                                                                                                                                                                                |
+| --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Supporting unsigned build         | `pnpm release:unsigned`; fixed Mainnet: `pnpm release:unsigned:mainnet`                                                                                                                                         |
+| Production multi-network evidence | `pnpm release:unsigned:multi`; normally two clean machines, frozen signed HWI input, identical executable. ADR 0088 permits two clean checkouts with fresh isolated build state on the same Mac for v5.2.0 only |
+| Freeze signed HWI                 | `pnpm release:prepare:signed-hwi`; pinned upstream digest, approved HWI-only entitlement, timestamp and provenance                                                                                              |
+| Production macOS package          | `pnpm release:package:macos:ga`; compare reproduced executable before outer signing/notarization/stapling; no rebuild or HWI entitlement on Groot                                                               |
+| Private test candidate            | `pnpm build:native:multi:internal` or `pnpm build:native:mainnet:internal`; exact clean commit, pinned HWI, ad-hoc `REHEARSAL_ONLY`, verified app/DMG                                                           |
 
 Public packaging requires the accepted version/tag authorization and identical local HEAD, fresh `origin/main` and peeled annotated tag. It never creates/imports/prints signing credentials. Developer ID/notarization credentials must already be configured. Internal builders provide no production signing, notarization, push or public authorization.
 

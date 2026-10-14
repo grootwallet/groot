@@ -1,6 +1,6 @@
 # Product behavior
 
-Canonical behavior for the 5.2.0 GA preparation source. [Current status](implementation-status.md) separates implementation from release certification. Public Mainnet approval remains bound to v0.5.1 commit `c731fa1c`; later candidates require their own authorization.
+Canonical behavior for the 5.2.0 GA preparation source. [Current status](implementation-status.md) separates implementation from release certification. ADR 0088 conditionally authorizes v5.2.0 only when the final source, annotated tag, fresh remote main, reproduced evidence and signed/notarized published package all bind to one reviewed commit.
 
 ## Wallets and credentials
 

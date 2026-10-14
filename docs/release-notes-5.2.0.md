@@ -2,8 +2,8 @@
 
 Draft for owner review; not a published release.
 
-- First-history approval starts a resumable genesis scan; choosing a private node opens its connection dialog directly, with retry after partial observations.
-- Standard multisig restoration preserves the backup threshold and public origins. Restored BIP329 imports derive address ownership; matching signer-key records retain current signer names.
+- First-history approval starts a resumable genesis scan; choosing a private node opens its connection dialog directly, with retry after partial observations. Approval stays blocked until Groot can show the exact configured backend's privacy disclosure.
+- Standard multisig restoration preserves the backup threshold and public origins. Restored BIP329 imports derive address ownership, reject additions beyond Groot's supported recovery gap, and retain current signer names for matching signer-key records.
 - Hardware-only and multisig wallets can change their app PIN with current/new confirmation, encrypted rollback protection and a lock after success. Software BIP39 passphrases remain fixed.
 - Policy first-address detail uses the shared derivation view for every device. Discovery candidates say Select to identify with amber badges; full account identity checks remain required.
 - Address/xpub details group characters consistently. Public descriptor views, copy and text exports show one receive/change multipath descriptor. Permanent-label entry supports Tab and intentional grouping.
