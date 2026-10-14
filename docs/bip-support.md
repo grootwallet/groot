@@ -60,3 +60,5 @@ Update scope and evidence in the same change that changes standards behavior. Ch
 The rc04 update-control layout and native Caps Lock sizing fixes have **no BIP impact** and preserve existing wallet/profile formats.
 
 App release/update preparation (ADR 0086) and 5.2 naming (ADR 0087) have **no BIP impact**: no key derivation, descriptor, transaction, protocol or wallet backup format changes. Experimental platform packaging does not extend physical interoperability evidence.
+
+The 5.2.0 GA version promotion and same-machine reproduction decision (ADR 0088) have **no BIP impact**.

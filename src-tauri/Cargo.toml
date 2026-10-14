@@ -1,6 +1,6 @@
 [package]
 name = "groot"
-version = "5.2.0-rc04"
+version = "5.2.0"
 description = "Groot, a minimal onchain Bitcoin wallet"
 edition = "2021"
 license = "Apache-2.0"

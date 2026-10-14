@@ -1,6 +1,6 @@
 # User flows
 
-State transitions for the current rc04 source. [Product behavior](product-spec.md) owns policy; [design system](design-system.md) owns presentation; [status](implementation-status.md) owns availability. Do not append historical overrides here.
+State transitions for the 5.2.0 GA preparation source. [Product behavior](product-spec.md) owns policy; [design system](design-system.md) owns presentation; [status](implementation-status.md) owns availability. Do not append historical overrides here.
 
 ## Create and restore
 

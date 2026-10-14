@@ -43,7 +43,7 @@ test('a blocked authorization cannot be used for public packaging', () => {
   }
 });
 
-test('the repository authorizes the v0.5.1 release tag', () => {
+test('the repository authorizes the v5.2.0 release tag', () => {
   assert.doesNotThrow(() =>
     verifyPublicReleaseAuthorization({
       commit

@@ -16,7 +16,10 @@ remote tag, `origin/main`, and the packaged `HEAD` resolve to the same commit.
 ADR 0083 authorizes v0.5.1 under the same exact-tag binding after owner testing
 of the focused 0.5.1 candidate. Production distribution still requires the
 frozen signed HWI, independent matching unsigned builds, Developer ID signing,
-notarization, stapling, provenance, and final artifact verification. The
+notarization, stapling, provenance, and final artifact verification. ADR 0088 records owner acceptance of rc04 and authorizes the v5.2.0 campaign,
+including two separate clean builds on the same Mac for this release only.
+Fresh source review, validation, build comparison, signing/notarization and
+exact remote main/tag binding remain required. The
 internal ad-hoc candidate is not a public package.
 
 The detailed notes below are the historical evidence ledger. Earlier statements
