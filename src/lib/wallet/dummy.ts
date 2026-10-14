@@ -437,6 +437,18 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     this.multisigSetupDraftValue = null;
   }
   async nodeConfig() {
+    const params = typeof location === 'undefined' ? null : new URLSearchParams(location.search);
+    if (params?.has('fixture-node-config-delay'))
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    if (params?.has('fixture-node-config-error'))
+      throw new WalletError('internal_error', 'Synthetic node configuration failure.');
+    if (params?.has('fixture-managed-node'))
+      return {
+        backend: { type: 'remote_core' as const, url: 'https://bitcoin-rpc.usegroot.com/' },
+        auth: 'user_pass' as const,
+        username: 'groot-0123456789abcdef01234567',
+        torProxy: null
+      };
     return structuredClone(this._nodeConfig);
   }
   async publicNetworkStatus() {

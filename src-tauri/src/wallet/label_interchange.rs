@@ -399,6 +399,7 @@ fn import_records(
     let signer_map = signers.iter().cloned().collect::<BTreeMap<_, _>>();
     let mut ignored = initial_ignored;
     let mut matched_signers = 0;
+    let starting_required_gap = required_recovery_gap(&transaction, None)?;
     // Recovered descriptors have no presentation rows. Match public addresses
     // against native derivation, never the label database alone. Bound work
     // independently of the hostile record count.
@@ -578,6 +579,15 @@ fn import_records(
             },
             _ => ignored += 1,
         }
+    }
+    let required_gap = required_recovery_gap(&transaction, None)?;
+    if required_gap > MAX_RECOVERY_GAP_LIMIT && required_gap > starting_required_gap {
+        return Err(api_error(
+            "label_import_invalid",
+            format!(
+                "These labels would require a recovery gap of {required_gap}, above Groot's supported maximum of {MAX_RECOVERY_GAP_LIMIT}. Import only address labels that remain within the supported recovery gap."
+            ),
+        ));
     }
     for labels in planned.values_mut() {
         let mut seen = BTreeSet::new();
@@ -924,6 +934,37 @@ mod tests {
             import_records(&mut db, &records, 0, &[]).unwrap_err().code,
             "backup_mismatch"
         );
+        assert_eq!(
+            db.query_row("SELECT COUNT(*) FROM groot_addresses", [], |row| row
+                .get::<_, usize>(0))
+                .unwrap(),
+            0
+        );
+        let wallet = load_wallet(&mut db).unwrap();
+        assert_eq!(wallet.derivation_index(KeychainKind::External), None);
+    }
+
+    #[test]
+    fn recovered_label_import_rejects_an_unsupported_gap_atomically() {
+        let (mut db, _) = label_wallet("bounded recovered labels");
+        let wallet = load_wallet(&mut db).unwrap();
+        let address = wallet
+            .peek_address(KeychainKind::External, MAX_RECOVERY_GAP_LIMIT)
+            .address
+            .to_string();
+        drop(wallet);
+        db.execute("DELETE FROM groot_addresses", []).unwrap();
+        let record = Bip329Record {
+            record_type: "addr".to_owned(),
+            reference: address,
+            label: "Too far ahead".to_owned(),
+            spendable: None,
+        };
+
+        let error = import_records(&mut db, &[record], 0, &[]).unwrap_err();
+
+        assert_eq!(error.code, "label_import_invalid");
+        assert!(error.message.contains("recovery gap of 1001"));
         assert_eq!(
             db.query_row("SELECT COUNT(*) FROM groot_addresses", [], |row| row
                 .get::<_, usize>(0))

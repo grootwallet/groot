@@ -34,7 +34,7 @@ The multi-network desktop app switches Regtest/Testnet4/Mainnet through global S
 
 ## History and connectivity
 
-Before first history verification, do not present a numeric balance as verified. Ask for privacy approval: use Groot's network for simplicity and speed, or set up a private node. Approval saves genesis height 0 and starts a resumable scan. Declining opens the Bitcoin Core connection dialog directly. Partial observations do not block an explicitly targeted genesis retry (ADRs 0084/0085).
+Before first history verification, do not present a numeric balance as verified. Ask for privacy approval: use Groot's network for simplicity and speed, or set up a private node. Resolve the configured backend before showing its specific privacy disclosure or enabling approval; a failed lookup stays blocked with an inline retry. Approval saves genesis height 0 and starts a resumable scan. Declining opens the Bitcoin Core connection dialog directly. Partial observations do not block an explicitly targeted genesis retry (ADRs 0084/0085).
 
 Settings owns authenticated birthday, recovery gap and full-rescan controls. A birthday must precede possible wallet activity and cannot exceed the verified tip. Gaps remain 20–1,000 and cannot be reduced below already revealed receive/change runs. A pruned node must retain required history; errors show the native retention facts and a retry. Progress reaches 100% only after pending transactions and the atomic result are reconciled. Lock/restart can reattach to saved progress; cancellation never presents discarded run progress as completed history.
 
@@ -54,7 +54,7 @@ Full address/xpub views group four characters with a short final block; copy ret
 
 Hardware address verification is address-specific. Discovery candidates use amber **Select to identify**; selected-device unlock instructions remain distinct. Fresh full-account identity proof precedes device display, policy registration and signing. Standard multisig must have policy/first-address verification on enough signers to intersect every signing quorum before receiving. Policy first-address detail uses the same comparison/derivation component as Receive for all devices.
 
-BIP329 exports representable public labels/spendability deterministically. Import is bounded, additive and atomic: conflicts leave the wallet unchanged. Restored-wallet address ownership is derived in Rust across receive indexes 0–9,999 plus indexed ownership. Matching xpub records report matched signer keys and preserve current editable signer names. Labels are not a seed/descriptor backup or live synchronization protocol.
+BIP329 exports representable public labels/spendability deterministically. Import is bounded, additive and atomic: conflicts leave the wallet unchanged. Restored-wallet address ownership is derived in Rust across receive indexes 0–9,999 plus indexed ownership, but an import that would exceed Groot's supported recovery gap is rejected atomically. Matching xpub records report matched signer keys and preserve current editable signer names. Labels are not a seed/descriptor backup or live synchronization protocol.
 
 ## Send, coins and activity
 

@@ -158,6 +158,23 @@ export const copyCatalog = {
   'Changing PIN…': { fr: 'Modification du PIN…', es: 'Cambiando PIN…' },
   'Confirm new app PIN': { fr: 'Confirmer le nouveau PIN', es: 'Confirmar nuevo PIN' },
   'Current app PIN': { fr: 'PIN actuel de l’application', es: 'PIN actual de la aplicación' },
+  'Checking wallet privacy…': {
+    fr: 'Vérification de la confidentialité du portefeuille…',
+    es: 'Comprobando la privacidad del monedero…'
+  },
+  'Groot is checking which network will receive your wallet history.': {
+    fr: 'Groot vérifie quel réseau recevra l’historique de votre portefeuille.',
+    es: 'Groot está comprobando qué red recibirá el historial de tu monedero.'
+  },
+  'Could not check wallet privacy': {
+    fr: 'Impossible de vérifier la confidentialité du portefeuille',
+    es: 'No se pudo comprobar la privacidad del monedero'
+  },
+  'Groot could not verify which network would receive your wallet history. Try again before approving.':
+    {
+      fr: 'Groot n’a pas pu vérifier quel réseau recevrait l’historique de votre portefeuille. Réessayez avant d’autoriser.',
+      es: 'Groot no pudo comprobar qué red recibiría el historial de tu monedero. Inténtalo de nuevo antes de autorizar.'
+    },
   'Groot’s network can see your wallet activity. Your keys stay on your device.': {
     fr: 'Le réseau Groot peut voir l’activité de votre portefeuille. Vos clés restent sur votre appareil.',
     es: 'La red de Groot puede ver la actividad de tu monedero. Tus claves permanecen en tu dispositivo.'

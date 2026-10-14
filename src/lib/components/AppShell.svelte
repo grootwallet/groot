@@ -246,34 +246,47 @@
   let initialApprovalWalletId = $state<string | null>(null);
   let initialApprovalBusy = $state(false);
   let initialApprovalError = $state('');
-  let initialApprovalManaged = $state(false);
+  let initialApprovalBackend = $state<'loading' | 'managed' | 'private' | 'error'>('loading');
+  let initialApprovalLookupGeneration = 0;
   const declinedInitialScans = new Set<string>();
   function requestInitialHistoryApproval(force = false) {
     const id = selectedWalletId;
     if (!id || (!force && declinedInitialScans.has(id)) || initialApprovalBusy) return;
     if (!force && initialApprovalWalletId === id) return;
+    const lookupGeneration = ++initialApprovalLookupGeneration;
     initialApprovalWalletId = id;
     initialApprovalError = '';
-    initialApprovalManaged = false;
+    initialApprovalBackend = 'loading';
     void walletService
       .nodeConfig()
       .then((config) => {
-        if (initialApprovalWalletId === id)
-          initialApprovalManaged =
+        if (initialApprovalWalletId === id && initialApprovalLookupGeneration === lookupGeneration)
+          initialApprovalBackend =
             config.backend.type === 'remote_core' &&
-            config.backend.url === 'https://bitcoin-rpc.usegroot.com/';
+            config.backend.url === 'https://bitcoin-rpc.usegroot.com/'
+              ? 'managed'
+              : 'private';
       })
-      .catch(() => undefined);
+      .catch(() => {
+        if (initialApprovalWalletId === id && initialApprovalLookupGeneration === lookupGeneration)
+          initialApprovalBackend = 'error';
+      });
   }
   async function declineInitialHistoryScan() {
     if (initialApprovalBusy) return;
     if (initialApprovalWalletId) declinedInitialScans.add(initialApprovalWalletId);
+    initialApprovalLookupGeneration += 1;
     initialApprovalWalletId = null;
     await goto('/settings?nodeConnection=1');
   }
   async function approveInitialHistoryScan() {
     const id = initialApprovalWalletId;
-    if (!id || initialApprovalBusy) return;
+    if (
+      !id ||
+      initialApprovalBusy ||
+      (initialApprovalBackend !== 'managed' && initialApprovalBackend !== 'private')
+    )
+      return;
     initialApprovalBusy = true;
     initialApprovalError = '';
     let scanStarted = false;
@@ -986,15 +999,42 @@
   }}
 >
   <div class="modal-form">
-    <WarningNotice
-      title={translate($locale, 'Wallet privacy')}
-      body={translate(
-        $locale,
-        initialApprovalManaged
-          ? 'Groot’s network can see your wallet activity. Your keys stay on your device.'
-          : 'Your own node checks your wallet history. Your keys stay on your device.'
-      )}
-    />
+    {#if initialApprovalBackend === 'loading'}
+      <WarningNotice
+        role="status"
+        ariaLive="polite"
+        title={translate($locale, 'Checking wallet privacy…')}
+        body={translate(
+          $locale,
+          'Groot is checking which network will receive your wallet history.'
+        )}
+      />
+    {:else if initialApprovalBackend === 'error'}
+      <WarningNotice
+        tone="danger"
+        icon
+        role="alert"
+        title={translate($locale, 'Could not check wallet privacy')}
+        body={translate(
+          $locale,
+          'Groot could not verify which network would receive your wallet history. Try again before approving.'
+        )}
+      >
+        <Button size="sm" variant="secondary" onclick={() => requestInitialHistoryApproval(true)}
+          >{translate($locale, 'Try again')}</Button
+        >
+      </WarningNotice>
+    {:else}
+      <WarningNotice
+        title={translate($locale, 'Wallet privacy')}
+        body={translate(
+          $locale,
+          initialApprovalBackend === 'managed'
+            ? 'Groot’s network can see your wallet activity. Your keys stay on your device.'
+            : 'Your own node checks your wallet history. Your keys stay on your device.'
+        )}
+      />
+    {/if}
     {#if initialApprovalError}<WarningNotice
         tone="danger"
         icon
@@ -1008,6 +1048,7 @@
       >{translate($locale, 'Set up my own node')}</Button
     ><Button
       loading={initialApprovalBusy}
+      disabled={initialApprovalBackend === 'loading' || initialApprovalBackend === 'error'}
       loadingLabel={translate($locale, 'Starting scan…')}
       onclick={approveInitialHistoryScan}>{translate($locale, 'Approve and scan')}</Button
     >
