@@ -2,6 +2,8 @@
 
 Implemented scope is in [current status](implementation-status.md). GitHub [issues](https://github.com/grootwallet/groot/issues) own live priority and acceptance; this page does not duplicate their state.
 
+The first production target is a **macOS Apple-silicon desktop release with both software and approved hardware wallets**.
+
 ## Next
 
 - Finish the current wallet restoration, first-scan consent, labels, deletion and hardware UX feedback; validate the exact replacement candidate before release.

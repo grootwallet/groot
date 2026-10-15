@@ -20,9 +20,10 @@ notarization, stapling, provenance, and final artifact verification. ADR 0088
 records owner acceptance of rc04 and authorizes the v5.2.0 campaign, including
 two separate clean builds on the same Mac for this release only. The
 [5.2.0 security diff review](security-diff-review-5.2.0.md) is complete through
-its focused remediation commit. Final-source hash pinning, validation, build
-comparison, signing/notarization and exact remote main/tag binding remain
-required. The internal ad-hoc candidate is not a public package.
+its focused remediation commit and final trust-material review. Final-source
+hash pinning is complete. Validation, build comparison, signing/notarization
+and exact remote main/tag binding remain required. The internal ad-hoc
+candidate is not a public package.
 
 The detailed notes below are the historical evidence ledger. Earlier statements
 that work “remains,” “is pending,” or “is blocked” describe the state when that

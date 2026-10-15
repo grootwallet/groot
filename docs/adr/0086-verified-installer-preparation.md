@@ -1,12 +1,12 @@
 # ADR 0086: Verified installer preparation
 
-Status: Accepted for internal implementation; production trust material pending.
+Status: Accepted; production public verification material pinned for v5.2.0.
 
 ## Decision
 
 Reuse the schema-v1 signed update manifest from the offline release verifier. Rust verifies the exact bytes with strict raw Ed25519, then streams and verifies the named installer SHA-256 before exposing an opaque reveal capability. This is download preparation, never automatic replacement, execution, rollback or wallet migration. PGP signatures, SSH-signed Git tags and platform code signing are separate controls and do not substitute for this manifest.
 
-The owner will verify the release public key out of band and commit its 32-byte lowercase hex encoding to `docs/release-update-key.hex`. The file is deliberately empty in rc03; the app fails closed before any installer transfer. Keys are never accepted from GitHub assets, IPC or an environment override. Test-only deterministic keys are disposable fixture material, compiled only into tests. Production publication still requires platform signatures, provenance, independent review and exact-candidate authorization.
+The owner verified the release public key out of band and supplied its 32-byte lowercase hex encoding before the v5.2.0 GA source freeze. It is pinned in `docs/release-update-key.hex`; the corresponding public PEM is retained for offline verification. The file was deliberately empty through rc03, when the app failed closed before any installer transfer. Keys are never accepted from GitHub assets, IPC or an environment override. Test-only deterministic keys are disposable fixture material, compiled only into tests. Production publication still requires platform signatures, provenance, independent review and exact-candidate authorization.
 
 Native discovery reads only the public latest-release endpoint for `grootwallet/groot`. It rejects drafts, prereleases, invalid versions and same/older versions, including numerical comparison and rc-to-stable promotion. Candidate availability is untrusted information until verification; it is never a signing or certification claim. Platform installers use exact versioned names, with their own `.update.json` and raw 64-byte `.update.sig` assets. No arbitrary GitHub copy/HTML is rendered.
 

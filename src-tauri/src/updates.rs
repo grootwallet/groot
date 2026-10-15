@@ -19,7 +19,7 @@ use tauri_plugin_opener::OpenerExt;
 const RELEASES: &str = "https://api.github.com/repos/grootwallet/groot/releases/latest";
 const ASSET_ROOT: &str = "https://github.com/grootwallet/groot/releases/download/";
 const MAX_INSTALLER: u64 = 2 * 1024 * 1024 * 1024;
-// This is intentionally empty until the owner verifies and commits the real raw public key.
+// The release owner verified this raw public key out of band before the GA source freeze.
 const PINNED_KEY: &str = include_str!("../../docs/release-update-key.hex");
 
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
@@ -680,7 +680,7 @@ mod tests {
         assert!(!root.exists());
         assert_eq!(
             download(&state, root, 1).err(),
-            Some(UpdateError::TrustUnavailable)
+            Some(UpdateError::InvalidRelease)
         );
     }
 }
@@ -693,11 +693,11 @@ mod preparation_tests {
     fn signed_fixture_runs_whole_preparation_and_corrupt_download_never_exposes_installer() {
         let key = SigningKey::from_bytes(&[11; 32]);
         let installer = b"disposable fixture installer";
-        let name = artifact_name("5.2.0", platform().unwrap());
-        let manifest = serde_json::to_vec(&serde_json::json!({"schemaVersion":1,"product":"Groot","channel":"stable","version":"5.2.0","artifact":name,"sha256":sha256::Hash::hash(installer).to_string(),"commit":"b".repeat(40),"minimumSupportedVersion":"0.5.1","rollbackAllowedFrom":[]})).unwrap();
+        let name = artifact_name("5.2.1", platform().unwrap());
+        let manifest = serde_json::to_vec(&serde_json::json!({"schemaVersion":1,"product":"Groot","channel":"stable","version":"5.2.1","artifact":name,"sha256":sha256::Hash::hash(installer).to_string(),"commit":"b".repeat(40),"minimumSupportedVersion":"5.2.0","rollbackAllowedFrom":[]})).unwrap();
         let signature = key.sign(&manifest).to_bytes().to_vec();
         let r = Release {
-            tag_name: "v5.2.0".into(),
+            tag_name: "v5.2.1".into(),
             draft: false,
             prerelease: false,
             assets: [
@@ -707,7 +707,7 @@ mod preparation_tests {
             ]
             .into_iter()
             .map(|(name, size)| Asset {
-                browser_download_url: format!("{ASSET_ROOT}v5.2.0/{name}"),
+                browser_download_url: format!("{ASSET_ROOT}v5.2.1/{name}"),
                 name,
                 size: size as u64,
                 state: "uploaded".into(),

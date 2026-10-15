@@ -1,6 +1,6 @@
 # Signed update and rollback procedure
 
-Groot can discover stable GitHub releases and prepare verified installers through Rust (ADR 0086). There is no automatic installation. The v5.2.0 verification key remains unconfigured until the release owner supplies and independently verifies its public half; real downloads stay blocked until that value is reviewed and committed before the final build. Offline and native verification share schema-v1 exact-byte Ed25519 manifests.
+Groot can discover stable GitHub releases and prepare verified installers through Rust (ADR 0086). There is no automatic installation. The release owner independently verified and supplied the v5.2.0 Ed25519 public key before the final source freeze. Its raw encoding is pinned in `release-update-key.hex`, and the corresponding PEM is retained in `release-update-key.pem` for offline verification. Offline and native verification share schema-v1 exact-byte Ed25519 manifests.
 
 ## Produce and verify
 
@@ -23,6 +23,6 @@ The disposable verifier regression is `pnpm release:test:update`. Actual update/
 
 ## Native asset contract
 
-Use `Groot-VERSION-macos-arm64.dmg`, `Groot-VERSION-windows-x64.msi` or `Groot-VERSION-linux-x64.deb`. Each has `FILENAME.update.json` and `FILENAME.update.sig` (raw 64-byte signature), uploaded to the exact `grootwallet/groot` tag. The signed manifest's `artifact` matches the basename and its stable `version` matches the tag; `minimumSupportedVersion` must admit the installed client. The trusted key is raw 32-byte hex in `docs/release-update-key.hex`; offline tools accept its corresponding Ed25519 public PEM. SSH tag keys and Developer ID are independent.
+Use `Groot-VERSION-macos-arm64.dmg`, `Groot-VERSION-windows-x64.msi` or `Groot-VERSION-linux-x64.deb`. Each has `FILENAME.update.json` and `FILENAME.update.sig` (raw 64-byte signature), uploaded to the exact `grootwallet/groot` tag. The signed manifest's `artifact` matches the basename and its stable `version` matches the tag; `minimumSupportedVersion` must admit the installed client. The trusted key is raw 32-byte hex in `docs/release-update-key.hex`; offline tools accept `docs/release-update-key.pem`. OpenPGP tag signing and Developer ID are independent.
 
 Release checks are opt-in once daily while active, manual otherwise. GitHub sees IP address and app version. Rate-limit failures wait an hour, with no automatic immediate retries. Reveal never launches an installer. Cache files last until next preparation/restart; copy them if keeping them for later.
