@@ -68,7 +68,17 @@ import { pendingBalanceBreakdown, sortTransactions } from './presentation';
 export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
   async checkUpdate(): Promise<import('./contracts').UpdateOffer | null> {
     if (sessionStorage.getItem('fixture-update-delay') === '1')
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      await new Promise<void>((resolve) => {
+        const timeout = setTimeout(resolve, 10_000);
+        window.addEventListener(
+          'groot-fixture-update-ready',
+          () => {
+            clearTimeout(timeout);
+            resolve();
+          },
+          { once: true }
+        );
+      });
     const fixture = sessionStorage.getItem('fixture-app-update');
     if (fixture === 'offline' || fixture === 'rate_limited') throw fixture;
     return fixture === 'available' ? { version: '5.2.0', verificationReady: true } : null;
@@ -78,7 +88,9 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
       throw 'verification_failed';
     return { filename: 'Groot-5.2.0-fixture.dmg', revealToken: 'fixture-only' };
   }
-  async cancelUpdate(): Promise<void> {}
+  async cancelUpdate(): Promise<void> {
+    window.dispatchEvent(new Event('groot-fixture-update-ready'));
+  }
   async revealUpdate(_token: string): Promise<void> {}
   private multisigSetupDraftValue: import('./contracts').MultisigSetupDraft | null = null;
   private paymentDrafts = new Map<string, PaymentDraft>();
@@ -439,7 +451,17 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
   async nodeConfig() {
     const params = typeof location === 'undefined' ? null : new URLSearchParams(location.search);
     if (params?.has('fixture-node-config-delay'))
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      await new Promise<void>((resolve) => {
+        const timeout = setTimeout(resolve, 10_000);
+        window.addEventListener(
+          'groot-fixture-node-config-ready',
+          () => {
+            clearTimeout(timeout);
+            resolve();
+          },
+          { once: true }
+        );
+      });
     if (params?.has('fixture-node-config-error'))
       throw new WalletError('internal_error', 'Synthetic node configuration failure.');
     if (params?.has('fixture-managed-node'))

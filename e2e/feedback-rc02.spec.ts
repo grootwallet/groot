@@ -77,6 +77,7 @@ test('initial scan waits for the exact privacy disclosure before approval', asyn
   await expect(modal.getByText('Checking wallet privacy…')).toBeVisible();
   await expect(modal.getByText('Your own node checks your wallet history.')).toHaveCount(0);
   await expect(modal.getByRole('button', { name: 'Approve and scan' })).toBeDisabled();
+  await page.evaluate(() => window.dispatchEvent(new Event('groot-fixture-node-config-ready')));
   await expect(modal.getByText('Groot’s network can see your wallet activity.')).toBeVisible();
   await expect(modal.getByRole('button', { name: 'Approve and scan' })).toBeEnabled();
 });
