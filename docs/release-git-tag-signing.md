@@ -1,5 +1,30 @@
 # Git release-tag signing key
 
+## v5.2.0 OpenPGP key
+
+The v5.2.0 release owner supplied the public OpenPGP key in
+[`release-git-tag-signing-5.2.0.asc`](release-git-tag-signing-5.2.0.asc). Its
+full fingerprint is:
+
+```text
+9815 9EDF 6C8C A092 E332 AFEF DB55 5867 2522 3366
+```
+
+Verify the public key independently before using it to authenticate the signed
+`v5.2.0` tag:
+
+```sh
+gpg --show-keys --with-fingerprint docs/release-git-tag-signing-5.2.0.asc
+git verify-tag v5.2.0
+```
+
+The private key and passphrase remain with the release owner and must not be
+committed. The OpenPGP signature authenticates the source tag; it does not
+replace Apple Developer ID signing, notarization, provenance, or the separate
+offline Ed25519 update-manifest signature.
+
+## Historical v0.5.1 SSH key
+
 The release owner supplied the public key in
 [`release-git-tag-signing.pub`](release-git-tag-signing.pub) for SSH-signed Git
 release tags. This is public verification material only. The private key and
