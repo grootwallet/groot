@@ -155,11 +155,11 @@ const pinnedPolicySources = new Map([
   ],
   [
     'scripts/release/build-unsigned-mainnet.sh',
-    '35b13554ff2de5ff9e7fa5a43d28338502fadbda23a9f0e4a41b688a830ed160'
+    'befb799f37a66900cc59cbf2bbf9cfaf075ed47176341bb6cc3bb0f53e12ffff'
   ],
   [
     'scripts/release/build-unsigned-multi.sh',
-    '2b41651abb9e67ce8239a915a897f0d2513f5280c47e890b450417b788cf031f'
+    '45ea9a423449298d8bcd6fc32349ccfa6b5605a5f18d09ceabdb00d98802c8eb'
   ],
   [
     'scripts/release/verify-native-frontend-output.mjs',
@@ -227,7 +227,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'scripts/release/reproducible-rust-env.sh',
-    '8f309ced5719b7e57ef314df6574c875b1495b491be591d62a59bd2fc58e13ae'
+    '404df4d19ebc6901cdb07d23cb42cad2545826ced71086b7e7463104e53d5e03'
   ],
   [
     'scripts/release/normalize-macho-uuid.mjs',
