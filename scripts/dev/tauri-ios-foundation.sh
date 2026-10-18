@@ -60,9 +60,14 @@ case "$1" in
       echo "Generated Apple project is not the isolated Testnet4 identity. Inspect and regenerate it before building." >&2
       exit 1
     fi
+    node scripts/dev/prepare-ios-project.mjs
+    xcodegen generate --spec src-tauri/gen/apple/project.yml
     pnpm tauri ios build --debug --target aarch64 --no-sign --archive-only --ci
     # This is the default-feature build-script output used by the archived
     # library, not the separate all-feature Clippy result.
     node scripts/dev/verify-ios-foundation-build.mjs "${CARGO_TARGET_DIR}"
+    # Remove debugging sections from the unsigned app before development signing.
+    # Keep the archive's dSYM; no executable instructions or wallet formats change.
+    xcrun strip -S 'src-tauri/gen/apple/build/groot_iOS.xcarchive/Products/Applications/Groot Testnet4 Dev.app/Groot Testnet4 Dev'
     ;;
 esac

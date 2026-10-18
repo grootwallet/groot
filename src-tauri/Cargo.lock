@@ -2151,7 +2151,7 @@ dependencies = [
 
 [[package]]
 name = "groot"
-version = "5.3.0-rc1"
+version = "5.3.0-rc2"
 dependencies = [
  "aes-gcm 0.10.3",
  "argon2",
@@ -2161,6 +2161,7 @@ dependencies = [
  "bdk_wallet",
  "bip39",
  "block2",
+ "cc",
  "core-foundation",
  "ed25519-dalek",
  "hidapi",

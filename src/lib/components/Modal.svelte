@@ -12,6 +12,7 @@
     onclose,
     attentionSignal = 0,
     wide = false,
+    dismissible = true,
     upper = false,
     fixedViewport = false,
     children
@@ -89,7 +90,7 @@
   });
 
   function handleKeydown(event: KeyboardEvent) {
-    if (event.key === 'Escape') {
+    if (dismissible && event.key === 'Escape') {
       event.preventDefault();
       onclose();
       return;
@@ -123,7 +124,7 @@
     class:modal-layer-upper={upper}
     use:portal
     role="presentation"
-    onclick={(e) => e.target === e.currentTarget && onclose()}
+    onclick={(e) => dismissible && e.target === e.currentTarget && onclose()}
   >
     <div
       bind:this={dialog}
@@ -143,8 +144,13 @@
           <h2>{title}</h2>
           {#if description}<p>{description}</p>{/if}
         </div>
-        <button class="icon-button" aria-label={translate($locale, 'Close')} onclick={onclose}
-          ><X size={18} /></button
+        <button
+          disabled={!dismissible}
+          class="icon-button"
+          aria-label={translate($locale, 'Close')}
+          onclick={() => {
+            if (dismissible) onclose?.();
+          }}><X size={18} /></button
         >
       </header>
       <div class="modal-body">{@render children?.()}</div>

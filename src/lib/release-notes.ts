@@ -3,7 +3,7 @@ export const releaseNotes = [
   'Clearer activity pagination, tooltips and QR scan errors.',
   'Accepted broadcasts keep their successful result when local recording needs a retry.',
   'Wallet operations run off the UI thread and recheck wallet selection before changing data.',
-  'Testnet4 iPhone development UI; mobile key creation, recovery, signing and broadcast remain unavailable.'
+  'Testnet4 iPhone software wallets and QR multisig signing with native recovery and device-authorized key access.'
 ] as const;
 export const experimentalPlatformWarning =
   'Windows and Linux are experimental and untested on physical machines. They are riskier than macOS: native seed creation/recovery and USB device discovery are unavailable. Test public-wallet and file-signing flows and report feedback.';

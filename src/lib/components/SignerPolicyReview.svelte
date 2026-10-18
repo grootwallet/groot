@@ -229,7 +229,7 @@
         })}</Button
       >
     {:else if busy}<Button onclick={onshowtransaction}
-        >{translate($locale, 'Wallet policy reviewed — show transaction')}</Button
+        >{translate($locale, 'Wallet policy reviewed. Show transaction')}</Button
       >
     {:else}<Button onclick={oncontinue}
         >{translate($locale, 'Review & sign on {device}', { device: deviceName })}</Button

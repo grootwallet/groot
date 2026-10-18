@@ -1,7 +1,11 @@
 import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { verifyIosFoundationBuild } from '../../../scripts/dev/verify-ios-foundation-build.mjs';
+import {
+  verifyIosFoundationBuild,
+  verifyIosArchiveResources
+} from '../../../scripts/dev/verify-ios-foundation-build.mjs';
+import { prepareIosProject } from '../../../scripts/dev/prepare-ios-project.mjs';
 import { describe, expect, it } from 'vitest';
 
 const read = (path: string) => readFileSync(new URL(`../../../${path}`, import.meta.url), 'utf8');
@@ -41,6 +45,35 @@ describe('isolated Testnet4 iOS development build', () => {
 });
 
 describe('actual iOS linked network verification', () => {
+  it('rejects an archive containing a build-only static library', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'groot-ios-resources-'));
+    try {
+      writeFileSync(join(directory, 'Groot'), 'synthetic executable');
+      expect(() => verifyIosArchiveResources(directory)).not.toThrow();
+      writeFileSync(join(directory, 'libapp.a'), 'synthetic build-only library');
+      expect(() => verifyIosArchiveResources(directory)).toThrow('Do not install this archive.');
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it('prepares only the isolated project, keeps its signing settings and is idempotent', () => {
+    const identity = {
+      identifier: mobile.identifier,
+      version: '5.3.0-rc2',
+      bundleVersion: '530002'
+    };
+    const source = `PRODUCT_BUNDLE_IDENTIFIER: ${mobile.identifier}\n      - path: Externals\n      - sdk: Security.framework\nCFBundleShortVersionString: 5.2.0\nCFBundleVersion: "5.2.0"\nCODE_SIGN_STYLE: Automatic\n`;
+    const prepared = prepareIosProject(source, identity);
+    expect(prepareIosProject(prepared, identity)).toBe(prepared);
+    expect(prepared).toContain('excludes: ["**/*.a"]');
+    expect(prepared).toContain('LocalAuthentication.framework');
+    expect(prepared).toContain('CFBundleVersion: "530002"');
+    expect(prepared).toContain('CODE_SIGN_STYLE: Automatic');
+    expect(() =>
+      prepareIosProject(source.replace(mobile.identifier, desktop.identifier), identity)
+    ).toThrow('not changed');
+  });
   it.each([
     ['testnet4', 'same', true],
     ['regtest', 'same', false],

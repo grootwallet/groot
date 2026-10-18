@@ -1337,6 +1337,27 @@ fn coldcard_policy_acknowledgement_is_serialized_before_authorization() {
 }
 
 #[test]
+fn wallet_exists_reconciles_pairing_storage_only_under_the_operation_lock() {
+    // The startup poll must not race coordination_mobile_complete: an
+    // unguarded reconcile could delete a profile directory or restore a
+    // tombstone while completion is actively writing it.
+    let source = include_str!("profile_commands.rs");
+    let command = source
+        .split("pub async fn wallet_exists")
+        .nth(1)
+        .unwrap()
+        .split("pub(crate) fn registered_wallets_exist")
+        .next()
+        .unwrap();
+    let guard = command.find("operation_guard(&state)").unwrap();
+    let reconcile = command
+        .find("reconcile_mobile_pairing_storage(&app)")
+        .unwrap();
+    assert!(guard < reconcile);
+    assert!(command.find("spawn_blocking").unwrap() < guard);
+}
+
+#[test]
 fn chain_tip_observations_survive_restart_age_to_stale_and_reject_corruption() {
     let db = Connection::open_in_memory().unwrap();
     init_app_schema(&db).unwrap();
@@ -6538,6 +6559,18 @@ fn mobile_key_operations_fail_closed_without_affecting_desktop() {
 }
 
 #[test]
+fn software_mobile_capability_is_explicitly_ios_testnet4_only() {
+    for network in ["regtest", "signet", "testnet4", "mainnet", "multi"] {
+        assert!(validate_software_key_platform(false, false, network).is_ok());
+        assert_eq!(
+            validate_software_key_platform(true, false, network).is_ok(),
+            network == "testnet4"
+        );
+        assert!(validate_software_key_platform(false, true, network).is_err());
+    }
+}
+
+#[test]
 fn mobile_key_operation_guards_precede_command_work() {
     for (source, names) in [
         (
@@ -6574,7 +6607,8 @@ fn mobile_key_operation_guards_precede_command_work() {
                 .unwrap_or(body)
                 .trim_start();
             assert!(
-                body.starts_with("require_desktop_key_operation()?;"),
+                body.starts_with("require_desktop_key_operation()?;")
+                    || body.starts_with("require_software_key_operation()?;"),
                 "{name} must reject mobile before performing work"
             );
         }

@@ -50,6 +50,18 @@ pub(super) fn ensure_mainnet_core_ready_for_admission(
     }
 }
 
+fn ensure_sync_source_supported_on_platform(source: &WalletSyncSource) -> ApiResult<()> {
+    if cfg!(any(target_os = "ios", target_os = "android"))
+        && matches!(source, WalletSyncSource::CompactFilters { .. })
+    {
+        return Err(api_error(
+            "invalid_node_config",
+            "Compact-filter sync is experimental and unavailable on mobile. Configure Bitcoin Core instead.",
+        ));
+    }
+    Ok(())
+}
+
 pub(crate) fn profile_compatibility_for(
     profile: &WalletProfile,
     directory: &Path,
@@ -64,9 +76,20 @@ pub(crate) fn profile_compatibility_for(
 }
 
 #[tauri::command]
-pub fn wallet_exists(app: AppHandle) -> ApiResult<bool> {
-    let registry = load_registry(&app)?;
-    Ok(registered_wallets_exist(&registry))
+pub async fn wallet_exists(app: AppHandle) -> ApiResult<bool> {
+    // Pairing-storage reconciliation can delete or restore staging state. It
+    // must run under the same serialized operation lock as
+    // `coordination_mobile_complete`, never concurrently with an in-flight
+    // completion that is actively writing the same profile directory.
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let _operation = operation_guard(&state)?;
+        super::coordination_commands::reconcile_mobile_pairing_storage(&app)?;
+        let registry = load_registry(&app)?;
+        Ok(registered_wallets_exist(&registry))
+    })
+    .await
+    .map_err(internal)?
 }
 
 pub(crate) fn registered_wallets_exist(registry: &WalletRegistry) -> bool {
@@ -124,6 +147,10 @@ pub fn network_setup_sources(
             }
             let config = read_node_config_for(&app, profile.id).ok()?;
             let ready = unlocked.is_unlocked(profile.id)
+                && (!cfg!(any(target_os = "ios", target_os = "android"))
+                    || read_sync_source_for(&app, profile.id)
+                        .and_then(|source| ensure_sync_source_supported_on_platform(&source))
+                        .is_ok())
                 && match config.auth {
                     RpcAuthMode::Cookie => true,
                     RpcAuthMode::UserPass => node_auth
@@ -236,7 +263,7 @@ pub async fn wallet_generate_mnemonic(
     app: AppHandle,
     supplemental_entropy: Option<SupplementalEntropyDto>,
 ) -> ApiResult<bool> {
-    require_desktop_key_operation()?;
+    require_software_key_operation()?;
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<AppState>();
 
@@ -293,7 +320,7 @@ pub async fn wallet_create(
     network_setup_source_wallet_id: Option<String>,
 ) -> ApiResult<SoftwareWalletCreation> {
     let credential = Zeroizing::new(credential);
-    require_desktop_key_operation()?;
+    require_software_key_operation()?;
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<AppState>();
 
@@ -369,7 +396,7 @@ pub async fn wallet_create(
 #[tauri::command]
 pub async fn wallet_recover(app: AppHandle, name: String, credential: String) -> ApiResult<()> {
     let credential = Zeroizing::new(credential);
-    require_desktop_key_operation()?;
+    require_software_key_operation()?;
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<AppState>();
 
@@ -432,7 +459,7 @@ pub async fn wallet_recover(app: AppHandle, name: String, credential: String) ->
 #[tauri::command]
 pub async fn wallet_verify_backup(app: AppHandle, credential: String) -> ApiResult<bool> {
     let credential = Zeroizing::new(credential);
-    require_desktop_key_operation()?;
+    require_software_key_operation()?;
     let expected_wallet_id = selected_profile(&app)?.id;
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<AppState>();
@@ -490,7 +517,7 @@ pub async fn wallet_reveal_and_verify_backup(
     credential: String,
 ) -> ApiResult<bool> {
     let credential = Zeroizing::new(credential);
-    require_desktop_key_operation()?;
+    require_software_key_operation()?;
     let expected_wallet_id = selected_profile(&app)?.id;
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<AppState>();
@@ -616,6 +643,42 @@ pub async fn wallet_lock(app: AppHandle) -> ApiResult<()> {
             },
             None,
         );
+        Ok(())
+    })
+    .await
+    .map_err(internal)?
+}
+
+#[tauri::command]
+pub async fn wallet_lock_all(app: AppHandle) -> ApiResult<()> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        cancel_foreground_sync(&state)?;
+        let _operation = operation_guard(&state)?;
+        state.proposals.lock().map_err(internal)?.clear();
+        state.unlocked_wallets.lock().map_err(internal)?.lock_all();
+        *state.pending_mnemonic.lock().map_err(internal)? = None;
+        state.verified_recovery.lock().map_err(internal)?.clear();
+        state
+            .pending_hardware_pins
+            .lock()
+            .map_err(internal)?
+            .clear();
+        *state.recent_hardware_scan.lock().map_err(internal)? = None;
+        state.node_auth.lock().map_err(internal)?.clear();
+        state
+            .authenticated_software_descriptors
+            .lock()
+            .map_err(internal)?
+            .clear();
+        state.saved_files.lock().map_err(internal)?.clear();
+        #[cfg(target_os = "macos")]
+        state.pending_pdf_exports.lock().map_err(internal)?.clear();
+        state
+            .pending_policy_verifications
+            .lock()
+            .map_err(internal)?
+            .clear();
         Ok(())
     })
     .await
@@ -787,10 +850,15 @@ pub(crate) fn validate_notification_acknowledgements(ids: &[String]) -> ApiResul
 
 #[tauri::command]
 pub async fn address_create(app: AppHandle, labels: Vec<String>) -> ApiResult<ReceiveAddressDto> {
+    let expected_wallet_id = load_registry(&app)?.selected_wallet_id;
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<AppState>();
         let _operation = operation_guard(&state)?;
+        if load_registry(&app)?.selected_wallet_id != expected_wallet_id {
+            return Err(api_error("wallet_selection_changed", "The selected wallet changed. Retry in the current wallet."));
+        }
         let wallet_id = require_unlocked(&app, &state)?;
+        coordination_commands::require_receive_authority(&app, &selected_profile(&app)?.kind)?;
         let labels = normalize_labels(labels)?;
         let label = labels[0].clone();
         let mut db = open_db(&app)?;
@@ -1398,6 +1466,7 @@ pub async fn wallet_sync_source_save(
         }
 
         require_unlocked(&app, &state)?;
+        ensure_sync_source_supported_on_platform(&source)?;
         source
             .validate(network())
             .map_err(network_config_api_error)?;
@@ -1808,6 +1877,16 @@ pub async fn node_config_save(
         cancel_foreground_sync(&state)?;
         let _operation = operation_guard(&state)?;
         require_unlocked(&app, &state)?;
+        #[cfg(mobile)]
+        if matches!(
+            config.backend,
+            crate::network::ChainBackend::LocalCore { .. }
+        ) {
+            return Err(api_error(
+                "invalid_node_config",
+                "A mobile device must connect to a remote Bitcoin Core node over TLS or Tor.",
+            ));
+        }
         config.validate().map_err(network_config_api_error)?;
         check_auth_throttle(&app, &state)?;
         let verified = verify_selected_credential(&app, credential.as_str());
@@ -1927,6 +2006,7 @@ pub async fn network_setup_adopt(
 
         let config = read_node_config_for(&app, source)?;
         let sync_source = read_sync_source_for(&app, source)?;
+        ensure_sync_source_supported_on_platform(&sync_source)?;
         let client = match config.auth {
             RpcAuthMode::Cookie => candidate_rpc_client(&config, "")?,
             RpcAuthMode::UserPass => {
@@ -2031,6 +2111,7 @@ pub(super) fn adopt_network_setup_for_new_profile(
 
     let config = read_node_config_for(app, source)?;
     let sync_source = read_sync_source_for(app, source)?;
+    ensure_sync_source_supported_on_platform(&sync_source)?;
     let (password, status) = match config.auth {
         RpcAuthMode::Cookie => {
             let status = checked_node_status(&candidate_rpc_client(&config, "")?, config.clone())?;

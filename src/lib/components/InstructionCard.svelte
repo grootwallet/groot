@@ -2,18 +2,18 @@
   import type { Snippet } from 'svelte';
 
   let {
-    title,
+    title = '',
     steps = [],
     children
   } = $props<{
-    title: string;
+    title?: string;
     steps?: string[];
     children?: Snippet;
   }>();
 </script>
 
 <section class="instruction-card">
-  <strong>{title}</strong>
+  {#if title}<strong>{title}</strong>{/if}
   {#if steps.length}
     <ol>
       {#each steps as step}<li>{step}</li>{/each}

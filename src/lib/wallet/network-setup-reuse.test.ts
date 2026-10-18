@@ -47,7 +47,7 @@ function nativeCommand(name: string): string {
 
 describe('protected network setup reuse', () => {
   it('keeps wallet-choice CTA arrows in a non-overlapping shared footer', () => {
-    expect(welcome.match(/class="wallet-type-footer"/g)).toHaveLength(3);
+    expect(welcome.match(/class="wallet-type-footer"/g)).toHaveLength(6);
     expect(appCss).toContain('.wallet-type-footer {');
     expect(appCss).toContain('.wallet-type-arrow {\n  flex: 0 0 auto;');
   });

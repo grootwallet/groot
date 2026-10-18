@@ -40,6 +40,8 @@ Use focused checks while iterating, then mandatory validation and applicable ext
 
 For ADR 0089 development, run `bash scripts/dev/tauri-ios-foundation.sh check`, then `init` once and `build`. This uses the pinned runtime, a distinct development bundle identifier, fixed Testnet4 under ADR 0091, bundled assets and isolated Cargo output. It creates an unsigned debug archive without installing or selecting a phone. Generated Apple files remain ignored. Device installation requires inspected development signing, an explicitly selected connected/unlocked phone and disposable data; see the [5.3 plan](mobile-5.3-plan.md). Native compile evidence does not certify pairing, signing, recovery or mobile support. Preserve release-source pins and report any mismatch rather than updating reviewed hashes. The [native review/device checklist](testing/5.3-native-review.md) separates the unsigned foundation archive from later pairing and signer acceptance.
 
+The RC2 signer rehearsal follows ADRs 0094–0096 and the [candidate record](testing/5.3.0-rc2-mobile-keys.md). The build script prepares generated version/framework metadata, excludes build-only libraries, verifies the actual Testnet4 library and strips debugging sections before development signing. These packaging checks do not replace physical key authorization, backup/recovery or QR signing acceptance.
+
 ## Packaging
 
 Build from a clean tracked/untracked commit. Generate fresh target-specific SBOM/provenance after the executable exists. Generated output remains untracked.

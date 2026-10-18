@@ -9,14 +9,18 @@
     FileKey,
     FlaskConical,
     Plus,
+    RotateCcw,
     ShieldCheck,
+    Smartphone,
     Usb
   } from '@lucide/svelte';
   import { onDestroy, onMount } from 'svelte';
   import Button from '$lib/components/Button.svelte';
+  import AnimatedUrQr from '$lib/components/AnimatedUrQr.svelte';
   import DeviceDetailsModal from '$lib/components/DeviceDetailsModal.svelte';
   import LocalTimestamp from '$lib/components/LocalTimestamp.svelte';
   import Modal from '$lib/components/Modal.svelte';
+  import PasswordField from '$lib/components/PasswordField.svelte';
   import HardwareActionPrompt from '$lib/components/HardwareActionPrompt.svelte';
   import InsightTip from '$lib/components/InsightTip.svelte';
   import SignerPolicyReview from '$lib/components/SignerPolicyReview.svelte';
@@ -30,6 +34,7 @@
     walletService,
     WalletError,
     type CosignerHealthCheck,
+    type CoordinationStatus,
     type HardwareDevice,
     type MultisigWallet,
     type PolicyVerificationAddress,
@@ -38,6 +43,10 @@
     type WalletSnapshot
   } from '$lib/wallet';
   import type { CosignerDraft, CosignerSource } from '$lib/multisig/policy';
+  import {
+    DESKTOP_MANAGED_SIGNER_CONTEXT,
+    LOCAL_MOBILE_SIGNER_CONTEXT
+  } from '$lib/wallet/contracts/coordination';
   import { defaultConfig, networkName } from '$lib/config';
   import { shortSats } from '$lib/data';
   import Amount from '$lib/components/Amount.svelte';
@@ -75,9 +84,14 @@
   let walletLoading = $state(true);
   let walletLoadError = $state('');
   let snapshot = $state<WalletSnapshot | null>(null);
+  let coordination = $state<CoordinationStatus | null>(null);
   let statusError = $state('');
   let selectedSigner = $state<CosignerDraft | null>(null);
   let showDescriptors = $state(false);
+  let showPhoneRecovery = $state(false);
+  let phoneRecoveryFrames = $state<string[]>([]);
+  let phoneRecoveryBusy = $state(false);
+  let phoneRecoveryError = $state('');
   let moreOpen = $state(false);
   let moreRoot = $state<HTMLDivElement | null>(null);
   let moreTrigger = $state<HTMLButtonElement | null>(null);
@@ -96,6 +110,10 @@
   let healthPinDevice = $state<HardwareDevice | null>(null);
   let healthPinError = $state('');
   let healthPinErrorCode = $state<WalletErrorCode | ''>('');
+  let phoneCheckOpen = $state(false);
+  let phoneCheckCredential = $state('');
+  let phoneCheckError = $state('');
+  let phoneCheckBusy = $state(false);
   const maturitySummary = $derived(
     snapshot ? policyMaturitySummary(snapshot.utxos, snapshot.chainTip) : null
   );
@@ -108,6 +126,7 @@
   onDestroy(() => {
     healthPinChallenge = '';
     healthPinPositions = '';
+    phoneCheckCredential = '';
   });
   async function loadPolicyWallet() {
     walletLoading = true;
@@ -121,6 +140,15 @@
       walletLoading = false;
     }
     if (!wallet) return;
+    try {
+      coordination = await walletService.coordinationStatus();
+    } catch (cause) {
+      toast({
+        title: 'Device role unavailable',
+        description: localizedError(cause, $locale),
+        tone: 'danger'
+      });
+    }
     const [verifications, address, health, walletSnapshot] = await Promise.allSettled([
       walletService.multisigSignerPolicyVerifications(),
       walletService.multisigPolicyVerificationAddress(),
@@ -149,6 +177,29 @@
   onMount(() => {
     void loadPolicyWallet();
   });
+
+  async function openPhoneRecovery() {
+    phoneRecoveryBusy = true;
+    phoneRecoveryError = '';
+    try {
+      phoneRecoveryFrames = await walletService.mobileRecoveryRecord();
+      showPhoneRecovery = true;
+      moreOpen = false;
+    } catch (cause) {
+      phoneRecoveryError = localizedError(
+        cause,
+        $locale,
+        'Groot could not prepare the replacement-phone QR.'
+      );
+      toast({
+        title: translate($locale, 'Recovery QR unavailable'),
+        description: phoneRecoveryError,
+        tone: 'danger'
+      });
+    } finally {
+      phoneRecoveryBusy = false;
+    }
+  }
   onMount(() =>
     walletService.subscribe((event) => {
       if (
@@ -188,7 +239,41 @@
   function openSigner(signer: CosignerDraft) {
     selectedSigner = signer;
   }
+  function signerDeviceContext(signer: CosignerDraft) {
+    if (coordination?.role !== 'mobile_cosigner') return null;
+    return signer.fingerprint.toLowerCase() === coordination.mobileSignerFingerprint?.toLowerCase()
+      ? LOCAL_MOBILE_SIGNER_CONTEXT
+      : DESKTOP_MANAGED_SIGNER_CONTEXT;
+  }
+  function signerAvailabilityLabel(
+    signer: CosignerDraft,
+    verification: SignerPolicyVerification | null
+  ) {
+    const context = signerDeviceContext(signer);
+    if (context === LOCAL_MOBILE_SIGNER_CONTEXT) return 'Available on this phone';
+    if (context === DESKTOP_MANAGED_SIGNER_CONTEXT) return 'Managed on desktop';
+    return policyReadinessLabel(signer, verification);
+  }
   function signerPolicyStatus(signer: CosignerDraft) {
+    const context = signerDeviceContext(signer);
+    if (context === LOCAL_MOBILE_SIGNER_CONTEXT)
+      return {
+        label: translate($locale, 'Available on this phone'),
+        description: translate(
+          $locale,
+          'This phone holds this key. Its fingerprint and public account key match the wallet policy.'
+        ),
+        attention: false
+      };
+    if (context === DESKTOP_MANAGED_SIGNER_CONTEXT)
+      return {
+        label: translate($locale, 'Managed on desktop'),
+        description: translate(
+          $locale,
+          'Identity and device details came from the authenticated desktop wallet policy. Connect and verify this signer on desktop.'
+        ),
+        attention: false
+      };
     const profile = policyRegistrationProfile(signer);
     const verification = matchingPolicyVerification(signer, policyVerifications);
     const label = translate($locale, policyReadinessLabel(signer, verification));
@@ -268,6 +353,36 @@
       toast({ title: 'Health check needs attention', description: summary, tone: 'danger' });
     } finally {
       checking = false;
+    }
+  }
+  function openPhoneHealthCheck() {
+    phoneCheckCredential = '';
+    phoneCheckError = '';
+    phoneCheckOpen = true;
+  }
+  async function runPhoneHealthCheck() {
+    if (!selectedSigner || !phoneCheckCredential || phoneCheckBusy) return;
+    const signer = selectedSigner;
+    phoneCheckBusy = true;
+    phoneCheckError = '';
+    try {
+      const result = await walletService.checkMobileSigner(phoneCheckCredential);
+      await saveHardwareHealthCheck(signer.fingerprint, result);
+      phoneCheckCredential = '';
+      phoneCheckOpen = false;
+      toast({
+        title: translate($locale, 'Phone key verified'),
+        description: translate(
+          $locale,
+          'The encrypted key on this phone matches the wallet policy.'
+        ),
+        tone: 'success'
+      });
+    } catch (cause) {
+      phoneCheckError = localizedError(cause, $locale, 'The phone key could not be verified.');
+      phoneCheckCredential = '';
+    } finally {
+      phoneCheckBusy = false;
     }
   }
   async function startHealthPin(device: HardwareDevice) {
@@ -464,6 +579,16 @@
     <header class="page-header">
       <div>
         <h1>{wallet.name}</h1>
+        <p class="subtitle">
+          {translate(
+            $locale,
+            coordination?.role === 'mobile_cosigner'
+              ? 'Shared wallet · this phone holds one software signer and can sign reviewed desktop PSBTs.'
+              : coordination?.role === 'desktop_coordinator'
+                ? 'Shared wallet · this desktop coordinates the policy and hardware signers.'
+                : 'A watch-only wallet whose spending policy is enforced by independent keys.'
+          )}
+        </p>
       </div>
     </header>
     {#if statusError}<WarningNotice
@@ -534,7 +659,16 @@
                     >{translate($locale, 'Save a public wallet backup')}</small
                   ></span
                 ></a
-              >{#if recoveryPolicyLabAvailable}<a role="menuitem" href="/multisig/policy"
+              >{#if coordination?.role === 'desktop_coordinator'}<button
+                  role="menuitem"
+                  disabled={phoneRecoveryBusy}
+                  onclick={openPhoneRecovery}
+                  ><RotateCcw size={15} /><span
+                    ><strong>{translate($locale, 'Restore Groot phone')}</strong><small
+                      >{translate($locale, 'Rebuild the phone signer from its 24 words')}</small
+                    ></span
+                  ></button
+                >{/if}{#if recoveryPolicyLabAvailable}<a role="menuitem" href="/multisig/policy"
                   ><FlaskConical size={15} /><span
                     ><strong>{translate($locale, 'Recovery policy lab')}</strong><small
                       >{translate($locale, 'Explore guided Miniscript paths')}</small
@@ -544,7 +678,9 @@
             </div>{/if}
         </div>
         <Button variant="secondary" href="/multisig/receive">{translate($locale, 'Receive')}</Button
-        ><Button href="/multisig/send">{translate($locale, 'Send')}</Button>
+        >{#if coordination?.canSignOnThisDevice}<Button href="/mobile/sign"
+            ><Smartphone size={16} />{translate($locale, 'Sign desktop PSBT')}</Button
+          >{:else}<Button href="/multisig/send">{translate($locale, 'Send')}</Button>{/if}
       </div>
     </section>
     {#if maturitySummary}
@@ -728,10 +864,11 @@
                   ></span
                 ><span
                   class="ready-badge"
-                  class:attention={(requiresPolicySetup(signer) && !verification) ||
-                    !policyRegistrationProfile(signer).supported ||
-                    latestHealth(signer)?.status === 'attention'}
-                  >{translate($locale, policyReadinessLabel(signer, verification))}</span
+                  class:attention={!signerDeviceContext(signer) &&
+                    ((requiresPolicySetup(signer) && !verification) ||
+                      !policyRegistrationProfile(signer).supported ||
+                      latestHealth(signer)?.status === 'attention')}
+                  >{translate($locale, signerAvailabilityLabel(signer, verification))}</span
                 ><ChevronRight class="row-chevron" size={16} /></button
               >
             </article>{/each}
@@ -750,7 +887,13 @@
         </div>
         <Button variant="secondary" class="full" href="/multisig/backup"
           >{translate($locale, 'Export & verify')}</Button
-        >{#if recoveryPolicyLabAvailable}<Button
+        >{#if coordination?.role === 'desktop_coordinator'}<Button
+            variant="secondary"
+            class="full"
+            loading={phoneRecoveryBusy}
+            onclick={openPhoneRecovery}
+            ><RotateCcw size={16} />{translate($locale, 'Restore Groot phone')}</Button
+          >{/if}{#if recoveryPolicyLabAvailable}<Button
             variant="ghost"
             class="full"
             href="/multisig/policy">{translate($locale, 'Recovery policy lab')}</Button
@@ -804,15 +947,61 @@
 </div>
 
 <DeviceDetailsModal
-  signer={healthPinOpen ? null : selectedSigner}
+  signer={healthPinOpen || phoneCheckOpen ? null : selectedSigner}
   health={selectedSigner ? latestHealth(selectedSigner) : null}
   policyStatus={selectedSigner ? signerPolicyStatus(selectedSigner) : null}
+  deviceContext={selectedSigner ? signerDeviceContext(selectedSigner) : null}
   {checking}
   onclose={() => (selectedSigner = null)}
-  oncheck={runHealthCheck}
-  onpolicy={() => selectedSigner && openPolicyVerification(selectedSigner)}
-  onrename={renameSavedSigner}
+  oncheck={selectedSigner && signerDeviceContext(selectedSigner) === LOCAL_MOBILE_SIGNER_CONTEXT
+    ? openPhoneHealthCheck
+    : selectedSigner?.deviceType &&
+        selectedSigner.deviceType !== 'groot-mobile' &&
+        coordination?.role !== 'mobile_cosigner'
+      ? runHealthCheck
+      : undefined}
+  onpolicy={selectedSigner && !signerDeviceContext(selectedSigner)
+    ? () => selectedSigner && openPolicyVerification(selectedSigner)
+    : undefined}
+  onrename={selectedSigner && !signerDeviceContext(selectedSigner) ? renameSavedSigner : undefined}
 />
+<Modal
+  open={phoneCheckOpen}
+  title={translate($locale, 'Check phone key')}
+  description={translate(
+    $locale,
+    'Enter the app PIN to decrypt this phone key and prove it matches the wallet policy.'
+  )}
+  onclose={() => {
+    if (phoneCheckBusy) return;
+    phoneCheckOpen = false;
+    phoneCheckCredential = '';
+    phoneCheckError = '';
+  }}
+>
+  <PasswordField
+    label={translate($locale, 'App PIN')}
+    bind:value={phoneCheckCredential}
+    autocomplete="current-password"
+    error={phoneCheckError}
+    oninput={() => (phoneCheckError = '')}
+  />
+  <div class="modal-footer">
+    <Button
+      variant="secondary"
+      onclick={() => {
+        phoneCheckOpen = false;
+        phoneCheckCredential = '';
+        phoneCheckError = '';
+      }}>{translate($locale, 'Cancel')}</Button
+    ><Button
+      disabled={!phoneCheckCredential}
+      loading={phoneCheckBusy}
+      loadingLabel={translate($locale, 'Checking…')}
+      onclick={runPhoneHealthCheck}>{translate($locale, 'Check phone key')}</Button
+    >
+  </div>
+</Modal>
 <TrezorPinModal
   open={healthPinOpen}
   busy={healthPinBusy}
@@ -833,6 +1022,40 @@
   {wallet}
   onclose={() => (showDescriptors = false)}
 />
+<Modal
+  open={showPhoneRecovery}
+  title={translate($locale, 'Restore a Groot phone')}
+  description={translate(
+    $locale,
+    'Scan this public wallet record on the replacement phone, then enter the original 24 words there.'
+  )}
+  onclose={() => {
+    showPhoneRecovery = false;
+    phoneRecoveryFrames = [];
+    phoneRecoveryError = '';
+  }}
+>
+  <div class="phone-recovery-qr">
+    <AnimatedUrQr
+      frames={phoneRecoveryFrames}
+      label={translate($locale, 'Replacement phone wallet record')}
+      expandable
+    />
+    <div class="phone-recovery-note">
+      <ShieldCheck size={18} />
+      <p>
+        <strong>{translate($locale, 'Words stay on the phone')}</strong>
+        <span
+          >{translate(
+            $locale,
+            'This QR cannot spend, but it reveals wallet addresses. The phone accepts it only when the words reproduce the exact signer and policy.'
+          )}</span
+        >
+      </p>
+    </div>
+    {#if phoneRecoveryError}<p class="inline-error" role="alert">{phoneRecoveryError}</p>{/if}
+  </div>
+</Modal>
 <Modal
   open={!!policySigner}
   title={translate(
@@ -1283,5 +1506,30 @@
     position: relative;
     z-index: 2;
     overflow: visible;
+  }
+
+  .phone-recovery-qr {
+    display: grid;
+    gap: 1rem;
+  }
+  .phone-recovery-note {
+    display: flex;
+    gap: 0.75rem;
+    padding: 0.9rem;
+    border-radius: 0.8rem;
+    background: var(--surface-inset);
+  }
+  .phone-recovery-note > p {
+    display: grid;
+    gap: 0.2rem;
+    margin: 0;
+  }
+  .phone-recovery-note span {
+    color: var(--muted);
+    font-size: 0.875rem;
+  }
+  .inline-error {
+    margin: 0;
+    color: var(--danger);
   }
 </style>

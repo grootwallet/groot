@@ -13,6 +13,8 @@
     KeyRound,
     Settings,
     ShieldCheck,
+    Smartphone,
+    RotateCcw,
     X
   } from '@lucide/svelte';
   import Button from '$lib/components/Button.svelte';
@@ -33,6 +35,7 @@
     MIN_SUPPLEMENTAL_COIN_FLIPS,
     MIN_SUPPLEMENTAL_DICE_ROLLS,
     walletService,
+    type RuntimePlatform,
     type SupplementalEntropyInput
   } from '$lib/wallet';
   import { beforeNavigate, goto } from '$app/navigation';
@@ -67,6 +70,7 @@
   let draggedWord = $state<RecoveryWord | null>(null);
   let supplementalSource = $state<'none' | 'coin' | 'dice'>('none');
   let supplementalOutcomes = $state('');
+  let runtimeIdentity = $state<RuntimePlatform | null>(null);
   let createdMasterFingerprint = $state('');
   let createdWalletDescriptor = $state('');
   let fingerprintCopied = $state(false);
@@ -93,6 +97,7 @@
   );
 
   onMount(async () => {
+    runtimeIdentity = await walletService.runtimePlatform();
     hasExistingWallet = await walletService.exists();
     if (hasExistingWallet && page.url.searchParams.get('add') !== '1') await goto('/unlock');
   });
@@ -309,7 +314,11 @@
         onclick={returnToWallet}><X size={17} /></button
       >{/if}
   </header>
-  <main class="onboarding-card" class:wallet-choice-card={mode === 'choose'}>
+  <main
+    class="onboarding-card"
+    class:home-card={mode === 'home'}
+    class:wallet-choice-card={mode === 'choose'}
+  >
     {#if mode === 'home'}
       <span class="hero-mark"><BrandMark size={34} /></span>
       <h1>
@@ -355,6 +364,48 @@
             /></span
           >
         </button>
+        {#if runtimeIdentity?.mobile && defaultConfig.network !== 'mainnet'}<a
+            class="wallet-type-card multisig"
+            href="/mobile/pair"
+          >
+            <span class="wallet-type-icon"><Smartphone size={20} /></span>
+            <span class="wallet-type-copy"
+              ><strong>{translate($locale, 'Connect desktop app')}</strong><small
+                >{translate($locale, 'Add this phone as one signer in a shared wallet.')}</small
+              ></span
+            >
+            <span class="wallet-type-footer"
+              ><span class="wallet-type-meta">{translate($locale, 'No account')}</span>
+              <ArrowRight class="wallet-type-arrow" size={17} /></span
+            >
+          </a>
+          <a class="wallet-type-card multisig" href="/mobile/recover">
+            <span class="wallet-type-icon"><RotateCcw size={20} /></span>
+            <span class="wallet-type-copy"
+              ><strong>{translate($locale, 'Restore phone signer')}</strong><small
+                >{translate(
+                  $locale,
+                  'Recover a shared wallet from desktop and its 24 words.'
+                )}</small
+              ></span
+            >
+            <span class="wallet-type-footer"
+              ><span class="wallet-type-meta">{translate($locale, 'Replacement phone')}</span>
+              <ArrowRight class="wallet-type-arrow" size={17} /></span
+            >
+          </a>
+          <a class="wallet-type-card hardware" href="/mobile/watch">
+            <span class="wallet-type-icon"><Eye size={20} /></span>
+            <span class="wallet-type-copy"
+              ><strong>{translate($locale, 'Watch desktop wallet')}</strong><small
+                >{translate($locale, 'Import a hardware wallet without its signing key.')}</small
+              ></span
+            >
+            <span class="wallet-type-footer"
+              ><span class="wallet-type-meta">{translate($locale, 'Watch-only')}</span>
+              <ArrowRight class="wallet-type-arrow" size={17} /></span
+            >
+          </a>{/if}
         <button
           class="wallet-type-card hardware"
           onclick={() => beginExternalWalletSetup('/hardware/new')}
@@ -578,7 +629,7 @@
             </p>
           </div>
           <Button variant="secondary" class="full" onclick={() => (revealed = true)}
-            ><Eye size={16} />{translate($locale, 'I’m private — reveal words')}</Button
+            ><Eye size={16} />{translate($locale, 'I’m private. Reveal words')}</Button
           >
         </div>
       {/if}

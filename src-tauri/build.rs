@@ -21,6 +21,23 @@ fn main() {
     println!("cargo:rustc-env=GROOT_COMPILED_MACOS_SIGNING_TEAM_ID={compiled_team_id}");
     let commit = build_commit();
     println!("cargo:rustc-env=GROOT_BUILD_COMMIT={commit}");
+
+    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("ios") {
+        println!("cargo:rerun-if-changed=src/native_backup/ios.mm");
+        println!("cargo:rerun-if-changed=src/native_backup/ios_device_key.mm");
+        cc::Build::new()
+            .cpp(true)
+            .file("src/native_backup/ios.mm")
+            .file("src/native_backup/ios_device_key.mm")
+            .flag("-fobjc-arc")
+            .flag("-fblocks")
+            .compile("groot_ios_native_backup");
+        println!("cargo:rustc-link-lib=framework=Foundation");
+        println!("cargo:rustc-link-lib=framework=UIKit");
+        println!("cargo:rustc-link-lib=framework=Security");
+        println!("cargo:rustc-link-lib=framework=LocalAuthentication");
+    }
+
     tauri_build::build()
 }
 

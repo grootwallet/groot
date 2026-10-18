@@ -303,6 +303,12 @@ pub(super) fn secure_store_error(error: SecureStoreError) -> ApiError {
             "secure_storage_unavailable",
             "Groot could not read or confirm a durable encrypted-wallet update. Check application data access and try again. The wallet remains locked; no plaintext wallet secret was written.",
         ),
+        SecureStoreError::DeviceAuthorizationCancelled => api_error(
+            "device_authorization_cancelled", "Device authorization was cancelled. No key was released. Try again when ready.",
+        ),
+        SecureStoreError::DeviceKeyUnavailable => api_error(
+            "device_key_unavailable", "This phone could not release the device-bound wallet key. Check the device passcode or restore from the written backup.",
+        ),
     }
 }
 

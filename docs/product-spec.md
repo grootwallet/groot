@@ -4,7 +4,9 @@ Canonical desktop behavior from the shipped 5.2.0 baseline, with the gated 5.3 m
 
 ## Mobile development boundary
 
-The [5.3 mobile plan](mobile-5.3-plan.md) starts with isolated Testnet4 iOS development. Native mobile key creation/recovery, secret backup access, signing and broadcast fail closed under ADR 0089. Authenticated pairing and watch-only receive/PSBT workflows remain planned; no public mobile support is implied. Desktop behavior and existing formats are unchanged.
+The [5.3 mobile plan](mobile-5.3-plan.md) and ADRs 0093–0096 cover an internal Testnet4 iOS software wallet and QR multisig signer. The current candidate wires native backup/recovery, new device-protected secrets, bounded pairing and exact-PSBT review/signing; physical acceptance remains in progress. Mainnet mobile, Android key operations, mobile USB signing and mobile multisig broadcast stay blocked. Desktop behavior and existing wallet files are preserved.
+
+A phone software wallet keeps its own BIP84 key and labelled receive authority. A multisig phone contributes an independent BIP48 key; desktop receives its public account, verifies the complete policy and later validates returned PSBT signatures. QR never transfers a seed, private descriptor, app credential or RPC credential. Shared and mobile watch-only receive requests are allocated on desktop to avoid independent address-index reuse. General label/history synchronization and a relay are not implemented. See the [candidate record](testing/5.3.0-rc2-mobile-keys.md) for actual evidence.
 
 ## Wallets and credentials
 

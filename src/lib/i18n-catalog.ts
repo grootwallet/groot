@@ -10,6 +10,7 @@ import { multisigCopy } from './locales/multisig';
 import { accessibilityCopy } from './locales/accessibility';
 import { attributeCopy } from './locales/attributes';
 import { dynamicCopy } from './locales/dynamic';
+import { coordinationCopy } from './locales/coordination';
 
 export type { MessageValues, Translation, CatalogSection } from './locales/types';
 
@@ -116,6 +117,11 @@ export const copyCatalog = {
     fr: 'Les opérations s’exécutent hors du fil de l’interface et revérifient le portefeuille sélectionné avant de modifier les données.',
     es: 'Las operaciones se ejecutan fuera del hilo de la interfaz y comprueban el monedero seleccionado antes de modificar datos.'
   },
+  'Testnet4 iPhone software wallets and QR multisig signing with native recovery and device-authorized key access.':
+    {
+      fr: 'Portefeuilles logiciels iPhone Testnet4 et signature multisig par QR, avec récupération native et accès aux clés autorisé sur l’appareil.',
+      es: 'Carteras de software de iPhone Testnet4 y firma multifirma por QR, con recuperación nativa y acceso a las claves autorizado en el dispositivo.'
+    },
   'Testnet4 iPhone development UI; mobile key creation, recovery, signing and broadcast remain unavailable.':
     {
       fr: 'Interface iPhone de développement Testnet4 ; création de clés, restauration, signature et diffusion mobiles restent indisponibles.',
@@ -389,6 +395,7 @@ export const copyCatalog = {
   ...accessibilityCopy,
   ...attributeCopy,
   ...dynamicCopy,
+  ...coordinationCopy,
   Dismiss: { fr: 'Fermer', es: 'Cerrar' },
   Cancel: { fr: 'Annuler', es: 'Cancelar' },
   Back: { fr: 'Retour', es: 'Atrás' },

@@ -28,6 +28,7 @@
     WalletCards
   } from '@lucide/svelte';
   import Button from '$lib/components/Button.svelte';
+  import AnimatedUrQr from '$lib/components/AnimatedUrQr.svelte';
   import BuildIdentity from '$lib/components/BuildIdentity.svelte';
   import FieldCounter from '$lib/components/FieldCounter.svelte';
   import Modal from '$lib/components/Modal.svelte';
@@ -98,6 +99,7 @@
       (shortcut) => shortcut.id !== 'lock' || (!isPrototypeWallet && desktopPlatform)
     )
   );
+  let mobileRuntime = $state(false);
   let profiles = $state<WalletProfile[]>([]);
   let selectedWalletId = $state<string | null>(null);
   let walletUnlocked = $state(false);
@@ -326,6 +328,7 @@
     hardwareBackupError = $state(''),
     hardwareBackup = $state(''),
     hardwareBackupContent = $state(''),
+    hardwareBackupFrames = $state<string[]>([]),
     exportingHardwareBackup = $state(false);
   let renameOpen = $state(false),
     renameDraft = $state(''),
@@ -382,6 +385,7 @@
     ]);
     if (generation !== profileReadGeneration) return;
     runtime = nextRuntime;
+    mobileRuntime = nextRuntime.mobile;
     profiles = registry.wallets;
     selectedWalletId = registry.selectedWalletId;
     const session = registry.selectedWalletId ? await walletService.session() : null;
@@ -554,6 +558,7 @@
     hardwareBackupPin = '';
     hardwareBackup = '';
     hardwareBackupContent = '';
+    hardwareBackupFrames = [];
     signerRenameDraft = '';
     if (syncStatusPoll) clearTimeout(syncStatusPoll);
     if (scanPoll) clearTimeout(scanPoll);
@@ -657,6 +662,7 @@
   function openNodeSettings() {
     clearNodeCredentials();
     nodeMode = isManagedNodeConfig(node) ? 'managed' : node.torProxy ? 'tor' : node.backend.type;
+    if (mobileRuntime && nodeMode === 'local_core') setNodeLocation('remote_core');
     nodeOpen = true;
   }
   function closeNodeSettings() {
@@ -771,7 +777,8 @@
     }
   }
   function openSyncSource() {
-    syncSourceType = defaultConfig.network === 'mainnet' ? 'bitcoin_core' : syncSource.type;
+    syncSourceType =
+      mobileRuntime || defaultConfig.network === 'mainnet' ? 'bitcoin_core' : syncSource.type;
     if (syncSource.type === 'compact_filters') {
       syncDiscoverPeers = syncSource.discoverPeers;
       syncPeers = syncSource.peers.join('\n');
@@ -1234,6 +1241,10 @@
       const backup = await walletService.exportExternalSignerDescriptor(hardwareBackupPin);
       hardwareBackup = backup.descriptor;
       hardwareBackupContent = backup.content;
+      hardwareBackupFrames =
+        defaultConfig.network === 'mainnet'
+          ? []
+          : await walletService.encodeWatchOnlyQr(backup.content);
       hardwareBackupPin = '';
       toast({
         title: 'Public descriptor ready',
@@ -1625,26 +1636,26 @@
           >
         </span>
       </div>
-      <div class="setting-row keyboard-shortcut-row">
-        <span class="setting-icon"><Keyboard size={18} /></span><span
-          ><strong>{translate($locale, 'Keyboard shortcuts')}</strong><small
-            >{translate($locale, 'Navigate and lock without leaving the keyboard.')}</small
-          ></span
-        >
-        <dl class="keyboard-shortcut-grid">
-          {#each displayedKeyboardShortcuts as shortcut}
-            <div>
-              <dt>{translate($locale, shortcut.label)}</dt>
-              <dd>
-                {#each shortcutKeys(shortcut, commandModifier) as key}<kbd>{key}</kbd>{/each}
-              </dd>
-            </div>
-          {/each}
-        </dl>
-      </div>
+      {#if !mobileRuntime}<div class="setting-row keyboard-shortcut-row">
+          <span class="setting-icon"><Keyboard size={18} /></span><span
+            ><strong>{translate($locale, 'Keyboard shortcuts')}</strong><small
+              >{translate($locale, 'Navigate and lock without leaving the keyboard.')}</small
+            ></span
+          >
+          <dl class="keyboard-shortcut-grid">
+            {#each displayedKeyboardShortcuts as shortcut}
+              <div>
+                <dt>{translate($locale, shortcut.label)}</dt>
+                <dd>
+                  {#each shortcutKeys(shortcut, commandModifier) as key}<kbd>{key}</kbd>{/each}
+                </dd>
+              </div>
+            {/each}
+          </dl>
+        </div>{/if}
     </div>
   </section>
-  <section class="settings-group">
+  <section class="settings-group" id="network-services">
     <h2>{translate($locale, 'Network services')}</h2>
     <div class="settings-list">
       <div class="setting-row bitcoin-network-row">
@@ -2169,6 +2180,7 @@
     hardwareBackupError = '';
     hardwareBackup = '';
     hardwareBackupContent = '';
+    hardwareBackupFrames = [];
   }}
 >
   {#if !hardwareBackup}
@@ -2214,6 +2226,18 @@
         >
       </div>
     </div>
+    {#if hardwareBackupFrames.length}
+      <AnimatedUrQr
+        frames={hardwareBackupFrames}
+        label={translate($locale, 'Watch-only wallet QR')}
+      />
+      <p class="settings-help">
+        {translate(
+          $locale,
+          'On the phone choose “Watch desktop wallet.” This QR contains public descriptors only and cannot sign.'
+        )}
+      </p>
+    {/if}
     {#if hardwareBackupError}<p class="form-error" role="alert">{hardwareBackupError}</p>{/if}
     <div class="modal-footer">
       <Button
@@ -2245,10 +2269,7 @@
 <Modal
   open={syncOpen}
   title={translate($locale, 'Wallet activity sync')}
-  description={translate(
-    $locale,
-    'Choose how this wallet discovers transactions. Fee estimation and broadcast continue to use the separately configured Bitcoin Core service.'
-  )}
+  description={translate($locale, 'Choose where this wallet gets transaction activity.')}
   onclose={() => {
     if (syncSaving) return;
     syncOpen = false;
@@ -2260,11 +2281,11 @@
       <button
         class:active={syncSourceType === 'bitcoin_core'}
         onclick={() => (syncSourceType = 'bitcoin_core')}>Bitcoin Core</button
-      ><button
-        class:active={syncSourceType === 'compact_filters'}
-        onclick={() => (syncSourceType = 'compact_filters')}
-        >{translate($locale, 'Compact filters')}</button
-      >
+      >{#if !mobileRuntime}<button
+          class:active={syncSourceType === 'compact_filters'}
+          onclick={() => (syncSourceType = 'compact_filters')}
+          >{translate($locale, 'Compact filters · Experimental')}</button
+        >{/if}
     </div>{/if}
   {#if defaultConfig.network === 'mainnet'}
     <WarningNotice
@@ -2276,6 +2297,13 @@
       )}
     />
   {:else if syncSourceType === 'compact_filters'}
+    <WarningNotice
+      title={translate($locale, 'Experimental test-network feature.')}
+      body={translate(
+        $locale,
+        'Confirmed activity only. The initial scan may repeat after interruption; do not rely on this source for recovery.'
+      )}
+    />
     <WarningNotice
       title={translate($locale, 'Confirmed activity only.')}
       body={translate(
@@ -2643,7 +2671,7 @@
   title={translate($locale, 'Connect Bitcoin Core')}
   description={translate(
     $locale,
-    'Each wallet keeps isolated, encrypted RPC credentials. Use direct TLS or a local Tor SOCKS proxy remotely.'
+    'Used for activity sync, fee estimates, and broadcast. Credentials are encrypted for this wallet.'
   )}
   onclose={closeNodeSettings}
 >
@@ -2651,10 +2679,10 @@
     {#if defaultConfig.network === 'mainnet'}<button
         class:active={nodeMode === 'managed'}
         onclick={() => setNodeLocation('managed')}>{translate($locale, 'Groot managed')}</button
+      >{/if}{#if !mobileRuntime}<button
+        class:active={nodeMode === 'local_core'}
+        onclick={() => setNodeLocation('local_core')}>{translate($locale, 'This Mac')}</button
       >{/if}<button
-      class:active={nodeMode === 'local_core'}
-      onclick={() => setNodeLocation('local_core')}>{translate($locale, 'This Mac')}</button
-    ><button
       class:active={nodeMode === 'remote_core'}
       onclick={() => setNodeLocation('remote_core')}>{translate($locale, 'Custom remote')}</button
     >{#if defaultConfig.network !== 'mainnet'}<button

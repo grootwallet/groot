@@ -25,12 +25,16 @@ const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
 const buildTarget = process.argv[2] ?? 'mainnet';
 const buildIdentity = {
   mainnet: {
-    appName: 'Groot Mainnet.app',
+    appName: 'Groot Mainnet RC.app',
+    productName: 'Groot Mainnet RC',
+    identifier: 'app.groot.wallet.mainnet.internal',
     config: 'src-tauri/tauri.mainnet.conf.json',
     outputDirectory: 'mainnet-internal-rc'
   },
   multi: {
-    appName: 'Groot.app',
+    appName: 'Groot RC.app',
+    productName: 'Groot RC',
+    identifier: 'app.groot.wallet.internal',
     config: 'src-tauri/tauri.multi.conf.json',
     outputDirectory: 'multi-network-internal-rc'
   }
@@ -97,7 +101,19 @@ try {
 
   execFileSync(
     'pnpm',
-    ['exec', 'tauri', 'build', '--config', buildIdentity.config, '--bundles', 'app'],
+    [
+      'exec',
+      'tauri',
+      'build',
+      '--config',
+      JSON.stringify({
+        ...JSON.parse(readFileSync(join(repoRoot, buildIdentity.config), 'utf8')),
+        productName: buildIdentity.productName,
+        identifier: buildIdentity.identifier
+      }),
+      '--bundles',
+      'app'
+    ],
     {
       cwd: repoRoot,
       env: {
@@ -112,9 +128,27 @@ try {
     }
   );
 
-  execFileSync('codesign', ['--force', '--sign', '-', '--timestamp=none', builtApp], {
-    stdio: 'inherit'
-  });
+  // This private QR rehearsal can request camera access only after a user gesture.
+  // Do not inherit HWI entitlements or broaden the production signing workflow.
+  const cameraEntitlements = join(tauriRoot, 'Entitlements.camera.plist');
+  const cameraPolicy = JSON.parse(
+    execFileSync('/usr/bin/plutil', ['-convert', 'json', '-o', '-', cameraEntitlements], {
+      encoding: 'utf8'
+    })
+  );
+  if (
+    Object.keys(cameraPolicy).length !== 1 ||
+    cameraPolicy['com.apple.security.device.camera'] !== true
+  ) {
+    throw new Error('Internal camera entitlement file must contain only camera access');
+  }
+  execFileSync(
+    'codesign',
+    ['--force', '--sign', '-', '--timestamp=none', '--entitlements', cameraEntitlements, builtApp],
+    {
+      stdio: 'inherit'
+    }
+  );
   const result = verifyPackagedHwi(builtApp, {
     manifestPath,
     requireProductionSigning: false

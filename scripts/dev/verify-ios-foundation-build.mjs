@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -32,8 +32,20 @@ export function verifyIosFoundationBuild(target, xcodeLibrary) {
   }
 }
 
+/** @param {string} app */
+export function verifyIosArchiveResources(app) {
+  if (readdirSync(app, { recursive: true }).some((name) => String(name).endsWith('.a'))) {
+    throw new Error(
+      'The iOS app contains a build-only static library. Do not install this archive.'
+    );
+  }
+}
+
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   verifyIosFoundationBuild(process.argv[2], 'src-tauri/gen/apple/Externals/arm64/debug/libapp.a');
+  verifyIosArchiveResources(
+    'src-tauri/gen/apple/build/groot_iOS.xcarchive/Products/Applications/Groot Testnet4 Dev.app'
+  );
   console.log(
     'iOS native build verified: Testnet4, and Xcode uses the exact compiled Cargo library.'
   );

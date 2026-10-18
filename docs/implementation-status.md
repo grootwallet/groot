@@ -31,7 +31,7 @@ This page describes 5.3 development from the shipped `5.2.0` baseline at `733bc5
 - Decaying/expanding policies are experimental foundations, not supported creation paths.
 - Payjoin V2 recognizes requests and rejects unsupported fallback; sender/receiver sessions and transport are not implemented.
 - Experimental Windows/Linux x64 packaging is Signet-only, without bundled HWI, native seed UI or passive USB discovery. Builds/CI do not certify physical platforms. iOS and Android public releases are not certified. Passive USB discovery is macOS-only; Windows production HWI verification fails closed.
-- Mobile pairing and continuity/Miniscript development live on separate feature branches; their presence is not merged support. The [5.3 foundation](mobile-5.3-plan.md) adds isolated Testnet4 iOS build configuration and native rejection of mobile key creation/recovery, secret backups, signing and broadcast (ADR 0089). It does not add pairing or certify a device.
+- Internal iOS Testnet4 candidate code now restores QR pairing, native phone backup/recovery, new device-protected software/phone-signer keys and exact-PSBT signing under ADRs 0093–0096. Physical full-flow acceptance and independent review remain incomplete; this is not public mobile support. Android secret UI/platform protection, Mainnet mobile and continuity/Miniscript creation remain outside the enabled scope. See the [candidate record](testing/5.3.0-rc2-mobile-keys.md).
 - No cloud backup, custodial key service, Lightning, Taproot wallet, or hosted remote signing service is implemented.
 
 ## Maintaining this page

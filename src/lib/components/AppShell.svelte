@@ -214,9 +214,12 @@
   let currentZoom = 1;
   let shortcutLockPending = false;
   let walletSelectionTask: Promise<void> | undefined;
+  let mobileRuntime = false;
   let pendingUnlockSyncWalletId: string | null = null;
   let runtimeIdentity = $state<RuntimePlatform | null>(null);
   let startupFailure = $state('');
+  let checkingRuntime = $state(true);
+  let backgroundLockRequired = false;
   let selectedProfile = $derived(profiles.find((wallet) => wallet.id === selectedWalletId));
   let policyContext = $derived(
     selectedProfile?.kind === 'multisig' || page.url.pathname.startsWith('/multisig')
@@ -224,6 +227,11 @@
   let visibleNav = $derived(policyContext ? nav : nav.slice(0, 3));
   let mobileItems = $derived(policyContext ? nav : nav.slice(0, 3));
   let onboardingRoute = $derived(walletSetupRoutes.has(page.url.pathname));
+  let mobileSetupRoute = $derived(
+    page.url.pathname === '/mobile/pair' ||
+      page.url.pathname === '/mobile/watch' ||
+      page.url.pathname === '/mobile/recover'
+  );
   let lockedRoute = $derived(page.url.pathname === '/unlock');
   let settingsRoute = $derived(page.url.pathname === '/settings');
   let diagnosticsRoute = $derived(page.url.pathname === '/diagnostics');
@@ -232,7 +240,7 @@
     lockedRoute || ((settingsRoute || diagnosticsRoute) && walletLocked)
   );
   let syncPausedRoute = $derived(
-    onboardingRoute || lockedRoute || diagnosticsRoute || walletLocked
+    onboardingRoute || lockedRoute || diagnosticsRoute || walletLocked || mobileSetupRoute
   );
   const showQuickActions = $derived(
     !restrictedUtilityRoute && (page.url.pathname === '/' || page.url.pathname === '/coins')
@@ -488,7 +496,10 @@
     '/hardware/new',
     '/multisig/new',
     '/multisig/recover',
-    '/multisig/delete'
+    '/multisig/delete',
+    '/mobile/pair',
+    '/mobile/watch',
+    '/mobile/recover'
   ]);
 
   async function resumeAfterWalletCreation(profileRefresh: Promise<void>) {
@@ -658,11 +669,30 @@
   async function resolveStartupRoute() {
     startupState = 'checking';
     startupFailure = '';
+    checkingRuntime = true;
     try {
       const runtime = await walletService.runtimePlatform();
+      if (
+        !runtime.network ||
+        !runtime.version ||
+        !runtime.commit ||
+        !['regtest', 'signet', 'testnet4', 'mainnet'].includes(runtime.network)
+      ) {
+        startupFailure = translate(
+          $locale,
+          'This Groot app contains mismatched components. Rebuild and reinstall the native app.'
+        );
+        throw new Error('incomplete runtime identity');
+      }
       runtimeIdentity = runtime;
+      mobileRuntime = runtime.mobile && runtime.platform !== 'browser';
       restoreMobileViewport?.();
-      restoreMobileViewport = configureMobileViewport(runtime.mobile);
+      restoreMobileViewport = configureMobileViewport(mobileRuntime);
+      if (mobileRuntime && document.visibilityState !== 'visible') {
+        backgroundLockRequired = true;
+        await enforceMobileBackgroundLock();
+        return;
+      }
       if (runtime.networkSwitching !== networkSwitchingBuild) {
         startupFailure = translate(
           $locale,
@@ -681,6 +711,7 @@
         );
         throw new Error('native/web build mismatch');
       }
+      checkingRuntime = false;
       await refreshSetupDraft();
       if (!(await walletService.exists())) {
         if (!diagnosticsRoute) await goto('/welcome');
@@ -707,8 +738,50 @@
         void liveSync?.runNow();
       }
     } catch {
-      if (!startupFailure)
-        startupFailure = translate($locale, 'Groot could not verify the wallet lock state.');
+      if (!startupFailure) {
+        startupFailure = translate(
+          $locale,
+          checkingRuntime
+            ? 'Groot could not verify this app build. Rebuild and reinstall the native app.'
+            : 'Groot could not verify the wallet lock state.'
+        );
+      }
+      startupState = 'failed';
+    }
+  }
+
+  function centerMobileField(event: FocusEvent) {
+    if (!mobileRuntime) return;
+    const field = event.target;
+    if (!(
+      field instanceof HTMLInputElement ||
+      field instanceof HTMLTextAreaElement ||
+      field instanceof HTMLSelectElement
+    ))
+      return;
+    // Let iOS finish resizing the visual viewport for the keyboard, then perform
+    // one centering move. Competing smooth-scroll timers can otherwise move the
+    // field into view and immediately pull it away again.
+    setTimeout(() => {
+      if (document.activeElement !== field) return;
+      field.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'smooth' });
+    }, 320);
+  }
+
+  async function enforceMobileBackgroundLock() {
+    if (!mobileRuntime || !backgroundLockRequired) return;
+    startupState = 'checking';
+    liveSync?.stop();
+    try {
+      await Promise.allSettled([
+        walletService.cancelHardwareOperations(),
+        walletService.cancelSync()
+      ]);
+      await walletService.lockAll();
+      backgroundLockRequired = false;
+      await goto('/unlock');
+      startupState = 'ready';
+    } catch {
       startupState = 'failed';
     }
   }
@@ -755,10 +828,13 @@
     const unsubscribe = walletService.subscribe((event) => {
       const presentation = walletEventPresentation(event, $locale, $denomination, goto);
       if (presentation) toast(presentation);
-      if (event.type === 'wallet_profile_updated')
-        profiles = profiles.map((profile) =>
-          profile.id === event.profile.id ? event.profile : profile
-        );
+      if (event.type === 'wallet_profile_updated') {
+        const known = profiles.some((profile) => profile.id === event.profile.id);
+        profiles = known
+          ? profiles.map((profile) => (profile.id === event.profile.id ? event.profile : profile))
+          : [...profiles, event.profile];
+        selectedWalletId = event.profile.id;
+      }
     });
     liveSync = createLiveSync(
       walletService,
@@ -799,9 +875,18 @@
     );
     sessionMonitor.start();
     const wakeWhenVisible = () => {
-      if (document.visibilityState === 'visible') void liveSync?.runNow();
+      if (document.visibilityState !== 'visible') {
+        if (mobileRuntime) {
+          backgroundLockRequired = true;
+          void enforceMobileBackgroundLock();
+        }
+        return;
+      }
+      if (backgroundLockRequired) void enforceMobileBackgroundLock();
+      else void liveSync?.runNow();
     };
     document.addEventListener('visibilitychange', wakeWhenVisible);
+    document.addEventListener('focusin', centerMobileField);
     window.addEventListener('keydown', handleKeyboardShortcut);
     void resolveStartupRoute();
     return () => {
@@ -815,6 +900,7 @@
       liveSync?.stop();
       sessionMonitor?.stop();
       document.removeEventListener('visibilitychange', wakeWhenVisible);
+      document.removeEventListener('focusin', centerMobileField);
       window.removeEventListener('keydown', handleKeyboardShortcut);
     };
   });
@@ -835,7 +921,10 @@
       <BrandLockup animated />
       {#if startupState === 'failed'}
         <p>{startupFailure}</p>
-        <button class="button secondary" onclick={resolveStartupRoute}
+        <button
+          class="button secondary"
+          onclick={() =>
+            backgroundLockRequired ? enforceMobileBackgroundLock() : resolveStartupRoute()}
           >{translate($locale, 'Retry')}</button
         >
       {:else}
@@ -878,7 +967,10 @@
         <div class="preference-toggles">
           <ThemeToggle /><DiscreetModeToggle />
         </div>
-        <NetworkStatus network={defaultConfig.network} locked={walletLocked} />
+        <NetworkStatus
+          network={runtimeIdentity?.network ?? defaultConfig.network}
+          locked={walletLocked}
+        />
         <BuildIdentity runtime={runtimeIdentity} placement="sidebar" />
         {#if updateOffer}
           <Button
@@ -893,8 +985,11 @@
       </div>
     </aside>
 
-    <a class="mobile-brand" href="/" aria-label={translate($locale, 'Groot home')}
-      ><BrandLockup /></a
+    <a
+      class="mobile-brand"
+      class:locked-brand={lockedRoute}
+      href="/"
+      aria-label={translate($locale, 'Groot home')}><BrandLockup /></a
     >
 
     <main class="main">
@@ -940,7 +1035,10 @@
 
     {#if onboardingRoute}<BuildIdentity runtime={runtimeIdentity} placement="onboarding" />{/if}
 
-    {#if !restrictedUtilityRoute}<nav class="mobile-nav" class:policy-nav={policyContext}>
+    {#if !restrictedUtilityRoute && !onboardingRoute && !mobileSetupRoute}<nav
+        class="mobile-nav"
+        class:policy-nav={policyContext}
+      >
         {#each mobileItems as item}
           <a
             href={item.href}
@@ -963,7 +1061,7 @@
             href="/settings"
             aria-label={t('settings', $locale)}><Settings size={20} /></a
           >{/if}<ThemeToggle /><DiscreetModeToggle /><NetworkStatus
-          network={defaultConfig.network}
+          network={runtimeIdentity?.network ?? defaultConfig.network}
           locked={walletLocked}
         />
       </div>{/if}

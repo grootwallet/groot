@@ -45,7 +45,7 @@ use std::{
     },
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
-#[cfg(not(target_os = "macos"))]
+#[cfg(any(target_os = "linux", target_os = "windows"))]
 use tauri::WebviewWindow;
 use tauri::{AppHandle, Manager, State};
 use uuid::Uuid;
@@ -200,7 +200,7 @@ pub async fn public_backup_pdf_save(
     export_commands::public_backup_pdf_save(app, state, save_token, markup).await
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(any(target_os = "linux", target_os = "windows"))]
 #[tauri::command]
 pub fn public_backup_pdf_prepare(
     app: AppHandle,
@@ -209,6 +209,12 @@ pub fn public_backup_pdf_prepare(
     suggested_filename: String,
 ) -> ApiResult<PendingPdfExportDto> {
     export_commands::public_backup_pdf_prepare(app, state, window, suggested_filename)
+}
+
+#[cfg(any(target_os = "android", target_os = "ios"))]
+#[tauri::command]
+pub fn public_backup_pdf_prepare(suggested_filename: String) -> ApiResult<PendingPdfExportDto> {
+    export_commands::public_backup_pdf_prepare(suggested_filename)
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -291,6 +297,26 @@ fn validate_key_operation_platform(mobile: bool) -> ApiResult<()> {
         return Err(api_error(
             "mobile_operation_unavailable",
             "Key creation, recovery, signing and broadcast are unavailable on mobile while pairing safety is under review.",
+        ));
+    }
+    Ok(())
+}
+
+// Keep mobile software keys restricted to the isolated Testnet4 iOS candidate.
+// USB signing and multisig broadcast retain the desktop-only guard.
+fn require_software_key_operation() -> ApiResult<()> {
+    validate_software_key_platform(
+        cfg!(target_os = "ios"),
+        cfg!(target_os = "android"),
+        crate::build_network::name(),
+    )
+}
+
+fn validate_software_key_platform(ios: bool, android: bool, network: &str) -> ApiResult<()> {
+    if android || (ios && network != "testnet4") {
+        return Err(api_error(
+            "mobile_operation_unavailable",
+            "Phone keys are available only in the isolated Testnet4 iOS development build.",
         ));
     }
     Ok(())
@@ -651,7 +677,10 @@ pub struct AppState {
     pending_pdf_exports: Mutex<HashMap<String, PendingPdfExport>>,
     recovery_scans: Mutex<HashMap<Uuid, ActiveRecoveryScan>>,
     runtime_auth_retry_at: Mutex<HashMap<Uuid, Instant>>,
+    staging_auth_failures: Mutex<HashMap<Uuid, u32>>,
+    staging_auth_retry_at: Mutex<HashMap<Uuid, Instant>>,
     pending_policy_verifications: Mutex<HashMap<String, SignerPolicyVerificationDto>>,
+    desktop_pairings: Mutex<HashMap<String, coordination_commands::PendingDesktopPairing>>,
     // Public transaction ids only. A completed snapshot lets the next refresh
     // inspect the wallet's mempool delta instead of downloading every unchanged
     // transaction again. The cache is deliberately process-local and contains
@@ -2197,12 +2226,22 @@ fn migrate_directories_with_rollback(
 }
 
 fn prepare_profile_directory(app: &AppHandle) -> ApiResult<(Uuid, PathBuf)> {
-    ensure_registry_migrated(app)?;
     let id = Uuid::new_v4();
+    let directory = prepare_profile_directory_with_id(app, id)?;
+    Ok((id, directory))
+}
+
+fn prepare_profile_directory_with_id(app: &AppHandle, id: Uuid) -> ApiResult<PathBuf> {
+    ensure_registry_migrated(app)?;
     let directory = profile_directory(app, id)?;
     ensure_private_directory(&wallets_root(app)?)?;
+    if directory.exists() {
+        return Err(internal(
+            "The new wallet storage identity is already in use.",
+        ));
+    }
     ensure_private_directory(&directory)?;
-    Ok((id, directory))
+    Ok(directory)
 }
 
 fn current_mainnet_node_admission(state: &AppState) -> ApiResult<PendingMainnetNodeAdmission> {
@@ -5082,7 +5121,7 @@ fn decrypt_mnemonic(app: &AppHandle, credential: &str) -> ApiResult<Mnemonic> {
     let version = serde_json::from_str::<serde_json::Value>(&encoded)
         .ok()
         .and_then(|value| value.get("version").and_then(|version| version.as_u64()));
-    if matches!(version, Some(2..=5)) {
+    if matches!(version, Some(2..=6)) {
         let plaintext = secure_store::load(&path, credential, wallet_secret_context(profile.id))
             .map_err(secure_store_error)?;
         return parse_mnemonic_bytes(plaintext);
@@ -5559,7 +5598,7 @@ fn verify_multisig_credential(app: &AppHandle, credential: &str) -> ApiResult<()
         .ok()
         .and_then(|value| value.get("version").and_then(|version| version.as_u64()));
     let context = wallet_secret_context(profile.id);
-    let mut plaintext = if matches!(version, Some(2..=5)) {
+    let mut plaintext = if matches!(version, Some(2..=6)) {
         secure_store::load(&path, credential, context).map_err(secure_store_error)?
     } else {
         let secret: EncryptedSecret = serde_json::from_str(&encoded).map_err(internal)?;
@@ -7061,6 +7100,12 @@ fn sync_wallet_with_compact_filters(
     source: &WalletSyncSource,
     cancel: Option<&AtomicBool>,
 ) -> ApiResult<WalletSnapshotDto> {
+    if cfg!(any(target_os = "ios", target_os = "android")) {
+        return Err(api_error(
+            "invalid_node_config",
+            "Compact-filter sync is experimental and unavailable on mobile. Configure Bitcoin Core instead.",
+        ));
+    }
     let config = source
         .validate(network())
         .map_err(network_config_api_error)?
@@ -7841,6 +7886,8 @@ fn connected_hardware_identity(
 #[path = "wallet/hardware_commands.rs"]
 pub(crate) mod hardware_commands;
 
+#[path = "wallet/coordination_commands.rs"]
+pub(crate) mod coordination_commands;
 #[path = "wallet/multisig_setup_commands.rs"]
 pub(crate) mod multisig_setup_commands;
 

@@ -12,8 +12,10 @@
     EyeOff,
     FileKey,
     HeartPulse,
+    Network,
     RefreshCw,
     ShieldCheck,
+    Smartphone,
     TriangleAlert,
     Trash2
   } from '@lucide/svelte';
@@ -33,6 +35,7 @@
     WalletError,
     type WalletErrorDetails,
     type CosignerHealthCheck,
+    type CoreNodeConfig,
     type ExternalSignerWallet,
     type MultisigProposal,
     type MultisigWallet,
@@ -91,6 +94,7 @@
   let checkingSignerHealth = $state(false);
   let activeProposal = $state<MultisigProposal | PaymentProposal | null>(null);
   let activeDraft = $state<PaymentDraft | null>(null);
+  let pendingMobilePairingCount = $state(0);
   let discardDraftOpen = $state(false);
   let discardingDraft = $state(false);
   let discardDraftError = $state('');
@@ -115,6 +119,8 @@
   let initialDataLoading = $state(true);
   let syncSource = $state<WalletSyncSource | null>(null);
   let syncStatus = $state<WalletSyncStatus | null>(null);
+  let mobileRuntime = $state(false);
+  let nodeConfig = $state<CoreNodeConfig | null>(null);
   let syncPollToken = 0;
   let syncStatusReadGeneration = 0;
   let inheritedSyncObserved = false;
@@ -253,6 +259,11 @@
         ? presentLocalTimestamp(snapshot.syncedAt).detail
         : translate($locale, 'This wallet has not completed a sync yet.'))
   );
+  const mobileSyncSetupRequired = $derived(
+    mobileRuntime &&
+      (syncSource?.type === 'compact_filters' ||
+        (syncSource?.type === 'bitcoin_core' && nodeConfig?.backend.type === 'local_core'))
+  );
   let hardwareSignerDetails = $derived.by<CosignerDraft | null>(() =>
     hardwareSignerWallet
       ? {
@@ -379,6 +390,7 @@
     networkSetupRequired = false;
     initialDataLoading = true;
     try {
+      const pendingPairingsPromise = walletService.pendingMobilePairings().catch(() => []);
       // Profile-mutating routes refresh the shell after navigation. Read the
       // authoritative registry here so this route cannot race that refresh and
       // query the newly selected wallet using the previous wallet's kind.
@@ -390,12 +402,17 @@
           return;
         }
       }
-      const [nextSyncSource, networkSetupSources] = await Promise.all([
+      const [nextSyncSource, runtime, nextNodeConfig, networkSetupSources] = await Promise.all([
         walletService.syncSource(),
+        walletService.runtimePlatform(),
+        walletService.nodeConfig(),
         walletService.networkSetupSources()
       ]);
       if (generation !== loadGeneration) return;
+      pendingMobilePairingCount = (await pendingPairingsPromise).length;
       syncSource = nextSyncSource;
+      mobileRuntime = runtime.mobile;
+      nodeConfig = nextNodeConfig;
       selectedProfile =
         registry.wallets.find((wallet) => wallet.id === registry.selectedWalletId) ?? null;
       // Set the command family before any network preflight can fail. Otherwise
@@ -680,6 +697,10 @@
     void pollSyncStatus(token);
   }
   const sync = async (manual = true) => {
+    if (mobileSyncSetupRequired) {
+      if (manual) await goto('/settings#network-services');
+      return;
+    }
     if (manual && networkSetupRequired) {
       await openNetworkSetup();
       return;
@@ -846,7 +867,12 @@
         walletAwaitingAutomaticScan ||
         syncInProgress ||
         recoveryScanIsActive(recoveryStatus)}
-      title={syncButtonTitle}
+      title={mobileSyncSetupRequired
+        ? translate(
+            $locale,
+            'Configure a trusted remote Bitcoin Core node before refreshing this wallet on mobile.'
+          )
+        : syncButtonTitle}
       onclick={() => sync(true)}
       ><RefreshCw
         size={15}
@@ -856,9 +882,19 @@
         recoveryScanIsActive(recoveryStatus)
           ? 'spin'
           : ''}
-      />{syncButtonLabel}</button
+      />{mobileSyncSetupRequired ? translate($locale, 'Set up sync') : syncButtonLabel}</button
     >
   </header>
+  {#if mobileSyncSetupRequired}<WarningNotice
+      title={translate($locale, 'Set up wallet sync')}
+      body={translate(
+        $locale,
+        'Configure a trusted remote Bitcoin Core node before refreshing this wallet on mobile.'
+      )}
+      ><Button size="small" variant="secondary" href="/settings#network-services"
+        >{translate($locale, 'Configure sync')}</Button
+      ></WarningNotice
+    >{/if}
   {#if initialHistoryRequired && !walletAwaitingAutomaticScan && !automaticInitialScanActive}
     <section class="initial-history-scan" aria-live="polite">
       <div>
@@ -1106,6 +1142,24 @@
     <WalletSkeleton variant="balance" />
   {/if}
   {#if !loadError}
+    {#if pendingMobilePairingCount > 0}
+      <a
+        class="active-proposal-callout"
+        href="/mobile/pair"
+        aria-label={translate($locale, 'Resume wallet pairing')}
+      >
+        <span class="active-proposal-icon"><Smartphone size={17} /></span>
+        <span class="active-proposal-copy"
+          ><strong>{translate($locale, 'Wallet pairing in progress')}</strong><span
+            class="active-proposal-meta"
+            ><small>{translate($locale, 'Phone signer setup is waiting to finish')}</small></span
+          ></span
+        >
+        <span class="active-proposal-action"
+          >{translate($locale, 'Resume')} <ChevronRight size={15} /></span
+        >
+      </a>
+    {/if}
     {#if secondaryError}
       <LoadFailure
         title={translate($locale, 'Wallet details are unavailable')}

@@ -33,7 +33,7 @@ describe('hardware signing review usability', () => {
 
   it('keeps the Ledger policy and transaction reviews as explicit reachable steps', () => {
     expect(policy).toContain("'Step 1 of 2 · Wallet policy'");
-    expect(policy).toContain("'Wallet policy reviewed — show transaction'");
+    expect(policy).toContain("'Wallet policy reviewed. Show transaction'");
     expect(policy).toContain("'Review & sign on {device}'");
     expect(multisigSend).toContain("'Step 2 of 2 · Transaction review'");
     expect(multisigSend).toContain('showTransactionDuringSigning()');

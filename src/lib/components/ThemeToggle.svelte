@@ -9,6 +9,14 @@
 
   onMount(() => {
     theme = currentTheme();
+    const observer = new MutationObserver(() => {
+      theme = currentTheme();
+    });
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['data-theme']
+    });
+    return () => observer.disconnect();
   });
 
   function setTheme(next: Theme) {

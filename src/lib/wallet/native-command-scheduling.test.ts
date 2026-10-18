@@ -25,6 +25,10 @@ const walletCore = readFileSync(
   new URL('../../../src-tauri/src/wallet.rs', import.meta.url),
   'utf8'
 );
+const coordinationCommands = readFileSync(
+  new URL('../../../src-tauri/src/wallet/coordination_commands.rs', import.meta.url),
+  'utf8'
+);
 
 function commandSource(source: string, command: string): string {
   const start = source.indexOf(`pub async fn ${command}(`);
@@ -47,7 +51,8 @@ describe('native command scheduling', () => {
     multisigProposalCommands,
     transactionCommands,
     hardwareCommands,
-    walletCore
+    walletCore,
+    coordinationCommands
   ])('keeps every serialized command off the main thread, including cancellation', (source) => {
     const commands = source.split('#[tauri::command]').slice(1);
     for (const command of commands) {
@@ -66,7 +71,12 @@ describe('native command scheduling', () => {
     expect(source).not.toContain('require_unlocked');
     expect(source).toContain('unlocked.is_unlocked(profile.id)');
     expect(source).toContain('session.config == config');
-    expect(source).not.toContain('read_sync_source_for');
+    // Mobile source eligibility is protected by the same per-profile unlock;
+    // locked availability still exposes no source settings or credentials.
+    expect(source.indexOf('unlocked.is_unlocked(profile.id)')).toBeLessThan(
+      source.indexOf('read_sync_source_for')
+    );
+    expect(source).toContain('ensure_sync_source_supported_on_platform');
     const dto = profileCommands.slice(
       profileCommands.indexOf('pub struct NetworkSetupSource'),
       profileCommands.indexOf('pub struct SoftwareWalletCreation')

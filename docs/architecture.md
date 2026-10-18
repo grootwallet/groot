@@ -72,7 +72,9 @@ Public descriptor/BSMS/JSON and PSBT/UR imports are bounded, parsed natively, ne
 
 ## Mobile foundation
 
-ADR 0089 keeps mobile key creation/recovery, secret backup operations, signing and broadcast behind native rejection before entropy, decryption, device access or mutation. Desktop operations keep their existing checks. The isolated iOS development override uses bundled Testnet4 assets and its own bundle identifier. Pairing remains absent; see the [5.3 implementation plan](mobile-5.3-plan.md) for future authenticated public-data and receive-authority boundaries.
+ADRs 0093–0096 restore the retained coordination domains through WalletPort, with native iOS secret sheets and worker-based commands. New iOS wallet-secret files add a device-authorized Keychain layer (secure-store v6); desktop/node-auth files retain their existing portable format, and existing files are not silently converted. The fixed Testnet4 development identity and actual linked-library/network check remain mandatory. Native capability guards reject other mobile signing platforms/networks and keep USB signing/multisig broadcast on desktop.
+
+BIP129 QR enrollment authenticates signer records and binds the final complete public policy. Mobile review parses the actual PSBT and signs its exact revision; desktop keeps signature-only validation and merge. Desktop owns receive allocation for paired/watch-only phone views; standalone software wallets retain local authority. No live metadata sync or relay is introduced. [Current candidate evidence](testing/5.3.0-rc2-mobile-keys.md) distinguishes unit/Core passes from unfinished physical acceptance.
 
 ## App updates
 

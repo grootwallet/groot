@@ -1520,10 +1520,15 @@ pub async fn multisig_address_create(
     app: AppHandle,
     labels: Vec<String>,
 ) -> ApiResult<ReceiveAddressDto> {
+    let expected_wallet_id = load_registry(&app)?.selected_wallet_id;
     tauri::async_runtime::spawn_blocking(move || {
     let state = app.state::<AppState>();
     let _operation = operation_guard(&state)?;
+    if load_registry(&app)?.selected_wallet_id != expected_wallet_id {
+        return Err(api_error("wallet_selection_changed", "The selected wallet changed. Retry in the current wallet."));
+    }
     let wallet_id = require_unlocked(&app, &state)?;
+    coordination_commands::require_receive_authority(&app, &WalletKind::Multisig)?;
     let labels = normalize_labels(labels)?;
     let metadata = read_multisig_metadata(&app)?;
     let db = open_multisig_db(&app)?;

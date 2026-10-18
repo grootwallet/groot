@@ -16,6 +16,7 @@
     Plus,
     RefreshCw,
     ShieldCheck,
+    Smartphone,
     Trash2,
     Usb,
     Users
@@ -23,6 +24,8 @@
   import { goto } from '$app/navigation';
   import { onDestroy, onMount } from 'svelte';
   import Button from '$lib/components/Button.svelte';
+  import AnimatedUrQr from '$lib/components/AnimatedUrQr.svelte';
+  import UrQrScanner from '$lib/components/UrQrScanner.svelte';
   import { formatInteger, locale } from '$lib/i18n';
   import { defaultConfig, networkName } from '$lib/config';
   import FieldCounter from '$lib/components/FieldCounter.svelte';
@@ -54,6 +57,7 @@
     type SignerPolicyVerification,
     type WalletErrorCode
   } from '$lib/wallet';
+  import type { PairingInvitation } from '$lib/wallet';
   import {
     findDuplicateCosigner,
     MULTISIG_ACCOUNT_PATH,
@@ -168,6 +172,17 @@
   let checkingSigner = $state(false);
   let healthChecks = $state<Record<string, CosignerHealthCheck>>({});
   let source = $state<CosignerSource>('manual');
+  let mobilePairOpen = $state(false);
+  let mobilePairScan = $state(false);
+  let mobilePairBusy = $state(false);
+  let mobilePairError = $state('');
+  let mobilePairAccepted = $state(false);
+  let mobileInvitation = $state<PairingInvitation | null>(null);
+  let mobileResponseFrames = $state<string[]>([]);
+  let mobileCandidate = $state<CosignerDraft | null>(null);
+  let mobileSessionId = $state('');
+  let mobileFinalFrames = $state<string[]>([]);
+  let mobileFinalOpen = $state(false);
   let label = $state('');
   let fingerprint = $state('');
   let xpub = $state('');
@@ -206,6 +221,7 @@
   let discardingDraft = $state(false);
   let draftSaveError = $state('');
   let createErrorTitle = $state('');
+  let createdWalletNeedsFinalPolicy = $state(false);
   let hardwareScanGeneration = 0;
   let queuedDraft: MultisigSetupDraft | null = null;
   let draftSaveRunning = false;
@@ -216,6 +232,9 @@
     standardRecipe === '2of3' ? 3 : standardRecipe === '3of5' ? 5 : customCosignerCount
   );
   const requiredKeys = $derived(templateKind === 'standard' ? standardCosignerCount : 4);
+  const hasGrootPhoneSigner = $derived(
+    cosigners.some((signer) => signer.deviceType === 'groot-mobile')
+  );
   const errors = $derived([
     ...validatePolicyDraft(policy),
     ...(cosigners.length !== requiredKeys
@@ -580,6 +599,66 @@
     pickerOpen = false;
     keyError = '';
     keyOpen = true;
+  }
+
+  async function startMobilePairing() {
+    if (hasGrootPhoneSigner) return;
+    pickerOpen = false;
+    mobilePairOpen = true;
+    mobilePairBusy = true;
+    mobilePairError = '';
+    mobilePairAccepted = false;
+    mobilePairScan = false;
+    mobileResponseFrames = [];
+    mobileCandidate = null;
+    try {
+      mobileInvitation = await walletService.createPairingInvitation(name, threshold, requiredKeys);
+      mobileSessionId = mobileInvitation.sessionId;
+    } catch (cause) {
+      mobilePairError = localizedError(cause, $locale, 'Could not create a phone invitation.');
+    } finally {
+      mobilePairBusy = false;
+    }
+  }
+
+  async function receiveMobileResponse(frame: string) {
+    mobileResponseFrames = [...mobileResponseFrames, frame];
+    try {
+      mobileCandidate = await walletService.acceptMobileSigner(mobileResponseFrames);
+      mobilePairError = '';
+      return true;
+    } catch (cause) {
+      if (cause instanceof WalletError && cause.code === 'qr_incomplete') return false;
+      const message = localizedError(cause, $locale, 'Waiting for the complete phone response.');
+      mobilePairError = message;
+      throw cause;
+    }
+  }
+
+  function confirmMobileSigner() {
+    if (!mobileCandidate) return;
+    if (!appendCosigner(mobileCandidate, (message) => (mobilePairError = message))) return;
+    mobilePairAccepted = true;
+    mobilePairScan = false;
+    toast({
+      title: 'Phone signer added',
+      description: 'Continue on desktop. The phone waits for the completed wallet policy.',
+      tone: 'success'
+    });
+  }
+
+  function continueAfterMobileSigner() {
+    mobilePairOpen = false;
+    mobilePairAccepted = false;
+  }
+
+  async function cancelMobilePairing() {
+    const session = mobileSessionId;
+    mobilePairOpen = false;
+    mobileInvitation = null;
+    mobileCandidate = null;
+    mobileSessionId = '';
+    if (session) await walletService.cancelPairing(session).catch(() => {});
   }
 
   function duplicateSignerMessage(candidate: CosignerDraft): string | null {
@@ -1230,6 +1309,7 @@
         await walletService.createMultisig(policy, credential);
       }
       hasDraft = false;
+      createdWalletNeedsFinalPolicy = Boolean(mobileSessionId);
       toast({
         title: 'Multisig wallet created',
         description:
@@ -1238,7 +1318,22 @@
             : '2 of 3 primary keys work now. The recovery key becomes available after the chosen wait.',
         tone: 'success'
       });
-      await goto('/multisig');
+      if (mobileSessionId) {
+        try {
+          mobileFinalFrames = await walletService.finalizePairingOnDesktop(mobileSessionId);
+          mobileFinalOpen = true;
+          createdWalletNeedsFinalPolicy = false;
+        } catch (cause) {
+          createErrorTitle = 'Wallet created — phone pairing incomplete';
+          error = localizedError(
+            cause,
+            $locale,
+            'Retry the final QR. Do not create this wallet again.'
+          );
+        }
+      } else {
+        await goto('/multisig');
+      }
     } catch (cause) {
       existingWalletId =
         cause instanceof WalletError && cause.code === 'wallet_already_exists'
@@ -1259,6 +1354,22 @@
     } finally {
       credential = '';
       confirmation = '';
+      busy = false;
+    }
+  }
+
+  async function retryFinalPolicyQr() {
+    if (!mobileSessionId || busy) return;
+    busy = true;
+    error = '';
+    try {
+      mobileFinalFrames = await walletService.finalizePairingOnDesktop(mobileSessionId);
+      mobileFinalOpen = true;
+      createdWalletNeedsFinalPolicy = false;
+    } catch (cause) {
+      createErrorTitle = 'Phone pairing still incomplete';
+      error = localizedError(cause, $locale, 'Could not prepare the final wallet QR.');
+    } finally {
       busy = false;
     }
   }
@@ -1713,16 +1824,10 @@
       <aside class="safety-panel">
         <ShieldCheck size={22} />
         <h2>{translate($locale, 'Before you continue')}</h2>
-        <p>
-          {translate(
-            $locale,
-            'Groot stores public descriptors only. It cannot spend without enough signatures.'
-          )}
-        </p>
         <ul>
-          <li>{translate($locale, 'Back up the wallet descriptor.')}</li>
-          <li>{translate($locale, 'Verify each fingerprint on its device.')}</li>
-          <li>{translate($locale, 'Keep devices in separate places.')}</li>
+          <li>{translate($locale, 'Save the wallet descriptor.')}</li>
+          <li>{translate($locale, 'Verify keys on each signer.')}</li>
+          <li>{translate($locale, 'Store signers separately.')}</li>
         </ul>
         <button class="hardware-help-card" onclick={() => openHardwareHelp()}
           ><CircleHelp size={17} /><span
@@ -1730,7 +1835,7 @@
               >{translate($locale, 'Coldcard, BitBox02, Ledger, Trezor, Jade')}</small
             ></span
           ><ChevronRight size={14} /></button
-        ><code>{MULTISIG_ACCOUNT_PATH}</code>
+        >
       </aside>
     </div>
   {:else if stage === 'review' && preview}
@@ -2049,21 +2154,26 @@
               onclick={openExistingWallet}>{translate($locale, 'Open existing wallet')}</Button
             >{/if}
         </WarningNotice>{/if}
-      <div class="coordinator-actions">
-        <Button variant="secondary" disabled={busy} onclick={() => (stage = 'review')}>
-          <ArrowLeft size={16} />{translate($locale, 'Back to verification')}
-        </Button>
-        <Button
-          size="large"
-          disabled={!saved ||
-            !policyReadinessAcknowledged ||
-            !credential ||
-            credential !== confirmation}
-          loading={busy}
-          loadingLabel={translate($locale, 'Creating wallet…')}
-          onclick={create}>{translate($locale, 'Create wallet')}</Button
+      {#if createdWalletNeedsFinalPolicy}
+        <Button class="full" loading={busy} onclick={retryFinalPolicyQr}
+          >{translate($locale, 'Retry final phone QR')}</Button
         >
-      </div>
+      {:else}<div class="coordinator-actions">
+          <Button variant="secondary" disabled={busy} onclick={() => (stage = 'review')}>
+            <ArrowLeft size={16} />{translate($locale, 'Back to verification')}
+          </Button>
+          <Button
+            size="large"
+            disabled={!saved ||
+              !policyReadinessAcknowledged ||
+              !credential ||
+              credential !== confirmation}
+            loading={busy}
+            loadingLabel={translate($locale, 'Creating wallet…')}
+            onclick={create}>{translate($locale, 'Create wallet')}</Button
+          >
+        </div>
+      {/if}
     </section>
   {/if}
 </div>
@@ -2111,6 +2221,20 @@
   onclose={closeSignerPicker}
 >
   <div class="source-list">
+    {#if templateKind === 'standard' && defaultConfig.network !== 'mainnet'}<button
+        disabled={hasGrootPhoneSigner}
+        onclick={startMobilePairing}
+        ><Smartphone size={18} /><span
+          ><strong>{translate($locale, 'Add a Groot phone')}</strong><small
+            >{translate(
+              $locale,
+              hasGrootPhoneSigner
+                ? 'One Groot phone signer per wallet in V1'
+                : 'Accountless · encrypted two-QR pairing'
+            )}</small
+          ></span
+        ><ChevronRight size={15} /></button
+      >{/if}
     {#if templateKind === 'standard'}<button onclick={scanHardware}
         ><Cpu size={18} /><span
           ><strong>{translate($locale, 'Connect hardware device')}</strong><small
@@ -2159,6 +2283,115 @@
         ></span
       >
     </div>{/if}
+</Modal>
+<Modal
+  open={mobilePairOpen}
+  dismissible={false}
+  wide={mobilePairScan && !mobileCandidate}
+  title={translate($locale, 'Add a Groot phone')}
+  description={translate($locale, 'Create one words-only phone signer.')}
+  onclose={cancelMobilePairing}
+>
+  <div class="mobile-pairing-flow">
+    {#if mobilePairAccepted}
+      <WarningNotice
+        role="status"
+        icon
+        title={translate($locale, 'Phone key added')}
+        body={translate(
+          $locale,
+          'Keep the phone on its waiting screen. After you add the remaining signers and create the wallet, desktop will show one final QR for the phone.'
+        )}
+      />
+      <Button class="full" onclick={continueAfterMobileSigner}
+        >{translate($locale, 'Continue wallet setup')}</Button
+      >
+    {:else if mobilePairBusy}<HardwareActionPrompt
+        title={translate($locale, 'Creating one-time invitation')}
+        detail={translate($locale, 'Groot is generating a fresh 128-bit BIP129 token.')}
+        label={translate($locale, 'Pairing invitation in progress')}
+      />{:else if mobileInvitation && !mobilePairScan && !mobileCandidate}
+      <AnimatedUrQr
+        frames={mobileInvitation.frames}
+        label={translate($locale, 'Groot phone invitation QR')}
+      />
+      <div class="comparison-code">
+        <small>{translate($locale, 'Both devices must show')}</small><strong
+          >{mobileInvitation.comparisonCode}</strong
+        >
+      </div>
+      <WarningNotice
+        role="note"
+        icon
+        title={translate($locale, 'One phone, one invitation')}
+        body={translate(
+          $locale,
+          'On the fresh phone choose “Connect desktop app,” scan this QR, and keep the response private.'
+        )}
+      />
+      <Button class="full" onclick={() => (mobilePairScan = true)}
+        >{translate($locale, 'Scan phone QR code')}</Button
+      >
+    {:else if mobileInvitation && mobilePairScan && !mobileCandidate}
+      {#if mobilePairError}<p class="form-error" role="alert">{mobilePairError}</p>{/if}
+      <UrQrScanner
+        acceptedTypes={['groot-bsms']}
+        prompt={translate($locale, 'Point the camera at the encrypted phone response')}
+        onframe={receiveMobileResponse}
+      />
+    {:else if mobileInvitation && mobileCandidate}
+      <div class="device-scan paired-mobile">
+        <Smartphone size={20} /><strong>{mobileCandidate.label}</strong><span
+          >{translate($locale, 'Phone key fingerprint')} {mobileCandidate.fingerprint}</span
+        >
+      </div>
+      <div class="comparison-code">
+        <small>{translate($locale, 'Confirm the phone shows the same digits')}</small><strong
+          >{mobileInvitation.comparisonCode}</strong
+        >
+      </div>
+      {#if mobilePairError}<p class="form-error" role="alert">{mobilePairError}</p>{/if}
+      <Button class="full" onclick={confirmMobileSigner}
+        >{translate($locale, 'Six digits match — add signer')}</Button
+      >
+    {:else if mobilePairError}<p class="form-error" role="alert">{mobilePairError}</p>{/if}
+    {#if !mobilePairAccepted}<Button
+        variant="secondary"
+        class="full"
+        disabled={mobilePairBusy}
+        onclick={cancelMobilePairing}>{translate($locale, 'Cancel pairing')}</Button
+      >{/if}
+  </div>
+</Modal>
+
+<Modal
+  open={mobileFinalOpen}
+  dismissible={false}
+  title={translate($locale, 'Return the final policy to the phone')}
+  description={translate(
+    $locale,
+    'Final phone step. This encrypted QR commits the wallet policy and first address.'
+  )}
+  onclose={() => {}}
+>
+  <div class="mobile-pairing-flow">
+    <AnimatedUrQr
+      frames={mobileFinalFrames}
+      label={translate($locale, 'Final shared wallet policy QR')}
+    />
+    <WarningNotice
+      role="note"
+      icon
+      title={translate($locale, 'Verify before funding')}
+      body={translate(
+        $locale,
+        'On the phone, check the same threshold and first address. Pairing is not complete until the phone accepts this policy.'
+      )}
+    />
+    <Button class="full" onclick={() => goto('/multisig')}
+      >{translate($locale, 'Phone accepted the wallet')}</Button
+    >
+  </div>
 </Modal>
 <Modal
   open={policyReviewOpen}
@@ -2272,7 +2505,7 @@
   title={translate($locale, 'Use Trezor standard wallet?')}
   description={translate(
     $locale,
-    'Passphrase protection can expose several independent wallets from the same device.'
+    'This selects the seed-derived wallet with no hardware passphrase.'
   )}
   onclose={() => {
     standardWalletOpen = false;
@@ -2283,22 +2516,11 @@
   <div class="credential-warning">
     <ShieldCheck size={17} />
     <p>
-      <strong>{translate($locale, 'No hardware passphrase for this signer')}</strong><span
-        >{translate(
-          $locale,
-          'This imports the key derived from the device seed alone. It does not disable, change, or\n        reveal any hidden passphrase wallet you may use elsewhere.'
-        )}</span
+      <strong>{translate($locale, 'Your hidden wallet is unchanged.')}</strong><span
+        >{translate($locale, 'Confirm this standard wallet to continue.')}</span
       >
     </p>
   </div>
-  <p class="policy-guidance">
-    {translate($locale, 'Choose this only if you intentionally want the Trezor')}
-    <strong>{translate($locale, 'standard wallet')}</strong>
-    {translate(
-      $locale,
-      'in this multisig\n    policy. Enabling or choosing a passphrase later opens a different hidden wallet; it does not change\n    this signer. The imported fingerprint is permanently bound to this policy.'
-    )}
-  </p>
   {#if hardwareBusy}<HardwareActionPrompt
       title={translate($locale, 'Importing the Trezor standard wallet')}
       detail={translate(
@@ -2451,6 +2673,26 @@
 />
 
 <style>
+  .mobile-pairing-flow {
+    display: grid;
+    gap: 1rem;
+  }
+  .comparison-code {
+    display: grid;
+    justify-items: center;
+    gap: 0.25rem;
+    padding: 0.8rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+  }
+  .comparison-code small {
+    color: var(--muted);
+  }
+  .comparison-code strong {
+    font-size: 1.65rem;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.18em;
+  }
   /* Keep the original cascade weight while constraining these rules to this owner. */
 
   :global(.secondary-link):where(.secondary-link) {
@@ -2610,12 +2852,6 @@
   }
   :global(.custom-threshold):where(.custom-threshold) :global(.field) {
     margin: 0;
-  }
-  :global(.policy-guidance):where(.policy-guidance) {
-    margin: 0 0 20px;
-    color: var(--muted);
-    font-size: var(--font-size-meta);
-    line-height: 1.5;
   }
   :global(.cosigner-list):where(.cosigner-list) {
     border: 1px solid var(--border);

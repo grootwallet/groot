@@ -1488,7 +1488,7 @@ pub async fn tx_sign_and_broadcast(
     credential: String,
 ) -> ApiResult<BroadcastResultDto> {
     let credential = Zeroizing::new(credential);
-    require_desktop_key_operation()?;
+    require_software_key_operation()?;
     let diagnostic_app = app.clone();
     let context = diagnostics::DiagnosticContext {
         wallet_kind: Some(diagnostics::DiagnosticWalletKind::Software),

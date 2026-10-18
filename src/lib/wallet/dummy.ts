@@ -210,7 +210,7 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
   async runtimePlatform() {
     return {
       platform: 'browser' as const,
-      mobile: false,
+      mobile: typeof window !== 'undefined' && matchMedia('(max-width: 760px)').matches,
       network: defaultConfig.network,
       networkSwitching: false,
       version: APP_VERSION,
@@ -381,6 +381,9 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
   }
   async lock() {
     if (this._selectedWalletId) this._unlockedWalletIds.delete(this._selectedWalletId);
+  }
+  async lockAll() {
+    this._unlockedWalletIds.clear();
   }
   async deleteWallet(
     credential: string,
@@ -2605,6 +2608,105 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     const proposal = this._multisigProposals.get(proposalId);
     if (!proposal) throw new WalletError('proposal_not_found', 'Payment proposal was not found.');
     proposal.status = 'cancelled';
+  }
+  async createPairingInvitation(
+    _walletName: string,
+    _threshold: number,
+    _signerCount: number
+  ): ReturnType<WalletPort['createPairingInvitation']> {
+    throw new WalletError('unsupported_operation', 'Device pairing requires the native Groot app.');
+  }
+  async coordinationStatus() {
+    return {
+      shared: false,
+      role: null,
+      canSignOnThisDevice: false,
+      mobileSignerFingerprint: null,
+      keyProtection: null
+    };
+  }
+  async encodeWatchOnlyQr(_content: string): ReturnType<WalletPort['encodeWatchOnlyQr']> {
+    throw new WalletError('unsupported_operation', 'Watch-only QR export requires the native app.');
+  }
+  async decodeWatchOnlyQr(_frames: string[]): ReturnType<WalletPort['decodeWatchOnlyQr']> {
+    throw new WalletError('unsupported_operation', 'Watch-only QR import requires the native app.');
+  }
+  async cancelPairing(_sessionId: string) {}
+  async decodePairingInvitation(
+    _frames: string[]
+  ): ReturnType<WalletPort['decodePairingInvitation']> {
+    throw new WalletError('unsupported_operation', 'Device pairing requires the native Groot app.');
+  }
+  async pendingMobilePairings(): ReturnType<WalletPort['pendingMobilePairings']> {
+    return [];
+  }
+  async resumePairingOnMobile(
+    _sessionId: string,
+    _credential: string
+  ): ReturnType<WalletPort['resumePairingOnMobile']> {
+    throw new WalletError('unsupported_operation', 'Device pairing requires the native Groot app.');
+  }
+  async awaitFinalPairingPolicy(
+    _sessionId: string,
+    _credential: string
+  ): ReturnType<WalletPort['awaitFinalPairingPolicy']> {
+    throw new WalletError('unsupported_operation', 'Device pairing requires the native Groot app.');
+  }
+  async acceptPairingOnMobile(
+    _invitationJson: string,
+    _signerLabel: string,
+    _credential: string
+  ): ReturnType<WalletPort['acceptPairingOnMobile']> {
+    throw new WalletError('unsupported_operation', 'Device pairing requires the native Groot app.');
+  }
+  async acceptMobileSigner(_frames: string[]): ReturnType<WalletPort['acceptMobileSigner']> {
+    throw new WalletError('unsupported_operation', 'Device pairing requires the native Groot app.');
+  }
+  async finalizePairingOnDesktop(
+    _sessionId: string
+  ): ReturnType<WalletPort['finalizePairingOnDesktop']> {
+    throw new WalletError('unsupported_operation', 'Device pairing requires the native Groot app.');
+  }
+  async inspectFinalPairingOnMobile(
+    _frames: string[]
+  ): ReturnType<WalletPort['inspectFinalPairingOnMobile']> {
+    throw new WalletError('unsupported_operation', 'Device pairing requires the native Groot app.');
+  }
+  async completePairingOnMobile(
+    _frames: string[],
+    _credential: string
+  ): ReturnType<WalletPort['completePairingOnMobile']> {
+    throw new WalletError('unsupported_operation', 'Device pairing requires the native Groot app.');
+  }
+  async mobileRecoveryRecord(): ReturnType<WalletPort['mobileRecoveryRecord']> {
+    throw new WalletError('unsupported_operation', 'Phone recovery requires the native Groot app.');
+  }
+  async inspectMobileRecoveryRecord(
+    _frames: string[]
+  ): ReturnType<WalletPort['inspectMobileRecoveryRecord']> {
+    throw new WalletError('unsupported_operation', 'Phone recovery requires the native Groot app.');
+  }
+  async recoverMobileSigner(
+    _frames: string[],
+    _credential: string
+  ): ReturnType<WalletPort['recoverMobileSigner']> {
+    throw new WalletError('unsupported_operation', 'Phone recovery requires the native Groot app.');
+  }
+  async reviewMobilePsbt(_psbt: string): ReturnType<WalletPort['reviewMobilePsbt']> {
+    throw new WalletError('unsupported_operation', 'Mobile signing requires the native Groot app.');
+  }
+  async checkMobileSigner(_credential: string): ReturnType<WalletPort['checkMobileSigner']> {
+    throw new WalletError(
+      'unsupported_operation',
+      'Phone key checks require the native Groot app.'
+    );
+  }
+  async signMobilePsbt(
+    _reviewedPsbt: string,
+    _revisionId: string,
+    _credential: string
+  ): ReturnType<WalletPort['signMobilePsbt']> {
+    throw new WalletError('unsupported_operation', 'Mobile signing requires the native Groot app.');
   }
   async verifyMultisigAddress(deviceId: string, addressId: number) {
     const rejectReview =

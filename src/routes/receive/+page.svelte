@@ -18,6 +18,7 @@
   import Button from '$lib/components/Button.svelte';
   import LoadFailure from '$lib/components/LoadFailure.svelte';
   import WalletSkeleton from '$lib/components/WalletSkeleton.svelte';
+  import WarningNotice from '$lib/components/WarningNotice.svelte';
   import PermanentLabelEditor from '$lib/components/PermanentLabelEditor.svelte';
   import Modal from '$lib/components/Modal.svelte';
   import ReadableAddress from '$lib/components/ReadableAddress.svelte';
@@ -68,6 +69,7 @@
   let savedSignerDeviceType = $state<string | null>(null);
   let savedSignerFingerprint = $state<string | null>(null);
   let savedSignerLabel = $state<string | null>(null);
+  let receiveOnDesktop = $state(false);
   const walletShell = useWalletShellContext();
   let externalSigner = $derived(
     walletShell.profiles().find((profile) => profile.id === walletShell.selectedWalletId())
@@ -106,11 +108,11 @@
   async function load() {
     loading = true;
     loadError = '';
+    receiveOnDesktop = false;
     try {
       const snapshot = await walletService.snapshot();
       applyAddresses(snapshot.receiveAddresses);
       labelSuggestions = snapshot.labelSuggestions;
-      loading = false;
       const shellWallets = walletShell.profiles();
       const shellSelectedWalletId = walletShell.selectedWalletId();
       const registry =
@@ -121,11 +123,14 @@
         registry.wallets.find((profile) => profile.id === registry.selectedWalletId)?.kind ===
         'watch_only'
       ) {
+        const runtime = await walletService.runtimePlatform();
+        receiveOnDesktop = runtime.mobile && runtime.platform !== 'browser';
         const savedSigner = (await walletService.externalSignerWallet()).signer;
         savedSignerDeviceType = savedSigner.deviceType;
         savedSignerFingerprint = savedSigner.fingerprint;
         savedSignerLabel = savedSigner.label;
       }
+      loading = false;
     } catch (cause) {
       loadError = localizedError(cause, $locale);
       loading = false;
@@ -315,6 +320,16 @@
     </section>
   {:else if loading}
     <WalletSkeleton variant="balance" />
+  {:else if receiveOnDesktop}
+    <WarningNotice
+      role="note"
+      icon
+      title={translate($locale, 'Receive on desktop')}
+      body={translate(
+        $locale,
+        'Create receive requests on desktop for paired and watch-only wallets. This avoids allocating the same address on two devices.'
+      )}
+    />
   {:else if current}
     <section class="receive-card" bind:this={receiveCard}>
       <button

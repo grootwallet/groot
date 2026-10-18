@@ -17,7 +17,7 @@
     X
   } from '@lucide/svelte';
   import QRCode from 'qrcode';
-  import { onDestroy } from 'svelte';
+  import { onDestroy, onMount } from 'svelte';
   import Button from '$lib/components/Button.svelte';
   import Modal from '$lib/components/Modal.svelte';
   import PasswordField from '$lib/components/PasswordField.svelte';
@@ -52,6 +52,7 @@
   let receiveQr = $state('');
   let receivePrintQr = $state<PrintableQr | null>(null);
   let loadedBackupName = $state('');
+  let mobileRuntime = $state(false);
   const policyPresentation = $derived(wallet ? walletPolicyPresentation(wallet) : null);
 
   const combinedDescriptor = $derived(
@@ -61,6 +62,9 @@
     pin = '';
     backup = '';
     exportedBackups = null;
+  });
+  onMount(() => {
+    void walletService.runtimePlatform().then((runtime) => (mobileRuntime = runtime.mobile));
   });
 
   $effect(() => {
@@ -347,9 +351,9 @@
           ><Button variant="secondary" onclick={saveBackupFile}
             ><Download size={15} />{translate($locale, 'Download')}
             {translate($locale, backupFormat === 'bsms' ? 'BSMS' : 'JSON')}</Button
-          ><Button variant="secondary" onclick={printBackup}
-            ><Printer size={15} />{translate($locale, 'Save PDF')}</Button
-          >
+          >{#if !mobileRuntime}<Button variant="secondary" onclick={printBackup}
+              ><Printer size={15} />{translate($locale, 'Save PDF')}</Button
+            >{/if}
         </div>
         {#if exportError}<p class="form-error" aria-live="polite">{exportError}</p>{/if}
         <div class="descriptor-qr-preview">
@@ -469,7 +473,7 @@
         <header>
           <p>{translate($locale, 'Groot · Public wallet backup')}</p>
           <h1>{wallet.name}</h1>
-          <strong>{translate($locale, 'Watch-only descriptors — cannot spend bitcoin')}</strong>
+          <strong>{translate($locale, 'Watch-only descriptors. Cannot spend bitcoin')}</strong>
         </header>
         <dl>
           <div>
