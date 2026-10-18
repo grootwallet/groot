@@ -64,3 +64,7 @@ App release/update preparation (ADR 0086) and 5.2 naming (ADR 0087) have **no BI
 The 5.2.0 GA version promotion and same-machine reproduction decision (ADR 0088) have **no BIP impact**.
 
 The GA remediation keeps BIP329 records and wallet formats unchanged. It adds an atomic application-level recovery-gap bound to restored address-label imports. The first-history disclosure fix has **no BIP impact**.
+
+The 5.3 iOS foundation (ADR 0089) has **no BIP impact**: native mobile safety gates and isolated build configuration change no derivation, descriptor, PSBT, label or backup format and establish no new physical interoperability evidence.
+
+The 5.3 defect remediation (ADR 0090) changes no BIP support, PSBT encoding, derivation or wallet format. It extends application failure/recovery tests around existing SegWit BIP125/174 paths; it does not add interoperability or physical-device certification. Accessibility, Activity retention, scanner copy and worker scheduling have no BIP impact.

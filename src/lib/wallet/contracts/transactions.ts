@@ -159,8 +159,9 @@ export type LabelImportResult = {
 
 export type BroadcastResult = {
   txid: string;
-  snapshot: WalletSnapshot;
+  snapshot: WalletSnapshot | null;
   syncPending: boolean;
+  persistencePending?: boolean;
 };
 
 export type AutomaticSelectionStrategy = 'balanced' | 'private' | 'lower_fee';

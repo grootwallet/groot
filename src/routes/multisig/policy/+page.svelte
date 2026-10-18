@@ -308,3 +308,84 @@
       <Button href="/multisig/new">{translate($locale, 'Create wallet')}</Button>
     </section>{/if}
 </div>
+
+<style>
+  /* Keep the original cascade weight while constraining these rules to this owner. */
+
+  .policy-lab {
+    max-width: 1120px;
+  }
+  :global(.policy-lab-loading):where(.policy-lab-loading) {
+    visibility: hidden;
+  }
+  .policy-lab :global(.form-card > .policy-lab-notice) {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin: 0 0 20px;
+  }
+  .policy-lab :global(.warning-notice.danger) {
+    gap: 8px;
+  }
+  :global(.template-explainer):where(.template-explainer) {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 14px;
+    margin-bottom: 16px;
+    border: 1px solid var(--border);
+    background: var(--surface-control);
+    border-radius: var(--radius-control);
+  }
+  :global(.template-explainer):where(.template-explainer) :global(span) {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+  :global(.template-explainer):where(.template-explainer) :global(small) {
+    color: var(--muted);
+    line-height: 1.5;
+  }
+  :global(.policy-analysis):where(.policy-analysis) {
+    margin-top: 18px;
+  }
+  :global(.policy-timeline):where(.policy-timeline) {
+    display: grid;
+    gap: 8px;
+    margin: 18px 0;
+  }
+  :global(.policy-timeline):where(.policy-timeline) :global(article) {
+    display: grid;
+    grid-template-columns: 30px 1fr auto;
+    align-items: center;
+    gap: 10px;
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+  }
+  :global(.policy-timeline):where(.policy-timeline) :global(article > span) {
+    width: 25px;
+    height: 25px;
+    display: grid;
+    place-items: center;
+    border-radius: 50%;
+    background: var(--panel-2);
+    font-size: var(--font-size-meta);
+  }
+  :global(.policy-timeline):where(.policy-timeline) :global(article div) {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  :global(.policy-timeline):where(.policy-timeline) :global(article small) {
+    color: var(--muted);
+  }
+  :global(.policy-timeline):where(.policy-timeline) :global(article.active) {
+    border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+    background: var(--accent-soft);
+  }
+  :global(.policy-timeline):where(.policy-timeline) :global(article.active > span) {
+    background: var(--accent);
+    color: var(--accent-contrast);
+  }
+</style>

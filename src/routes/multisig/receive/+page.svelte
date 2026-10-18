@@ -653,3 +653,23 @@
     : 'Native SegWit · standard multisig'}
   onclose={() => (detailAddress = null)}
 />
+
+<style>
+  /* Keep the original cascade weight while constraining these rules to this owner. */
+
+  :global(.policy-next-step):where(.policy-next-step) {
+    margin-top: 16px;
+  }
+  :global(.policy-next-step):where(.policy-next-step) :global(.instruction-card) {
+    border-color: var(--link);
+    background: var(--surface-control);
+  }
+  :global(.policy-next-step):where(.policy-next-step) :global(.instruction-card p) {
+    margin: 0;
+    color: var(--text-soft);
+    font-size: var(--font-size-meta);
+  }
+  :global(.policy-next-step):where(.policy-next-step) :global(.button) {
+    justify-self: start;
+  }
+</style>

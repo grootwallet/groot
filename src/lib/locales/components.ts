@@ -1,6 +1,34 @@
 import type { CatalogSection } from './types';
 
 export const componentCopy = {
+  '{count} unique frame scanned': {
+    fr: '{count} image unique analysée',
+    es: '{count} fotograma único escaneado'
+  },
+  'This payment request is too large to scan safely.': {
+    fr: 'Cette demande de paiement est trop volumineuse pour être analysée en sécurité.',
+    es: 'Esta solicitud de pago es demasiado grande para escanearla de forma segura.'
+  },
+  'No usable camera is available. Connect a camera or enter the payment request manually.': {
+    fr: 'Aucune caméra utilisable. Connectez une caméra ou saisissez la demande de paiement manuellement.',
+    es: 'No hay ninguna cámara disponible. Conecta una cámara o introduce la solicitud de pago manualmente.'
+  },
+  'Too many QR frames. Restart the scan.': {
+    fr: 'Trop d’images QR. Relancez l’analyse.',
+    es: 'Demasiados fotogramas QR. Reinicia el escaneo.'
+  },
+  'Camera access was denied. Allow camera access for Groot, then reopen this scanner.': {
+    fr: 'L’accès à la caméra a été refusé. Autorisez Groot à l’utiliser, puis rouvrez ce scanner.',
+    es: 'Se denegó el acceso a la cámara. Permite el acceso a Groot y vuelve a abrir este escáner.'
+  },
+  'No usable camera is available. Connect a camera or import the signed PSBT file instead.': {
+    fr: 'Aucune caméra utilisable. Connectez une caméra ou importez le fichier PSBT signé.',
+    es: 'No hay ninguna cámara disponible. Conecta una cámara o importa el archivo PSBT firmado.'
+  },
+  '{count} unique frames scanned': {
+    fr: '{count} images uniques analysées',
+    es: '{count} fotogramas únicos escaneados'
+  },
   'Open existing wallet': {
     fr: 'Ouvrir le portefeuille existant',
     es: 'Abrir la cartera existente'

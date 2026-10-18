@@ -275,3 +275,284 @@
     label={translate($locale, 'Public account key (xpub)')}
     onclose={() => (publicKeyOpen = false)}
   />{/if}
+
+<style>
+  /* Keep the original cascade weight while constraining these rules to this owner. */
+
+  :global(.device-details):where(.device-details) {
+    display: grid;
+    gap: 16px;
+  }
+  :global(.device-identity):where(.device-identity) {
+    display: grid;
+    grid-template-columns: 42px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 12px;
+  }
+  :global(.device-identity):where(.device-identity) > :global(span:first-child) {
+    width: 42px;
+    height: 42px;
+    display: grid;
+    place-items: center;
+    color: var(--accent);
+    background: var(--accent-soft);
+    border-radius: var(--radius-inset);
+  }
+  :global(.device-identity):where(.device-identity) > :global(div) {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+  :global(.device-identity):where(.device-identity) :global(small) {
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+  }
+  :global(.device-details):where(.device-details) :global(dl) {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+    background: var(--border);
+  }
+  :global(.device-details):where(.device-details) :global(dl > div) {
+    min-width: 0;
+    padding: 12px;
+    background: var(--surface-control);
+  }
+  :global(.device-details):where(.device-details) :global(dt) {
+    margin-bottom: 5px;
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  :global(.device-details):where(.device-details) :global(dd) {
+    margin: 0;
+    color: var(--text-soft);
+    font-size: var(--font-size-meta);
+  }
+  :global(.device-details):where(.device-details) :global(dd code) {
+    color: var(--text);
+    font-size: var(--font-size-meta);
+  }
+  :global(.device-details):where(.device-details) :global(.public-key-detail) {
+    grid-column: 1 / -1;
+  }
+  :global(.public-key-detail):where(.public-key-detail) :global(dd) {
+    min-width: 0;
+  }
+  :global(.public-key-trigger):where(.public-key-trigger) {
+    width: 100%;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+    padding: 6px;
+    border: 0;
+    border-radius: 6px;
+    color: var(--muted);
+    background: transparent;
+    text-align: left;
+    cursor: pointer;
+  }
+  :global(.public-key-trigger:hover):where(.public-key-trigger) {
+    color: var(--link);
+    background: var(--surface-hover);
+  }
+  :global(.public-key-trigger):where(.public-key-trigger) :global(code) {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  :global(.health-card):where(.health-card) {
+    padding: 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+    background: var(--panel-2);
+  }
+  :global(.health-heading):where(.health-heading) {
+    display: grid;
+    grid-template-columns: 30px 1fr;
+    gap: 10px;
+    align-items: center;
+  }
+  :global(.health-heading):where(.health-heading) > :global(span) {
+    width: 30px;
+    height: 30px;
+    display: grid;
+    place-items: center;
+    color: var(--muted);
+    background: var(--surface-icon);
+    border-radius: var(--radius-control);
+  }
+  :global(.health-heading):where(.health-heading) > :global(span.checked) {
+    color: var(--success);
+    background: color-mix(in srgb, var(--success) 8%, transparent);
+  }
+  :global(.health-heading):where(.health-heading) > :global(span.attention) {
+    color: var(--danger);
+    background: rgba(239, 100, 100, 0.08);
+  }
+  :global(.health-heading):where(.health-heading) :global(div) {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  :global(.health-heading):where(.health-heading) :global(strong) {
+    font-size: var(--font-size-meta);
+  }
+  :global(.health-heading):where(.health-heading) :global(small) {
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+  }
+  :global(.health-card):where(.health-card) :global(p) {
+    margin: 11px 0 13px;
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+    line-height: 1.5;
+  }
+  :global(.signer-name-editor):where(.signer-name-editor) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 12px;
+    padding: 11px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+    background: var(--surface-control);
+  }
+  :global(.signer-name-editor):where(.signer-name-editor) > :global(span) {
+    min-width: 0;
+    display: grid;
+    gap: 3px;
+  }
+  :global(.signer-name-editor):where(.signer-name-editor) :global(small),
+  :global(.signer-name-editor):where(.signer-name-editor) :global(label > span) {
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+    font-weight: 650;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  :global(.signer-name-editor):where(.signer-name-editor) :global(strong) {
+    overflow: hidden;
+    font-size: var(--font-size-meta);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  :global(.signer-name-editor):where(.signer-name-editor) :global(form) {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: end;
+    gap: 10px;
+  }
+  :global(.signer-name-editor):where(.signer-name-editor) :global(label) {
+    display: grid;
+    gap: 6px;
+  }
+  :global(.signer-name-editor):where(.signer-name-editor) :global(input) {
+    min-height: 38px;
+    padding: 8px 10px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-control);
+    color: var(--text);
+    background: var(--surface-inset);
+    font: inherit;
+    font-size: var(--font-size-meta);
+  }
+  :global(.signer-name-editor):where(.signer-name-editor) :global(form > div) {
+    display: flex;
+    gap: 7px;
+  }
+  :global(.signer-name-editor):where(.signer-name-editor) :global(.form-error) {
+    grid-column: 1 / -1;
+    margin: 0;
+  }
+  :global(.device-policy-status):where(.device-policy-status) {
+    display: grid;
+    grid-template-columns: 32px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 10px;
+    padding: 13px;
+    border: 1px solid color-mix(in srgb, var(--success) 28%, var(--border));
+    border-radius: var(--radius-control);
+    background: color-mix(in srgb, var(--success) 6%, var(--panel));
+  }
+  :global(.device-policy-status):where(.device-policy-status) > :global(span) {
+    width: 32px;
+    height: 32px;
+    display: grid;
+    place-items: center;
+    border-radius: var(--radius-control);
+    color: var(--success);
+    background: var(--surface-icon);
+  }
+  :global(.device-policy-status):where(.device-policy-status) > :global(div) {
+    min-width: 0;
+    display: grid;
+    gap: 3px;
+  }
+  :global(.device-policy-status):where(.device-policy-status) :global(strong) {
+    font-size: var(--font-size-meta);
+  }
+  :global(.device-policy-status):where(.device-policy-status) :global(small) {
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+    line-height: 1.45;
+  }
+  :global(.device-policy-status):where(.device-policy-status) :global(em) {
+    color: var(--success);
+    font-size: var(--font-size-meta);
+    font-style: normal;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+  :global(.device-policy-status.attention):where(.device-policy-status) {
+    border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+    background: var(--accent-soft);
+  }
+  :global(.device-policy-status.attention):where(.device-policy-status) > :global(span),
+  :global(.device-policy-status.attention):where(.device-policy-status) :global(em) {
+    color: var(--accent);
+  }
+  :global(.device-policy-status):where(.device-policy-status) :global(.button) {
+    grid-column: 2 / -1;
+    justify-self: start;
+  }
+  :global(.health-card-body):where(.health-card-body) {
+    margin-top: 14px;
+  }
+  :global(.health-card-body):where(.health-card-body) > :global(p) {
+    margin-top: 0;
+  }
+
+  @media (max-width: 760px) {
+    :global(.signer-name-editor):where(.signer-name-editor) :global(form) {
+      grid-template-columns: 1fr;
+    }
+    :global(.signer-name-editor):where(.signer-name-editor) :global(form > div) {
+      justify-content: stretch;
+    }
+    :global(.signer-name-editor):where(.signer-name-editor) :global(form > div .button) {
+      flex: 1;
+    }
+    :global(.device-details):where(.device-details) :global(dl) {
+      grid-template-columns: 1fr;
+    }
+    :global(.device-details):where(.device-details) :global(.public-key-detail) {
+      grid-column: auto;
+    }
+    :global(.device-policy-status):where(.device-policy-status) {
+      grid-template-columns: 30px minmax(0, 1fr);
+    }
+    :global(.device-policy-status):where(.device-policy-status) :global(em),
+    :global(.device-policy-status):where(.device-policy-status) :global(.button) {
+      grid-column: 2;
+    }
+  }
+</style>

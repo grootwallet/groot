@@ -29,3 +29,11 @@ Use the lowest layer that proves the invariant. Share fixture builders, not muta
 Delete obsolete tests with their unreachable implementation. Deduplicate only after proving equivalent coverage. Source-boundary tests remain where they protect secrets, reviewed dependencies or release controls; do not replace them with mocks that cannot observe the boundary.
 
 Keep screenshots, SBOMs, coverage output and performance measurements as untracked artifacts. Record physical evidence against exact commit/model/firmware. Candidate-specific [test guides](testing/) are instructions for that candidate, not evergreen specifications.
+
+## Mobile foundation
+
+ADR 0089 adds native desktop/mobile capability-policy and command-order regression tests. Compile the arm64 iOS target to catch desktop-only native API calls. The isolated debug archive establishes build evidence only; pairing, camera, public watch sync, receive labels, PSBT transfer and device lifecycle require the staged evidence in the [5.3 plan](mobile-5.3-plan.md). Keep signing blocked and desktop profiles intact.
+
+## 5.3 defect regressions
+
+ADR 0090 is covered by SQLite failure, transaction rollback/reopen and idempotent exact-proposal reconciliation tests, plus native-adapter null-snapshot tests. Browser regressions cover the accepted-but-recording-pending warning, retained Activity after refresh failure, accessible tooltip relationships/Escape, and translated scanner denial/count/limit states. Native worker source guards reject main-thread operation-lock waits and check identity binding for newly queued wallet-specific work. The [native review and device checklist](testing/5.3-native-review.md) records the remaining release-review boundary and exact device test scope. These guards supplement the Rust suites; browser fixtures do not prove native UI responsiveness, physical camera behavior or VoiceOver certification.

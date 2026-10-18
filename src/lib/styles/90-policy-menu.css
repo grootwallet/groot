@@ -1,0 +1,10 @@
+/* Wallet-policy menus intentionally float above their summary card. */
+.wallet-more {
+  z-index: 40;
+}
+body:has(.toast-region .toast) .app-update-action {
+  display: none;
+}
+body:has(input:focus, textarea:focus, [contenteditable='true']:focus) .app-update-action {
+  display: none;
+}

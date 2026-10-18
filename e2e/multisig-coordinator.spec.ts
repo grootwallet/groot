@@ -47,17 +47,20 @@ test('disabled loading buttons keep visibly rotating until the operation ends', 
   page
 }) => {
   await page.goto('/multisig');
+  await expect(page.getByRole('heading', { name: 'Family wallet', exact: true })).toBeVisible();
+  await page.waitForLoadState('networkidle');
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
   const indicator = page.locator('.button-loading-indicator');
-  await page.evaluate(() => {
-    const button = document.createElement('button');
-    button.className = 'button';
-    button.disabled = true;
-    button.setAttribute('aria-busy', 'true');
-    button.innerHTML =
-      '<span class="button-loading-indicator" aria-hidden="true"></span><span>Working…</span>';
-    document.body.append(button);
+  await page.evaluate(async () => {
+    const path = '/src/lib/testing/loading-button.ts';
+    const { mountLoadingButton } = await import(path);
+    const target = document.createElement('div');
+    document.body.append(target);
+    mountLoadingButton(target);
   });
   await expect(indicator).toBeVisible();
+  await expect(indicator).toHaveCSS('animation-name', 'groot-spinner-rotation');
+  await expect(indicator).toHaveCSS('animation-duration', '1s');
   expect(await indicator.evaluate((element) => getComputedStyle(element, '::after').content)).toBe(
     'none'
   );

@@ -1,7 +1,8 @@
+import { readUiStyles } from '../testing/ui-styles';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
-const css = readFileSync(new URL('../../app.css', import.meta.url), 'utf8');
+const css = readUiStyles();
 const walletProfiles = readFileSync(new URL('./WalletProfileList.svelte', import.meta.url), 'utf8');
 const backup = readFileSync(
   new URL('../../routes/multisig/backup/+page.svelte', import.meta.url),

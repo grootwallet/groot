@@ -1,0 +1,15 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Groot Testnet4 Dev",
+  "identifier": "app.groot.wallet.mobile.testnet4.dev",
+  "build": {
+    "beforeDevCommand": null,
+    "devUrl": null,
+    "beforeBuildCommand": "pnpm build:testnet4"
+  },
+  "bundle": {
+    "iOS": {
+      "minimumSystemVersion": "17.0"
+    }
+  }
+}

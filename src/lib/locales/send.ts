@@ -1,6 +1,15 @@
 import type { CatalogSection } from './types';
 
 export const sendCopy = {
+  'Local recording pending': {
+    fr: 'Enregistrement local en attente',
+    es: 'Registro local pendiente'
+  },
+  'The transaction was accepted, but its local record could not be saved. Sync this wallet before making another payment. Do not resend it.':
+    {
+      fr: 'La transaction a été acceptée, mais son enregistrement local a échoué. Synchronisez ce portefeuille avant un autre paiement. Ne la renvoyez pas.',
+      es: 'La transacción se aceptó, pero no se pudo guardar su registro local. Sincroniza este monedero antes de otro pago. No la vuelvas a enviar.'
+    },
   Intent: { fr: 'Intention', es: 'Intención' },
   'Amount & fee': { fr: 'Montant et frais', es: 'Importe y comisión' },
   'Review & sign': { fr: 'Vérifier et signer', es: 'Revisar y firmar' },

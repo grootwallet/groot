@@ -1,5 +1,6 @@
 export const WALLET_ERROR_CODES = [
   'invalid_credential',
+  'mobile_operation_unavailable',
   'entropy_unavailable',
   'invalid_supplemental_entropy',
   'invalid_address',

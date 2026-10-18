@@ -66,3 +66,48 @@
     </dl>
   </details>
 </section>
+
+<style>
+  /* Keep the original cascade weight while constraining these rules to this owner. */
+
+  :global(.verification-address):where(.verification-address) {
+    display: grid;
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+  :global(.verification-address):where(.verification-address) > :global(span) {
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+    font-weight: 650;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  :global(.verification-address):where(.verification-address) :global(.readable-address-block) {
+    width: 100%;
+  }
+  :global(.verification-address):where(.verification-address) :global(.readable-address) {
+    min-height: 58px;
+  }
+  :global(.verification-derivation):where(.verification-derivation) {
+    margin: 0;
+    padding: 4px 11px;
+  }
+  :global(.verification-derivation):where(.verification-derivation) > :global(div) {
+    min-height: 34px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  :global(.verification-derivation):where(.verification-derivation) :global(dt),
+  :global(.verification-derivation):where(.verification-derivation) :global(dd) {
+    margin: 0;
+    font-size: var(--font-size-meta);
+  }
+  :global(.verification-derivation):where(.verification-derivation) :global(dt) {
+    color: var(--muted);
+  }
+  :global(.verification-derivation):where(.verification-derivation) :global(dd) {
+    color: var(--text);
+  }
+</style>

@@ -525,7 +525,7 @@ export class TauriWalletAdapter implements WalletPort {
       reviewBinding,
       credential
     });
-    result.snapshot = normalizeSnapshot(result.snapshot);
+    if (result.snapshot) result.snapshot = normalizeSnapshot(result.snapshot);
     this.#scheduleNotifications(false, walletId, generation);
     return result;
   }
@@ -728,7 +728,7 @@ export class TauriWalletAdapter implements WalletPort {
       reviewedPsbt,
       credential
     });
-    result.snapshot = normalizeSnapshot(result.snapshot);
+    if (result.snapshot) result.snapshot = normalizeSnapshot(result.snapshot);
     this.#scheduleNotifications(false, walletId, generation);
     return result;
   }
@@ -952,7 +952,7 @@ export class TauriWalletAdapter implements WalletPort {
       reviewedPsbt,
       credential
     });
-    result.snapshot = normalizeSnapshot(result.snapshot);
+    if (result.snapshot) result.snapshot = normalizeSnapshot(result.snapshot);
     this.#scheduleNotifications(true, walletId, generation);
     return result;
   }

@@ -7,7 +7,13 @@
 
   let { onframe } = $props<{ onframe: (frame: string) => void | Promise<void> }>();
   let video: HTMLVideoElement;
-  let error = $state('');
+  let error = $state<'limit' | 'denied' | 'unavailable' | null>(null);
+  const errors = {
+    limit: 'Too many QR frames. Restart the scan.',
+    denied: 'Camera access was denied. Allow camera access for Groot, then reopen this scanner.',
+    unavailable:
+      'No usable camera is available. Connect a camera or import the signed PSBT file instead.'
+  } as const;
   let scanned = $state(0);
 
   onMount(() => {
@@ -19,7 +25,7 @@
       const frame = rawValue.trim().toLowerCase();
       if (!frame.startsWith('ur:crypto-psbt/') || seen.has(frame) || stopped) return;
       if (seen.size >= 1024) {
-        error = 'Too many QR frames. Restart the scan.';
+        error = 'limit';
         scanner?.stop();
         return;
       }
@@ -51,10 +57,7 @@
       } catch (cause) {
         if (stopped) return;
         const name = cause instanceof DOMException ? cause.name : '';
-        error =
-          name === 'NotAllowedError'
-            ? 'Camera access was denied. Allow camera access for Groot, then reopen this scanner.'
-            : 'No usable camera is available. Connect a camera or import the signed PSBT file instead.';
+        error = name === 'NotAllowedError' ? 'denied' : 'unavailable';
       }
     })();
     return () => {
@@ -73,10 +76,17 @@
   ></video>
   <div class="scan-guide" aria-hidden="true"></div>
   <div class="scan-status">
-    {#if error}<CameraOff size={16} /><span>{error}</span>{:else}<Camera size={16} /><span
+    {#if error}<CameraOff size={16} /><span>{translate($locale, errors[error])}</span>{:else}<Camera
+        size={16}
+      /><span
         >{translate(
           $locale,
-          scanned ? `${scanned} unique frames scanned` : 'Point the camera at a crypto-psbt QR'
+          scanned
+            ? scanned === 1
+              ? '{count} unique frame scanned'
+              : '{count} unique frames scanned'
+            : 'Point the camera at a crypto-psbt QR',
+          { count: scanned }
         )}</span
       >{/if}
   </div>

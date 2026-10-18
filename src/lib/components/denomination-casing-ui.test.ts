@@ -1,3 +1,4 @@
+import { readUiStyles } from '../testing/ui-styles';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -5,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 
 const sourceRoot = fileURLToPath(new URL('../../', import.meta.url));
 const amountComponent = readFileSync(new URL('./Amount.svelte', import.meta.url), 'utf8');
-const appCss = readFileSync(new URL('../../app.css', import.meta.url), 'utf8');
+const appCss = readUiStyles();
 
 function svelteFiles(directory: string): string[] {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {

@@ -2826,3 +2826,571 @@
     >
   </div>
 </Modal>
+
+<style>
+  /* Keep the original cascade weight while constraining these rules to this owner. */
+
+  :global(.settings-build-row):where(.settings-build-row) {
+    margin-top: 42px;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  :global(.settings-build-row):where(.settings-build-row) :global(.build-identity) {
+    min-width: 0;
+    justify-items: start;
+  }
+  :global(.settings-build-row):where(.settings-build-row) :global(.build-identity button) {
+    text-align: start;
+  }
+  @media (max-width: 700px) {
+    :global(.settings-build-row):where(.settings-build-row) :global(.build-identity button) {
+      min-height: 44px;
+    }
+  }
+  :global(.scan-form):where(.scan-form) {
+    display: grid;
+    gap: 18px;
+  }
+  :global(.scan-form):where(.scan-form) :global(.field) {
+    margin: 0;
+  }
+  :global(.scan-form):where(.scan-form) :global(.scan-tip) {
+    color: var(--text-soft);
+    font-variant-numeric: tabular-nums;
+  }
+  :global(.scan-form):where(.scan-form) :global(.field > .form-error) {
+    color: var(--danger);
+  }
+  :global(.scan-optional-control):where(.scan-optional-control) {
+    border-bottom: 1px solid var(--border);
+  }
+  :global(.scan-optional-control):where(.scan-optional-control) > :global(summary) {
+    display: flex;
+    width: fit-content;
+    align-items: center;
+    gap: 5px;
+    padding: 2px 0 12px;
+    color: var(--link);
+    font-size: var(--font-size-meta);
+    font-weight: 700;
+    cursor: pointer;
+    list-style: none;
+  }
+  :global(.scan-optional-control):where(.scan-optional-control)
+    > :global(summary::-webkit-details-marker) {
+    display: none;
+  }
+  :global(.scan-optional-control):where(.scan-optional-control) > :global(summary svg) {
+    transition: transform 140ms ease;
+  }
+  :global(.scan-optional-control[open]):where(.scan-optional-control) > :global(summary svg) {
+    transform: rotate(180deg);
+  }
+  :global(.scan-optional-control):where(.scan-optional-control) > :global(.field) {
+    margin-bottom: 14px;
+  }
+  :global(.scan-progress):where(.scan-progress) {
+    display: grid;
+    gap: 9px;
+    padding: 12px 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+    background: var(--surface-control);
+  }
+  :global(.scan-progress):where(.scan-progress) > :global(div) {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: baseline;
+  }
+  :global(.scan-progress):where(.scan-progress) :global(strong) {
+    font-size: 13px;
+    color: var(--text-soft);
+  }
+  :global(.scan-progress):where(.scan-progress) :global(small) {
+    font-size: var(--font-size-meta);
+    color: var(--muted);
+    text-align: right;
+  }
+  :global(.scan-progress):where(.scan-progress) :global(progress) {
+    width: 100%;
+    height: 6px;
+    accent-color: var(--progress);
+  }
+  :global(.settings-group):where(.settings-group) :global(h2) {
+    font-size: 15px;
+    margin: 0;
+    font-weight: 600;
+  }
+  :global(.settings-list):where(.settings-list) > :global(button:focus-visible) {
+    /* Keep focus visible inside the shared rounded, clipped list container. */
+    outline: 2px solid var(--focus);
+    outline-offset: -3px;
+  }
+  :global(.modal-supporting-copy):where(.modal-supporting-copy) {
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+    line-height: 1.45;
+    margin: 16px 0 0;
+  }
+
+  :global(.settings-group):where(.settings-group) {
+    margin-bottom: 28px;
+  }
+  :global(.settings-group):where(.settings-group) :global(h2) {
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+    margin: 0 0 9px 3px;
+  }
+  :global(.settings-group):where(.settings-group) :global(h2:has(> span)) {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  :global(.settings-group):where(.settings-group) :global(h2 > strong) {
+    min-width: 0;
+    padding: 0;
+    color: var(--muted-2);
+    background: transparent;
+    border-radius: 0;
+    font-size: var(--font-size-meta);
+    font-weight: 550;
+    text-align: right;
+  }
+  :global(.settings-list):where(.settings-list) {
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-panel);
+    background: var(--panel);
+  }
+  :global(.settings-list):where(.settings-list) > :global(button),
+  :global(.settings-list):where(.settings-list) > :global(.setting-row) {
+    width: 100%;
+    min-height: 66px;
+    padding: 0 15px;
+    display: grid;
+    grid-template-columns: 34px minmax(0, 1fr) auto;
+    gap: 12px;
+    align-items: center;
+    color: var(--text);
+    background: var(--panel);
+    border: 0;
+    border-bottom: 1px solid var(--border);
+    text-align: left;
+  }
+  :global(.settings-list):where(.settings-list) > :global(.setting-row.language-setting-row) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  :global(.settings-list):where(.settings-list) > :global(.bitcoin-network-row) {
+    padding-block: 14px;
+  }
+  :global(.settings-list):where(.settings-list) > :global(button) {
+    cursor: pointer;
+  }
+  :global(.settings-list):where(.settings-list) > :global(button:hover),
+  :global(.settings-list):where(.settings-list) > :global(a.setting-row:hover) {
+    background: var(--panel-2);
+  }
+  :global(.settings-list):where(.settings-list) > :global(:last-child) {
+    border-bottom: 0;
+  }
+  :global(.settings-list):where(.settings-list) > :global(button > span:nth-child(2)),
+  :global(.settings-list):where(.settings-list) > :global(.setting-row > span:nth-child(2)) {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+  :global(.settings-list):where(.settings-list) :global(strong) {
+    font-size: 14px;
+  }
+  :global(.settings-list):where(.settings-list) :global(small) {
+    color: var(--muted);
+    font-size: 13px;
+    line-height: 1.4;
+  }
+  :global(.keyboard-shortcut-row):where(.keyboard-shortcut-row) {
+    align-items: start !important;
+    padding-block: 14px !important;
+  }
+  :global(.keyboard-shortcut-grid):where(.keyboard-shortcut-grid) {
+    width: min(390px, 44%);
+    margin: 0;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(150px, 1fr));
+    gap: 8px 16px;
+  }
+  :global(.keyboard-shortcut-grid):where(.keyboard-shortcut-grid) > :global(div) {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  :global(.keyboard-shortcut-grid):where(.keyboard-shortcut-grid) :global(dt) {
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+    white-space: normal;
+  }
+  :global(.keyboard-shortcut-grid):where(.keyboard-shortcut-grid) :global(dd) {
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    justify-content: flex-end;
+    min-width: max-content;
+  }
+  :global(.keyboard-shortcut-grid):where(.keyboard-shortcut-grid) :global(kbd) {
+    min-width: 21px;
+    min-height: 21px;
+    padding: 1px 5px;
+    border: 1px solid var(--border-strong);
+    border-bottom-width: 2px;
+    border-radius: 5px;
+    background: var(--surface-control);
+    color: var(--text);
+    display: inline-grid;
+    place-items: center;
+    font-family: inherit;
+    font-size: var(--font-size-meta);
+    font-weight: 650;
+    line-height: 1;
+  }
+  :global(.settings-list):where(.settings-list) > :global(button > svg:last-child),
+  :global(.settings-list):where(.settings-list) > :global(a.setting-row > svg:last-child) {
+    color: var(--muted-2);
+  }
+  :global(.setting-row-status):where(.setting-row-status) {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    color: var(--muted-2);
+  }
+  :global(.wallet-context-row):where(.wallet-context-row) :global(.setting-icon) {
+    color: var(--fr-red);
+    background: color-mix(in srgb, var(--fr-red) 7%, var(--surface-icon));
+  }
+  :global(.backup-information-row):where(.backup-information-row) {
+    cursor: default;
+  }
+  :global(.backup-information-row):where(.backup-information-row) :global(.info-badge) {
+    color: var(--muted);
+    background: var(--surface-control);
+    outline: 1px solid var(--border);
+  }
+  :global(.settings-sync-indicator):where(.settings-sync-indicator) {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    margin: 8px 0 0 auto;
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  :global(.info-badge):where(.info-badge) {
+    padding: 4px 8px;
+    color: var(--warning-text);
+    background: var(--accent-soft);
+    border-radius: 999px;
+    font-size: var(--font-size-meta);
+    font-weight: 650;
+    white-space: nowrap;
+  }
+  :global(.info-badge.healthy):where(.info-badge) {
+    color: var(--success);
+    background: color-mix(in srgb, var(--success) 10%, transparent);
+  }
+  :global(.info-badge.attention):where(.info-badge) {
+    color: var(--accent);
+    outline: 1px solid color-mix(in srgb, var(--accent) 34%, transparent);
+  }
+  :global(.info-badge.muted):where(.info-badge) {
+    color: var(--muted);
+    background: var(--surface-icon);
+  }
+  :global(.settings-list.timeout-menu-open):where(.settings-list) {
+    overflow: visible;
+  }
+  :global(.timeout-control):where(.timeout-control) {
+    position: relative;
+    min-width: 144px;
+  }
+  :global(.timeout-choice):where(.timeout-choice) {
+    width: 100%;
+    min-width: 124px;
+    height: 38px;
+    padding: 0 10px 0 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    color: var(--text);
+    background-color: var(--panel-2);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-control);
+    font-family: var(--font-ui);
+    font-size: 13px;
+    font-weight: 650;
+    line-height: 1.2;
+    cursor: pointer;
+  }
+  :global(.timeout-choice):where(.timeout-choice) > :global(span:last-child) {
+    display: flex;
+    color: var(--muted-2);
+    transition: transform 150ms ease;
+  }
+  :global(.timeout-choice):where(.timeout-choice) > :global(span:last-child.rotated) {
+    transform: rotate(180deg);
+  }
+  :global(.timeout-choice:focus-visible):where(.timeout-choice) {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+  }
+  :global(.timeout-choice:disabled):where(.timeout-choice) {
+    cursor: wait;
+    opacity: 0.65;
+  }
+  :global(.timeout-menu):where(.timeout-menu) {
+    position: absolute;
+    z-index: 40;
+    top: calc(100% + 6px);
+    right: 0;
+    min-width: 100%;
+    padding: 5px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-inset);
+    background: var(--panel-2);
+    box-shadow: 0 18px 40px rgb(0 0 0 / 24%);
+  }
+  :global(.timeout-menu):where(.timeout-menu) :global(button) {
+    width: 100%;
+    min-height: 36px;
+    padding: 7px 9px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    border: 0;
+    border-radius: var(--radius-control);
+    color: var(--text-soft);
+    background: transparent;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    text-align: left;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+  :global(.timeout-menu):where(.timeout-menu) :global(button:hover),
+  :global(.timeout-menu):where(.timeout-menu) :global(button:focus-visible) {
+    color: var(--text);
+    background: var(--surface-hover);
+    outline: 0;
+  }
+  :global(.timeout-menu):where(.timeout-menu) :global(button.active) {
+    color: var(--link);
+    background: color-mix(in srgb, var(--fr-blue) 12%, var(--panel-2));
+  }
+  :global(.mobile-wallet-manager):where(.mobile-wallet-manager) {
+    display: none;
+  }
+  :global(.settings-group):where(.settings-group) > :global(button),
+  :global(.settings-group):where(.settings-group) > :global(.setting-row),
+  :global(.settings-group.danger-zone):where(.settings-group) > :global(div) {
+    width: 100%;
+    min-height: 66px;
+    border: 1px solid var(--border);
+    border-bottom: 0;
+    background: var(--panel);
+    padding: 0 15px;
+    display: grid;
+    grid-template-columns: 34px 1fr auto;
+    gap: 12px;
+    align-items: center;
+    text-align: left;
+  }
+  :global(.settings-group):where(.settings-group) > :global(button) {
+    cursor: pointer;
+  }
+  :global(.settings-group):where(.settings-group) > :global(button:first-of-type) {
+    border-radius: 9px 9px 0 0;
+  }
+  :global(.settings-group):where(.settings-group) > :global(button:last-of-type) {
+    border-bottom: 1px solid var(--border);
+    border-radius: 0 0 9px 9px;
+  }
+  :global(.settings-group):where(.settings-group) > :global(button:only-of-type) {
+    border-radius: var(--radius-control);
+  }
+  :global(.settings-group):where(.settings-group) > :global(.setting-row:first-of-type) {
+    border-radius: 9px 9px 0 0;
+  }
+  :global(.settings-group):where(.settings-group) > :global(.setting-row:last-of-type) {
+    border-bottom: 1px solid var(--border);
+    border-radius: 0 0 9px 9px;
+  }
+  :global(.settings-group):where(.settings-group) :global(button > span:nth-child(2)),
+  :global(.settings-group):where(.settings-group) :global(.setting-row > span:nth-child(2)),
+  :global(.danger-zone):where(.danger-zone) :global(div > span) {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+  :global(.settings-group):where(.settings-group) :global(strong) {
+    font-size: 14px;
+  }
+  :global(.settings-group):where(.settings-group) :global(small) {
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+  }
+  :global(.settings-group):where(.settings-group) :global(svg:last-child) {
+    color: var(--muted-2);
+  }
+  :global(.badge):where(.badge) {
+    color: var(--success);
+    background: color-mix(in srgb, var(--success) 9%, transparent);
+    border-radius: var(--radius-inset);
+    font-size: var(--font-size-meta);
+    padding: 4px 8px;
+  }
+  :global(.badge.offline):where(.badge) {
+    color: var(--danger);
+    background: rgba(239, 100, 100, 0.08);
+  }
+  :global(.settings-group.danger-zone):where(.settings-group) > :global(div) {
+    border-bottom: 1px solid rgba(239, 100, 100, 0.2);
+    border-color: rgba(239, 100, 100, 0.2);
+    grid-template-columns: 1fr auto;
+    border-radius: var(--radius-control);
+  }
+  :global(.node-location):where(.node-location) {
+    margin-bottom: 14px;
+  }
+  :global(.node-wallet-credential):where(.node-wallet-credential) {
+    margin-top: 24px;
+  }
+  :global(.node-activity-source):where(.node-activity-source) {
+    display: grid;
+    justify-items: start;
+    gap: 7px;
+    margin-top: 16px;
+  }
+  :global(.node-activity-source):where(.node-activity-source) :global(small) {
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+    line-height: 1.45;
+  }
+  .scan-error-card {
+    grid-template-columns: 22px minmax(0, 1fr);
+  }
+  :global(.scan-error-details):where(.scan-error-details) {
+    margin: 6px 0 0;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px 14px;
+    color: var(--text);
+  }
+  :global(.scan-error-details):where(.scan-error-details) > :global(div) {
+    display: grid;
+    gap: 1px;
+  }
+  :global(.scan-error-details):where(.scan-error-details) :global(dt) {
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+  }
+  :global(.scan-error-details):where(.scan-error-details) :global(dd) {
+    margin: 0;
+    font-size: var(--font-size-meta);
+    font-weight: 650;
+    font-variant-numeric: tabular-nums;
+  }
+  @media (max-width: 640px) {
+    :global(.scan-error-details):where(.scan-error-details) {
+      grid-template-columns: 1fr;
+    }
+  }
+  :global(.theme-choice):where(.theme-choice) {
+    display: flex;
+    padding: 3px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+  }
+  :global(.theme-choice):where(.theme-choice) :global(button) {
+    border: 0;
+    background: transparent;
+    color: var(--muted);
+    border-radius: 4px;
+    padding: 6px 9px;
+    font-size: var(--font-size-meta);
+  }
+  :global(.theme-choice):where(.theme-choice) :global(button.active) {
+    background: var(--fr-blue);
+    color: var(--on-blue);
+  }
+
+  @media (max-width: 760px) {
+    :global(.mobile-wallet-manager):where(.mobile-wallet-manager) {
+      display: block;
+    }
+    .settings-page {
+      padding-inline: 14px;
+    }
+    .settings-page :global(.page-header) {
+      margin-bottom: 30px;
+    }
+    .settings-page :global(.subtitle) {
+      max-width: 34ch;
+      font-size: var(--font-size-meta);
+      line-height: 1.45;
+    }
+    .settings-page :global(.settings-group) {
+      margin-bottom: 24px;
+    }
+    .settings-page :global(.settings-list > button),
+    .settings-page :global(.settings-list > .setting-row) {
+      min-height: 0;
+      padding: 14px 12px;
+      gap: 10px;
+    }
+    .settings-page :global(.automatic-lock-row .timeout-control) {
+      grid-column: 2 / -1;
+      justify-self: stretch;
+      width: 100%;
+      margin-top: 2px;
+    }
+    .settings-page :global(.wallet-context-row .info-badge) {
+      grid-column: 2 / -1;
+      justify-self: start;
+    }
+    .settings-page :global(.theme-choice) {
+      grid-column: 2 / -1;
+      justify-self: stretch;
+      margin-top: 2px;
+    }
+    .settings-page :global(.theme-choice button) {
+      flex: 1;
+    }
+    .settings-page :global(.settings-list > .language-setting-row) {
+      padding: 12px;
+    }
+    .settings-page :global(.keyboard-shortcut-row) {
+      grid-template-columns: 28px minmax(0, 1fr);
+    }
+    .settings-page :global(.keyboard-shortcut-grid) {
+      grid-column: 2 / -1;
+      width: 100%;
+      margin-top: 8px;
+      grid-template-columns: 1fr;
+    }
+    .settings-page :global(.danger-zone > div) {
+      min-height: 0;
+      padding: 14px 12px;
+      gap: 10px;
+    }
+  }
+</style>

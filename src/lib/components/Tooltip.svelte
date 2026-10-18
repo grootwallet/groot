@@ -63,3 +63,12 @@
       style:top={`${top}px`}>{text}</span
     >{/if}
 </span>
+
+<style>
+  /* Keep the original cascade weight while constraining these rules to this owner. */
+
+  :global(.tooltip-anchor):where(.tooltip-anchor) {
+    display: block;
+    min-width: 0;
+  }
+</style>

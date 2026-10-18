@@ -602,9 +602,15 @@ test('shows skeletons while a restored wallet loads its first synced data', asyn
   await page.goto('/?fixture-delayed-wallet-data=1', { waitUntil: 'commit' });
   await expect
     .poll(() =>
-      page
-        .locator('.wallet-skeleton')
-        .evaluateAll((skeletons) => skeletons.map((item) => item.className).sort())
+      page.locator('.wallet-skeleton').evaluateAll((skeletons) =>
+        skeletons
+          .map((item) =>
+            Array.from(item.classList)
+              .filter((name) => !name.startsWith('svelte-'))
+              .join(' ')
+          )
+          .sort()
+      )
     )
     .toEqual(['wallet-skeleton balance', 'wallet-skeleton transactions']);
   await page.clock.runFor(1000);

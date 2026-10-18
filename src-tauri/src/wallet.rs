@@ -280,6 +280,22 @@ fn api_error(code: &'static str, message: impl ToString) -> ApiError {
     }
 }
 
+// Mobile 5.3 starts with public observation and interchange only. Keep this
+// native guard even when the renderer hides the actions.
+fn require_desktop_key_operation() -> ApiResult<()> {
+    validate_key_operation_platform(cfg!(any(target_os = "ios", target_os = "android")))
+}
+
+fn validate_key_operation_platform(mobile: bool) -> ApiResult<()> {
+    if mobile {
+        return Err(api_error(
+            "mobile_operation_unavailable",
+            "Key creation, recovery, signing and broadcast are unavailable on mobile while pairing safety is under review.",
+        ));
+    }
+    Ok(())
+}
+
 fn api_error_with_details(
     code: &'static str,
     message: impl ToString,
@@ -1439,8 +1455,9 @@ impl CoinSelectionInput {
 #[serde(rename_all = "camelCase")]
 pub struct BroadcastResultDto {
     txid: String,
-    snapshot: WalletSnapshotDto,
+    snapshot: Option<WalletSnapshotDto>,
     sync_pending: bool,
+    persistence_pending: bool,
 }
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
@@ -5976,6 +5993,80 @@ fn apply_locally_broadcast_transaction(wallet: &mut Wallet, transaction: &Transa
     wallet.apply_unconfirmed_txs([(transaction.clone(), now())]);
 }
 
+fn accepted_broadcast_result(
+    txid: Txid,
+    record: impl FnOnce() -> ApiResult<(WalletSnapshotDto, bool)>,
+) -> BroadcastResultDto {
+    match record() {
+        Ok((snapshot, sync_pending)) => BroadcastResultDto {
+            txid: txid.to_string(),
+            snapshot: Some(snapshot),
+            sync_pending,
+            persistence_pending: false,
+        },
+        Err(_) => BroadcastResultDto {
+            txid: txid.to_string(),
+            snapshot: None,
+            sync_pending: true,
+            persistence_pending: true,
+        },
+    }
+}
+
+// Existing PSBTv0 proposals contain the exact unsigned transaction. Canonical
+// native sync observations can repair an interrupted post-broadcast commit
+// without a new receipt store or trusting renderer-supplied transaction facts.
+fn reconcile_broadcast_proposals(wallet: &Wallet, db: &Connection) -> ApiResult<Vec<Txid>> {
+    let mut statement = db
+        .prepare(
+            "SELECT proposal_id, psbt FROM groot_proposals WHERE status IN ('collecting','ready')",
+        )
+        .map_err(internal)?;
+    let mut rows = statement
+        .query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })
+        .map_err(internal)?
+        .peekable();
+    if rows.peek().is_none() {
+        return Ok(Vec::new());
+    }
+    let canonical = wallet
+        .transactions()
+        .map(|tx| tx.tx_node.txid)
+        .collect::<HashSet<_>>();
+    let mut repaired = Vec::new();
+    for row in rows {
+        let (id, encoded) = row.map_err(internal)?;
+        let psbt = decode_psbt(&encoded).map_err(proposal_api_error)?;
+        let txid = psbt.unsigned_tx.compute_txid();
+        if !canonical.contains(&txid) {
+            continue;
+        }
+        db.execute("UPDATE groot_proposals SET status = 'broadcast', txid = ?1 WHERE proposal_id = ?2 AND status IN ('collecting','ready')", params![txid.to_string(), id]).map_err(internal)?;
+        label_provenance::bind_broadcast_transaction(db, &id, &txid.to_string(), now())
+            .map_err(internal)?;
+        record_replacement(db, &id, &txid)?;
+        repaired.push(txid);
+    }
+    Ok(repaired)
+}
+
+fn enqueue_reconciled_broadcasts(db: &Connection, txids: &[Txid], balance: u64) -> ApiResult<()> {
+    for txid in txids {
+        notifications::enqueue(
+            db,
+            &WalletNotification::TransactionBroadcast {
+                txid: txid.to_string(),
+                balance,
+            },
+            now(),
+        )
+        .map_err(internal)?;
+    }
+    Ok(())
+}
+
 fn commit_multisig_broadcast(
     db: &mut Connection,
     transaction: &Transaction,
@@ -6941,6 +7032,7 @@ fn sync_wallet_with_core(
     } else {
         None
     };
+    let reconciled = reconcile_broadcast_proposals(&wallet, &transaction)?;
     let snapshot = snapshot_from(
         &wallet,
         &transaction,
@@ -6948,6 +7040,7 @@ fn sync_wallet_with_core(
         multisig,
         delayed_policy.as_ref(),
     )?;
+    enqueue_reconciled_broadcasts(&transaction, &reconciled, snapshot.balance.total)?;
     enqueue_snapshot_notifications(&transaction, &snapshot)?;
     if let Some(changeset) = wallet.take_staged() {
         changeset
@@ -7044,6 +7137,7 @@ where
     after_stage(CompactFilterCommitStage::AddressesMarked)?;
     label_provenance::reconcile_wallet_outputs(&wallet, &transaction, now()).map_err(internal)?;
     after_stage(CompactFilterCommitStage::ProvenanceReconciled)?;
+    let reconciled = reconcile_broadcast_proposals(&wallet, &transaction)?;
     let snapshot = snapshot_from(
         &wallet,
         &transaction,
@@ -7052,6 +7146,7 @@ where
         delayed_policy,
     )?;
     after_stage(CompactFilterCommitStage::SnapshotBuilt)?;
+    enqueue_reconciled_broadcasts(&transaction, &reconciled, snapshot.balance.total)?;
     enqueue_snapshot_notifications(&transaction, &snapshot)?;
     after_stage(CompactFilterCommitStage::NotificationsEnqueued)?;
     wallet.persist(&mut transaction).map_err(internal)?;
@@ -7409,12 +7504,18 @@ fn transaction_kind(received: bool, has_external_value_output: bool) -> &'static
 }
 
 #[tauri::command]
-pub fn multisig_acknowledge_coldcard_policy(
+pub async fn multisig_acknowledge_coldcard_policy(
     app: AppHandle,
-    state: State<'_, AppState>,
     signer_fingerprint: String,
 ) -> ApiResult<SignerPolicyVerificationDto> {
+    let expected_wallet_id = load_registry(&app)?.selected_wallet_id;
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+
     let _operation = operation_guard(&state)?;
+    if load_registry(&app)?.selected_wallet_id != expected_wallet_id {
+        return Err(api_error("wallet_selection_changed", "The selected wallet changed. Retry in the current wallet."));
+    }
     require_unlocked(&app, &state)?;
     let signer_fingerprint = signer_fingerprint.trim().to_ascii_lowercase();
     if signer_fingerprint.len() != 8
@@ -7460,6 +7561,7 @@ pub fn multisig_acknowledge_coldcard_policy(
         scope: "policy_file_acknowledgement",
         displayed_address: None,
     })
+    }).await.map_err(internal)?
 }
 
 fn snapshot_from(
@@ -8053,30 +8155,39 @@ pub async fn wallet_delete(
 }
 
 #[tauri::command]
-pub fn wallet_reset_regtest(
-    app: AppHandle,
-    state: State<'_, AppState>,
-    confirmation: String,
-) -> ApiResult<()> {
-    let _operation = operation_guard(&state)?;
-    validate_regtest_reset_confirmation(&confirmation)?;
-    state.proposals.lock().map_err(internal)?.clear();
-    let profile = selected_profile(&app)?;
-    delete_registered_wallet(&app, profile.id, &profile_directory(&app, profile.id)?)?;
-    forget_core_mempool_snapshot(&state, profile.id);
-    lock_wallet(&state, profile.id)?;
-    diagnostics::record(
-        &app,
-        &state,
-        diagnostics::DiagnosticEventKind::WalletRemoved,
-        diagnostics::DiagnosticOutcome::Succeeded,
-        diagnostics::DiagnosticContext {
-            wallet_kind: Some(diagnostics::wallet_kind(profile.kind)),
-            ..Default::default()
-        },
-        None,
-    );
-    Ok(())
+pub async fn wallet_reset_regtest(app: AppHandle, confirmation: String) -> ApiResult<()> {
+    let expected_wallet_id = load_registry(&app)?.selected_wallet_id;
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+
+        let _operation = operation_guard(&state)?;
+        if load_registry(&app)?.selected_wallet_id != expected_wallet_id {
+            return Err(api_error(
+                "wallet_selection_changed",
+                "The selected wallet changed. Retry in the current wallet.",
+            ));
+        }
+        validate_regtest_reset_confirmation(&confirmation)?;
+        state.proposals.lock().map_err(internal)?.clear();
+        let profile = selected_profile(&app)?;
+        delete_registered_wallet(&app, profile.id, &profile_directory(&app, profile.id)?)?;
+        forget_core_mempool_snapshot(&state, profile.id);
+        lock_wallet(&state, profile.id)?;
+        diagnostics::record(
+            &app,
+            &state,
+            diagnostics::DiagnosticEventKind::WalletRemoved,
+            diagnostics::DiagnosticOutcome::Succeeded,
+            diagnostics::DiagnosticContext {
+                wallet_kind: Some(diagnostics::wallet_kind(profile.kind)),
+                ..Default::default()
+            },
+            None,
+        );
+        Ok(())
+    })
+    .await
+    .map_err(internal)?
 }
 
 fn validate_regtest_reset_confirmation(confirmation: &str) -> ApiResult<()> {

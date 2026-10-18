@@ -1,3 +1,4 @@
+import { readUiStyles } from '../testing/ui-styles';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
@@ -22,7 +23,7 @@ const multisigReceive = readFileSync(
   new URL('../../routes/multisig/receive/+page.svelte', import.meta.url),
   'utf8'
 );
-const appStyles = readFileSync(new URL('../../app.css', import.meta.url), 'utf8');
+const appStyles = readUiStyles();
 
 describe('foreground wallet navigation', () => {
   it('focuses the selected wallet credential after the locked route finishes loading', () => {

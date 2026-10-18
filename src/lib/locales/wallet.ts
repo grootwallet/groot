@@ -1,6 +1,15 @@
 import type { CatalogSection } from './types';
 
 export const walletCopy = {
+  'PDF export is unavailable on mobile. Use a public descriptor backup instead.': {
+    fr: 'L’export PDF est indisponible sur mobile. Utilisez plutôt une sauvegarde du descripteur public.',
+    es: 'La exportación PDF no está disponible en el móvil. Usa una copia del descriptor público.'
+  },
+  'Key creation, recovery, signing and broadcast are unavailable on mobile while pairing safety is under review.':
+    {
+      fr: 'La création de clés, la restauration, la signature et la diffusion sont indisponibles sur mobile pendant l’examen de la sécurité de l’association.',
+      es: 'La creación de claves, la recuperación, la firma y la difusión no están disponibles en el móvil mientras se revisa la seguridad del emparejamiento.'
+    },
   'Sync unavailable': { fr: 'Synchronisation indisponible', es: 'Sincronización no disponible' },
   'The saved Bitcoin Core node is unreachable. Check that it is running and reachable, then try again.':
     {

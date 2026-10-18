@@ -1,3 +1,4 @@
+import { readUiStyles } from '../testing/ui-styles';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
@@ -27,7 +28,7 @@ const directAdoptionRoutes = [
   readFileSync(new URL('../../routes/hardware/new/+page.svelte', import.meta.url), 'utf8')
 ];
 const welcome = directAdoptionRoutes[0];
-const appCss = readFileSync(new URL('../../app.css', import.meta.url), 'utf8');
+const appCss = readUiStyles();
 const multisigCreationRoute = readFileSync(
   new URL('../../routes/multisig/new/+page.svelte', import.meta.url),
   'utf8'
@@ -99,7 +100,7 @@ describe('protected network setup reuse', () => {
   });
 
   it('finishes software network setup inside native creation before publishing success', () => {
-    const createStart = nativeCommands.indexOf('pub fn wallet_create');
+    const createStart = nativeCommands.indexOf('pub async fn wallet_create');
     const createEnd = nativeCommands.indexOf('#[tauri::command]', createStart);
     const create = nativeCommands.slice(createStart, createEnd);
     const nativeCopy = create.indexOf('create_from_mnemonic(');

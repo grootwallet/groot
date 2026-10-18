@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Tauri mobile forwards CARGO_* variables, but drops GROOT_* before Xcode's
+# Cargo invocation. Supply the fixed development network through Cargo's
+# scoped env configuration; keep the reviewed Rust network binding unchanged.
+: "${CARGO_GROOT_IOS_REAL_CARGO:?Use tauri-ios-foundation.sh to select the pinned Cargo executable.}"
+if [[ "${CARGO_GROOT_IOS_REAL_CARGO}" != /* || ! -x "${CARGO_GROOT_IOS_REAL_CARGO}" || "${CARGO_GROOT_IOS_REAL_CARGO}" == "${BASH_SOURCE[0]}" ]]; then
+  echo "Invalid underlying Cargo executable for the isolated iOS build." >&2
+  exit 1
+fi
+if [[ "${GROOT_BUILD_NETWORK:-testnet4}" != testnet4 ]]; then
+  echo "The isolated iOS Cargo runner requires Testnet4." >&2
+  exit 1
+fi
+exec "${CARGO_GROOT_IOS_REAL_CARGO}" --config 'env.GROOT_BUILD_NETWORK="testnet4"' "$@"

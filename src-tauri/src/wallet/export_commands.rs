@@ -561,15 +561,25 @@ pub async fn public_backup_pdf_save(
 pub fn public_backup_pdf_prepare(
     app: AppHandle,
     state: State<'_, AppState>,
-    window: WebviewWindow,
+    _window: WebviewWindow,
     _suggested_filename: String,
 ) -> ApiResult<PendingPdfExportDto> {
     require_unlocked(&app, &state)?;
-    window.print().map_err(internal)?;
-    Ok(PendingPdfExportDto {
-        prepared: false,
-        save_token: None,
-    })
+    #[cfg(mobile)]
+    {
+        Err(api_error(
+            "backup_export_failed",
+            "PDF export is unavailable on mobile. Use a public descriptor backup instead.",
+        ))
+    }
+    #[cfg(desktop)]
+    {
+        _window.print().map_err(internal)?;
+        Ok(PendingPdfExportDto {
+            prepared: false,
+            save_token: None,
+        })
+    }
 }
 
 #[cfg(not(target_os = "macos"))]

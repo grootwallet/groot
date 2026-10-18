@@ -278,3 +278,68 @@
     >
   </div>
 </Modal>
+
+<style>
+  /* Keep the original cascade weight while constraining these rules to this owner. */
+
+  :global(.prototype-hint):where(.prototype-hint) {
+    width: fit-content;
+    max-width: 100%;
+    padding: 8px 10px;
+    margin: 7px 0 0 !important;
+    color: var(--muted) !important;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+    font-size: var(--font-size-meta) !important;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+  }
+  :global(.prototype-hint):where(.prototype-hint) :global(code) {
+    color: var(--text);
+  }
+  :global(.locked-reset):where(.locked-reset) {
+    width: 100%;
+    margin-top: 16px;
+    padding: 9px;
+    border: 0;
+    background: transparent;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    font-size: var(--font-size-meta);
+    cursor: pointer;
+  }
+  :global(.locked-reset:hover):where(.locked-reset) {
+    color: var(--danger);
+  }
+  .unlock-overlay {
+    left: 224px;
+    z-index: 5;
+  }
+  .unlock-overlay :global(.onboarding-card) {
+    margin-block: auto;
+  }
+  .unlock-overlay :global(.setup-step) {
+    margin: 0 0 14px;
+    color: var(--fr-red);
+  }
+  .unlock-overlay :global(.sign-icon) {
+    margin-bottom: 16px;
+  }
+  .unlock-overlay :global(.onboarding-card > h1) {
+    margin-top: 12px;
+  }
+  .unlock-overlay :global(.onboarding-card > p) {
+    margin-bottom: 22px;
+  }
+
+  @media (max-width: 760px) {
+    .unlock-overlay {
+      left: 0;
+      z-index: 50;
+    }
+  }
+</style>

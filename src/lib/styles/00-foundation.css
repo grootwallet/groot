@@ -1,0 +1,175 @@
+/* Bundled, unmodified Source Sans 3.052R; see static/fonts/source-sans-OFL.md.
+   Swap keeps wallet content visible even if the local font cannot be decoded. */
+@font-face {
+  font-family: 'Source Sans 3';
+  src: url('/fonts/source-sans-3.052R.woff2') format('woff2');
+  font-style: normal;
+  font-weight: 200 900;
+  font-display: swap;
+}
+:root {
+  --font-ui:
+    'Source Sans 3', ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: var(--font-ui);
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --radius-control: 10px;
+  --radius-inset: 12px;
+  --radius-panel: 20px;
+  --font-size-meta: 13px;
+  color-scheme: dark;
+  color: var(--text);
+  background: var(--bg);
+  font-synthesis: none;
+  --text: #f7f3e9;
+  --text-soft: #d9e2ee;
+  --bg: #091625;
+  --panel: #10233a;
+  --panel-2: #142c47;
+  --border: #34465d;
+  --border-strong: #788ca7;
+  --muted: #c4cfdd;
+  --muted-2: #b4c2d3;
+  --accent: #f1d18b;
+  --accent-soft: #382d16;
+  --progress: #ffd54a;
+  --fr-blue: #1b56c5;
+  --fr-red: #ff8a95;
+  --success: #85d6aa;
+  --danger: #ff8a95;
+  --sidebar: #0c1b2d;
+  --surface-control: #10233a;
+  --surface-inset: #142c47;
+  --surface-icon: #203b60;
+  --brand-tile: #102a4c;
+  --brand-mark: #f7f3e9;
+  --surface-hover: #1b3553;
+  --surface-active: #203b60;
+  --control-border: #788ca7;
+  --primary-bg: #f7f3e9;
+  --primary-fg: #102a4c;
+  --primary-hover: #ffffff;
+  --accent-contrast: #111827;
+  --link: #a9c7ff;
+  --warning-text: #f1d18b;
+  --danger-fg: #111827;
+  --on-blue: #ffffff;
+  --focus: #a9c7ff;
+  --fr-blue-soft: color-mix(in srgb, var(--link) 10%, transparent);
+  --tooltip-bg: #f7f3e9;
+  --tooltip-fg: #102a4c;
+  --step-complete-bg: #dbe8ff;
+  --step-complete-fg: #194faa;
+  --step-complete-border: #a9c7ff;
+}
+button:not(:disabled),
+a[href]:not([aria-disabled='true']),
+summary,
+[role='button']:not([aria-disabled='true']) {
+  cursor: pointer;
+}
+button:disabled,
+a[aria-disabled='true'] {
+  cursor: not-allowed;
+}
+.descriptor-viewer details {
+  display: grid;
+  gap: 10px;
+}
+.descriptor-viewer details > summary {
+  cursor: pointer;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  color: var(--text-soft);
+  background: var(--surface-control);
+  font-size: var(--font-size-meta);
+  font-weight: 600;
+}
+.descriptor-viewer details[open] > summary {
+  margin-bottom: 10px;
+}
+.descriptor-viewer details section + section {
+  margin-top: 10px;
+}
+.descriptor-viewer .descriptor-primary {
+  border-color: color-mix(in srgb, var(--link) 35%, var(--border));
+  background: color-mix(in srgb, var(--link) 5%, var(--surface-control));
+}
+.field-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.optional-insight {
+  margin: 10px 0 0;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--muted);
+  font-size: var(--font-size-meta);
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  color: var(--text);
+  background: var(--bg);
+  -webkit-user-select: none;
+  user-select: none;
+}
+input,
+textarea,
+[contenteditable='true'],
+code,
+pre,
+.selectable-text,
+.mono,
+.readable-address-groups,
+.compact-address-button,
+.address-history-row small,
+.awaiting-select small {
+  -webkit-user-select: text;
+  user-select: text;
+}
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+input::placeholder,
+textarea::placeholder {
+  color: var(--muted-2);
+  opacity: 1;
+}
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+button {
+  color: inherit;
+}
+a {
+  color: inherit;
+  text-decoration: none;
+}
+code {
+  font-family: 'SFMono-Regular', Consolas, ui-monospace, monospace;
+}
+:where(button, a, input, textarea, select, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+.sr-only {
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  position: absolute;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

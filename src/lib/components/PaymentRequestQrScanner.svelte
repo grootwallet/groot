@@ -7,7 +7,13 @@
 
   let { onscan } = $props<{ onscan: (value: string) => void | Promise<void> }>();
   let video: HTMLVideoElement;
-  let error = $state('');
+  let error = $state<'denied' | 'unavailable' | 'too_large' | null>(null);
+  const errors = {
+    too_large: 'This payment request is too large to scan safely.',
+    denied: 'Camera access was denied. Allow camera access for Groot, then reopen this scanner.',
+    unavailable:
+      'No usable camera is available. Connect a camera or enter the payment request manually.'
+  } as const;
   let processing = $state(false);
 
   onMount(() => {
@@ -19,7 +25,7 @@
       const exact = value.trim();
       if (!exact || processing || stopped || seen.has(exact)) return;
       if (exact.length > 8 * 1024) {
-        error = 'This payment request is too large to scan safely.';
+        error = 'too_large';
         return;
       }
       seen.add(exact);
@@ -48,10 +54,7 @@
       } catch (cause) {
         if (stopped) return;
         const name = cause instanceof DOMException ? cause.name : '';
-        error =
-          name === 'NotAllowedError'
-            ? 'Camera access was denied. Allow camera access for Groot, then reopen this scanner.'
-            : 'No usable camera is available. Connect a camera or enter the payment request manually.';
+        error = name === 'NotAllowedError' ? 'denied' : 'unavailable';
       }
     })();
     return () => {
@@ -72,7 +75,9 @@
     <div class="scan-guide" aria-hidden="true"></div>
   </div>
   <div class="scan-status" role="status">
-    {#if error}<CameraOff size={16} /><span>{error}</span>{:else}<Camera size={16} /><span
+    {#if error}<CameraOff size={16} /><span>{translate($locale, errors[error])}</span>{:else}<Camera
+        size={16}
+      /><span
         >{translate(
           $locale,
           processing ? 'Reading payment request…' : 'Point the camera at a Bitcoin payment QR'

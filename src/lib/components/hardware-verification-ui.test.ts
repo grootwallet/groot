@@ -1,8 +1,9 @@
+import { readUiStyles } from '../testing/ui-styles';
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { copyCatalog } from '$lib/i18n-catalog';
 
-const appCss = readFileSync(new URL('../../app.css', import.meta.url), 'utf8');
+const appCss = readUiStyles();
 const sharedButton = readFileSync(new URL('./Button.svelte', import.meta.url), 'utf8');
 const emptyState = readFileSync(
   new URL('./HardwareDeviceEmptyState.svelte', import.meta.url),
@@ -583,7 +584,7 @@ describe('hardware receive verification UI', () => {
 
   it('opens a new hardware wallet in automatic full-history scan mode', () => {
     expect(hardwareSetup).toContain("await goto('/?initial=full')");
-    const createStart = hardwareCommands.indexOf('pub fn external_signer_create(');
+    const createStart = hardwareCommands.indexOf('pub async fn external_signer_create(');
     const createEnd = hardwareCommands.indexOf(
       '#[tauri::command]\npub async fn external_signer_wallet',
       createStart

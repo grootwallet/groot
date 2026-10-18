@@ -1,10 +1,11 @@
+import { readUiStyles } from '../testing/ui-styles';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 const shell = readFileSync(new URL('./AppShell.svelte', import.meta.url), 'utf8');
 const buildIdentity = readFileSync(new URL('./BuildIdentity.svelte', import.meta.url), 'utf8');
 const brandLockup = readFileSync(new URL('./BrandLockup.svelte', import.meta.url), 'utf8');
-const appCss = readFileSync(new URL('../../app.css', import.meta.url), 'utf8');
+const appCss = readUiStyles();
 const settings = readFileSync(
   new URL('../../routes/settings/+page.svelte', import.meta.url),
   'utf8'

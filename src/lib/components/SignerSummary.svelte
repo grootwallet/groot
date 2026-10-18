@@ -110,3 +110,173 @@
     {/if}
   </div>
 </section>
+
+<style>
+  /* Keep the original cascade weight while constraining these rules to this owner. */
+
+  :global(.send-signers):where(.send-signers) {
+    margin: 0 0 14px;
+    padding: 11px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+    background: var(--surface-inset);
+  }
+  :global(.send-signers.loading):where(.send-signers) {
+    position: relative;
+    overflow: hidden;
+  }
+  :global(.send-signers.loading::after):where(.send-signers) {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    transform: translateX(-100%);
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      color-mix(in srgb, var(--text) 12%, transparent) 48%,
+      transparent 100%
+    );
+    animation: skeleton-shimmer 1.15s linear infinite;
+  }
+  :global(.send-signers):where(.send-signers) > :global(header) {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 8px;
+  }
+  :global(.send-signers):where(.send-signers) > :global(header div) {
+    display: flex;
+    align-items: baseline;
+    gap: 7px;
+  }
+  :global(.send-signers):where(.send-signers) > :global(header span),
+  :global(.send-signers):where(.send-signers) > :global(header small) {
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+  }
+  :global(.send-signers):where(.send-signers) > :global(header strong) {
+    font-size: var(--font-size-meta);
+  }
+  :global(.send-signer-list):where(.send-signer-list) {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 6px;
+  }
+  :global(.send-signer-list):where(.send-signer-list) :global(article) {
+    position: relative;
+    min-width: 0;
+    padding: 7px 8px;
+    display: grid;
+    grid-template-columns: 28px minmax(0, 1fr);
+    align-items: center;
+    gap: 8px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+    background: var(--panel);
+  }
+  :global(.send-signer-list):where(.send-signer-list) :global(article.send-signer-placeholder) {
+    min-height: 44px;
+    color: var(--muted);
+  }
+  :global(.send-signer-list):where(.send-signer-list) :global(article.discardable) {
+    grid-template-columns: 28px minmax(0, 1fr) 28px;
+  }
+  :global(.send-signer-list):where(.send-signer-list) :global(article.signed) {
+    border-color: color-mix(in srgb, var(--success) 28%, var(--border));
+    background: color-mix(in srgb, var(--success) 5%, var(--panel));
+  }
+  :global(.send-signer-icon):where(.send-signer-icon) {
+    width: 28px;
+    height: 28px;
+    display: grid;
+    place-items: center;
+    border-radius: var(--radius-control);
+    color: var(--muted);
+    background: var(--surface-icon);
+  }
+  :global(.send-signer-list):where(.send-signer-list) :global(article.signed .send-signer-icon) {
+    color: var(--success);
+    background: color-mix(in srgb, var(--success) 11%, var(--surface-icon));
+  }
+  :global(.send-signer-list):where(.send-signer-list) :global(article > div) {
+    min-width: 0;
+    display: grid;
+    gap: 3px;
+  }
+  :global(.send-signer-list):where(.send-signer-list) :global(article strong) {
+    overflow: hidden;
+    font-size: var(--font-size-meta);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  :global(.send-signer-list):where(.send-signer-list) :global(article small) {
+    overflow: hidden;
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  :global(.send-signer-list):where(.send-signer-list) :global(code) {
+    color: var(--text-soft);
+    font-size: inherit;
+  }
+  :global(.discard-signer-signature):where(.discard-signer-signature) {
+    width: 28px;
+    height: 28px;
+    display: grid;
+    place-items: center;
+    border: 1px solid transparent;
+    border-radius: var(--radius-control);
+    color: var(--muted);
+    background: transparent;
+    cursor: pointer;
+    opacity: 0.64;
+    transition:
+      opacity 0.15s ease,
+      border-color 0.15s ease,
+      color 0.15s ease,
+      background 0.15s ease;
+  }
+  :global(.discard-signer-signature:hover):where(.discard-signer-signature),
+  :global(.discard-signer-signature:focus-visible):where(.discard-signer-signature) {
+    opacity: 1;
+    color: var(--danger);
+    border-color: color-mix(in srgb, var(--danger) 25%, var(--border));
+    background: color-mix(in srgb, var(--danger) 7%, var(--panel));
+    outline: none;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    :global(.send-signers.loading::after):where(.send-signers) {
+      display: none;
+    }
+  }
+
+  @media (max-width: 760px) {
+    :global(.send-signers):where(.send-signers) {
+      padding: 10px;
+    }
+    :global(.send-signers):where(.send-signers) > :global(header) {
+      margin-bottom: 7px;
+    }
+    :global(.send-signer-list):where(.send-signer-list) {
+      display: flex;
+      overflow-x: auto;
+      overscroll-behavior-inline: contain;
+      scrollbar-width: none;
+      scroll-snap-type: x proximity;
+    }
+    :global(.send-signer-list::-webkit-scrollbar):where(.send-signer-list) {
+      display: none;
+    }
+    :global(.send-signer-list):where(.send-signer-list) :global(article) {
+      flex: 0 0 156px;
+      scroll-snap-align: start;
+    }
+    :global(.send-signer-list):where(.send-signer-list) :global(article:only-child) {
+      flex-basis: 100%;
+    }
+  }
+</style>

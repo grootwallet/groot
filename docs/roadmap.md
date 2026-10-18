@@ -8,7 +8,7 @@ The first production target is a **macOS Apple-silicon desktop release with both
 
 - Finish the current wallet restoration, first-scan consent, labels, deletion and hardware UX feedback; validate the exact replacement candidate before release.
 - Reduce maintenance risk through the [code cleanup plan](engineering-roadmap.md), starting with CSS.
-- Complete mobile pairing on its separate branch, with key isolation, recovery, interruption and physical-device evidence.
+- Deliver the [5.3 mobile plan](mobile-5.3-plan.md): isolated iOS build, authenticated watch-only pairing, receive labels and bounded PSBT review first. Reuse the separate mobile branch selectively. Signing stays blocked pending security, recovery and physical-device evidence.
 - Add Windows/Linux releases only after packaging, filesystem, trusted HWI and device acceptance. PGP download signatures do not replace platform or runtime helper verification.
 
 ## Later, separately reviewed

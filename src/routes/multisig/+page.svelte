@@ -894,3 +894,394 @@
       >
     </div>{/if}
 </Modal>
+
+<style>
+  /* Keep the original cascade weight while constraining these rules to this owner. */
+
+  :global(.policy-loading-skeleton):where(.policy-loading-skeleton) {
+    display: grid;
+    gap: 16px;
+  }
+  :global(.info-banner):where(.info-banner) {
+    border: 1px solid var(--border);
+    background: var(--panel);
+    border-radius: var(--radius-control);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--muted);
+    padding: 11px 13px;
+  }
+  :global(.info-banner):where(.info-banner) :global(p) {
+    font-size: var(--font-size-meta);
+    margin: 0;
+  }
+  :global(.vault-hero):where(.vault-hero) {
+    border: 1px solid var(--border);
+    background: var(--panel);
+    border-radius: var(--radius-panel);
+    padding: 22px;
+    display: grid;
+    grid-template-columns: 45px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 15px;
+    margin-bottom: 30px;
+    overflow: hidden;
+  }
+  :global(.vault-hero):where(.vault-hero) > :global(span) {
+    width: 43px;
+    height: 43px;
+    border-radius: var(--radius-inset);
+    display: grid;
+    place-items: center;
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
+  :global(.vault-summary):where(.vault-summary) {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+  :global(.vault-policy-tags):where(.vault-policy-tags) {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 10px 0 9px;
+  }
+  :global(.vault-policy-tags):where(.vault-policy-tags) :global(.policy-pill) {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 9px;
+    font-size: var(--font-size-meta);
+  }
+  :global(.vault-policy-tags):where(.vault-policy-tags) :global(.policy-pill.delayed) {
+    color: var(--focus);
+    border-color: color-mix(in srgb, var(--focus) 25%, var(--border));
+    background: color-mix(in srgb, var(--focus) 7%, var(--panel));
+  }
+  :global(.vault-policy-tags):where(.vault-policy-tags) :global(svg) {
+    flex: 0 0 auto;
+  }
+  :global(.vault-hero):where(.vault-hero) :global(small),
+  :global(.vault-hero):where(.vault-hero) :global(p) {
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+    margin: 0;
+  }
+  :global(.vault-balance):where(.vault-balance) {
+    display: block;
+    color: var(--text);
+    font-size: 21px;
+    line-height: 1.1;
+  }
+
+  :global(.policy-maturity-panel):where(.policy-maturity-panel) {
+    display: grid;
+    gap: 12px;
+    margin-bottom: 24px;
+    padding: 16px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-inset);
+    background: var(--panel);
+  }
+
+  :global(.policy-maturity-panel-heading):where(.policy-maturity-panel-heading) {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: start;
+    gap: 12px;
+  }
+
+  :global(.policy-maturity-panel-heading):where(.policy-maturity-panel-heading)
+    > :global(span:first-child) {
+    display: grid;
+    width: 32px;
+    height: 32px;
+    place-items: center;
+    border-radius: var(--radius-control);
+    color: var(--focus);
+    background: var(--surface-icon);
+  }
+
+  :global(.policy-maturity-panel-heading):where(.policy-maturity-panel-heading) :global(h2),
+  :global(.policy-maturity-panel-heading):where(.policy-maturity-panel-heading) :global(p) {
+    margin: 0;
+  }
+
+  :global(.policy-maturity-panel-heading):where(.policy-maturity-panel-heading)
+    :global(p:not(.eyebrow)) {
+    margin-top: 2px;
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+    line-height: 1.4;
+  }
+
+  :global(.policy-maturity-panel-heading):where(.policy-maturity-panel-heading) :global(h2) {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 14px;
+    font-weight: 650;
+  }
+
+  :global(.policy-maturity-facts):where(.policy-maturity-facts) {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 8px;
+  }
+
+  :global(.policy-maturity-facts):where(.policy-maturity-facts) :global(.info-banner) {
+    min-height: 40px;
+    padding: 9px 11px;
+    background: var(--surface-inset);
+  }
+
+  :global(.policy-maturity-facts):where(.policy-maturity-facts) :global(svg) {
+    flex: 0 0 auto;
+    color: var(--focus);
+  }
+
+  :global(.policy-maturity-details):where(.policy-maturity-details) {
+    padding: 0 2px;
+  }
+
+  :global(.policy-maturity-details):where(.policy-maturity-details) :global(summary) {
+    cursor: pointer;
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+    font-weight: 600;
+  }
+
+  :global(.policy-maturity-details):where(.policy-maturity-details) :global(p) {
+    max-width: 720px;
+    margin: 8px 0 0;
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+    line-height: 1.5;
+  }
+
+  :global(.policy-access-coins):where(.policy-access-coins) {
+    margin-top: 14px;
+  }
+
+  :global(.policy-access-coins):where(.policy-access-coins) :global(h3) {
+    margin: 0 0 7px;
+    color: var(--text);
+    font-size: var(--font-size-meta);
+  }
+
+  :global(.policy-access-coins):where(.policy-access-coins) > :global(div) {
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+  }
+
+  :global(.policy-access-coins):where(.policy-access-coins) :global(article) {
+    min-height: 48px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface-inset);
+  }
+
+  :global(.policy-access-coins):where(.policy-access-coins) :global(article:last-child) {
+    border-bottom: 0;
+  }
+
+  :global(.policy-access-coins):where(.policy-access-coins) :global(article > span) {
+    min-width: 0;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+  }
+
+  :global(.policy-access-coins):where(.policy-access-coins) :global(article strong),
+  :global(.policy-access-coins):where(.policy-access-coins) :global(article .formatted-amount) {
+    font-size: var(--font-size-meta);
+  }
+  :global(.vault-actions):where(.vault-actions) {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+  :global(.vault-empty):where(.vault-empty) {
+    margin-top: 80px;
+  }
+  :global(.vault-grid):where(.vault-grid) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 260px;
+    align-items: start;
+    gap: 20px;
+  }
+  :global(.vault-cosigners):where(.vault-cosigners),
+  :global(.vault-backup-card):where(.vault-backup-card) {
+    min-width: 0;
+  }
+  :global(.vault-cosigners):where(.vault-cosigners) :global(.section-heading.compact) {
+    margin: 10px 0 14px;
+  }
+  :global(.saved-cosigner-list):where(.saved-cosigner-list) {
+    display: grid;
+    gap: 8px;
+  }
+  :global(.saved-cosigner-list):where(.saved-cosigner-list) :global(article) {
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-inset);
+    background: var(--panel);
+  }
+  :global(.saved-cosigner-list):where(.saved-cosigner-list) :global(button) {
+    width: 100%;
+    min-height: 76px;
+    display: grid;
+    grid-template-columns: 34px minmax(0, 1fr) auto 16px;
+    align-items: center;
+    gap: 12px;
+    padding: 13px 14px;
+    border: 0;
+    color: var(--text);
+    background: transparent;
+    text-align: left;
+    cursor: pointer;
+    transition:
+      background 0.15s ease,
+      box-shadow 0.15s ease;
+  }
+  :global(.saved-cosigner-list):where(.saved-cosigner-list) :global(button:hover) {
+    background: var(--surface-hover);
+    box-shadow: inset 3px 0 0 var(--fr-blue);
+  }
+  :global(.saved-cosigner-list):where(.saved-cosigner-list) :global(button:focus-visible) {
+    outline: 2px solid var(--focus);
+    outline-offset: -2px;
+  }
+  :global(.saved-cosigner-copy):where(.saved-cosigner-copy) {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  :global(.saved-cosigner-copy):where(.saved-cosigner-copy) :global(strong) {
+    overflow: hidden;
+    font-size: 14px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  :global(.saved-cosigner-copy):where(.saved-cosigner-copy) > :global(span) {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 7px;
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+  }
+  :global(.saved-cosigner-copy):where(.saved-cosigner-copy) :global(code) {
+    color: var(--text-soft);
+    font-size: var(--font-size-meta);
+  }
+  :global(.saved-cosigner-copy):where(.saved-cosigner-copy) :global(i) {
+    width: 3px;
+    height: 3px;
+    border-radius: 50%;
+    background: var(--muted-2);
+  }
+  :global(.vault-backup-card):where(.vault-backup-card) {
+    display: grid;
+    gap: 12px;
+    padding: 18px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-inset);
+    background: var(--surface-control);
+  }
+  :global(.vault-backup-icon):where(.vault-backup-icon) {
+    width: 38px;
+    height: 38px;
+    display: grid;
+    place-items: center;
+    border-radius: var(--radius-inset);
+    color: var(--accent);
+    background: var(--accent-soft);
+  }
+  :global(.vault-backup-card):where(.vault-backup-card) :global(h2) {
+    margin: 0;
+    font-size: 14px;
+  }
+  :global(.vault-backup-card):where(.vault-backup-card) :global(p) {
+    margin: 6px 0 2px;
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+    line-height: 1.55;
+  }
+  :global(.vault-backup-card):where(.vault-backup-card) :global(.button) {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  @media (max-width: 700px) {
+    :global(.policy-maturity-panel):where(.policy-maturity-panel) {
+      padding: 16px;
+    }
+
+    :global(.policy-maturity-panel-heading):where(.policy-maturity-panel-heading) {
+      grid-template-columns: auto minmax(0, 1fr);
+    }
+
+    :global(.policy-maturity-panel-heading):where(.policy-maturity-panel-heading)
+      > :global(.button) {
+      grid-column: 2;
+      justify-self: start;
+    }
+  }
+
+  @media (max-width: 760px) {
+    :global(.vault-grid):where(.vault-grid) {
+      grid-template-columns: 1fr;
+    }
+    :global(.vault-hero):where(.vault-hero) {
+      grid-template-columns: 42px minmax(0, 1fr);
+    }
+    :global(.vault-actions):where(.vault-actions) {
+      grid-column: 1 / -1;
+      display: grid;
+      grid-template-columns: auto 1fr 1fr;
+    }
+    :global(.vault-backup-card):where(.vault-backup-card) {
+      order: -1;
+    }
+    :global(.saved-cosigner-list):where(.saved-cosigner-list) :global(button) {
+      grid-template-columns: 32px minmax(0, 1fr) auto;
+    }
+    :global(.saved-cosigner-list):where(.saved-cosigner-list) :global(.row-chevron) {
+      display: none;
+    }
+    :global(.vault-actions):where(.vault-actions) :global(.wallet-more-menu) {
+      right: 18px;
+      left: 18px;
+      width: auto;
+    }
+  }
+
+  @media (min-width: 761px) and (max-width: 1050px) {
+    :global(.vault-grid):where(.vault-grid) {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    :global(.saved-cosigner-list):where(.saved-cosigner-list) :global(button) {
+      grid-template-columns: 34px minmax(0, 1fr) auto;
+    }
+    :global(.saved-cosigner-list):where(.saved-cosigner-list) :global(.row-chevron) {
+      display: none;
+    }
+  }
+  :global(.vault-hero):where(.vault-hero) {
+    position: relative;
+    z-index: 2;
+    overflow: visible;
+  }
+</style>

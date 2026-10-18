@@ -865,7 +865,12 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
         'initial_scan_required',
         'Complete the first wallet-history scan before syncing.'
       );
-    return this.snapshot();
+    const walletId = this._selectedWalletId;
+    const kind = this._profiles.find((profile) => profile.id === walletId)?.kind;
+    const snapshot = await this.snapshot();
+    if (walletId && kind && this._selectedWalletId === walletId)
+      this.#emit({ type: 'wallet_updated', walletId, walletKind: kind, snapshot });
+    return snapshot;
   }
 
   async cancelSync() {}
@@ -1266,11 +1271,16 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     const txid = this._accelerations.has(proposalId)
       ? '1b8cf4e8a09c7d12883143f9ab3fdf1d5f25a4784a96b35ec2e7a6c120437bad'
       : '0a7bf3d7a98d8bc981975320eba8e9b8ac1aa92145dcf018e48c3c2f8c19e2aa';
+    if (
+      typeof location !== 'undefined' &&
+      new URLSearchParams(location.search).has('fixture-broadcast-record-error')
+    )
+      return { txid, snapshot: null, syncPending: true, persistencePending: true };
     this.#recordFixtureBroadcast(proposalId, proposal, txid);
     this._balance = Math.max(0, this._balance - Number(proposal.total));
     this.#emit({ type: 'transaction_broadcast', txid, balance: sats(this._balance) });
     this._proposals.delete(proposalId);
-    return { txid, snapshot: await this.snapshot(), syncPending: false };
+    return { txid, snapshot: await this.snapshot(), syncPending: false, persistencePending: false };
   }
 
   async listHardwareDevices() {
@@ -1734,6 +1744,16 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     if (!proposal?.canFinalize) throw new WalletError('insufficient_signatures', 'Sign first.');
     if (proposal.psbt !== reviewedPsbt)
       throw new WalletError('proposal_mismatch', 'The signed proposal changed after review.');
+    if (
+      typeof location !== 'undefined' &&
+      new URLSearchParams(location.search).has('fixture-broadcast-record-error')
+    )
+      return {
+        txid: '0a7bf3d7a98d8bc981975320eba8e9b8ac1aa92145dcf018e48c3c2f8c19e2aa',
+        snapshot: null,
+        syncPending: true,
+        persistencePending: true
+      };
     this._externalProposals.delete(proposalId);
     return {
       txid: '0a7bf3d7a98d8bc981975320eba8e9b8ac1aa92145dcf018e48c3c2f8c19e2aa',
@@ -2237,8 +2257,8 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
           : null
     };
   }
-  async syncMultisig(_automatic = false) {
-    return this.snapshot();
+  async syncMultisig(automatic = false) {
+    return this.sync(automatic);
   }
   async createMultisigAddress(labels: string[]) {
     if (
@@ -2542,12 +2562,17 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
       throw new WalletError('invalid_credential', 'Incorrect app PIN.');
     if (!proposal.canFinalize)
       throw new WalletError('internal_error', 'Collect the required signatures first.');
+    const txid = '7d4a2c7f9e317f9859d7a8566fe02d773afb09fcddb617dbda98bfba8f721234';
+    if (
+      typeof location !== 'undefined' &&
+      new URLSearchParams(location.search).has('fixture-broadcast-record-error')
+    )
+      return { txid, snapshot: null, syncPending: true, persistencePending: true };
     proposal.status = 'broadcast';
     this._balance = Math.max(0, this._balance - Number(proposal.total));
-    const txid = '7d4a2c7f9e317f9859d7a8566fe02d773afb09fcddb617dbda98bfba8f721234';
     this.#recordFixtureBroadcast(proposalId, proposal, txid);
     this.#emit({ type: 'transaction_broadcast', txid, balance: sats(this._balance) });
-    return { txid, snapshot: await this.snapshot(), syncPending: false };
+    return { txid, snapshot: await this.snapshot(), syncPending: false, persistencePending: false };
   }
   async discardMultisigSignature(
     proposalId: string,

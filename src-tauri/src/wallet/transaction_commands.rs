@@ -19,33 +19,43 @@ pub async fn tx_proposals(app: AppHandle) -> ApiResult<Vec<PaymentProposalDto>> 
 }
 
 #[tauri::command]
-pub fn tx_proposal_cancel(
-    app: AppHandle,
-    state: State<'_, AppState>,
-    proposal_id: String,
-) -> ApiResult<()> {
-    let _operation = operation_guard(&state)?;
-    require_unlocked(&app, &state)?;
-    let db = open_db(&app)?;
-    let changed = db
-        .execute(
-            "UPDATE groot_proposals SET status = 'cancelled'
+pub async fn tx_proposal_cancel(app: AppHandle, proposal_id: String) -> ApiResult<()> {
+    let expected_wallet_id = load_registry(&app)?.selected_wallet_id;
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+
+        let _operation = operation_guard(&state)?;
+        if load_registry(&app)?.selected_wallet_id != expected_wallet_id {
+            return Err(api_error(
+                "wallet_selection_changed",
+                "The selected wallet changed. Retry in the current wallet.",
+            ));
+        }
+
+        require_unlocked(&app, &state)?;
+        let db = open_db(&app)?;
+        let changed = db
+            .execute(
+                "UPDATE groot_proposals SET status = 'cancelled'
              WHERE proposal_id = ?1 AND status IN ('collecting', 'ready')",
-            params![proposal_id],
-        )
-        .map_err(internal)?;
-    if changed != 1 {
-        return Err(api_error(
-            "proposal_not_found",
-            "The proposal is no longer active.",
-        ));
-    }
-    state
-        .proposals
-        .lock()
-        .map_err(internal)?
-        .remove(&proposal_id);
-    Ok(())
+                params![proposal_id],
+            )
+            .map_err(internal)?;
+        if changed != 1 {
+            return Err(api_error(
+                "proposal_not_found",
+                "The proposal is no longer active.",
+            ));
+        }
+        state
+            .proposals
+            .lock()
+            .map_err(internal)?
+            .remove(&proposal_id);
+        Ok(())
+    })
+    .await
+    .map_err(internal)?
 }
 
 #[tauri::command]
@@ -1478,6 +1488,7 @@ pub async fn tx_sign_and_broadcast(
     credential: String,
 ) -> ApiResult<BroadcastResultDto> {
     let credential = Zeroizing::new(credential);
+    require_desktop_key_operation()?;
     let diagnostic_app = app.clone();
     let context = diagnostics::DiagnosticContext {
         wallet_kind: Some(diagnostics::DiagnosticWalletKind::Software),
@@ -1578,53 +1589,51 @@ pub async fn tx_sign_and_broadcast(
         }
         let transaction = proposal.psbt.extract_tx().map_err(internal)?;
         let txid = broadcast_transaction(&app, &state, &db, &proposal_id, &transaction)?;
-        drop(wallet);
-        let mut persisted = db.transaction().map_err(internal)?;
-        let mut wallet = load_wallet_transaction(&mut persisted)?;
-        apply_locally_broadcast_transaction(&mut wallet, &transaction);
-        let changed = persisted
-            .execute(
-                "UPDATE groot_proposals SET status = 'broadcast', txid = ?1 WHERE proposal_id = ?2 AND status = 'collecting'",
-                params![txid.to_string(), proposal_id],
+        Ok(accepted_broadcast_result(txid, || {
+            drop(wallet);
+            let mut persisted = db.transaction().map_err(internal)?;
+            let mut wallet = load_wallet_transaction(&mut persisted)?;
+            apply_locally_broadcast_transaction(&mut wallet, &transaction);
+            let changed = persisted
+                .execute(
+                    "UPDATE groot_proposals SET status = 'broadcast', txid = ?1 WHERE proposal_id = ?2 AND status = 'collecting'",
+                    params![txid.to_string(), proposal_id],
+                )
+                .map_err(internal)?;
+            if changed != 1 {
+                return Err(api_error(
+                    "proposal_mismatch",
+                    "The proposal changed while it was being broadcast.",
+                ));
+            }
+            label_provenance::bind_broadcast_transaction(
+                &persisted,
+                &proposal_id,
+                &txid.to_string(),
+                now(),
             )
             .map_err(internal)?;
-        if changed != 1 {
-            return Err(api_error(
-                "proposal_mismatch",
-                "The proposal changed while it was being broadcast.",
-            ));
-        }
-        label_provenance::bind_broadcast_transaction(
-            &persisted,
-            &proposal_id,
-            &txid.to_string(),
-            now(),
-        )
-        .map_err(internal)?;
-        record_replacement(&persisted, &proposal_id, &txid)?;
-        let snapshot = snapshot_from(&wallet, &persisted, None, false, None)?;
-        notifications::enqueue(
-            &persisted,
-            &WalletNotification::TransactionBroadcast {
-                txid: txid.to_string(),
-                balance: snapshot.balance.total,
-            },
-            now(),
-        )
-        .map_err(internal)?;
-        wallet.persist(&mut persisted).map_err(internal)?;
-        drop(wallet);
-        persisted.commit().map_err(internal)?;
-        let (snapshot, sync_pending) =
-            match sync_wallet_atomically(&app, &state, &mut db, false, None) {
-                Ok(snapshot) => (snapshot, false),
-                Err(_) => (snapshot, true),
-            };
-        Ok(BroadcastResultDto {
-            txid: txid.to_string(),
-            snapshot,
-            sync_pending,
-        })
+            record_replacement(&persisted, &proposal_id, &txid)?;
+            let snapshot = snapshot_from(&wallet, &persisted, None, false, None)?;
+            notifications::enqueue(
+                &persisted,
+                &WalletNotification::TransactionBroadcast {
+                    txid: txid.to_string(),
+                    balance: snapshot.balance.total,
+                },
+                now(),
+            )
+            .map_err(internal)?;
+            wallet.persist(&mut persisted).map_err(internal)?;
+            drop(wallet);
+            persisted.commit().map_err(internal)?;
+            let (snapshot, sync_pending) =
+                match sync_wallet_atomically(&app, &state, &mut db, false, None) {
+                    Ok(snapshot) => (snapshot, false),
+                    Err(_) => (snapshot, true),
+                };
+            Ok((snapshot, sync_pending))
+        }))
     })
     .await
     .map_err(internal)?;

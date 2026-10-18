@@ -1,6 +1,10 @@
 # Product behavior
 
-Canonical behavior for the 5.2.0 GA preparation source. [Current status](implementation-status.md) separates implementation from release certification. ADR 0088 conditionally authorizes v5.2.0 only when the final source, annotated tag, fresh remote main, reproduced evidence and signed/notarized published package all bind to one reviewed commit.
+Canonical desktop behavior from the shipped 5.2.0 baseline, with the gated 5.3 mobile development boundary below. [Current status](implementation-status.md) separates implementation from release certification. ADR 0088 conditionally authorizes v5.2.0 only when the final source, annotated tag, fresh remote main, reproduced evidence and signed/notarized published package all bind to one reviewed commit.
+
+## Mobile development boundary
+
+The [5.3 mobile plan](mobile-5.3-plan.md) starts with isolated Testnet4 iOS development. Native mobile key creation/recovery, secret backup access, signing and broadcast fail closed under ADR 0089. Authenticated pairing and watch-only receive/PSBT workflows remain planned; no public mobile support is implied. Desktop behavior and existing formats are unchanged.
 
 ## Wallets and credentials
 
@@ -62,7 +66,7 @@ Use integer satoshis and positive validated sat/vB rates. Economy/Standard/Prior
 
 Coin selection offers automatic strategies or exact eligible inputs. Frozen coins never enter either path. Review explains amounts, fees, change and source linkage from the actual unsigned PSBT. Self-transfers show Rust-proven **Consolidating** totals and a fee-only wallet debit; labels do not prove ownership.
 
-Proposals and collected signatures persist across restart. Leaving signing preserves the proposal; discarding requires confirmation. Each imported partial signature must cryptographically verify against the unchanged proposal. Final authorization rechecks wallet/session identity, canonical prevouts, outputs and policy before broadcast. A successful broadcast remains success if later sync fails; show the pending refresh separately.
+Proposals and collected signatures persist across restart. Leaving signing preserves the proposal; discarding requires confirmation. Each imported partial signature must cryptographically verify against the unchanged proposal. Final authorization rechecks wallet/session identity, canonical prevouts, outputs and policy before broadcast. A successful broadcast remains success if later sync fails; show the pending refresh separately. If local recording fails after Core accepts it, retain the accepted transaction ID with a durable warning, no fabricated snapshot, and no invitation to resend. Sync reconciles the exact saved proposal with canonical wallet history; the pending-result screen directs the user to sync instead of resending (ADR 0090).
 
 RBF preserves the intended recipient amount; CPFP spends an eligible wallet output. Failed or stale quotes block signing. Before final submission verify the original is still in the configured mempool. A confirmed original leaves the saved proposal read-only with explicit discard; never erase the confirmed payment. Separate RPC checks and submission are not atomic.
 

@@ -1,8 +1,9 @@
+import { readUiStyles } from '../testing/ui-styles';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 const component = readFileSync(new URL('./TxDetailsModal.svelte', import.meta.url), 'utf8');
-const appCss = readFileSync(new URL('../../app.css', import.meta.url), 'utf8');
+const appCss = readUiStyles();
 
 describe('transaction details denomination', () => {
   it('switches the hero amount between sats and BTC like the overview balance', () => {

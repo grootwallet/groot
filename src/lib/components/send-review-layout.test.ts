@@ -1,7 +1,8 @@
+import { readUiStyles } from '../testing/ui-styles';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
-const appCss = readFileSync(new URL('../../app.css', import.meta.url), 'utf8');
+const appCss = readUiStyles();
 const amount = readFileSync(new URL('./Amount.svelte', import.meta.url), 'utf8');
 const reviewDetails = readFileSync(
   new URL('./TransactionReviewDetails.svelte', import.meta.url),
@@ -33,7 +34,10 @@ describe('send review layout', () => {
 
   it('stacks the signer rail before cards become narrow and expands a lone mobile signer', () => {
     expect(appCss).toMatch(
-      /@media \(min-width: 761px\) and \(max-width: 1050px\)[\s\S]*?\.send-flow-layout\.with-signers,[\s\S]*?\.multisig-signing-layout\s*\{[^}]*grid-template-columns:\s*1fr;/s
+      /@media \(min-width: 761px\) and \(max-width: 1050px\)[\s\S]*?\.send-flow-layout\.with-signers\s*\{[^}]*grid-template-columns:\s*1fr;/s
+    );
+    expect(appCss).toMatch(
+      /@media \(min-width: 761px\) and \(max-width: 1050px\)[\s\S]*?\.multisig-signing-layout\s*\{[^}]*grid-template-columns:\s*1fr;/s
     );
     expect(appCss).toMatch(
       /@media \(max-width: 760px\)[\s\S]*?\.send-signer-list article:only-child\s*\{[^}]*flex-basis:\s*100%;/s

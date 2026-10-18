@@ -1,7 +1,8 @@
+import { readUiStyles } from '../testing/ui-styles';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
-const appCss = readFileSync(new URL('../../app.css', import.meta.url), 'utf8');
+const appCss = readUiStyles();
 const singleReceive = readFileSync(
   new URL('../../routes/receive/+page.svelte', import.meta.url),
   'utf8'
