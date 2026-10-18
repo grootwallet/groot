@@ -58,6 +58,7 @@
       if (scanComplete) scanner?.stop();
     } catch (cause) {
       error = localizedError(cause, $locale, 'This QR could not be verified.');
+      pendingFrames.length = 0;
       scanner?.stop();
       cameraActive = false;
     } finally {
@@ -66,9 +67,12 @@
   }
 
   async function acceptFrame(rawValue: string) {
+    if (error || scanComplete || stopped) return;
     if (rawValue.length > 4096) {
       error = 'Too many QR frames. Restart the scan.';
+      pendingFrames.length = 0;
       scanner?.stop();
+      cameraActive = false;
       return;
     }
     const frame = rawValue.trim().toLowerCase();
@@ -81,7 +85,9 @@
     const frameLimit = acceptedTypes.every((type: string) => type === 'crypto-psbt') ? 1024 : 512;
     if (seen.size >= frameLimit) {
       error = 'Too many QR frames. Restart the scan.';
+      pendingFrames.length = 0;
       scanner?.stop();
+      cameraActive = false;
       return;
     }
     seen.add(frame);
@@ -184,8 +190,11 @@
           starting
             ? 'Requesting camera permission…'
             : scanned
-              ? 'Keep the QR inside the square'
-              : prompt
+              ? scanned === 1
+                ? '{count} unique frame scanned'
+                : '{count} unique frames scanned'
+              : prompt,
+          { count: scanned }
         )}</span
       >{:else}<CameraOff size={16} /><span
         >{translate($locale, 'Allow camera access to scan this QR.')}</span

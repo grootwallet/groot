@@ -2338,6 +2338,10 @@
         acceptedTypes={['groot-bsms']}
         prompt={translate($locale, 'Point the camera at the encrypted phone response')}
         onframe={receiveMobileResponse}
+        onreset={() => {
+          mobileResponseFrames = [];
+          mobilePairError = '';
+        }}
       />
     {:else if mobileInvitation && mobileCandidate}
       <div class="device-scan paired-mobile">

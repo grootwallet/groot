@@ -2335,10 +2335,7 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     const parts = multipart.filter((part): part is NonNullable<typeof part> => part !== null);
     const total = parts[0]?.total ?? 0;
     if (parts.length < total)
-      throw new WalletError(
-        'internal_error',
-        `Keep scanning (${parts.length} of ${total} frames).`
-      );
+      throw new WalletError('qr_incomplete', `Keep scanning (${parts.length} of ${total} frames).`);
     return atob(
       parts
         .sort((a, b) => a.index - b.index)

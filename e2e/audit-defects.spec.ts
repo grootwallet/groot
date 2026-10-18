@@ -96,6 +96,12 @@ test('accepted payment with failed local recording keeps the txid and blocks ano
 });
 
 test('UR scanner translates live counts and its bounded frame-limit failure', async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'mediaDevices', {
+      configurable: true,
+      value: { getUserMedia: async () => ({ getTracks: () => [] }) }
+    });
+  });
   await page.route(/\/qr-scanner\.js(?:\?|$)/, (route) =>
     route.fulfill({
       contentType: 'application/javascript',
@@ -111,11 +117,14 @@ test('UR scanner translates live counts and its bounded frame-limit failure', as
   await page.evaluate(async () => {
     const path = '/src/lib/wallet/index.ts';
     const { walletService } = await import(path);
+    const contractsPath = '/src/lib/wallet/contracts.ts';
+    const { WalletError } = await import(contractsPath);
     walletService.decodePsbtUr = async () => {
-      throw new Error('Keep scanning');
+      throw new WalletError('qr_incomplete', 'More frames are required');
     };
   });
   await page.getByRole('button', { name: 'Scan signed QR', exact: true }).click();
+  await page.getByRole('button', { name: 'Allow camera', exact: true }).click();
   await expect
     .poll(() =>
       page.evaluate(() => typeof (window as Window & { emitUrFrame?: unknown }).emitUrFrame)
@@ -143,4 +152,12 @@ test('UR scanner translates live counts and its bounded frame-limit failure', as
     for (let frame = 3; frame <= 1025; frame++) emit(`ur:crypto-psbt/${frame}of1024/synthetic`);
   });
   await expect(page.locator('.scan-status')).toContainText('Trop d’images QR. Relancez l’analyse.');
+  await page.locator('.scanner-retry').click();
+  await expect(page.locator('.scan-status')).not.toContainText('Trop d’images QR');
+  await page.evaluate(() =>
+    (window as Window & { emitUrFrame: (frame: string) => void }).emitUrFrame(
+      'ur:crypto-psbt/1of1024/synthetic'
+    )
+  );
+  await expect(page.locator('.scan-status')).toContainText('1 image unique analysée');
 });

@@ -1733,9 +1733,11 @@
       imported = await walletService.decodePsbtUr(scannedFrames);
       qrScanOpen = false;
       await importPsbt();
+      return true;
     } catch (cause) {
-      const message = localizedError(cause, $locale, '');
-      if (!message.includes('Keep scanning')) error = message || 'The QR frame was rejected.';
+      if (cause instanceof WalletError && cause.code === 'qr_incomplete') return false;
+      error = localizedError(cause, $locale, 'The QR frame was rejected.');
+      throw cause;
     }
   }
 </script>
@@ -3232,7 +3234,14 @@
     $locale,
     'Groot accepts only crypto-psbt UR frames and verifies the exact proposal before merging.'
   )}
-  onclose={() => (qrScanOpen = false)}><UrQrScanner onframe={receiveUrFrame} /></Modal
+  onclose={() => (qrScanOpen = false)}
+  ><UrQrScanner
+    onframe={receiveUrFrame}
+    onreset={() => {
+      scannedFrames = [];
+      error = '';
+    }}
+  /></Modal
 >
 <Modal
   open={discardDraftOpen}
