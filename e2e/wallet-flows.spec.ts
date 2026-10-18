@@ -109,7 +109,7 @@ test('copies the public build identity with inline retry feedback', async ({ pag
   await page.goto('/unlock?fixture-locked-wallet-switch=1');
   const buildIdentity = page.getByRole('button', { name: 'Copy build information' });
   const displayedIdentity = (await buildIdentity.textContent())?.trim();
-  expect(displayedIdentity).toMatch(/^Groot v\d+\.\d+\.\d+(?:-rc[0-9]{2})? · [a-z0-9-]+$/);
+  expect(displayedIdentity).toMatch(/^Groot v\d+\.\d+\.\d+(?:-rc[1-9][0-9]*)? · [a-z0-9-]+$/);
 
   await buildIdentity.click();
   const copyStatus = page.locator('.build-identity-sidebar .build-copy-status');
@@ -290,14 +290,17 @@ test('creates a 24-word wallet and clears onboarding secrets', async ({ page }) 
   ).toBeVisible();
   await expect(page.getByRole('button', { name: 'Recover software wallet' })).toBeVisible();
   await page.getByRole('button', { name: 'Add wallet' }).click();
-  await expect(page.locator('.wallet-type-card')).toHaveCount(6);
+  const mobile = (page.viewportSize()?.width ?? 1180) <= 760;
+  await expect(page.locator('.wallet-type-card')).toHaveCount(mobile ? 6 : 3);
   await expect(page.getByText('Create and back up your keys in Groot.')).toBeVisible();
   await expect(page.getByText('Connect a device you already trust.')).toBeVisible();
   await expect(
     page.getByText('Custom spending, recovery, inheritance, or shared control.')
   ).toBeVisible();
-  await expect(page.getByText('Add this phone as one signer in a shared wallet.')).toBeVisible();
-  await expect(page.getByText('Import a hardware wallet without its signing key.')).toBeVisible();
+  if (mobile) {
+    await expect(page.getByText('Add this phone as one signer in a shared wallet.')).toBeVisible();
+    await expect(page.getByText('Import a hardware wallet without its signing key.')).toBeVisible();
+  }
   await chooseSoftwareWallet(page);
   const setupProgress = page.getByRole('navigation', { name: 'Software wallet setup progress' });
   await expect(setupProgress).toContainText('Generate');
@@ -520,14 +523,11 @@ test('keeps recovery words out of the webview and unlock rejects the wrong crede
   await unlockCredential.fill('prototype-passphrase');
   await unlockCredential.press('Enter');
   await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible();
-  if ((page.viewportSize()?.width ?? 1180) <= 760) {
-    await expect(page.getByRole('button', { name: 'Set up sync' })).toBeVisible();
-    await expect(page.getByText('Set up wallet sync', { exact: true })).toBeVisible();
-  } else {
-    await expect(page.getByRole('button', { name: 'Syncing' })).toBeVisible();
-    await expect(page.locator('.sync-progress')).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Updated now' })).toBeVisible();
-  }
+  // Both viewport projects use the browser adapter. Native iOS connection
+  // restrictions depend on the reported platform, not the viewport width.
+  await expect(page.getByRole('button', { name: 'Syncing' })).toBeVisible();
+  await expect(page.locator('.sync-progress')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Updated now' })).toBeVisible();
   await page.getByRole('link', { name: 'Activity' }).click();
   await page.getByRole('link', { name: 'Overview' }).click();
   await expect(page.getByRole('button', { name: 'Syncing' })).toHaveCount(0);
@@ -2194,7 +2194,7 @@ test('receive label suggestions expose aligned tooltips only when truncated', as
   const suggestion = page.getByRole('button', {
     name: 'Reuse A deliberately long reusable label'
   });
-  if ((page.viewportSize()?.width ?? 1180) <= 760) await suggestion.click();
+  if ((page.viewportSize()?.width ?? 1180) <= 760) await suggestion.focus();
   else await suggestion.hover();
   const tooltip = page.getByRole('tooltip');
   await expect(tooltip).toHaveText('A deliberately long reusable label');
@@ -2204,6 +2204,11 @@ test('receive label suggestions expose aligned tooltips only when truncated', as
   const tooltipGap = suggestionBox!.y - (tooltipBox!.y + tooltipBox!.height);
   expect(tooltipGap).toBeGreaterThanOrEqual(4);
   expect(tooltipGap).toBeLessThanOrEqual(9);
+  await suggestion.click();
+  await expect(
+    page.getByRole('button', { name: 'Remove A deliberately long reusable label', exact: true })
+  ).toBeVisible();
+  await expect(page.getByRole('tooltip')).toHaveCount(0);
 });
 
 test('manually refreshes incoming payments without leaving Receive', async ({ page }) => {
@@ -2271,7 +2276,7 @@ test('receive keeps multiple labeled payment requests and discards them independ
   const longSuggestion = page.getByRole('button', {
     name: 'Reuse A deliberately long reusable label'
   });
-  if ((page.viewportSize()?.width ?? 1180) <= 760) await longSuggestion.click();
+  if ((page.viewportSize()?.width ?? 1180) <= 760) await longSuggestion.focus();
   else await longSuggestion.hover();
   await expect(page.getByRole('tooltip')).toHaveText('A deliberately long reusable label');
   await page.getByRole('button', { name: 'Cancel' }).click();

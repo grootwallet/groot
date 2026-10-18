@@ -262,7 +262,8 @@
   const mobileSyncSetupRequired = $derived(
     mobileRuntime &&
       (syncSource?.type === 'compact_filters' ||
-        (syncSource?.type === 'bitcoin_core' && nodeConfig?.backend.type === 'local_core'))
+        (syncSource?.type === 'bitcoin_core' &&
+          (!nodeConfig || nodeConfig.backend.type === 'local_core')))
   );
   let hardwareSignerDetails = $derived.by<CosignerDraft | null>(() =>
     hardwareSignerWallet
@@ -402,17 +403,16 @@
           return;
         }
       }
-      const [nextSyncSource, runtime, nextNodeConfig, networkSetupSources] = await Promise.all([
+      const [nextSyncSource, runtime, networkSetupSources] = await Promise.all([
         walletService.syncSource(),
         walletService.runtimePlatform(),
-        walletService.nodeConfig(),
         walletService.networkSetupSources()
       ]);
       if (generation !== loadGeneration) return;
       pendingMobilePairingCount = (await pendingPairingsPromise).length;
       syncSource = nextSyncSource;
-      mobileRuntime = runtime.mobile;
-      nodeConfig = nextNodeConfig;
+      mobileRuntime = runtime.mobile && runtime.platform !== 'browser';
+      nodeConfig = null;
       selectedProfile =
         registry.wallets.find((wallet) => wallet.id === registry.selectedWalletId) ?? null;
       // Set the command family before any network preflight can fail. Otherwise
@@ -508,6 +508,11 @@
     const current = () =>
       generation === loadGeneration && profile.id === walletShell.selectedWalletId();
     const results = await Promise.allSettled([
+      // Connection hints must not block cached wallet data or the separate
+      // fail-closed wallet-history privacy disclosure.
+      (mobileRuntime ? walletService.nodeConfig() : Promise.resolve(null)).then((config) => {
+        if (current()) nodeConfig = config;
+      }),
       Promise.all([
         walletService.paymentDraft(),
         profile.kind === 'multisig'

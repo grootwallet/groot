@@ -95,7 +95,7 @@
   {#if showCounter}<FieldCounter {value} max={48} {hint} />{/if}
 </div>
 {#if !discreet}<div class="label-suggestions">
-    {#each suggestions as suggestion}<Tooltip
+    {#each suggestions as suggestion (suggestion.text)}<Tooltip
         text={suggestion.text}
         truncatedSelector=".label-suggestion-text"
         positionSelector="button"
