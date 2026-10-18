@@ -65,6 +65,12 @@ for (const theme of ['light', 'dark']) {
     await expect(page.getByText('5 sat/vB', { exact: true })).toBeVisible();
     await expect(page.getByText('220 vB', { exact: true })).toBeVisible();
     await expect(page.getByText('1234abcd', { exact: true })).toBeVisible();
+    for (const amount of await page.locator('.phone-outputs .formatted-amount').all()) {
+      const number = await amount.locator('strong').boundingBox();
+      const unit = await amount.locator('small').boundingBox();
+      expect(number && unit).toBeTruthy();
+      expect(unit!.x - (number!.x + number!.width)).toBeGreaterThanOrEqual(4);
+    }
     const capture = async (name: string) => {
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
         true
@@ -84,6 +90,13 @@ for (const theme of ['light', 'dark']) {
     await page.getByRole('button', { name: 'Sign this exact PSBT', exact: true }).click();
     await expect(page.getByText('Signature ready', { exact: true })).toBeVisible();
     await expect(page.getByRole('img', { name: /Signed crypto-psbt QR/ })).toBeVisible();
+    const heading = page.locator('.signature-heading');
+    const title = await heading.locator('strong').boundingBox();
+    const fingerprint = await heading.locator('small').boundingBox();
+    expect(title && fingerprint).toBeTruthy();
+    expect(fingerprint!.y).toBeGreaterThanOrEqual(title!.y + title!.height);
+    await page.locator('.toast-close').first().click();
+    await expect(page.locator('.toast-close')).toHaveCount(0);
     await capture('signature-ready');
     await page.getByRole('button', { name: 'Sign another PSBT', exact: true }).click();
     await expect(page.getByText('Scan unsigned PSBT from desktop', { exact: true })).toBeVisible();

@@ -90,7 +90,7 @@
   {#if signed}
     <InstructionCard>
       <span class="status-icon"><Check size={22} /></span>
-      <div>
+      <div class="signature-heading">
         <strong>{translate($locale, 'Signature ready')}</strong><small
           >{signed.signerFingerprint} · {signed.revisionId.slice(0, 12)}</small
         >
@@ -108,8 +108,8 @@
     </InstructionCard>
   {:else if review}
     <InstructionCard>
-      <button class="back-link" onclick={restart}
-        ><ArrowLeft size={16} />{translate($locale, 'Scan again')}</button
+      <Button variant="ghost" size="small" onclick={restart}
+        ><ArrowLeft size={16} />{translate($locale, 'Scan again')}</Button
       >
       <div class="review-heading">
         <ShieldCheck size={20} /><span
@@ -120,25 +120,29 @@
           ></span
         >
       </div>
-      <div class="review-list">
+      <div class="phone-outputs">
         {#each review.recipients as output}
-          <div>
-            <span
-              ><small>{translate($locale, 'Send')}</small><ReadableAddress
-                address={output.address}
-                oncopy={() => copyText(output.address, 'bitcoin-address')}
-              /></span
-            ><Amount value={output.amountSats} />
+          <div class="output-row">
+            <div class="output-heading">
+              <small>{translate($locale, 'Send')}</small><Amount value={output.amountSats} />
+            </div>
+            <ReadableAddress
+              address={output.address}
+              oncopy={() => copyText(output.address, 'bitcoin-address')}
+            />
           </div>
         {/each}
         {#each review.change as output}
-          <div>
-            <span
-              ><small>{translate($locale, 'Verified wallet change')}</small><ReadableAddress
-                address={output.address}
-                oncopy={() => copyText(output.address, 'bitcoin-address')}
-              /></span
-            ><Amount value={output.amountSats} />
+          <div class="output-row">
+            <div class="output-heading">
+              <small>{translate($locale, 'Verified wallet change')}</small><Amount
+                value={output.amountSats}
+              />
+            </div>
+            <ReadableAddress
+              address={output.address}
+              oncopy={() => copyText(output.address, 'bitcoin-address')}
+            />
           </div>
         {/each}
         <div class="fee-row">
@@ -178,7 +182,7 @@
   {:else}
     <InstructionCard>
       <span class="status-icon"><QrCode size={22} /></span>
-      <div>
+      <div class="scan-heading">
         <strong>{translate($locale, 'Scan unsigned PSBT from desktop')}</strong><small
           >{translate(
             $locale,
@@ -224,25 +228,31 @@
     align-items: center;
     column-gap: 0.75rem;
   }
-  .review-list {
+  .signature-heading,
+  .scan-heading,
+  .phone-outputs {
     display: grid;
     gap: 0.75rem;
   }
-  .review-list > div {
+  .signature-heading,
+  .scan-heading {
+    gap: 0.25rem;
+    overflow-wrap: anywhere;
+  }
+  .output-heading,
+  .fee-row {
     display: flex;
     justify-content: space-between;
-    align-items: flex-start;
-    gap: 1rem;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 0.5rem 1rem;
+  }
+  .output-row {
+    display: grid;
+    gap: 0.5rem;
+    min-width: 0;
     padding: 0.8rem 0;
     border-bottom: 1px solid var(--border);
-  }
-  .review-list span {
-    display: grid;
-    gap: 0.2rem;
-    min-width: 0;
-  }
-  .review-list strong {
-    white-space: nowrap;
   }
   .security-copy {
     color: var(--muted);
