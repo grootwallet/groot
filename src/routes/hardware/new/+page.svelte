@@ -796,19 +796,10 @@
     <ShieldCheck size={17} />
     <p>
       <strong>{translate($locale, 'Your hidden wallet is unchanged.')}</strong><span
-        >{translate(
-          $locale,
-          'The same Trezor can use a passphrase-derived wallet elsewhere and its standard wallet here.\n        They have different fingerprints and addresses.'
-        )}</span
+        >{translate($locale, 'Confirm this standard wallet to continue.')}</span
       >
     </p>
   </div>
-  <p>
-    {translate(
-      $locale,
-      'Review the imported public identity in the next step. You can enable or choose a Trezor\n    passphrase later, but that opens a different hidden wallet; add it to Groot as a separate wallet\n    while this standard wallet remains unchanged.'
-    )}
-  </p>
   {#if busy}<HardwareActionPrompt
       title={translate($locale, 'Importing the Trezor standard wallet')}
       detail={translate($locale, 'Keep Trezor connected while Groot reads its public account key.')}
@@ -898,3 +889,130 @@
     </p>
   </div>
 </Modal>
+
+<style>
+  /* Keep the original cascade weight while constraining these rules to this owner. */
+
+  :global(.hardware-setup-page):where(.hardware-setup-page) :global(.page-header) {
+    margin-bottom: 18px;
+  }
+  :global(.hardware-setup-progress):where(.hardware-setup-progress) {
+    width: min(520px, 100%);
+    margin: 0 auto 26px;
+  }
+  :global(.hardware-setup-progress):where(.hardware-setup-progress) :global(.setup-progress) {
+    margin: 0;
+  }
+  :global(.hardware-review-card):where(.hardware-review-card) :global(.setup-step),
+  :global(.hardware-protection-card):where(.hardware-protection-card) > :global(h2) {
+    margin-top: 0;
+  }
+  :global(.hardware-protection-card):where(.hardware-protection-card) > :global(p) {
+    max-width: 600px;
+    margin-bottom: 22px;
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+    line-height: 1.55;
+  }
+  :global(.ledger-passphrase-help):where(.ledger-passphrase-help) {
+    margin: -6px 0 18px;
+    padding: 0 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+    background: var(--surface-control);
+  }
+  :global(.ledger-passphrase-help):where(.ledger-passphrase-help) :global(summary) {
+    padding: 11px 0;
+    color: var(--link);
+    font-size: var(--font-size-meta);
+    font-weight: 650;
+    cursor: pointer;
+  }
+  :global(.ledger-passphrase-help):where(.ledger-passphrase-help) :global(p) {
+    margin: 0 0 12px;
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+    line-height: 1.55;
+  }
+  :global(.help-link):where(.help-link) {
+    width: 100%;
+    min-height: 40px;
+    display: grid;
+    grid-template-columns: 18px minmax(0, 1fr) 14px;
+    align-items: center;
+    gap: 8px;
+    margin-top: 14px;
+    padding: 9px 11px;
+    color: var(--text-soft);
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: var(--radius-control);
+    font-family: inherit;
+    font-size: var(--font-size-meta);
+    font-weight: 600;
+    line-height: 1.35;
+    text-align: left;
+    cursor: pointer;
+    transition:
+      color 0.15s ease,
+      background 0.15s ease,
+      border-color 0.15s ease;
+  }
+  :global(.help-link):where(.help-link) > :global(svg:first-child) {
+    color: var(--link);
+  }
+  :global(.help-link):where(.help-link) > :global(svg:last-child) {
+    color: var(--muted);
+    transition:
+      transform 0.15s ease,
+      color 0.15s ease;
+  }
+  :global(.help-link:hover):where(.help-link) {
+    color: var(--text);
+    background: var(--surface-hover);
+    border-color: var(--border);
+  }
+  :global(.help-link:hover):where(.help-link) > :global(svg:last-child) {
+    color: var(--link);
+    transform: translateX(2px);
+  }
+  :global(.help-link:focus-visible):where(.help-link) {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+  }
+  :global(.guide-list):where(.guide-list) {
+    display: grid;
+    gap: 10px;
+  }
+  :global(.guide-list):where(.guide-list) :global(p) {
+    margin: 0;
+    padding: 11px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+    background: var(--surface-control);
+  }
+  :global(.guide-list):where(.guide-list) :global(strong),
+  :global(.guide-list):where(.guide-list) :global(span) {
+    display: block;
+  }
+  :global(.guide-list):where(.guide-list) :global(span) {
+    margin-top: 4px;
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+    line-height: 1.5;
+  }
+  .coldcard-fingerprint-guide {
+    margin: -6px 0 18px;
+    border: 1px solid var(--border);
+  }
+  .coldcard-fingerprint-guide :global(ol) {
+    margin: 0;
+    padding: 11px 28px 13px;
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+    line-height: 1.55;
+  }
+  .coldcard-fingerprint-guide :global(li + li) {
+    margin-top: 5px;
+  }
+</style>

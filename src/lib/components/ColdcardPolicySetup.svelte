@@ -106,3 +106,38 @@
     >
   </div>
 </section>
+
+<style>
+  /* Keep the original cascade weight while constraining these rules to this owner. */
+
+  :global(.policy-review-confirmation):where(.policy-review-confirmation) {
+    display: grid;
+    grid-template-columns: 18px minmax(0, 1fr);
+    align-items: start;
+    gap: 9px;
+    padding: 11px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+    background: var(--surface-control);
+    cursor: pointer;
+  }
+  :global(.policy-review-confirmation):where(.policy-review-confirmation) :global(input) {
+    margin-top: 2px;
+  }
+  :global(.policy-review-confirmation):where(.policy-review-confirmation) :global(span) {
+    display: grid;
+    gap: 3px;
+  }
+  :global(.policy-review-confirmation):where(.policy-review-confirmation) :global(strong) {
+    font-size: var(--font-size-meta);
+  }
+  :global(.policy-review-confirmation):where(.policy-review-confirmation) :global(small) {
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+    line-height: 1.4;
+  }
+  :global(.policy-review-confirmation:has(input:disabled)):where(.policy-review-confirmation) {
+    cursor: default;
+    opacity: 0.72;
+  }
+</style>

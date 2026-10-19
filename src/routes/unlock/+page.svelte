@@ -1,10 +1,11 @@
 <script lang="ts">
   import { locale } from '$lib/i18n';
   import { translate, localizedError } from '$lib/i18n-catalog';
-  import { LockKeyhole, Trash2 } from '@lucide/svelte';
+  import { LockKeyhole, Plus, Trash2 } from '@lucide/svelte';
   import { afterNavigate, goto } from '$app/navigation';
   import { onDestroy, onMount, tick } from 'svelte';
   import { fly } from 'svelte/transition';
+  import BuildIdentity from '$lib/components/BuildIdentity.svelte';
   import Button from '$lib/components/Button.svelte';
   import Modal from '$lib/components/Modal.svelte';
   import PasswordField from '$lib/components/PasswordField.svelte';
@@ -15,6 +16,7 @@
   import { useWalletShellContext } from '$lib/wallet/shell-context';
   import {
     WalletError,
+    type RuntimePlatform,
     type WalletProfile,
     type WalletProfileCompatibility
   } from '$lib/wallet/contracts';
@@ -29,6 +31,7 @@
   let profiles = $state<WalletProfile[]>([]);
   let selectedWalletId = $state<string | null>(null);
   let compatibility = $state<WalletProfileCompatibility | null>(null);
+  let runtimeIdentity = $state<RuntimePlatform | null>(null);
   let credentialForm = $state<HTMLFormElement | null>(null);
   let retryAfterSeconds = $state(0);
   let retryTimer: ReturnType<typeof setInterval> | null = null;
@@ -61,6 +64,7 @@
   }
 
   onMount(async () => {
+    runtimeIdentity = await walletService.runtimePlatform();
     if (!(await walletService.exists())) {
       await goto('/welcome');
       return;
@@ -229,6 +233,15 @@
         >{/if}
     </main>
   {/key}
+  {#if runtimeIdentity?.mobile}<div class="mobile-add-wallet">
+      <Button href="/welcome?add=1" variant="secondary" size="large" class="full"
+        ><Plus size={16} />{translate($locale, 'Add another wallet')}</Button
+      >
+    </div>{/if}
+  {#if runtimeIdentity?.mobile}<BuildIdentity
+      runtime={runtimeIdentity}
+      placement="onboarding"
+    />{/if}
 </div>
 
 <Modal
@@ -278,3 +291,73 @@
     >
   </div>
 </Modal>
+
+<style>
+  .mobile-add-wallet {
+    width: min(470px, calc(100% - 36px));
+    margin: 0 auto 24px;
+    flex-shrink: 0;
+  }
+  /* Keep the original cascade weight while constraining these rules to this owner. */
+
+  :global(.prototype-hint):where(.prototype-hint) {
+    width: fit-content;
+    max-width: 100%;
+    padding: 8px 10px;
+    margin: 7px 0 0 !important;
+    color: var(--muted) !important;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+    font-size: var(--font-size-meta) !important;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+  }
+  :global(.prototype-hint):where(.prototype-hint) :global(code) {
+    color: var(--text);
+  }
+  :global(.locked-reset):where(.locked-reset) {
+    width: 100%;
+    margin-top: 16px;
+    padding: 9px;
+    border: 0;
+    background: transparent;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    font-size: var(--font-size-meta);
+    cursor: pointer;
+  }
+  :global(.locked-reset:hover):where(.locked-reset) {
+    color: var(--danger);
+  }
+  .unlock-overlay {
+    left: 224px;
+    z-index: 5;
+  }
+  .unlock-overlay :global(.onboarding-card) {
+    margin-block: auto;
+  }
+  .unlock-overlay :global(.setup-step) {
+    margin: 0 0 14px;
+    color: var(--fr-red);
+  }
+  .unlock-overlay :global(.sign-icon) {
+    margin-bottom: 16px;
+  }
+  .unlock-overlay :global(.onboarding-card > h1) {
+    margin-top: 12px;
+  }
+  .unlock-overlay :global(.onboarding-card > p) {
+    margin-bottom: 22px;
+  }
+
+  @media (max-width: 760px) {
+    .unlock-overlay {
+      left: 0;
+      z-index: 50;
+    }
+  }
+</style>

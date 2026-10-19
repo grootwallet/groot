@@ -1,0 +1,11 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Groot Regtest Desktop Dev",
+  "identifier": "app.groot.wallet.regtest.desktop.dev",
+  "bundle": {
+    "targets": ["app"],
+    "macOS": {
+      "entitlements": "Entitlements.camera.plist"
+    }
+  }
+}

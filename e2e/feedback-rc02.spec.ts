@@ -69,6 +69,40 @@ test('rc02 own-node choice opens the connection dialog directly', async ({ page 
   });
 });
 
+test('initial scan waits for the exact privacy disclosure before approval', async ({ page }) => {
+  await page.goto(
+    '/?fixture-initial-history-required=1&fixture-managed-node=1&fixture-node-config-delay=1'
+  );
+  const modal = page.getByRole('dialog', { name: 'Approve wallet-history scan' });
+  await expect(modal.getByText('Checking wallet privacy…')).toBeVisible();
+  await expect(modal.getByText('Your own node checks your wallet history.')).toHaveCount(0);
+  await expect(modal.getByRole('button', { name: 'Approve and scan' })).toBeDisabled();
+  await page.evaluate(() => window.dispatchEvent(new Event('groot-fixture-node-config-ready')));
+  await expect(modal.getByText('Groot’s network can see your wallet activity.')).toBeVisible();
+  await expect(modal.getByRole('button', { name: 'Approve and scan' })).toBeEnabled();
+});
+
+test('initial scan keeps approval blocked until a failed privacy check is retried', async ({
+  page
+}) => {
+  await page.goto(
+    '/?fixture-initial-history-required=1&fixture-managed-node=1&fixture-node-config-error=1'
+  );
+  const modal = page.getByRole('dialog', { name: 'Approve wallet-history scan' });
+  await expect(modal.getByText('Could not check wallet privacy')).toBeVisible();
+  await expect(modal.getByText('Your own node checks your wallet history.')).toHaveCount(0);
+  await expect(modal.getByRole('button', { name: 'Approve and scan' })).toBeDisabled();
+
+  await page.evaluate(() => {
+    const url = new URL(window.location.href);
+    url.searchParams.delete('fixture-node-config-error');
+    history.replaceState({}, '', url);
+  });
+  await modal.getByRole('button', { name: 'Try again' }).click();
+  await expect(modal.getByText('Groot’s network can see your wallet activity.')).toBeVisible();
+  await expect(modal.getByRole('button', { name: 'Approve and scan' })).toBeEnabled();
+});
+
 test('rc02 scan failures use the shared notice and retry after the connection is fixed', async ({
   page
 }) => {

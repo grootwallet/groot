@@ -1,3 +1,4 @@
+import { readUiStyles } from '../testing/ui-styles';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
@@ -10,7 +11,7 @@ const multisigSend = readFileSync(
   new URL('../../routes/multisig/send/+page.svelte', import.meta.url),
   'utf8'
 );
-const styles = readFileSync(new URL('../../app.css', import.meta.url), 'utf8');
+const styles = readUiStyles();
 
 describe('foreground wallet actions during sync', () => {
   it('keeps signer metadata visible and reports why the health action is unavailable', () => {

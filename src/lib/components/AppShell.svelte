@@ -167,6 +167,7 @@
     matchZoomShortcut,
     usesCommandModifier
   } from '$lib/keyboard-shortcuts';
+  import { configureMobileViewport } from '$lib/mobile-viewport';
   import { applyZoom, changeZoom, initZoom } from '$lib/zoom';
   let { children } = $props();
   const nav: Array<{ href: string; label: MessageKey; icon: typeof LayoutGrid }> = [
@@ -213,9 +214,12 @@
   let currentZoom = 1;
   let shortcutLockPending = false;
   let walletSelectionTask: Promise<void> | undefined;
+  let mobileRuntime = false;
   let pendingUnlockSyncWalletId: string | null = null;
   let runtimeIdentity = $state<RuntimePlatform | null>(null);
   let startupFailure = $state('');
+  let checkingRuntime = $state(true);
+  let backgroundLockRequired = false;
   let selectedProfile = $derived(profiles.find((wallet) => wallet.id === selectedWalletId));
   let policyContext = $derived(
     selectedProfile?.kind === 'multisig' || page.url.pathname.startsWith('/multisig')
@@ -223,6 +227,11 @@
   let visibleNav = $derived(policyContext ? nav : nav.slice(0, 3));
   let mobileItems = $derived(policyContext ? nav : nav.slice(0, 3));
   let onboardingRoute = $derived(walletSetupRoutes.has(page.url.pathname));
+  let mobileSetupRoute = $derived(
+    page.url.pathname === '/mobile/pair' ||
+      page.url.pathname === '/mobile/watch' ||
+      page.url.pathname === '/mobile/recover'
+  );
   let lockedRoute = $derived(page.url.pathname === '/unlock');
   let settingsRoute = $derived(page.url.pathname === '/settings');
   let diagnosticsRoute = $derived(page.url.pathname === '/diagnostics');
@@ -231,7 +240,7 @@
     lockedRoute || ((settingsRoute || diagnosticsRoute) && walletLocked)
   );
   let syncPausedRoute = $derived(
-    onboardingRoute || lockedRoute || diagnosticsRoute || walletLocked
+    onboardingRoute || lockedRoute || diagnosticsRoute || walletLocked || mobileSetupRoute
   );
   const showQuickActions = $derived(
     !restrictedUtilityRoute && (page.url.pathname === '/' || page.url.pathname === '/coins')
@@ -246,34 +255,48 @@
   let initialApprovalWalletId = $state<string | null>(null);
   let initialApprovalBusy = $state(false);
   let initialApprovalError = $state('');
-  let initialApprovalManaged = $state(false);
+  let initialApprovalBackend = $state<'loading' | 'managed' | 'private' | 'error'>('loading');
+  let initialApprovalIsManaged = $derived(initialApprovalBackend === 'managed');
+  let initialApprovalLookupGeneration = 0;
   const declinedInitialScans = new Set<string>();
   function requestInitialHistoryApproval(force = false) {
     const id = selectedWalletId;
     if (!id || (!force && declinedInitialScans.has(id)) || initialApprovalBusy) return;
     if (!force && initialApprovalWalletId === id) return;
+    const lookupGeneration = ++initialApprovalLookupGeneration;
     initialApprovalWalletId = id;
     initialApprovalError = '';
-    initialApprovalManaged = false;
+    initialApprovalBackend = 'loading';
     void walletService
       .nodeConfig()
       .then((config) => {
-        if (initialApprovalWalletId === id)
-          initialApprovalManaged =
+        if (initialApprovalWalletId === id && initialApprovalLookupGeneration === lookupGeneration)
+          initialApprovalBackend =
             config.backend.type === 'remote_core' &&
-            config.backend.url === 'https://bitcoin-rpc.usegroot.com/';
+            config.backend.url === 'https://bitcoin-rpc.usegroot.com/'
+              ? 'managed'
+              : 'private';
       })
-      .catch(() => undefined);
+      .catch(() => {
+        if (initialApprovalWalletId === id && initialApprovalLookupGeneration === lookupGeneration)
+          initialApprovalBackend = 'error';
+      });
   }
   async function declineInitialHistoryScan() {
     if (initialApprovalBusy) return;
     if (initialApprovalWalletId) declinedInitialScans.add(initialApprovalWalletId);
+    initialApprovalLookupGeneration += 1;
     initialApprovalWalletId = null;
     await goto('/settings?nodeConnection=1');
   }
   async function approveInitialHistoryScan() {
     const id = initialApprovalWalletId;
-    if (!id || initialApprovalBusy) return;
+    if (
+      !id ||
+      initialApprovalBusy ||
+      (initialApprovalBackend !== 'managed' && initialApprovalBackend !== 'private')
+    )
+      return;
     initialApprovalBusy = true;
     initialApprovalError = '';
     let scanStarted = false;
@@ -473,7 +496,10 @@
     '/hardware/new',
     '/multisig/new',
     '/multisig/recover',
-    '/multisig/delete'
+    '/multisig/delete',
+    '/mobile/pair',
+    '/mobile/watch',
+    '/mobile/recover'
   ]);
 
   async function resumeAfterWalletCreation(profileRefresh: Promise<void>) {
@@ -638,12 +664,35 @@
     resumeAutomaticSync
   });
 
+  let restoreMobileViewport: (() => void) | undefined;
+
   async function resolveStartupRoute() {
     startupState = 'checking';
     startupFailure = '';
+    checkingRuntime = true;
     try {
       const runtime = await walletService.runtimePlatform();
+      if (
+        !runtime.network ||
+        !runtime.version ||
+        !runtime.commit ||
+        !['regtest', 'signet', 'testnet4', 'mainnet'].includes(runtime.network)
+      ) {
+        startupFailure = translate(
+          $locale,
+          'This Groot app contains mismatched components. Rebuild and reinstall the native app.'
+        );
+        throw new Error('incomplete runtime identity');
+      }
       runtimeIdentity = runtime;
+      mobileRuntime = runtime.mobile && runtime.platform !== 'browser';
+      restoreMobileViewport?.();
+      restoreMobileViewport = configureMobileViewport(mobileRuntime);
+      if (mobileRuntime && document.visibilityState !== 'visible') {
+        backgroundLockRequired = true;
+        await enforceMobileBackgroundLock();
+        return;
+      }
       if (runtime.networkSwitching !== networkSwitchingBuild) {
         startupFailure = translate(
           $locale,
@@ -662,6 +711,7 @@
         );
         throw new Error('native/web build mismatch');
       }
+      checkingRuntime = false;
       await refreshSetupDraft();
       if (!(await walletService.exists())) {
         if (!diagnosticsRoute) await goto('/welcome');
@@ -688,8 +738,50 @@
         void liveSync?.runNow();
       }
     } catch {
-      if (!startupFailure)
-        startupFailure = translate($locale, 'Groot could not verify the wallet lock state.');
+      if (!startupFailure) {
+        startupFailure = translate(
+          $locale,
+          checkingRuntime
+            ? 'Groot could not verify this app build. Rebuild and reinstall the native app.'
+            : 'Groot could not verify the wallet lock state.'
+        );
+      }
+      startupState = 'failed';
+    }
+  }
+
+  function centerMobileField(event: FocusEvent) {
+    if (!mobileRuntime) return;
+    const field = event.target;
+    if (!(
+      field instanceof HTMLInputElement ||
+      field instanceof HTMLTextAreaElement ||
+      field instanceof HTMLSelectElement
+    ))
+      return;
+    // Let iOS finish resizing the visual viewport for the keyboard, then perform
+    // one centering move. Competing smooth-scroll timers can otherwise move the
+    // field into view and immediately pull it away again.
+    setTimeout(() => {
+      if (document.activeElement !== field) return;
+      field.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'smooth' });
+    }, 320);
+  }
+
+  async function enforceMobileBackgroundLock() {
+    if (!mobileRuntime || !backgroundLockRequired) return;
+    startupState = 'checking';
+    liveSync?.stop();
+    try {
+      await Promise.allSettled([
+        walletService.cancelHardwareOperations(),
+        walletService.cancelSync()
+      ]);
+      await walletService.lockAll();
+      backgroundLockRequired = false;
+      await goto('/unlock');
+      startupState = 'ready';
+    } catch {
       startupState = 'failed';
     }
   }
@@ -736,10 +828,13 @@
     const unsubscribe = walletService.subscribe((event) => {
       const presentation = walletEventPresentation(event, $locale, $denomination, goto);
       if (presentation) toast(presentation);
-      if (event.type === 'wallet_profile_updated')
-        profiles = profiles.map((profile) =>
-          profile.id === event.profile.id ? event.profile : profile
-        );
+      if (event.type === 'wallet_profile_updated') {
+        const known = profiles.some((profile) => profile.id === event.profile.id);
+        profiles = known
+          ? profiles.map((profile) => (profile.id === event.profile.id ? event.profile : profile))
+          : [...profiles, event.profile];
+        selectedWalletId = event.profile.id;
+      }
     });
     liveSync = createLiveSync(
       walletService,
@@ -780,13 +875,23 @@
     );
     sessionMonitor.start();
     const wakeWhenVisible = () => {
-      if (document.visibilityState === 'visible') void liveSync?.runNow();
+      if (document.visibilityState !== 'visible') {
+        if (mobileRuntime) {
+          backgroundLockRequired = true;
+          void enforceMobileBackgroundLock();
+        }
+        return;
+      }
+      if (backgroundLockRequired) void enforceMobileBackgroundLock();
+      else void liveSync?.runNow();
     };
     document.addEventListener('visibilitychange', wakeWhenVisible);
+    document.addEventListener('focusin', centerMobileField);
     window.addEventListener('keydown', handleKeyboardShortcut);
     void resolveStartupRoute();
     return () => {
       updateGeneration++;
+      restoreMobileViewport?.();
       void walletService.cancelUpdate().catch(() => undefined);
       clearInterval(updateTimer);
       modalObserver.disconnect();
@@ -795,6 +900,7 @@
       liveSync?.stop();
       sessionMonitor?.stop();
       document.removeEventListener('visibilitychange', wakeWhenVisible);
+      document.removeEventListener('focusin', centerMobileField);
       window.removeEventListener('keydown', handleKeyboardShortcut);
     };
   });
@@ -815,7 +921,10 @@
       <BrandLockup animated />
       {#if startupState === 'failed'}
         <p>{startupFailure}</p>
-        <button class="button secondary" onclick={resolveStartupRoute}
+        <button
+          class="button secondary"
+          onclick={() =>
+            backgroundLockRequired ? enforceMobileBackgroundLock() : resolveStartupRoute()}
           >{translate($locale, 'Retry')}</button
         >
       {:else}
@@ -858,7 +967,10 @@
         <div class="preference-toggles">
           <ThemeToggle /><DiscreetModeToggle />
         </div>
-        <NetworkStatus network={defaultConfig.network} locked={walletLocked} />
+        <NetworkStatus
+          network={runtimeIdentity?.network ?? defaultConfig.network}
+          locked={walletLocked}
+        />
         <BuildIdentity runtime={runtimeIdentity} placement="sidebar" />
         {#if updateOffer}
           <Button
@@ -873,8 +985,11 @@
       </div>
     </aside>
 
-    <a class="mobile-brand" href="/" aria-label={translate($locale, 'Groot home')}
-      ><BrandLockup /></a
+    <a
+      class="mobile-brand"
+      class:locked-brand={lockedRoute}
+      href="/"
+      aria-label={translate($locale, 'Groot home')}><BrandLockup /></a
     >
 
     <main class="main">
@@ -920,7 +1035,10 @@
 
     {#if onboardingRoute}<BuildIdentity runtime={runtimeIdentity} placement="onboarding" />{/if}
 
-    {#if !restrictedUtilityRoute}<nav class="mobile-nav" class:policy-nav={policyContext}>
+    {#if !restrictedUtilityRoute && !onboardingRoute && !mobileSetupRoute}<nav
+        class="mobile-nav"
+        class:policy-nav={policyContext}
+      >
         {#each mobileItems as item}
           <a
             href={item.href}
@@ -943,7 +1061,7 @@
             href="/settings"
             aria-label={t('settings', $locale)}><Settings size={20} /></a
           >{/if}<ThemeToggle /><DiscreetModeToggle /><NetworkStatus
-          network={defaultConfig.network}
+          network={runtimeIdentity?.network ?? defaultConfig.network}
           locked={walletLocked}
         />
       </div>{/if}
@@ -986,15 +1104,42 @@
   }}
 >
   <div class="modal-form">
-    <WarningNotice
-      title={translate($locale, 'Wallet privacy')}
-      body={translate(
-        $locale,
-        initialApprovalManaged
-          ? 'Groot’s network can see your wallet activity. Your keys stay on your device.'
-          : 'Your own node checks your wallet history. Your keys stay on your device.'
-      )}
-    />
+    {#if initialApprovalBackend === 'loading'}
+      <WarningNotice
+        role="status"
+        ariaLive="polite"
+        title={translate($locale, 'Checking wallet privacy…')}
+        body={translate(
+          $locale,
+          'Groot is checking which network will receive your wallet history.'
+        )}
+      />
+    {:else if initialApprovalBackend === 'error'}
+      <WarningNotice
+        tone="danger"
+        icon
+        role="alert"
+        title={translate($locale, 'Could not check wallet privacy')}
+        body={translate(
+          $locale,
+          'Groot could not verify which network would receive your wallet history. Try again before approving.'
+        )}
+      >
+        <Button size="sm" variant="secondary" onclick={() => requestInitialHistoryApproval(true)}
+          >{translate($locale, 'Try again')}</Button
+        >
+      </WarningNotice>
+    {:else}
+      <WarningNotice
+        title={translate($locale, 'Wallet privacy')}
+        body={translate(
+          $locale,
+          initialApprovalIsManaged
+            ? 'Groot’s network can see your wallet activity. Your keys stay on your device.'
+            : 'Your own node checks your wallet history. Your keys stay on your device.'
+        )}
+      />
+    {/if}
     {#if initialApprovalError}<WarningNotice
         tone="danger"
         icon
@@ -1008,6 +1153,7 @@
       >{translate($locale, 'Set up my own node')}</Button
     ><Button
       loading={initialApprovalBusy}
+      disabled={initialApprovalBackend === 'loading' || initialApprovalBackend === 'error'}
       loadingLabel={translate($locale, 'Starting scan…')}
       onclick={approveInitialHistoryScan}>{translate($locale, 'Approve and scan')}</Button
     >
@@ -1097,3 +1243,411 @@
     </div>
   </div>
 </Modal>
+
+<style>
+  /* Keep the original cascade weight while constraining these rules to this owner. */
+
+  :global(.app-shell):where(.app-shell) {
+    min-height: 100vh;
+    --locked-setup-notice-top: 18px;
+    --locked-setup-notice-right: 32px;
+    --locked-setup-notice-left: 256px;
+  }
+  :global(.startup-gate):where(.startup-gate) {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    display: grid;
+    place-content: center;
+    justify-items: center;
+    gap: 18px;
+    color: var(--text);
+    background: var(--bg);
+  }
+  :global(.startup-gate):where(.startup-gate) > :global(span[role='img']) {
+    width: 116px;
+    pointer-events: none;
+  }
+  :global(.startup-gate):where(.startup-gate) :global(p) {
+    margin: 0;
+    color: var(--muted);
+    font-size: 13px;
+  }
+  :global(.navigation-progress):where(.navigation-progress) {
+    position: fixed;
+    z-index: 95;
+    top: 0;
+    right: 0;
+    left: 224px;
+    height: 2px;
+    opacity: 0;
+    pointer-events: none;
+    transform: scaleX(0.08);
+    transform-origin: left;
+    background: linear-gradient(90deg, var(--fr-blue), color-mix(in srgb, var(--link) 70%, white));
+  }
+  :global(.app-shell.navigation-pending):where(.app-shell) :global(.navigation-progress) {
+    opacity: 0.72;
+    animation: navigation-progress 0.9s cubic-bezier(0.2, 0.75, 0.3, 1) both;
+  }
+  :global(.wallet-switcher):where(.wallet-switcher) {
+    margin: 19px 0 13px;
+    padding: 9px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+    background: var(--surface-inset);
+    display: grid;
+    gap: 7px;
+  }
+  :global(.wallet-switcher-label):where(.wallet-switcher-label) {
+    padding: 0 2px;
+    color: var(--muted-2);
+    font-size: var(--font-size-meta);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 2px 8px;
+    justify-content: space-between;
+  }
+  :global(.wallet-switcher-label):where(.wallet-switcher-label) > :global(span) {
+    min-width: 0;
+  }
+  :global(.wallet-switcher-label):where(.wallet-switcher-label) :global(strong) {
+    min-width: 0;
+    padding: 0;
+    color: var(--muted-2);
+    background: transparent;
+    border-radius: 0;
+    font-size: var(--font-size-meta);
+    font-weight: 550;
+    line-height: 1.4;
+    text-align: right;
+    text-transform: none;
+    letter-spacing: 0;
+    white-space: nowrap;
+  }
+  :global(.wallet-switcher):where(.wallet-switcher) :global(a) {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--link);
+    font-size: var(--font-size-meta);
+  }
+  :global(.side-nav):where(.side-nav) {
+    margin-top: 34px;
+    display: grid;
+    gap: 4px;
+  }
+  :global(.side-nav):where(.side-nav) :global(a),
+  :global(.sidebar-bottom):where(.sidebar-bottom) > :global(a) {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    height: 40px;
+    padding: 0 11px;
+    border-radius: var(--radius-control);
+    color: var(--muted);
+    font-size: 14px;
+    transition:
+      color 0.16s ease,
+      background-color 0.16s ease,
+      box-shadow 0.16s ease;
+  }
+  :global(.side-nav):where(.side-nav) :global(a svg),
+  :global(.sidebar-bottom):where(.sidebar-bottom) > :global(a svg),
+  :global(.wallet-switcher):where(.wallet-switcher) :global(a svg),
+  :global(.mobile-nav):where(.mobile-nav) :global(a svg),
+  :global(.mobile-action):where(.mobile-action) :global(svg) {
+    transition:
+      color 0.16s ease,
+      transform 0.16s cubic-bezier(0.2, 0.75, 0.3, 1);
+  }
+  :global(.side-nav):where(.side-nav) :global(a:hover),
+  :global(.sidebar-bottom):where(.sidebar-bottom) > :global(a:hover) {
+    color: var(--text-soft);
+    background: var(--surface-hover);
+  }
+  :global(.side-nav):where(.side-nav) :global(a:hover svg),
+  :global(.sidebar-bottom):where(.sidebar-bottom) > :global(a:hover svg),
+  :global(.wallet-switcher):where(.wallet-switcher) :global(a:hover svg),
+  :global(.mobile-nav):where(.mobile-nav) :global(a:hover svg),
+  :global(.mobile-action:hover):where(.mobile-action) :global(svg) {
+    transform: translateY(-1px) scale(1.025);
+  }
+  :global(.side-nav):where(.side-nav) :global(a:active),
+  :global(.sidebar-bottom):where(.sidebar-bottom) > :global(a:active),
+  :global(.mobile-nav):where(.mobile-nav) :global(a:active),
+  :global(.mobile-action:active):where(.mobile-action) {
+    transform: scale(0.992);
+  }
+  :global(.side-nav):where(.side-nav) :global(a.active),
+  :global(.sidebar-bottom):where(.sidebar-bottom) > :global(a.active) {
+    color: var(--text);
+    background: var(--surface-active);
+  }
+  :global(.side-nav):where(.side-nav) :global(a:focus-visible),
+  :global(.sidebar-bottom):where(.sidebar-bottom) > :global(a:focus-visible) {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+  }
+  :global(.sidebar-bottom):where(.sidebar-bottom) {
+    margin-top: auto;
+    display: grid;
+    gap: 10px;
+  }
+  :global(.app-shell:has(.onboarding-overlay)):where(.app-shell)
+    > :global(.build-identity-onboarding) {
+    /* Only full-screen overlays need a viewport footer. Setup forms keep the
+     existing document scroller and place this control below their content. */
+    position: fixed;
+  }
+  :global(.preference-toggles):where(.preference-toggles) {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-inline: 8px;
+  }
+  :global(.preference-toggles):where(.preference-toggles) :global(.shell-theme-toggle) {
+    margin-inline: 0;
+  }
+  :global(.locked-mobile-utilities):where(.locked-mobile-utilities) {
+    display: none;
+  }
+  :global(.demo-banner):where(.demo-banner) {
+    min-height: 34px;
+    padding: 7px 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    border-bottom: 1px solid color-mix(in srgb, var(--accent) 18%, transparent);
+    color: var(--warning-text);
+    background: var(--accent-soft);
+    font-size: var(--font-size-meta);
+    line-height: 1.35;
+    text-align: center;
+  }
+  :global(.demo-banner):where(.demo-banner) :global(strong) {
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  :global(.demo-banner):where(.demo-banner) :global(span) {
+    color: var(--muted);
+  }
+  :global(.route-transition):where(.route-transition) {
+    width: 100%;
+    min-height: 100%;
+  }
+  :global(.mobile-brand):where(.mobile-brand),
+  :global(.mobile-nav):where(.mobile-nav),
+  :global(.mobile-actions):where(.mobile-actions),
+  :global(.app-shell.onboarding-shell):where(.app-shell) :global(.sidebar),
+  :global(.app-shell.onboarding-shell):where(.app-shell) :global(.mobile-brand),
+  :global(.app-shell.onboarding-shell):where(.app-shell) :global(.mobile-nav),
+  :global(.app-shell.onboarding-shell):where(.app-shell) :global(.mobile-actions) {
+    display: none;
+  }
+  :global(.app-shell.onboarding-shell):where(.app-shell) :global(.main) {
+    margin-left: 0;
+    min-height: calc(100dvh - 70px - env(safe-area-inset-bottom));
+    padding-bottom: 0;
+  }
+
+  @media (max-width: 760px) {
+    :global(.app-shell):where(.app-shell) {
+      --locked-setup-notice-top: max(64px, calc(env(safe-area-inset-top) + 56px));
+      --locked-setup-notice-right: 18px;
+      --locked-setup-notice-left: 18px;
+    }
+    :global(.app-shell.prototype-shell):where(.app-shell) {
+      --locked-setup-notice-top: max(108px, calc(env(safe-area-inset-top) + 100px));
+    }
+    :global(.app-shell.locked-setup-visible):where(.app-shell)
+      :global(.unlock-overlay .onboarding-card) {
+      margin-top: 180px;
+      margin-bottom: auto;
+    }
+    :global(.app-shell.prototype-shell.locked-setup-visible):where(.app-shell)
+      :global(.unlock-overlay .onboarding-card) {
+      margin-top: 224px;
+    }
+    :global(.mobile-brand):where(.mobile-brand) {
+      position: absolute;
+      z-index: 80;
+      top: max(12px, env(safe-area-inset-top));
+      left: 18px;
+      width: 96px;
+      min-height: 36px;
+      display: flex;
+      align-items: center;
+    }
+    :global(.app-shell.prototype-shell):where(.app-shell) :global(.mobile-brand) {
+      top: max(56px, calc(env(safe-area-inset-top) + 44px));
+    }
+    :global(.demo-banner):where(.demo-banner) {
+      align-items: flex-start;
+      gap: 3px;
+      flex-direction: column;
+      padding-inline: 18px;
+    }
+    :global(.app-shell.prototype-shell):where(.app-shell) :global(.page),
+    :global(.app-shell.prototype-shell):where(.app-shell) :global(.send-page.signing-page) {
+      padding-top: max(120px, calc(env(safe-area-inset-top) + 108px));
+    }
+    :global(.app-shell:not(.mobile-actions-visible)):where(.app-shell) :global(.page) {
+      padding-bottom: calc(84px + env(safe-area-inset-bottom));
+    }
+    :global(.mobile-nav):where(.mobile-nav) {
+      position: fixed;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      inset: auto 0 0;
+      height: calc(64px + env(safe-area-inset-bottom));
+      padding-bottom: env(safe-area-inset-bottom);
+      background: var(--sidebar);
+      border-top: 1px solid var(--border);
+      z-index: 20;
+    }
+    :global(.navigation-progress):where(.navigation-progress) {
+      left: 0;
+    }
+    :global(.mobile-nav.policy-nav):where(.mobile-nav) {
+      grid-template-columns: repeat(5, 1fr);
+    }
+    :global(.mobile-nav):where(.mobile-nav) :global(a) {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      color: var(--muted-2);
+      font-size: var(--font-size-meta);
+    }
+    :global(.mobile-nav):where(.mobile-nav) :global(a.active) {
+      color: var(--text);
+      background: var(--surface-active);
+    }
+    :global(.locked-mobile-utilities):where(.locked-mobile-utilities) {
+      position: fixed;
+      z-index: 80;
+      top: max(12px, env(safe-area-inset-top));
+      right: 12px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    :global(.app-shell.prototype-shell):where(.app-shell) :global(.locked-mobile-utilities) {
+      top: max(56px, calc(env(safe-area-inset-top) + 44px));
+    }
+    :global(.locked-mobile-utilities):where(.locked-mobile-utilities) :global(.shell-theme-toggle) {
+      margin: 0;
+      background: var(--panel);
+    }
+    :global(.locked-settings-link):where(.locked-settings-link) {
+      width: 34px;
+      height: 34px;
+      display: grid;
+      place-items: center;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-control);
+      color: var(--muted);
+      background: var(--panel);
+    }
+    :global(.locked-settings-link:focus-visible):where(.locked-settings-link) {
+      outline: 2px solid var(--focus);
+      outline-offset: 2px;
+    }
+    :global(.locked-mobile-utilities):where(.locked-mobile-utilities) :global(.network-status) {
+      padding: 0;
+      border: 0;
+    }
+    :global(.locked-mobile-utilities):where(.locked-mobile-utilities) :global(.network-trigger) {
+      width: auto;
+      min-height: 34px;
+      padding-inline: 10px;
+      border: 1px solid var(--border);
+      background: var(--panel);
+    }
+    :global(.locked-mobile-utilities):where(.locked-mobile-utilities) :global(.network-popover) {
+      position: fixed;
+      left: 12px;
+      right: 12px;
+      top: 58px;
+      bottom: auto;
+      width: auto;
+    }
+    :global(.app-shell.prototype-shell):where(.app-shell)
+      :global(.locked-mobile-utilities .network-popover) {
+      top: 98px;
+    }
+    :global(.mobile-actions):where(.mobile-actions) {
+      position: fixed;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      bottom: calc(76px + env(safe-area-inset-bottom));
+      left: 18px;
+      right: 18px;
+      z-index: 19;
+    }
+    :global(.mobile-action):where(.mobile-action) {
+      min-height: 46px;
+      border-radius: var(--radius-control);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      font-size: 14px;
+      font-weight: 550;
+      box-shadow: 0 7px 25px rgba(0, 0, 0, 0.28);
+    }
+    :global(.mobile-action.primary):where(.mobile-action) {
+      background: var(--primary-bg);
+      color: var(--primary-fg);
+    }
+    :global(.mobile-action.secondary):where(.mobile-action) {
+      color: var(--text);
+      background: var(--surface-control);
+      border: 1px solid var(--control-border);
+    }
+    :global(.app-shell:not(.mobile-actions-visible)):where(.app-shell) :global(.toast-region) {
+      bottom: calc(76px + env(safe-area-inset-bottom));
+    }
+  }
+
+  @media (min-width: 761px) and (max-width: 1050px) {
+    :global(.app-shell):where(.app-shell) {
+      --locked-setup-notice-left: 222px;
+    }
+    :global(.wallet-switcher-label):where(.wallet-switcher-label) {
+      align-items: flex-start;
+      flex-direction: column;
+    }
+    :global(.wallet-switcher-label):where(.wallet-switcher-label) :global(strong) {
+      text-align: left;
+      white-space: normal;
+    }
+  }
+
+  :global(.app-update-action):where(.app-update-action) {
+    position: fixed;
+    z-index: 80;
+    right: max(20px, env(safe-area-inset-right));
+    bottom: max(20px, env(safe-area-inset-bottom));
+    max-width: calc(100vw - 40px);
+  }
+  :global(.release-note-list):where(.release-note-list) {
+    padding-left: 20px;
+    display: grid;
+    gap: 12px;
+  }
+  @media (max-width: 640px) {
+    :global(.app-update-action):where(.app-update-action) {
+      right: max(12px, env(safe-area-inset-right));
+      bottom: calc(142px + env(safe-area-inset-bottom));
+    }
+  }
+</style>

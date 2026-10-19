@@ -172,3 +172,72 @@
     {/if}
   </div>
 </Modal>
+
+<style>
+  /* Keep the original cascade weight while constraining these rules to this owner. */
+
+  :global(.pin-matrix-flow):where(.pin-matrix-flow) {
+    display: grid;
+    gap: 14px;
+  }
+  :global(.pin-matrix-flow):where(.pin-matrix-flow) :global(output) {
+    min-height: 42px;
+    display: grid;
+    place-items: center;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+    background: var(--surface-inset);
+    color: var(--text);
+    font-size: 17px;
+    letter-spacing: 0.22em;
+  }
+  :global(.pin-matrix):where(.pin-matrix) {
+    width: min(100%, 300px);
+    margin: 2px auto;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 9px;
+  }
+  :global(.pin-matrix):where(.pin-matrix) :global(button) {
+    min-height: 66px;
+    display: grid;
+    place-items: center;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-control);
+    background: var(--surface-control);
+    color: var(--text);
+    cursor: pointer;
+    transition:
+      border-color 0.14s ease,
+      background 0.14s ease,
+      transform 0.08s ease;
+  }
+  :global(.pin-matrix):where(.pin-matrix) :global(button > span) {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--muted-2);
+    opacity: 0.65;
+  }
+  :global(.pin-matrix):where(.pin-matrix) :global(button:hover:not(:disabled)) {
+    border-color: var(--link);
+    background: var(--surface-hover);
+  }
+  :global(.pin-matrix):where(.pin-matrix) :global(button:active:not(:disabled)) {
+    transform: scale(0.97);
+    background: var(--surface-active);
+  }
+  :global(.pin-matrix):where(.pin-matrix) :global(button:focus-visible) {
+    outline: 2px solid var(--link);
+    outline-offset: 2px;
+  }
+  :global(.pin-matrix):where(.pin-matrix) :global(button:disabled) {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  :global(.pin-matrix-actions):where(.pin-matrix-actions) {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+</style>

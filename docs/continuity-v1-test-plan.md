@@ -13,3 +13,5 @@ Refs #17. This retained branch includes current main and rc02 feedback; the old 
 Before enabling creation, prove every named delayed path one block before, at and after maturity, reorg/reconfirmation, partial-signature restart, clean descriptor recovery, refresh and fee/change/coin-control behavior. Certify each exact model/firmware/transport against each advertised operation. Native compiler tests do not satisfy those gates.
 
 No wallet/profile/backup/proposal/registry format change is introduced by this integration. No new reusable UI component is added. Mainnet authorization remains exact-commit scoped.
+
+Integration recommendation: keep Continuity on its feature branch until named delayed paths, renewal and exact-device drills are implemented and reviewed. The combined source includes the RC2 mobile/CSS/defect baseline, but does not expand the phone signer beyond standard multisig or make a release claim. The policy chooser discloses the lack of certified direct USB Miniscript support before setup.

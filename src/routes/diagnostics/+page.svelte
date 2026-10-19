@@ -943,9 +943,7 @@
     .log-controls {
       grid-template-columns: 1fr 1fr;
     }
-    .log-search {
-      grid-column: 1 / -1;
-    }
+    .log-search,
     .log-view {
       grid-column: 1 / -1;
     }
@@ -1005,5 +1003,13 @@
     .raw-log textarea {
       min-height: 340px;
     }
+  }
+
+  /* Keep the original cascade weight while constraining these rules to this owner. */
+
+  :global(.list-pagination):where(.list-pagination) {
+    display: flex;
+    justify-content: center;
+    margin-block: 24px;
   }
 </style>

@@ -17,7 +17,7 @@
     X
   } from '@lucide/svelte';
   import QRCode from 'qrcode';
-  import { onDestroy } from 'svelte';
+  import { onDestroy, onMount } from 'svelte';
   import Button from '$lib/components/Button.svelte';
   import Modal from '$lib/components/Modal.svelte';
   import PasswordField from '$lib/components/PasswordField.svelte';
@@ -52,6 +52,7 @@
   let receiveQr = $state('');
   let receivePrintQr = $state<PrintableQr | null>(null);
   let loadedBackupName = $state('');
+  let mobileRuntime = $state(false);
   const policyPresentation = $derived(wallet ? walletPolicyPresentation(wallet) : null);
 
   const combinedDescriptor = $derived(
@@ -61,6 +62,9 @@
     pin = '';
     backup = '';
     exportedBackups = null;
+  });
+  onMount(() => {
+    void walletService.runtimePlatform().then((runtime) => (mobileRuntime = runtime.mobile));
   });
 
   $effect(() => {
@@ -347,9 +351,9 @@
           ><Button variant="secondary" onclick={saveBackupFile}
             ><Download size={15} />{translate($locale, 'Download')}
             {translate($locale, backupFormat === 'bsms' ? 'BSMS' : 'JSON')}</Button
-          ><Button variant="secondary" onclick={printBackup}
-            ><Printer size={15} />{translate($locale, 'Save PDF')}</Button
-          >
+          >{#if !mobileRuntime}<Button variant="secondary" onclick={printBackup}
+              ><Printer size={15} />{translate($locale, 'Save PDF')}</Button
+            >{/if}
         </div>
         {#if exportError}<p class="form-error" aria-live="polite">{exportError}</p>{/if}
         <div class="descriptor-qr-preview">
@@ -469,7 +473,7 @@
         <header>
           <p>{translate($locale, 'Groot · Public wallet backup')}</p>
           <h1>{wallet.name}</h1>
-          <strong>{translate($locale, 'Watch-only descriptors — cannot spend bitcoin')}</strong>
+          <strong>{translate($locale, 'Watch-only descriptors. Cannot spend bitcoin')}</strong>
         </header>
         <dl>
           <div>
@@ -559,3 +563,287 @@
       >
     </div>{/if}</Modal
 >
+
+<style>
+  /* Keep the original cascade weight while constraining these rules to this owner. */
+
+  :global(.optional-insight-disclosure):where(.optional-insight-disclosure) {
+    margin: 12px 0;
+  }
+  :global(.optional-insight-disclosure):where(.optional-insight-disclosure) > :global(summary) {
+    width: fit-content;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    color: var(--link);
+    font-size: var(--font-size-meta);
+    font-weight: 700;
+    list-style: none;
+  }
+  :global(.optional-insight-disclosure):where(.optional-insight-disclosure)
+    > :global(summary::-webkit-details-marker) {
+    display: none;
+  }
+  :global(.optional-insight-disclosure):where(.optional-insight-disclosure) > :global(summary svg) {
+    transition: transform 140ms ease;
+  }
+  :global(.optional-insight-disclosure[open]):where(.optional-insight-disclosure)
+    > :global(summary svg) {
+    transform: rotate(90deg);
+  }
+  :global(.optional-insight-disclosure):where(.optional-insight-disclosure) > :global(p) {
+    max-width: 62ch;
+    margin: 8px 0 0;
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+    line-height: 1.5;
+  }
+  :global(.backup-export-card):where(.backup-export-card) > :global(.optional-insight-disclosure) {
+    margin: 16px 0 10px;
+  }
+  :global(.backup-format-grid):where(.backup-format-grid) {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 9px;
+    margin-bottom: 16px;
+  }
+  :global(.backup-format-grid):where(.backup-format-grid) :global(button) {
+    min-height: 92px;
+    display: grid;
+    grid-template-columns: 34px minmax(0, 1fr);
+    grid-template-rows: auto auto;
+    align-items: center;
+    column-gap: 11px;
+    padding: 13px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+    color: var(--text);
+    background: var(--surface-control);
+    text-align: left;
+    cursor: pointer;
+  }
+  :global(.backup-format-grid):where(.backup-format-grid) :global(button > span) {
+    grid-row: 1 / 3;
+    width: 34px;
+    height: 34px;
+    display: grid;
+    place-items: center;
+    border-radius: var(--radius-control);
+    color: var(--muted);
+    background: var(--surface-icon);
+  }
+  :global(.backup-format-grid):where(.backup-format-grid) :global(button strong) {
+    align-self: end;
+    font-size: var(--font-size-meta);
+  }
+  :global(.backup-format-grid):where(.backup-format-grid) :global(button small) {
+    align-self: start;
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+    line-height: 1.4;
+  }
+  :global(.backup-format-grid):where(.backup-format-grid) :global(button.active) {
+    border-color: color-mix(in srgb, var(--link) 60%, transparent);
+    background: color-mix(in srgb, var(--link) 8%, transparent);
+    box-shadow: inset 3px 0 0 var(--fr-blue);
+  }
+  :global(.backup-format-grid):where(.backup-format-grid) :global(button.active > span) {
+    color: var(--link);
+    background: color-mix(in srgb, var(--link) 12%, transparent);
+  }
+  :global(.backup-security-note):where(.backup-security-note) {
+    display: grid;
+    grid-template-columns: 30px minmax(0, 1fr);
+    gap: 11px;
+    padding: 13px;
+    margin-bottom: 16px;
+    border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent);
+    border-radius: var(--radius-control);
+    background: var(--accent-soft);
+  }
+  :global(.backup-security-note):where(.backup-security-note) > :global(svg) {
+    color: var(--accent);
+  }
+  :global(.backup-security-note):where(.backup-security-note) :global(span) {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  :global(.backup-security-note):where(.backup-security-note) :global(strong) {
+    font-size: var(--font-size-meta);
+  }
+  :global(.backup-security-note):where(.backup-security-note) :global(small) {
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+    line-height: 1.5;
+  }
+  :global(.backup-auth):where(.backup-auth) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 210px;
+    align-items: end;
+    gap: 10px;
+  }
+  :global(.backup-auth):where(.backup-auth) :global(.field) {
+    margin: 0;
+  }
+  :global(.backup-ready):where(.backup-ready) {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    padding: 13px;
+    margin-bottom: 14px;
+    border: 1px solid color-mix(in srgb, var(--success) 22%, transparent);
+    border-radius: var(--radius-control);
+    background: color-mix(in srgb, var(--success) 6%, transparent);
+  }
+  :global(.backup-ready):where(.backup-ready) > :global(span) {
+    width: 30px;
+    height: 30px;
+    display: grid;
+    place-items: center;
+    border-radius: var(--radius-control);
+    color: var(--success);
+    background: color-mix(in srgb, var(--success) 10%, transparent);
+  }
+  :global(.backup-ready):where(.backup-ready) :global(div) {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+  :global(.backup-ready):where(.backup-ready) :global(strong) {
+    font-size: var(--font-size-meta);
+  }
+  :global(.backup-ready):where(.backup-ready) :global(small) {
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+  }
+  :global(.backup-raw):where(.backup-raw) {
+    margin-bottom: 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+    background: var(--surface-inset);
+  }
+  :global(.backup-raw):where(.backup-raw) :global(summary) {
+    padding: 11px 13px;
+    color: var(--text-soft);
+    font-size: var(--font-size-meta);
+    font-weight: 600;
+    cursor: pointer;
+  }
+  :global(.backup-raw):where(.backup-raw) :global(textarea) {
+    width: calc(100% - 24px);
+    margin: 0 12px 12px;
+    padding: 11px;
+    resize: vertical;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+    color: var(--text-soft);
+    background: var(--surface-control);
+    font:
+      9px/1.55 'SFMono-Regular',
+      Consolas,
+      monospace;
+  }
+  :global(.backup-actions):where(.backup-actions) {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+  }
+  :global(.descriptor-qr-preview):where(.descriptor-qr-preview) {
+    display: grid;
+    grid-template-columns: 132px minmax(0, 1fr);
+    gap: 14px;
+    align-items: center;
+    padding: 14px;
+    margin-top: 16px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-inset);
+    background: var(--surface-control);
+  }
+  :global(.descriptor-qr-preview):where(.descriptor-qr-preview) > :global(div:first-child) {
+    display: grid;
+    gap: 8px;
+    justify-items: center;
+  }
+  :global(.descriptor-qr-preview):where(.descriptor-qr-preview) > :global(div:first-child span) {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+  }
+  :global(.descriptor-qr-preview):where(.descriptor-qr-preview) :global(strong) {
+    font-size: var(--font-size-meta);
+  }
+  :global(.descriptor-qr-preview):where(.descriptor-qr-preview) :global(small) {
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+    text-align: center;
+  }
+  :global(.descriptor-qr-preview):where(.descriptor-qr-preview) :global(img) {
+    width: 118px;
+    height: 118px;
+    padding: 6px;
+    border-radius: var(--radius-control);
+    background: #fff;
+  }
+  :global(.descriptor-qr-preview):where(.descriptor-qr-preview) :global(.descriptor-qr-trigger) {
+    padding: 0;
+    border: 0;
+    border-radius: var(--radius-control);
+    background: transparent;
+    cursor: zoom-in;
+  }
+  :global(.descriptor-qr-preview):where(.descriptor-qr-preview)
+    :global(.descriptor-qr-trigger:focus-visible) {
+    outline: 2px solid var(--link);
+    outline-offset: 3px;
+  }
+  :global(.descriptor-qr-modal):where(.descriptor-qr-modal) :global(img) {
+    background: #fff;
+    padding: 8px;
+  }
+  :global(.descriptor-copy-row):where(.descriptor-copy-row) {
+    min-width: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 34px;
+    align-items: center;
+    gap: 9px;
+  }
+  :global(.descriptor-copy-row):where(.descriptor-copy-row) :global(code) {
+    max-height: 92px;
+    overflow: auto;
+    padding: 10px;
+    color: var(--text-soft);
+    background: var(--surface-inset);
+    border-radius: var(--radius-control);
+    font-size: var(--font-size-meta);
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+  }
+  :global(.descriptor-copy-row):where(.descriptor-copy-row) :global(button) {
+    width: 32px;
+    height: 32px;
+    display: grid;
+    place-items: center;
+    border: 0;
+    border-radius: var(--radius-control);
+    color: var(--muted);
+    background: var(--surface-icon);
+    cursor: pointer;
+  }
+  :global(.descriptor-copy-row):where(.descriptor-copy-row) :global(button:hover) {
+    color: var(--text);
+    background: var(--surface-hover);
+  }
+
+  @media (max-width: 760px) {
+    :global(.backup-auth):where(.backup-auth) {
+      grid-template-columns: 1fr;
+      gap: 0;
+    }
+    :global(.backup-actions):where(.backup-actions),
+    :global(.backup-format-grid):where(.backup-format-grid),
+    :global(.descriptor-qr-preview):where(.descriptor-qr-preview) {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

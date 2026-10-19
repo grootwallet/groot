@@ -25,6 +25,10 @@ const walletCore = readFileSync(
   new URL('../../../src-tauri/src/wallet.rs', import.meta.url),
   'utf8'
 );
+const coordinationCommands = readFileSync(
+  new URL('../../../src-tauri/src/wallet/coordination_commands.rs', import.meta.url),
+  'utf8'
+);
 
 function commandSource(source: string, command: string): string {
   const start = source.indexOf(`pub async fn ${command}(`);
@@ -41,12 +45,38 @@ function synchronousCommandSource(source: string, command: string): string {
 }
 
 describe('native command scheduling', () => {
+  it.each([
+    profileCommands,
+    multisigCommands,
+    multisigProposalCommands,
+    transactionCommands,
+    hardwareCommands,
+    walletCore,
+    coordinationCommands
+  ])('keeps every serialized command off the main thread, including cancellation', (source) => {
+    const commands = source.split('#[tauri::command]').slice(1);
+    for (const command of commands) {
+      const body = command.slice(0, command.indexOf('\n}') + 2);
+      if (!body.includes('operation_guard(')) continue;
+      expect(body).toMatch(/pub async fn /);
+      expect(body.indexOf('tauri::async_runtime::spawn_blocking')).toBeGreaterThan(-1);
+      expect(body.indexOf('operation_guard(')).toBeGreaterThan(
+        body.indexOf('tauri::async_runtime::spawn_blocking')
+      );
+    }
+  });
+
   it('lists only public setup availability independently of the selected wallet lock', () => {
     const source = synchronousCommandSource(profileCommands, 'network_setup_sources');
     expect(source).not.toContain('require_unlocked');
     expect(source).toContain('unlocked.is_unlocked(profile.id)');
     expect(source).toContain('session.config == config');
-    expect(source).not.toContain('read_sync_source_for');
+    // Mobile source eligibility is protected by the same per-profile unlock;
+    // locked availability still exposes no source settings or credentials.
+    expect(source.indexOf('unlocked.is_unlocked(profile.id)')).toBeLessThan(
+      source.indexOf('read_sync_source_for')
+    );
+    expect(source).toContain('ensure_sync_source_supported_on_platform');
     const dto = profileCommands.slice(
       profileCommands.indexOf('pub struct NetworkSetupSource'),
       profileCommands.indexOf('pub struct SoftwareWalletCreation')
@@ -78,6 +108,43 @@ describe('native command scheduling', () => {
   );
 
   it.each([
+    ['multisig_acknowledge_coldcard_policy', walletCore],
+    ['wallet_reset_regtest', walletCore],
+    ['wallet_inactivity_timeout_save', profileCommands],
+    ['wallet_cancel_onboarding', profileCommands],
+    ['address_discard', profileCommands],
+    ['wallet_sync_source_save', profileCommands],
+    ['multisig_setup_draft', multisigCommands],
+    ['multisig_setup_draft_save', multisigCommands],
+    ['multisig_setup_draft_discard', multisigCommands],
+    ['multisig_signer_rename', multisigCommands],
+    ['multisig_export', multisigCommands],
+    ['multisig_export_bsms', multisigCommands],
+    ['multisig_recover_bsms', multisigCommands],
+    ['multisig_recovery_drill', multisigCommands],
+    ['multisig_recovery_drill_status', multisigCommands],
+    ['multisig_recover', multisigCommands],
+    ['multisig_address_claim_observed', multisigCommands],
+    ['multisig_address_discard', multisigCommands],
+    ['multisig_policy_renewal_prepare', multisigProposalCommands],
+    ['multisig_delayed_spend_prepare', multisigProposalCommands],
+    ['multisig_proposal_import', multisigProposalCommands],
+    ['multisig_proposal_discard_signature', multisigProposalCommands],
+    ['multisig_proposal_cancel', multisigProposalCommands],
+    ['tx_proposal_cancel', transactionCommands],
+    ['external_signer_create', hardwareCommands],
+    ['external_signer_export_descriptor', hardwareCommands],
+    ['external_signer_proposal_import', hardwareCommands],
+    ['external_signer_proposal_discard_signature', hardwareCommands],
+    ['external_signer_proposal_cancel', hardwareCommands],
+    ...[
+      'fees_estimate',
+      'wallet_generate_mnemonic',
+      'wallet_create',
+      'wallet_recover',
+      'wallet_verify_backup',
+      'wallet_reveal_and_verify_backup'
+    ].map((name) => [name, profileCommands]),
     ['wallet_lock', profileCommands],
     ['wallet_rename', profileCommands],
     ['wallet_select', profileCommands],
@@ -119,6 +186,64 @@ describe('native command scheduling', () => {
     ['node_connection_test', profileCommands]
   ])('%s keeps blocking disk and RPC work off the native UI thread', (command, source) => {
     expect(commandSource(source, command)).toContain('tauri::async_runtime::spawn_blocking');
+  });
+
+  it.each([
+    ['tx_sign_and_broadcast', transactionCommands],
+    ['external_signer_proposal_broadcast', hardwareCommands],
+    ['multisig_proposal_broadcast', multisigProposalCommands]
+  ])('%s preserves the accepted outcome around all subsequent persistence', (command, source) => {
+    const body = commandSource(source, command);
+    const broadcast = body.indexOf('let txid = broadcast_transaction(');
+    const accepted = body.indexOf('Ok(accepted_broadcast_result(txid, || {');
+    expect(broadcast).toBeGreaterThan(-1);
+    expect(accepted).toBeGreaterThan(broadcast);
+    expect(body.slice(broadcast, accepted)).not.toContain('db.transaction()');
+    expect(body).not.toContain('Ok(BroadcastResultDto {');
+  });
+
+  it.each([
+    ['multisig_acknowledge_coldcard_policy', walletCore],
+    ['wallet_reset_regtest', walletCore],
+    ['wallet_inactivity_timeout_save', profileCommands],
+    ['address_discard', profileCommands],
+    ['wallet_sync_source_save', profileCommands],
+    ['multisig_signer_rename', multisigCommands],
+    ['multisig_export', multisigCommands],
+    ['multisig_export_bsms', multisigCommands],
+    ['multisig_recover_bsms', multisigCommands],
+    ['multisig_recovery_drill', multisigCommands],
+    ['multisig_recovery_drill_status', multisigCommands],
+    ['multisig_recover', multisigCommands],
+    ['multisig_address_claim_observed', multisigCommands],
+    ['multisig_address_discard', multisigCommands],
+    ['multisig_policy_renewal_prepare', multisigProposalCommands],
+    ['multisig_delayed_spend_prepare', multisigProposalCommands],
+    ['multisig_proposal_import', multisigProposalCommands],
+    ['multisig_proposal_discard_signature', multisigProposalCommands],
+    ['multisig_proposal_cancel', multisigProposalCommands],
+    ['tx_proposal_cancel', transactionCommands],
+    ['external_signer_create', hardwareCommands],
+    ['external_signer_export_descriptor', hardwareCommands],
+    ['external_signer_proposal_import', hardwareCommands],
+    ['external_signer_proposal_discard_signature', hardwareCommands],
+    ['external_signer_proposal_cancel', hardwareCommands]
+  ])('%s rejects selection changes before queued wallet work', (name, source) => {
+    const command = commandSource(source, name);
+    const captured = command.indexOf(
+      'let expected_wallet_id = load_registry(&app)?.selected_wallet_id;'
+    );
+    const worker = command.indexOf('tauri::async_runtime::spawn_blocking');
+    const lock = command.indexOf('operation_guard(&state)?');
+    const checked = command.indexOf(
+      'load_registry(&app)?.selected_wallet_id != expected_wallet_id'
+    );
+    expect(captured).toBeGreaterThan(-1);
+    expect(captured).toBeLessThan(worker);
+    expect(checked).toBeGreaterThan(lock);
+    expect(command).toContain('"wallet_selection_changed"');
+    const authorization = command.indexOf('require_unlocked(');
+    if (authorization !== -1) expect(checked).toBeLessThan(authorization);
   });
 
   it('wallet locking cancels automatic sync before waiting for the wallet-operation lock', () => {

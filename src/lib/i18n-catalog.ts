@@ -10,6 +10,7 @@ import { multisigCopy } from './locales/multisig';
 import { accessibilityCopy } from './locales/accessibility';
 import { attributeCopy } from './locales/attributes';
 import { dynamicCopy } from './locales/dynamic';
+import { coordinationCopy } from './locales/coordination';
 
 export type { MessageValues, Translation, CatalogSection } from './locales/types';
 
@@ -100,6 +101,32 @@ export const copyCatalog = {
     es: 'Falló la descarga de actualización'
   },
   'Groot v{version}': { fr: 'Groot v{version}', es: 'Groot v{version}' },
+  'Component-scoped styles with desktop and mobile layout checks in both themes.': {
+    fr: 'Styles propres aux composants, avec vérification des mises en page ordinateur et mobile dans les deux thèmes.',
+    es: 'Estilos por componente, con comprobaciones de escritorio y móvil en ambos temas.'
+  },
+  'Clearer activity pagination, tooltips and QR scan errors.': {
+    fr: 'Pagination de l’activité, infobulles et erreurs de lecture QR plus claires.',
+    es: 'Paginación de actividad, ayudas y errores de lectura QR más claros.'
+  },
+  'Accepted broadcasts keep their successful result when local recording needs a retry.': {
+    fr: 'Les diffusions acceptées conservent leur résultat réussi si l’enregistrement local doit être réessayé.',
+    es: 'Los envíos aceptados conservan su resultado correcto si hay que reintentar el registro local.'
+  },
+  'Wallet operations run off the UI thread and recheck wallet selection before changing data.': {
+    fr: 'Les opérations s’exécutent hors du fil de l’interface et revérifient le portefeuille sélectionné avant de modifier les données.',
+    es: 'Las operaciones se ejecutan fuera del hilo de la interfaz y comprueban el monedero seleccionado antes de modificar datos.'
+  },
+  'Testnet4 iPhone software wallets and QR multisig signing with native recovery and device-authorized key access.':
+    {
+      fr: 'Portefeuilles logiciels iPhone Testnet4 et signature multisig par QR, avec récupération native et accès aux clés autorisé sur l’appareil.',
+      es: 'Carteras de software de iPhone Testnet4 y firma multifirma por QR, con recuperación nativa y acceso a las claves autorizado en el dispositivo.'
+    },
+  'Testnet4 iPhone development UI; mobile key creation, recovery, signing and broadcast remain unavailable.':
+    {
+      fr: 'Interface iPhone de développement Testnet4 ; création de clés, restauration, signature et diffusion mobiles restent indisponibles.',
+      es: 'Interfaz de desarrollo Testnet4 para iPhone; la creación de claves, recuperación, firma y difusión móviles siguen sin estar disponibles.'
+    },
   'Approve the first wallet-history scan or connect your own node, with clearer retry controls.': {
     fr: 'Autorisez la première analyse de l’historique ou connectez votre propre nœud, avec des contrôles de reprise plus clairs.',
     es: 'Autoriza el primer análisis del historial o conecta tu propio nodo, con controles de reintento más claros.'
@@ -158,6 +185,23 @@ export const copyCatalog = {
   'Changing PIN…': { fr: 'Modification du PIN…', es: 'Cambiando PIN…' },
   'Confirm new app PIN': { fr: 'Confirmer le nouveau PIN', es: 'Confirmar nuevo PIN' },
   'Current app PIN': { fr: 'PIN actuel de l’application', es: 'PIN actual de la aplicación' },
+  'Checking wallet privacy…': {
+    fr: 'Vérification de la confidentialité du portefeuille…',
+    es: 'Comprobando la privacidad del monedero…'
+  },
+  'Groot is checking which network will receive your wallet history.': {
+    fr: 'Groot vérifie quel réseau recevra l’historique de votre portefeuille.',
+    es: 'Groot está comprobando qué red recibirá el historial de tu monedero.'
+  },
+  'Could not check wallet privacy': {
+    fr: 'Impossible de vérifier la confidentialité du portefeuille',
+    es: 'No se pudo comprobar la privacidad del monedero'
+  },
+  'Groot could not verify which network would receive your wallet history. Try again before approving.':
+    {
+      fr: 'Groot n’a pas pu vérifier quel réseau recevrait l’historique de votre portefeuille. Réessayez avant d’autoriser.',
+      es: 'Groot no pudo comprobar qué red recibiría el historial de tu monedero. Inténtalo de nuevo antes de autorizar.'
+    },
   'Groot’s network can see your wallet activity. Your keys stay on your device.': {
     fr: 'Le réseau Groot peut voir l’activité de votre portefeuille. Vos clés restent sur votre appareil.',
     es: 'La red de Groot puede ver la actividad de tu monedero. Tus claves permanecen en tu dispositivo.'
@@ -351,6 +395,7 @@ export const copyCatalog = {
   ...accessibilityCopy,
   ...attributeCopy,
   ...dynamicCopy,
+  ...coordinationCopy,
   Dismiss: { fr: 'Fermer', es: 'Cerrar' },
   Cancel: { fr: 'Annuler', es: 'Cancelar' },
   Back: { fr: 'Retour', es: 'Atrás' },

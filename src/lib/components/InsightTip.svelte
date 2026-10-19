@@ -4,6 +4,7 @@
   import { Info } from '@lucide/svelte';
   import { onMount, tick } from 'svelte';
   let { text, label = '' } = $props<{ text: string; label?: string }>();
+  const tooltipId = $props.id();
   let open = $state(false);
   let hovered = $state(false);
   let focused = $state(false);
@@ -29,7 +30,7 @@
   }
 
   function toggleTooltip() {
-    if (visible) {
+    if (open) {
       open = false;
       hovered = false;
       focused = false;
@@ -54,18 +55,24 @@
       if (open && event.target instanceof Node && !root?.contains(event.target)) open = false;
     };
     const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') open = false;
+      if (event.key === 'Escape' && visible) {
+        event.preventDefault();
+        event.stopPropagation();
+        open = false;
+        hovered = false;
+        focused = false;
+      }
     };
     updatePointer();
     media.addEventListener('change', updatePointer);
     document.addEventListener('pointerdown', closeOutside);
-    document.addEventListener('keydown', closeOnEscape);
+    document.addEventListener('keydown', closeOnEscape, true);
     window.addEventListener('resize', positionTooltip);
     window.addEventListener('scroll', positionTooltip, true);
     return () => {
       media.removeEventListener('change', updatePointer);
       document.removeEventListener('pointerdown', closeOutside);
-      document.removeEventListener('keydown', closeOnEscape);
+      document.removeEventListener('keydown', closeOnEscape, true);
       window.removeEventListener('resize', positionTooltip);
       window.removeEventListener('scroll', positionTooltip, true);
     };
@@ -77,7 +84,8 @@
     bind:this={trigger}
     type="button"
     aria-label={label || translate($locale, 'More information')}
-    aria-expanded={open}
+    aria-expanded={visible}
+    aria-describedby={visible ? tooltipId : undefined}
     onpointerenter={() => (hovered = true)}
     onpointerleave={() => (hovered = false)}
     onfocus={() => (focused = true)}
@@ -90,9 +98,42 @@
       class="ui-tooltip insight-tooltip"
       class:below
       class:mobile={!finePointer}
+      id={tooltipId}
       role="tooltip"
       use:portal
       style:left={finePointer ? `${left}px` : undefined}
       style:top={finePointer ? `${top}px` : undefined}>{text}</span
     >{/if}
 </span>
+
+<style>
+  /* Keep the original cascade weight while constraining these rules to this owner. */
+
+  :global(.insight-tip):where(.insight-tip) {
+    position: relative;
+    display: inline-flex;
+    vertical-align: middle;
+  }
+  :global(.insight-tip):where(.insight-tip) > :global(button) {
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    display: grid;
+    place-items: center;
+    border: 0;
+    border-radius: 999px;
+    color: var(--muted);
+    background: transparent;
+    cursor: pointer;
+  }
+  :global(.insight-tip):where(.insight-tip) > :global(button:hover),
+  :global(.insight-tip):where(.insight-tip) > :global(button:focus-visible),
+  :global(.insight-tip):where(.insight-tip) > :global(button[aria-expanded='true']) {
+    color: var(--text);
+  }
+  @media (hover: hover) and (pointer: fine) {
+    :global(.insight-tip):where(.insight-tip) > :global(button) {
+      cursor: help;
+    }
+  }
+</style>

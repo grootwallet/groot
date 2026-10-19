@@ -458,59 +458,73 @@ pub(crate) fn coldcard_registration_for_preview(
 }
 
 #[tauri::command]
-pub fn multisig_setup_draft(
-    app: AppHandle,
-    state: State<'_, AppState>,
-) -> ApiResult<Option<MultisigSetupDraft>> {
-    let _operation = operation_guard(&state)?;
-    let path = multisig_setup_draft_path(&app)?;
-    if !path.exists() {
-        return Ok(None);
-    }
-    let encoded = read_private_text(&path)?;
-    let draft: MultisigSetupDraft = serde_json::from_str(&encoded).map_err(|_| {
-        api_error(
-            "wallet_corrupt",
-            "The saved multisig setup is corrupt. Discard it and start again.",
-        )
-    })?;
-    let preview = validate_multisig_setup_draft(&draft)?;
-    sync_pending_draft_verifications(&state, &draft, preview.as_ref())?;
-    Ok(Some(draft))
+pub async fn multisig_setup_draft(app: AppHandle) -> ApiResult<Option<MultisigSetupDraft>> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+
+        let _operation = operation_guard(&state)?;
+        let path = multisig_setup_draft_path(&app)?;
+        if !path.exists() {
+            return Ok(None);
+        }
+        let encoded = read_private_text(&path)?;
+        let draft: MultisigSetupDraft = serde_json::from_str(&encoded).map_err(|_| {
+            api_error(
+                "wallet_corrupt",
+                "The saved multisig setup is corrupt. Discard it and start again.",
+            )
+        })?;
+        let preview = validate_multisig_setup_draft(&draft)?;
+        sync_pending_draft_verifications(&state, &draft, preview.as_ref())?;
+        Ok(Some(draft))
+    })
+    .await
+    .map_err(internal)?
 }
 
 #[tauri::command]
-pub fn multisig_setup_draft_save(
+pub async fn multisig_setup_draft_save(
     app: AppHandle,
-    state: State<'_, AppState>,
     mut draft: MultisigSetupDraft,
 ) -> ApiResult<MultisigSetupDraft> {
-    let _operation = operation_guard(&state)?;
-    draft.version = MULTISIG_SETUP_DRAFT_VERSION;
-    draft.updated_at = now();
-    let preview = validate_new_multisig_setup_draft(&draft)?;
-    {
-        let pending = state
-            .pending_policy_verifications
-            .lock()
-            .map_err(internal)?;
-        draft_verifications_match_pending(&draft, preview.as_ref(), &pending)?;
-    }
-    write_private_json(&multisig_setup_draft_path(&app)?, &draft)?;
-    sync_pending_draft_verifications(&state, &draft, preview.as_ref())?;
-    Ok(draft)
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+
+        let _operation = operation_guard(&state)?;
+        draft.version = MULTISIG_SETUP_DRAFT_VERSION;
+        draft.updated_at = now();
+        let preview = validate_new_multisig_setup_draft(&draft)?;
+        {
+            let pending = state
+                .pending_policy_verifications
+                .lock()
+                .map_err(internal)?;
+            draft_verifications_match_pending(&draft, preview.as_ref(), &pending)?;
+        }
+        write_private_json(&multisig_setup_draft_path(&app)?, &draft)?;
+        sync_pending_draft_verifications(&state, &draft, preview.as_ref())?;
+        Ok(draft)
+    })
+    .await
+    .map_err(internal)?
 }
 
 #[tauri::command]
-pub fn multisig_setup_draft_discard(app: AppHandle, state: State<'_, AppState>) -> ApiResult<()> {
-    let _operation = operation_guard(&state)?;
-    clear_multisig_setup_draft(&app)?;
-    state
-        .pending_policy_verifications
-        .lock()
-        .map_err(internal)?
-        .clear();
-    Ok(())
+pub async fn multisig_setup_draft_discard(app: AppHandle) -> ApiResult<()> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+
+        let _operation = operation_guard(&state)?;
+        clear_multisig_setup_draft(&app)?;
+        state
+            .pending_policy_verifications
+            .lock()
+            .map_err(internal)?
+            .clear();
+        Ok(())
+    })
+    .await
+    .map_err(internal)?
 }
 
 #[cfg(test)]
@@ -847,79 +861,112 @@ pub async fn multisig_wallet(app: AppHandle) -> ApiResult<Option<MultisigWalletD
 }
 
 #[tauri::command]
-pub fn multisig_signer_rename(
+pub async fn multisig_signer_rename(
     app: AppHandle,
-    state: State<'_, AppState>,
     signer_id: String,
     label: String,
 ) -> ApiResult<MultisigWalletDto> {
-    let _operation = operation_guard(&state)?;
-    require_unlocked(&app, &state)?;
-    let mut wallet = read_multisig_metadata(&app)?;
-    rename_cosigner_label(&mut wallet.cosigners, &signer_id, &label)?;
-    write_private_json(&multisig_metadata_path(&app)?, &wallet)?;
-    Ok(wallet)
+    let expected_wallet_id = load_registry(&app)?.selected_wallet_id;
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+
+        let _operation = operation_guard(&state)?;
+        if load_registry(&app)?.selected_wallet_id != expected_wallet_id {
+            return Err(api_error(
+                "wallet_selection_changed",
+                "The selected wallet changed. Retry in the current wallet.",
+            ));
+        }
+
+        require_unlocked(&app, &state)?;
+        let mut wallet = read_multisig_metadata(&app)?;
+        rename_cosigner_label(&mut wallet.cosigners, &signer_id, &label)?;
+        write_private_json(&multisig_metadata_path(&app)?, &wallet)?;
+        Ok(wallet)
+    })
+    .await
+    .map_err(internal)?
 }
 
 #[tauri::command]
-pub fn multisig_export(
-    app: AppHandle,
-    state: State<'_, AppState>,
-    credential: String,
-) -> ApiResult<String> {
+pub async fn multisig_export(app: AppHandle, credential: String) -> ApiResult<String> {
     let credential = Zeroizing::new(credential);
-    let _operation = operation_guard(&state)?;
-    authorize_multisig_operation(&app, &state, credential.as_str())?;
-    let backup = MultisigBackupDto {
-        version: 1,
-        network: network_name().to_owned(),
-        wallet: read_multisig_metadata(&app)?,
-    };
-    let encoded = serde_json::to_string_pretty(&backup).map_err(internal)?;
-    diagnostics::record(
-        &app,
-        &state,
-        diagnostics::DiagnosticEventKind::BackupExported,
-        diagnostics::DiagnosticOutcome::Succeeded,
-        diagnostics::DiagnosticContext {
-            wallet_kind: Some(diagnostics::DiagnosticWalletKind::Multisig),
-            ..Default::default()
-        },
-        None,
-    );
-    Ok(encoded)
+    let expected_wallet_id = load_registry(&app)?.selected_wallet_id;
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+
+        let _operation = operation_guard(&state)?;
+        if load_registry(&app)?.selected_wallet_id != expected_wallet_id {
+            return Err(api_error(
+                "wallet_selection_changed",
+                "The selected wallet changed. Retry in the current wallet.",
+            ));
+        }
+
+        authorize_multisig_operation(&app, &state, credential.as_str())?;
+        let backup = MultisigBackupDto {
+            version: 1,
+            network: network_name().to_owned(),
+            wallet: read_multisig_metadata(&app)?,
+        };
+        let encoded = serde_json::to_string_pretty(&backup).map_err(internal)?;
+        diagnostics::record(
+            &app,
+            &state,
+            diagnostics::DiagnosticEventKind::BackupExported,
+            diagnostics::DiagnosticOutcome::Succeeded,
+            diagnostics::DiagnosticContext {
+                wallet_kind: Some(diagnostics::DiagnosticWalletKind::Multisig),
+                ..Default::default()
+            },
+            None,
+        );
+        Ok(encoded)
+    })
+    .await
+    .map_err(internal)?
 }
 
 #[tauri::command]
-pub fn multisig_export_bsms(
-    app: AppHandle,
-    state: State<'_, AppState>,
-    credential: String,
-) -> ApiResult<String> {
+pub async fn multisig_export_bsms(app: AppHandle, credential: String) -> ApiResult<String> {
     let credential = Zeroizing::new(credential);
-    let _operation = operation_guard(&state)?;
-    authorize_multisig_operation(&app, &state, credential.as_str())?;
-    let wallet = read_multisig_metadata(&app)?;
-    let first_address = first_multisig_address(&wallet)?;
-    let encoded = DescriptorRecord::from_descriptor_pair(
-        &wallet.external_descriptor,
-        &wallet.internal_descriptor,
-        &first_address,
-    )
-    .map(|record| record.encode())
-    .map_err(bsms_api_error)?;
-    diagnostics::record(
-        &app,
-        &state,
-        diagnostics::DiagnosticEventKind::BackupExported,
-        diagnostics::DiagnosticOutcome::Succeeded,
-        diagnostics::DiagnosticContext {
-            wallet_kind: Some(diagnostics::DiagnosticWalletKind::Multisig),
-            ..Default::default()
-        },
-        None,
-    );
-    Ok(encoded)
+    let expected_wallet_id = load_registry(&app)?.selected_wallet_id;
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+
+        let _operation = operation_guard(&state)?;
+        if load_registry(&app)?.selected_wallet_id != expected_wallet_id {
+            return Err(api_error(
+                "wallet_selection_changed",
+                "The selected wallet changed. Retry in the current wallet.",
+            ));
+        }
+
+        authorize_multisig_operation(&app, &state, credential.as_str())?;
+        let wallet = read_multisig_metadata(&app)?;
+        let first_address = first_multisig_address(&wallet)?;
+        let encoded = DescriptorRecord::from_descriptor_pair(
+            &wallet.external_descriptor,
+            &wallet.internal_descriptor,
+            &first_address,
+        )
+        .map(|record| record.encode())
+        .map_err(bsms_api_error)?;
+        diagnostics::record(
+            &app,
+            &state,
+            diagnostics::DiagnosticEventKind::BackupExported,
+            diagnostics::DiagnosticOutcome::Succeeded,
+            diagnostics::DiagnosticContext {
+                wallet_kind: Some(diagnostics::DiagnosticWalletKind::Multisig),
+                ..Default::default()
+            },
+            None,
+        );
+        Ok(encoded)
+    })
+    .await
+    .map_err(internal)?
 }
 
 pub(crate) fn parse_public_descriptor_record(encoded: &str) -> ApiResult<DescriptorRecord> {
@@ -1034,202 +1081,254 @@ pub fn multisig_bsms_inspect(
 }
 
 #[tauri::command]
-pub fn multisig_recover_bsms(
+pub async fn multisig_recover_bsms(
     app: AppHandle,
-    state: State<'_, AppState>,
     name: String,
     encoded_backup: String,
     credential: String,
 ) -> ApiResult<MultisigWalletDto> {
     let credential = Zeroizing::new(credential);
-    let _operation = operation_guard(&state)?;
-    let _admission_cleanup = clear_new_wallet_admission_on_exit(&state);
-    validate_credential(credential.as_str())?;
-    let record = parse_public_descriptor_record(&encoded_backup)?;
-    let (threshold, keys) = record.standard_policy().map_err(bsms_api_error)?;
-    let cosigners = keys
-        .into_iter()
-        .enumerate()
-        .map(|(index, key)| CosignerInput {
-            id: format!("bsms-{}", key.fingerprint),
-            label: format!("Signer {}", index + 1),
-            fingerprint: key.fingerprint.to_string(),
-            xpub: key.xpub.to_string(),
-            derivation_path: key.derivation_path,
-            source: CosignerSource::Manual,
-            device_type: None,
-        })
-        .collect::<Vec<_>>();
-    let cosigners = hardware_commands::reconcile_mainnet_recovery_cosigners(&state, &cosigners)?;
-    let preview = PolicyInput {
-        name,
-        threshold,
-        cosigners,
-    }
-    .preview()
-    .map_err(policy_api_error)?;
-    let wallet = MultisigWalletDto {
-        kind: "multisig".to_owned(),
-        name: preview.name,
-        threshold: preview.threshold,
-        cosigners: preview.cosigners,
-        external_descriptor: preview.external_descriptor,
-        internal_descriptor: preview.internal_descriptor,
-        created_at: now().to_string(),
-        policy_type: "standard".to_owned(),
-        recovery_template: None,
-        spending_paths: Vec::new(),
-    };
-    if first_multisig_address(&wallet)? != record.first_address {
-        return Err(api_error(
-            "backup_mismatch",
-            "The backup's first address does not match its descriptor.",
-        ));
-    }
-    let (id, dir) = prepare_profile_directory(&app)?;
-    let result = (|| {
-        let permit = database_open_permit_for_new_wallet(&state)?;
-        let mut db = open_wallet_database(&dir.join("wallet.sqlite"), &permit)?;
-        init_app_schema(&db)?;
-        Wallet::create(
-            wallet.external_descriptor.clone(),
-            wallet.internal_descriptor.clone(),
-        )
-        .network(network())
-        .create_wallet(&mut db)
-        .map_err(internal)?;
+    let expected_wallet_id = load_registry(&app)?.selected_wallet_id;
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
 
-        let marker = format!("groot-multisig:{}", wallet.external_descriptor);
-        secure_store::store(
-            &dir.join("secret.json"),
-            marker.as_bytes(),
-            credential.as_str(),
-            wallet_secret_context(id),
-        )
-        .map_err(secure_store_error)?;
-        write_private_json(&dir.join("wallet.json"), &wallet)?;
-        profile_commands::persist_mainnet_node_admission_for_new_profile(
+        let _operation = operation_guard(&state)?;
+        if load_registry(&app)?.selected_wallet_id != expected_wallet_id {
+            return Err(api_error(
+                "wallet_selection_changed",
+                "The selected wallet changed. Retry in the current wallet.",
+            ));
+        }
+
+        let _admission_cleanup = clear_new_wallet_admission_on_exit(&state);
+        validate_credential(credential.as_str())?;
+        let record = parse_public_descriptor_record(&encoded_backup)?;
+        let (threshold, keys) = record.standard_policy().map_err(bsms_api_error)?;
+        let cosigners = keys
+            .into_iter()
+            .enumerate()
+            .map(|(index, key)| CosignerInput {
+                id: format!("bsms-{}", key.fingerprint),
+                label: format!("Signer {}", index + 1),
+                fingerprint: key.fingerprint.to_string(),
+                xpub: key.xpub.to_string(),
+                derivation_path: key.derivation_path,
+                source: CosignerSource::Manual,
+                device_type: None,
+            })
+            .collect::<Vec<_>>();
+        let cosigners =
+            hardware_commands::reconcile_mainnet_recovery_cosigners(&state, &cosigners)?;
+        let preview = PolicyInput {
+            name,
+            threshold,
+            cosigners,
+        }
+        .preview()
+        .map_err(policy_api_error)?;
+        let wallet = MultisigWalletDto {
+            kind: "multisig".to_owned(),
+            name: preview.name,
+            threshold: preview.threshold,
+            cosigners: preview.cosigners,
+            external_descriptor: preview.external_descriptor,
+            internal_descriptor: preview.internal_descriptor,
+            created_at: now().to_string(),
+            policy_type: "standard".to_owned(),
+            recovery_template: None,
+            spending_paths: Vec::new(),
+        };
+        if first_multisig_address(&wallet)? != record.first_address {
+            return Err(api_error(
+                "backup_mismatch",
+                "The backup's first address does not match its descriptor.",
+            ));
+        }
+        let (id, dir) = prepare_profile_directory(&app)?;
+        let result = (|| {
+            let permit = database_open_permit_for_new_wallet(&state)?;
+            let mut db = open_wallet_database(&dir.join("wallet.sqlite"), &permit)?;
+            init_app_schema(&db)?;
+            Wallet::create(
+                wallet.external_descriptor.clone(),
+                wallet.internal_descriptor.clone(),
+            )
+            .network(network())
+            .create_wallet(&mut db)
+            .map_err(internal)?;
+
+            let marker = format!("groot-multisig:{}", wallet.external_descriptor);
+            secure_store::store(
+                &dir.join("secret.json"),
+                marker.as_bytes(),
+                credential.as_str(),
+                wallet_secret_context(id),
+            )
+            .map_err(secure_store_error)?;
+            write_private_json(&dir.join("wallet.json"), &wallet)?;
+            profile_commands::persist_mainnet_node_admission_for_new_profile(
+                &app,
+                &state,
+                id,
+                credential.as_str(),
+            )?;
+            commit_multisig_profile(&app, id, &wallet)?;
+            Ok(wallet)
+        })();
+        finish_new_profile_attempt(&state, id, &dir, result.is_ok())?;
+        let wallet = result?;
+        unlock_selected(&app, &state)?;
+        reset_auth_throttle(&app, &state)?;
+        diagnostics::record(
             &app,
             &state,
-            id,
-            credential.as_str(),
-        )?;
-        commit_multisig_profile(&app, id, &wallet)?;
+            diagnostics::DiagnosticEventKind::BackupImported,
+            diagnostics::DiagnosticOutcome::Succeeded,
+            diagnostics::DiagnosticContext {
+                trigger: diagnostics::DiagnosticTrigger::Recovery,
+                wallet_kind: Some(diagnostics::DiagnosticWalletKind::Multisig),
+                ..Default::default()
+            },
+            None,
+        );
+        diagnostics::record(
+            &app,
+            &state,
+            diagnostics::DiagnosticEventKind::WalletRecovered,
+            diagnostics::DiagnosticOutcome::Succeeded,
+            diagnostics::DiagnosticContext {
+                trigger: diagnostics::DiagnosticTrigger::Recovery,
+                wallet_kind: Some(diagnostics::DiagnosticWalletKind::Multisig),
+                ..Default::default()
+            },
+            None,
+        );
         Ok(wallet)
-    })();
-    finish_new_profile_attempt(&state, id, &dir, result.is_ok())?;
-    let wallet = result?;
-    unlock_selected(&app, &state)?;
-    reset_auth_throttle(&app, &state)?;
-    diagnostics::record(
-        &app,
-        &state,
-        diagnostics::DiagnosticEventKind::BackupImported,
-        diagnostics::DiagnosticOutcome::Succeeded,
-        diagnostics::DiagnosticContext {
-            trigger: diagnostics::DiagnosticTrigger::Recovery,
-            wallet_kind: Some(diagnostics::DiagnosticWalletKind::Multisig),
-            ..Default::default()
-        },
-        None,
-    );
-    diagnostics::record(
-        &app,
-        &state,
-        diagnostics::DiagnosticEventKind::WalletRecovered,
-        diagnostics::DiagnosticOutcome::Succeeded,
-        diagnostics::DiagnosticContext {
-            trigger: diagnostics::DiagnosticTrigger::Recovery,
-            wallet_kind: Some(diagnostics::DiagnosticWalletKind::Multisig),
-            ..Default::default()
-        },
-        None,
-    );
-    Ok(wallet)
+    })
+    .await
+    .map_err(internal)?
 }
 
 #[tauri::command]
-pub fn multisig_recovery_drill(
+pub async fn multisig_recovery_drill(
     app: AppHandle,
-    state: State<'_, AppState>,
     encoded_backup: String,
 ) -> ApiResult<RecoveryDrillDto> {
-    let _operation = operation_guard(&state)?;
-    let backup = validate_multisig_backup(&encoded_backup)?;
-    let first_address = first_multisig_address(&backup.wallet)?;
-    let record = crate::bsms::DescriptorRecord::from_descriptor_pair(
-        &backup.wallet.external_descriptor,
-        &backup.wallet.internal_descriptor,
-        &first_address,
-    )
-    .map_err(bsms_api_error)?;
-    let current_wallet = read_multisig_metadata(&app).ok();
-    let matches_current_wallet = current_wallet
-        .as_ref()
-        .map(|wallet| {
-            record.matches_descriptor_pair(&wallet.external_descriptor, &wallet.internal_descriptor)
-        })
-        .transpose()
-        .map_err(bsms_api_error)?
-        .unwrap_or(false);
-    if matches_current_wallet {
-        let wallet_id = selected_profile_of_kind(&app, WalletKind::Multisig)?.id;
-        let descriptor = current_wallet
+    let expected_wallet_id = load_registry(&app)?.selected_wallet_id;
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+
+        let _operation = operation_guard(&state)?;
+        if load_registry(&app)?.selected_wallet_id != expected_wallet_id {
+            return Err(api_error(
+                "wallet_selection_changed",
+                "The selected wallet changed. Retry in the current wallet.",
+            ));
+        }
+
+        let backup = validate_multisig_backup(&encoded_backup)?;
+        let first_address = first_multisig_address(&backup.wallet)?;
+        let record = crate::bsms::DescriptorRecord::from_descriptor_pair(
+            &backup.wallet.external_descriptor,
+            &backup.wallet.internal_descriptor,
+            &first_address,
+        )
+        .map_err(bsms_api_error)?;
+        let current_wallet = read_multisig_metadata(&app).ok();
+        let matches_current_wallet = current_wallet
             .as_ref()
-            .ok_or_else(|| api_error("wallet_not_found", "No multisig wallet exists."))?
-            .external_descriptor
-            .clone();
-        state
+            .map(|wallet| {
+                record.matches_descriptor_pair(
+                    &wallet.external_descriptor,
+                    &wallet.internal_descriptor,
+                )
+            })
+            .transpose()
+            .map_err(bsms_api_error)?
+            .unwrap_or(false);
+        if matches_current_wallet {
+            let wallet_id = selected_profile_of_kind(&app, WalletKind::Multisig)?.id;
+            let descriptor = current_wallet
+                .as_ref()
+                .ok_or_else(|| api_error("wallet_not_found", "No multisig wallet exists."))?
+                .external_descriptor
+                .clone();
+            state
+                .verified_recovery
+                .lock()
+                .map_err(internal)?
+                .insert(wallet_id, descriptor);
+        }
+        diagnostics::record(
+            &app,
+            &state,
+            diagnostics::DiagnosticEventKind::RecoveryTested,
+            diagnostics::DiagnosticOutcome::Succeeded,
+            diagnostics::DiagnosticContext {
+                wallet_kind: Some(diagnostics::DiagnosticWalletKind::Multisig),
+                ..Default::default()
+            },
+            None,
+        );
+        Ok(RecoveryDrillDto {
+            threshold: backup.wallet.threshold,
+            cosigners: backup.wallet.cosigners,
+            first_address,
+            matches_current_wallet,
+        })
+    })
+    .await
+    .map_err(internal)?
+}
+
+#[tauri::command]
+pub async fn multisig_recovery_drill_status(app: AppHandle) -> ApiResult<bool> {
+    let expected_wallet_id = load_registry(&app)?.selected_wallet_id;
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+
+        let _operation = operation_guard(&state)?;
+        if load_registry(&app)?.selected_wallet_id != expected_wallet_id {
+            return Err(api_error(
+                "wallet_selection_changed",
+                "The selected wallet changed. Retry in the current wallet.",
+            ));
+        }
+
+        require_unlocked(&app, &state)?;
+        let wallet = read_multisig_metadata(&app)?;
+        let wallet_id = selected_profile_of_kind(&app, WalletKind::Multisig)?.id;
+        let verified = state
             .verified_recovery
             .lock()
             .map_err(internal)?
-            .insert(wallet_id, descriptor);
-    }
-    diagnostics::record(
-        &app,
-        &state,
-        diagnostics::DiagnosticEventKind::RecoveryTested,
-        diagnostics::DiagnosticOutcome::Succeeded,
-        diagnostics::DiagnosticContext {
-            wallet_kind: Some(diagnostics::DiagnosticWalletKind::Multisig),
-            ..Default::default()
-        },
-        None,
-    );
-    Ok(RecoveryDrillDto {
-        threshold: backup.wallet.threshold,
-        cosigners: backup.wallet.cosigners,
-        first_address,
-        matches_current_wallet,
+            .get(&wallet_id)
+            .is_some_and(|descriptor| descriptor == &wallet.external_descriptor);
+        Ok(verified)
     })
+    .await
+    .map_err(internal)?
 }
 
 #[tauri::command]
-pub fn multisig_recovery_drill_status(
+pub async fn multisig_recover(
     app: AppHandle,
-    state: State<'_, AppState>,
-) -> ApiResult<bool> {
-    let _operation = operation_guard(&state)?;
-    require_unlocked(&app, &state)?;
-    let wallet = read_multisig_metadata(&app)?;
-    let wallet_id = selected_profile_of_kind(&app, WalletKind::Multisig)?.id;
-    Ok(state
-        .verified_recovery
-        .lock()
-        .map_err(internal)?
-        .get(&wallet_id)
-        .is_some_and(|descriptor| descriptor == &wallet.external_descriptor))
-}
-
-#[tauri::command]
-pub fn multisig_recover(
-    app: AppHandle,
-    state: State<'_, AppState>,
     encoded_backup: String,
     credential: String,
 ) -> ApiResult<MultisigWalletDto> {
     let credential = Zeroizing::new(credential);
+    let expected_wallet_id = load_registry(&app)?.selected_wallet_id;
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+
     let _operation = operation_guard(&state)?;
+        if load_registry(&app)?.selected_wallet_id != expected_wallet_id {
+            return Err(api_error(
+                "wallet_selection_changed",
+                "The selected wallet changed. Retry in the current wallet.",
+            ));
+        }
+
     let _admission_cleanup = clear_new_wallet_admission_on_exit(&state);
     validate_credential(credential.as_str())?;
     let mut backup = validate_multisig_backup(&encoded_backup)?;
@@ -1302,6 +1401,9 @@ pub fn multisig_recover(
         None,
     );
     Ok(wallet)
+    })
+    .await
+    .map_err(internal)?
 }
 
 #[tauri::command]
@@ -1466,10 +1568,15 @@ pub async fn multisig_address_create(
     app: AppHandle,
     labels: Vec<String>,
 ) -> ApiResult<ReceiveAddressDto> {
+    let expected_wallet_id = load_registry(&app)?.selected_wallet_id;
     tauri::async_runtime::spawn_blocking(move || {
     let state = app.state::<AppState>();
     let _operation = operation_guard(&state)?;
+    if load_registry(&app)?.selected_wallet_id != expected_wallet_id {
+        return Err(api_error("wallet_selection_changed", "The selected wallet changed. Retry in the current wallet."));
+    }
     let wallet_id = require_unlocked(&app, &state)?;
+    coordination_commands::require_receive_authority(&app, &WalletKind::Multisig)?;
     let labels = normalize_labels(labels)?;
     let metadata = read_multisig_metadata(&app)?;
     let db = open_multisig_db(&app)?;
@@ -1621,26 +1728,46 @@ pub(crate) fn claim_observed_receive_output(
 }
 
 #[tauri::command]
-pub fn multisig_address_claim_observed(
+pub async fn multisig_address_claim_observed(
     app: AppHandle,
-    state: State<'_, AppState>,
     outpoint: String,
     labels: Vec<String>,
 ) -> ApiResult<ReceiveAddressDto> {
-    let _operation = operation_guard(&state)?;
-    require_unlocked(&app, &state)?;
-    let mut db = open_multisig_db(&app)?;
-    let wallet = load_wallet(&mut db)?;
-    claim_observed_receive_output(&mut db, &wallet, &outpoint, &labels)
+    let expected_wallet_id = load_registry(&app)?.selected_wallet_id;
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+
+        let _operation = operation_guard(&state)?;
+        if load_registry(&app)?.selected_wallet_id != expected_wallet_id {
+            return Err(api_error(
+                "wallet_selection_changed",
+                "The selected wallet changed. Retry in the current wallet.",
+            ));
+        }
+
+        require_unlocked(&app, &state)?;
+        let mut db = open_multisig_db(&app)?;
+        let wallet = load_wallet(&mut db)?;
+        claim_observed_receive_output(&mut db, &wallet, &outpoint, &labels)
+    })
+    .await
+    .map_err(internal)?
 }
 
 #[tauri::command]
-pub fn multisig_address_discard(
-    app: AppHandle,
-    state: State<'_, AppState>,
-    id: u32,
-) -> ApiResult<()> {
+pub async fn multisig_address_discard(app: AppHandle, id: u32) -> ApiResult<()> {
+    let expected_wallet_id = load_registry(&app)?.selected_wallet_id;
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+
     let _operation = operation_guard(&state)?;
+        if load_registry(&app)?.selected_wallet_id != expected_wallet_id {
+            return Err(api_error(
+                "wallet_selection_changed",
+                "The selected wallet changed. Retry in the current wallet.",
+            ));
+        }
+
     require_unlocked(&app, &state)?;
     let db = open_multisig_db(&app)?;
     let changed = db
@@ -1667,4 +1794,7 @@ pub fn multisig_address_discard(
         None,
     );
     Ok(())
+    })
+    .await
+    .map_err(internal)?
 }

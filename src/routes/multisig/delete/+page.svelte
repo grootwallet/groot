@@ -258,3 +258,44 @@
     >
   </div>
 </Modal>
+
+<style>
+  /* Keep the original cascade weight while constraining these rules to this owner. */
+
+  .danger-card {
+    border-color: rgba(239, 100, 100, 0.25);
+  }
+  :global(.backup-required-action):where(.backup-required-action) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 14px;
+    padding: 13px 14px;
+    margin-bottom: 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+    background: var(--surface-inset);
+  }
+  :global(.backup-required-action):where(.backup-required-action) > :global(span) {
+    min-width: 0;
+    display: grid;
+    gap: 3px;
+  }
+  :global(.backup-required-action):where(.backup-required-action) :global(strong) {
+    font-size: var(--font-size-meta);
+  }
+  :global(.backup-required-action):where(.backup-required-action) :global(small) {
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+    line-height: 1.45;
+  }
+
+  @media (max-width: 760px) {
+    :global(.backup-required-action):where(.backup-required-action) {
+      grid-template-columns: 1fr;
+    }
+    :global(.backup-required-action):where(.backup-required-action) :global(.button) {
+      width: 100%;
+    }
+  }
+</style>

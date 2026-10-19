@@ -1,6 +1,15 @@
 import type { CatalogSection } from './types';
 
 export const multisigCopy = {
+  'Miniscript signer compatibility': {
+    fr: 'Compatibilité des signataires Miniscript',
+    es: 'Compatibilidad de firmantes Miniscript'
+  },
+  'Recovery and inheritance are not enabled yet. Ledger, Jade/Jade Plus and BitBox02 models are candidates only; no direct USB Miniscript workflow is certified in Groot. Standard multisig and phone pairing keep their existing support.':
+    {
+      fr: 'La récupération et la succession ne sont pas encore activées. Ledger, Jade/Jade Plus et les modèles BitBox02 sont seulement candidats ; aucun flux USB Miniscript direct n’est certifié dans Groot. Le multisig standard et l’association du téléphone conservent leur prise en charge actuelle.',
+      es: 'La recuperación y la herencia aún no están habilitadas. Ledger, Jade/Jade Plus y los modelos BitBox02 son solo candidatos; ningún flujo USB Miniscript directo está certificado en Groot. El multisig estándar y el emparejamiento del teléfono mantienen su compatibilidad actual.'
+    },
   '{walletName} Review': {
     fr: 'Vérification de {walletName}',
     es: 'Revisión de {walletName}'
@@ -450,6 +459,14 @@ export const multisigCopy = {
     fr: 'Réautoriser cet export',
     es: 'Volver a autenticar esta exportación'
   },
+  'Confirm this export': {
+    fr: 'Confirmer cette exportation',
+    es: 'Confirmar esta exportación'
+  },
+  'Enter this wallet’s app PIN. The backup cannot spend, but it reveals every wallet address.': {
+    fr: 'Saisissez le code PIN de ce portefeuille. La sauvegarde ne peut pas dépenser, mais elle révèle toutes les adresses du portefeuille.',
+    es: 'Introduce el PIN de esta cartera. La copia no puede gastar, pero revela todas las direcciones de la cartera.'
+  },
   'BSMS is an unencrypted public descriptor: it cannot spend, but reveals wallet addresses. Enter the app PIN and keep the export private.':
     {
       fr: 'BSMS est un descripteur public non chiffré : il ne peut pas dépenser, mais révèle les adresses du portefeuille. Saisissez le PIN de l’application et gardez cet export privé.',
@@ -607,9 +624,9 @@ export const multisigCopy = {
   'WALLET BACKUP': { fr: 'SAUVEGARDE DU PORTEFEUILLE', es: 'COPIA DE LA CARTERA' },
   'WALLET DELETION': { fr: 'SUPPRESSION DU PORTEFEUILLE', es: 'ELIMINACIÓN DE LA CARTERA' },
   'WALLET POLICY': { fr: 'POLITIQUE DU PORTEFEUILLE', es: 'POLÍTICA DE LA CARTERA' },
-  'Watch-only descriptors — cannot spend bitcoin': {
-    fr: 'Descripteurs d’observation — ne peuvent pas dépenser de bitcoin',
-    es: 'Descriptores de solo lectura — no pueden gastar bitcoin'
+  'Watch-only descriptors. Cannot spend bitcoin': {
+    fr: 'Descripteurs d’observation. Ils ne peuvent pas dépenser de bitcoin',
+    es: 'Descriptores de solo lectura. No pueden gastar bitcoin'
   },
   wu: { fr: 'wu', es: 'wu' },
   '2 of 3 now; an emergency key after about one month.': {
@@ -1060,5 +1077,9 @@ export const multisigCopy = {
       es: 'Ledger, Jade/Jade Plus, BitBox02 y BitBox02 Nova admiten Miniscript en su firmware, pero Groot solo habilita cada modelo exacto tras certificar el registro del descriptor, la visualización y la firma. Por ahora, añade las claves públicas mediante archivo o entrada manual y usa el flujo PSBT sin conexión.'
     },
   partner_continuity_v1: { fr: 'continuité du couple v1', es: 'continuidad de pareja v1' },
-  family_continuity_v1: { fr: 'continuité familiale v1', es: 'continuidad familiar v1' }
+  family_continuity_v1: { fr: 'continuité familiale v1', es: 'continuidad familiar v1' },
+  'A watch-only wallet whose spending policy is enforced by independent keys.': {
+    fr: 'Un portefeuille en lecture seule dont la politique de dépense repose sur des clés indépendantes.',
+    es: 'Una cartera de solo lectura cuya política de gasto depende de claves independientes.'
+  }
 } as const satisfies CatalogSection;

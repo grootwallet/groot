@@ -1,12 +1,27 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { isAcceptedReleaseVersion } from './release-version.mjs';
-test('owner naming admits existing releases and 5.2 candidates without authorizing other majors', () => {
-  for (const version of ['0.0.0', '0.5.1', '0.12.10', '5.2.0', '5.2.0-rc03'])
+test('owner naming admits the approved release lines and numbered 5.3 candidates only', () => {
+  for (const version of [
+    '0.0.0',
+    '0.5.1',
+    '0.12.10',
+    '5.2.0',
+    '5.2.0-rc03',
+    '5.3.0-rc1',
+    '5.3.0-rc2',
+    '5.3.0-rc12'
+  ])
     assert.equal(isAcceptedReleaseVersion(version), true, version);
   for (const version of [
     '1.0.0',
     '5.3.0',
+    '5.3.0-rc0',
+    '5.3.0-rc01',
+    '5.3.0-rc',
+    '5.3.0-rc1+build',
+    '5.3.1-rc1',
+    '5.4.0-rc1',
     '5.2.1',
     '5.2.0-beta1',
     '5.2.0-rc3',

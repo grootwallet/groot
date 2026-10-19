@@ -45,7 +45,7 @@ use std::{
     },
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
-#[cfg(not(target_os = "macos"))]
+#[cfg(any(target_os = "linux", target_os = "windows"))]
 use tauri::WebviewWindow;
 use tauri::{AppHandle, Manager, State};
 use uuid::Uuid;
@@ -200,7 +200,7 @@ pub async fn public_backup_pdf_save(
     export_commands::public_backup_pdf_save(app, state, save_token, markup).await
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(any(target_os = "linux", target_os = "windows"))]
 #[tauri::command]
 pub fn public_backup_pdf_prepare(
     app: AppHandle,
@@ -209,6 +209,12 @@ pub fn public_backup_pdf_prepare(
     suggested_filename: String,
 ) -> ApiResult<PendingPdfExportDto> {
     export_commands::public_backup_pdf_prepare(app, state, window, suggested_filename)
+}
+
+#[cfg(any(target_os = "android", target_os = "ios"))]
+#[tauri::command]
+pub fn public_backup_pdf_prepare(suggested_filename: String) -> ApiResult<PendingPdfExportDto> {
+    export_commands::public_backup_pdf_prepare(suggested_filename)
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -278,6 +284,42 @@ fn api_error(code: &'static str, message: impl ToString) -> ApiError {
         existing_wallet_id: None,
         details: None,
     }
+}
+
+// Mobile 5.3 starts with public observation and interchange only. Keep this
+// native guard even when the renderer hides the actions.
+fn require_desktop_key_operation() -> ApiResult<()> {
+    validate_key_operation_platform(cfg!(any(target_os = "ios", target_os = "android")))
+}
+
+fn validate_key_operation_platform(mobile: bool) -> ApiResult<()> {
+    if mobile {
+        return Err(api_error(
+            "mobile_operation_unavailable",
+            "Key creation, recovery, signing and broadcast are unavailable on mobile while pairing safety is under review.",
+        ));
+    }
+    Ok(())
+}
+
+// Keep mobile software keys restricted to the isolated Testnet4 iOS candidate.
+// USB signing and multisig broadcast retain the desktop-only guard.
+fn require_software_key_operation() -> ApiResult<()> {
+    validate_software_key_platform(
+        cfg!(target_os = "ios"),
+        cfg!(target_os = "android"),
+        crate::build_network::name(),
+    )
+}
+
+fn validate_software_key_platform(ios: bool, android: bool, network: &str) -> ApiResult<()> {
+    if android || (ios && network != "testnet4") {
+        return Err(api_error(
+            "mobile_operation_unavailable",
+            "Phone keys are available only in the isolated Testnet4 iOS development build.",
+        ));
+    }
+    Ok(())
 }
 
 fn api_error_with_details(
@@ -635,7 +677,10 @@ pub struct AppState {
     pending_pdf_exports: Mutex<HashMap<String, PendingPdfExport>>,
     recovery_scans: Mutex<HashMap<Uuid, ActiveRecoveryScan>>,
     runtime_auth_retry_at: Mutex<HashMap<Uuid, Instant>>,
+    staging_auth_failures: Mutex<HashMap<Uuid, u32>>,
+    staging_auth_retry_at: Mutex<HashMap<Uuid, Instant>>,
     pending_policy_verifications: Mutex<HashMap<String, SignerPolicyVerificationDto>>,
+    desktop_pairings: Mutex<HashMap<String, coordination_commands::PendingDesktopPairing>>,
     // Public transaction ids only. A completed snapshot lets the next refresh
     // inspect the wallet's mempool delta instead of downloading every unchanged
     // transaction again. The cache is deliberately process-local and contains
@@ -1439,8 +1484,9 @@ impl CoinSelectionInput {
 #[serde(rename_all = "camelCase")]
 pub struct BroadcastResultDto {
     txid: String,
-    snapshot: WalletSnapshotDto,
+    snapshot: Option<WalletSnapshotDto>,
     sync_pending: bool,
+    persistence_pending: bool,
 }
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
@@ -2180,12 +2226,22 @@ fn migrate_directories_with_rollback(
 }
 
 fn prepare_profile_directory(app: &AppHandle) -> ApiResult<(Uuid, PathBuf)> {
-    ensure_registry_migrated(app)?;
     let id = Uuid::new_v4();
+    let directory = prepare_profile_directory_with_id(app, id)?;
+    Ok((id, directory))
+}
+
+fn prepare_profile_directory_with_id(app: &AppHandle, id: Uuid) -> ApiResult<PathBuf> {
+    ensure_registry_migrated(app)?;
     let directory = profile_directory(app, id)?;
     ensure_private_directory(&wallets_root(app)?)?;
+    if directory.exists() {
+        return Err(internal(
+            "The new wallet storage identity is already in use.",
+        ));
+    }
     ensure_private_directory(&directory)?;
-    Ok((id, directory))
+    Ok(directory)
 }
 
 fn current_mainnet_node_admission(state: &AppState) -> ApiResult<PendingMainnetNodeAdmission> {
@@ -5065,7 +5121,7 @@ fn decrypt_mnemonic(app: &AppHandle, credential: &str) -> ApiResult<Mnemonic> {
     let version = serde_json::from_str::<serde_json::Value>(&encoded)
         .ok()
         .and_then(|value| value.get("version").and_then(|version| version.as_u64()));
-    if matches!(version, Some(2..=5)) {
+    if matches!(version, Some(2..=6)) {
         let plaintext = secure_store::load(&path, credential, wallet_secret_context(profile.id))
             .map_err(secure_store_error)?;
         return parse_mnemonic_bytes(plaintext);
@@ -5583,7 +5639,7 @@ fn verify_multisig_credential(app: &AppHandle, credential: &str) -> ApiResult<()
         .ok()
         .and_then(|value| value.get("version").and_then(|version| version.as_u64()));
     let context = wallet_secret_context(profile.id);
-    let mut plaintext = if matches!(version, Some(2..=5)) {
+    let mut plaintext = if matches!(version, Some(2..=6)) {
         secure_store::load(&path, credential, context).map_err(secure_store_error)?
     } else {
         let secret: EncryptedSecret = serde_json::from_str(&encoded).map_err(internal)?;
@@ -6015,6 +6071,80 @@ fn record_replacement(
 
 fn apply_locally_broadcast_transaction(wallet: &mut Wallet, transaction: &Transaction) {
     wallet.apply_unconfirmed_txs([(transaction.clone(), now())]);
+}
+
+fn accepted_broadcast_result(
+    txid: Txid,
+    record: impl FnOnce() -> ApiResult<(WalletSnapshotDto, bool)>,
+) -> BroadcastResultDto {
+    match record() {
+        Ok((snapshot, sync_pending)) => BroadcastResultDto {
+            txid: txid.to_string(),
+            snapshot: Some(snapshot),
+            sync_pending,
+            persistence_pending: false,
+        },
+        Err(_) => BroadcastResultDto {
+            txid: txid.to_string(),
+            snapshot: None,
+            sync_pending: true,
+            persistence_pending: true,
+        },
+    }
+}
+
+// Existing PSBTv0 proposals contain the exact unsigned transaction. Canonical
+// native sync observations can repair an interrupted post-broadcast commit
+// without a new receipt store or trusting renderer-supplied transaction facts.
+fn reconcile_broadcast_proposals(wallet: &Wallet, db: &Connection) -> ApiResult<Vec<Txid>> {
+    let mut statement = db
+        .prepare(
+            "SELECT proposal_id, psbt FROM groot_proposals WHERE status IN ('collecting','ready')",
+        )
+        .map_err(internal)?;
+    let mut rows = statement
+        .query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })
+        .map_err(internal)?
+        .peekable();
+    if rows.peek().is_none() {
+        return Ok(Vec::new());
+    }
+    let canonical = wallet
+        .transactions()
+        .map(|tx| tx.tx_node.txid)
+        .collect::<HashSet<_>>();
+    let mut repaired = Vec::new();
+    for row in rows {
+        let (id, encoded) = row.map_err(internal)?;
+        let psbt = decode_psbt(&encoded).map_err(proposal_api_error)?;
+        let txid = psbt.unsigned_tx.compute_txid();
+        if !canonical.contains(&txid) {
+            continue;
+        }
+        db.execute("UPDATE groot_proposals SET status = 'broadcast', txid = ?1 WHERE proposal_id = ?2 AND status IN ('collecting','ready')", params![txid.to_string(), id]).map_err(internal)?;
+        label_provenance::bind_broadcast_transaction(db, &id, &txid.to_string(), now())
+            .map_err(internal)?;
+        record_replacement(db, &id, &txid)?;
+        repaired.push(txid);
+    }
+    Ok(repaired)
+}
+
+fn enqueue_reconciled_broadcasts(db: &Connection, txids: &[Txid], balance: u64) -> ApiResult<()> {
+    for txid in txids {
+        notifications::enqueue(
+            db,
+            &WalletNotification::TransactionBroadcast {
+                txid: txid.to_string(),
+                balance,
+            },
+            now(),
+        )
+        .map_err(internal)?;
+    }
+    Ok(())
 }
 
 fn commit_multisig_broadcast(
@@ -6982,6 +7112,7 @@ fn sync_wallet_with_core(
     } else {
         None
     };
+    let reconciled = reconcile_broadcast_proposals(&wallet, &transaction)?;
     let snapshot = snapshot_from(
         &wallet,
         &transaction,
@@ -6989,6 +7120,7 @@ fn sync_wallet_with_core(
         multisig,
         delayed_policy.as_ref(),
     )?;
+    enqueue_reconciled_broadcasts(&transaction, &reconciled, snapshot.balance.total)?;
     enqueue_snapshot_notifications(&transaction, &snapshot)?;
     if let Some(changeset) = wallet.take_staged() {
         changeset
@@ -7009,6 +7141,12 @@ fn sync_wallet_with_compact_filters(
     source: &WalletSyncSource,
     cancel: Option<&AtomicBool>,
 ) -> ApiResult<WalletSnapshotDto> {
+    if cfg!(any(target_os = "ios", target_os = "android")) {
+        return Err(api_error(
+            "invalid_node_config",
+            "Compact-filter sync is experimental and unavailable on mobile. Configure Bitcoin Core instead.",
+        ));
+    }
     let config = source
         .validate(network())
         .map_err(network_config_api_error)?
@@ -7085,6 +7223,7 @@ where
     after_stage(CompactFilterCommitStage::AddressesMarked)?;
     label_provenance::reconcile_wallet_outputs(&wallet, &transaction, now()).map_err(internal)?;
     after_stage(CompactFilterCommitStage::ProvenanceReconciled)?;
+    let reconciled = reconcile_broadcast_proposals(&wallet, &transaction)?;
     let snapshot = snapshot_from(
         &wallet,
         &transaction,
@@ -7093,6 +7232,7 @@ where
         delayed_policy,
     )?;
     after_stage(CompactFilterCommitStage::SnapshotBuilt)?;
+    enqueue_reconciled_broadcasts(&transaction, &reconciled, snapshot.balance.total)?;
     enqueue_snapshot_notifications(&transaction, &snapshot)?;
     after_stage(CompactFilterCommitStage::NotificationsEnqueued)?;
     wallet.persist(&mut transaction).map_err(internal)?;
@@ -7450,12 +7590,18 @@ fn transaction_kind(received: bool, has_external_value_output: bool) -> &'static
 }
 
 #[tauri::command]
-pub fn multisig_acknowledge_coldcard_policy(
+pub async fn multisig_acknowledge_coldcard_policy(
     app: AppHandle,
-    state: State<'_, AppState>,
     signer_fingerprint: String,
 ) -> ApiResult<SignerPolicyVerificationDto> {
+    let expected_wallet_id = load_registry(&app)?.selected_wallet_id;
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+
     let _operation = operation_guard(&state)?;
+    if load_registry(&app)?.selected_wallet_id != expected_wallet_id {
+        return Err(api_error("wallet_selection_changed", "The selected wallet changed. Retry in the current wallet."));
+    }
     require_unlocked(&app, &state)?;
     let signer_fingerprint = signer_fingerprint.trim().to_ascii_lowercase();
     if signer_fingerprint.len() != 8
@@ -7501,6 +7647,7 @@ pub fn multisig_acknowledge_coldcard_policy(
         scope: "policy_file_acknowledgement",
         displayed_address: None,
     })
+    }).await.map_err(internal)?
 }
 
 fn snapshot_from(
@@ -7780,6 +7927,8 @@ fn connected_hardware_identity(
 #[path = "wallet/hardware_commands.rs"]
 pub(crate) mod hardware_commands;
 
+#[path = "wallet/coordination_commands.rs"]
+pub(crate) mod coordination_commands;
 #[path = "wallet/multisig_setup_commands.rs"]
 pub(crate) mod multisig_setup_commands;
 
@@ -8115,30 +8264,39 @@ pub async fn wallet_delete(
 }
 
 #[tauri::command]
-pub fn wallet_reset_regtest(
-    app: AppHandle,
-    state: State<'_, AppState>,
-    confirmation: String,
-) -> ApiResult<()> {
-    let _operation = operation_guard(&state)?;
-    validate_regtest_reset_confirmation(&confirmation)?;
-    state.proposals.lock().map_err(internal)?.clear();
-    let profile = selected_profile(&app)?;
-    delete_registered_wallet(&app, profile.id, &profile_directory(&app, profile.id)?)?;
-    forget_core_mempool_snapshot(&state, profile.id);
-    lock_wallet(&state, profile.id)?;
-    diagnostics::record(
-        &app,
-        &state,
-        diagnostics::DiagnosticEventKind::WalletRemoved,
-        diagnostics::DiagnosticOutcome::Succeeded,
-        diagnostics::DiagnosticContext {
-            wallet_kind: Some(diagnostics::wallet_kind(profile.kind)),
-            ..Default::default()
-        },
-        None,
-    );
-    Ok(())
+pub async fn wallet_reset_regtest(app: AppHandle, confirmation: String) -> ApiResult<()> {
+    let expected_wallet_id = load_registry(&app)?.selected_wallet_id;
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+
+        let _operation = operation_guard(&state)?;
+        if load_registry(&app)?.selected_wallet_id != expected_wallet_id {
+            return Err(api_error(
+                "wallet_selection_changed",
+                "The selected wallet changed. Retry in the current wallet.",
+            ));
+        }
+        validate_regtest_reset_confirmation(&confirmation)?;
+        state.proposals.lock().map_err(internal)?.clear();
+        let profile = selected_profile(&app)?;
+        delete_registered_wallet(&app, profile.id, &profile_directory(&app, profile.id)?)?;
+        forget_core_mempool_snapshot(&state, profile.id);
+        lock_wallet(&state, profile.id)?;
+        diagnostics::record(
+            &app,
+            &state,
+            diagnostics::DiagnosticEventKind::WalletRemoved,
+            diagnostics::DiagnosticOutcome::Succeeded,
+            diagnostics::DiagnosticContext {
+                wallet_kind: Some(diagnostics::wallet_kind(profile.kind)),
+                ..Default::default()
+            },
+            None,
+        );
+        Ok(())
+    })
+    .await
+    .map_err(internal)?
 }
 
 fn validate_regtest_reset_confirmation(confirmation: &str) -> ApiResult<()> {

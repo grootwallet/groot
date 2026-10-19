@@ -1,7 +1,8 @@
+import { readUiStyles } from '../testing/ui-styles';
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 
-const appCss = readFileSync(new URL('../../app.css', import.meta.url), 'utf8');
+const appCss = readUiStyles();
 const warningNotice = readFileSync(new URL('./WarningNotice.svelte', import.meta.url), 'utf8');
 
 function declaration(selector: string, source = appCss) {

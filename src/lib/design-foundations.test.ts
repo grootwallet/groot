@@ -1,8 +1,9 @@
+import { readUiStyles } from './testing/ui-styles';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
-const css = readFileSync(new URL('../app.css', import.meta.url), 'utf8');
+const css = readUiStyles();
 
 describe('approved wallet design foundations', () => {
   it('bundles one exact licensed font without a remote service or blocking font display', () => {
@@ -38,7 +39,7 @@ describe('approved wallet design foundations', () => {
   it('keeps financial surfaces opaque and focus inside clipped transaction lists', () => {
     expect(css).toMatch(/\.balance-card\s*\{[^}]*background: var\(--panel\)/);
     expect(css).not.toContain('.balance-card::after');
-    expect(css).toMatch(/\.tx-row:focus-visible,[\s\S]*?outline-offset: -3px/);
+    expect(css).toMatch(/\.tx-row:focus-visible\s*\{[^}]*outline-offset: -3px/);
     expect(css.match(/\.mobile-nav \{[^}]*backdrop-filter/g)).toBeNull();
     expect(css).toMatch(/\.build-identity-onboarding\s*\{[^}]*position: relative/);
     expect(css).toMatch(

@@ -1,7 +1,8 @@
+import { readUiStyles } from '../testing/ui-styles';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
-const styles = readFileSync(new URL('../../app.css', import.meta.url), 'utf8');
+const styles = readUiStyles();
 const modal = readFileSync(new URL('./Modal.svelte', import.meta.url), 'utf8');
 
 describe('modal overlay', () => {

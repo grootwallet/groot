@@ -16,6 +16,7 @@
     Plus,
     RefreshCw,
     ShieldCheck,
+    Smartphone,
     Trash2,
     Usb,
     Users
@@ -23,6 +24,8 @@
   import { goto } from '$app/navigation';
   import { onDestroy, onMount } from 'svelte';
   import Button from '$lib/components/Button.svelte';
+  import AnimatedUrQr from '$lib/components/AnimatedUrQr.svelte';
+  import UrQrScanner from '$lib/components/UrQrScanner.svelte';
   import { formatInteger, locale } from '$lib/i18n';
   import { defaultConfig, networkName } from '$lib/config';
   import FieldCounter from '$lib/components/FieldCounter.svelte';
@@ -54,6 +57,7 @@
     type SignerPolicyVerification,
     type WalletErrorCode
   } from '$lib/wallet';
+  import type { PairingInvitation } from '$lib/wallet';
   import {
     findDuplicateCosigner,
     MULTISIG_ACCOUNT_PATH,
@@ -169,6 +173,17 @@
   let checkingSigner = $state(false);
   let healthChecks = $state<Record<string, CosignerHealthCheck>>({});
   let source = $state<CosignerSource>('manual');
+  let mobilePairOpen = $state(false);
+  let mobilePairScan = $state(false);
+  let mobilePairBusy = $state(false);
+  let mobilePairError = $state('');
+  let mobilePairAccepted = $state(false);
+  let mobileInvitation = $state<PairingInvitation | null>(null);
+  let mobileResponseFrames = $state<string[]>([]);
+  let mobileCandidate = $state<CosignerDraft | null>(null);
+  let mobileSessionId = $state('');
+  let mobileFinalFrames = $state<string[]>([]);
+  let mobileFinalOpen = $state(false);
   let label = $state('');
   let fingerprint = $state('');
   let xpub = $state('');
@@ -207,6 +222,7 @@
   let discardingDraft = $state(false);
   let draftSaveError = $state('');
   let createErrorTitle = $state('');
+  let createdWalletNeedsFinalPolicy = $state(false);
   let hardwareScanGeneration = 0;
   let queuedDraft: MultisigSetupDraft | null = null;
   let draftSaveRunning = false;
@@ -224,6 +240,9 @@
         : templateKind === 'family_continuity_v1'
           ? 7
           : 4
+  );
+  const hasGrootPhoneSigner = $derived(
+    cosigners.some((signer) => signer.deviceType === 'groot-mobile')
   );
   const errors = $derived([
     ...validatePolicyDraft(policy),
@@ -574,6 +593,66 @@
     pickerOpen = false;
     keyError = '';
     keyOpen = true;
+  }
+
+  async function startMobilePairing() {
+    if (hasGrootPhoneSigner) return;
+    pickerOpen = false;
+    mobilePairOpen = true;
+    mobilePairBusy = true;
+    mobilePairError = '';
+    mobilePairAccepted = false;
+    mobilePairScan = false;
+    mobileResponseFrames = [];
+    mobileCandidate = null;
+    try {
+      mobileInvitation = await walletService.createPairingInvitation(name, threshold, requiredKeys);
+      mobileSessionId = mobileInvitation.sessionId;
+    } catch (cause) {
+      mobilePairError = localizedError(cause, $locale, 'Could not create a phone invitation.');
+    } finally {
+      mobilePairBusy = false;
+    }
+  }
+
+  async function receiveMobileResponse(frame: string) {
+    mobileResponseFrames = [...mobileResponseFrames, frame];
+    try {
+      mobileCandidate = await walletService.acceptMobileSigner(mobileResponseFrames);
+      mobilePairError = '';
+      return true;
+    } catch (cause) {
+      if (cause instanceof WalletError && cause.code === 'qr_incomplete') return false;
+      const message = localizedError(cause, $locale, 'Waiting for the complete phone response.');
+      mobilePairError = message;
+      throw cause;
+    }
+  }
+
+  function confirmMobileSigner() {
+    if (!mobileCandidate) return;
+    if (!appendCosigner(mobileCandidate, (message) => (mobilePairError = message))) return;
+    mobilePairAccepted = true;
+    mobilePairScan = false;
+    toast({
+      title: 'Phone signer added',
+      description: 'Continue on desktop. The phone waits for the completed wallet policy.',
+      tone: 'success'
+    });
+  }
+
+  function continueAfterMobileSigner() {
+    mobilePairOpen = false;
+    mobilePairAccepted = false;
+  }
+
+  async function cancelMobilePairing() {
+    const session = mobileSessionId;
+    mobilePairOpen = false;
+    mobileInvitation = null;
+    mobileCandidate = null;
+    mobileSessionId = '';
+    if (session) await walletService.cancelPairing(session).catch(() => {});
   }
 
   function duplicateSignerMessage(candidate: CosignerDraft): string | null {
@@ -1248,6 +1327,7 @@
         await walletService.createMultisig(policy, credential);
       }
       hasDraft = false;
+      createdWalletNeedsFinalPolicy = Boolean(mobileSessionId);
       toast({
         title: 'Multisig wallet created',
         description:
@@ -1256,7 +1336,22 @@
             : '2 of 3 primary keys work now. The recovery key becomes available after the chosen wait.',
         tone: 'success'
       });
-      await goto('/multisig');
+      if (mobileSessionId) {
+        try {
+          mobileFinalFrames = await walletService.finalizePairingOnDesktop(mobileSessionId);
+          mobileFinalOpen = true;
+          createdWalletNeedsFinalPolicy = false;
+        } catch (cause) {
+          createErrorTitle = 'Wallet created — phone pairing incomplete';
+          error = localizedError(
+            cause,
+            $locale,
+            'Retry the final QR. Do not create this wallet again.'
+          );
+        }
+      } else {
+        await goto('/multisig');
+      }
     } catch (cause) {
       existingWalletId =
         cause instanceof WalletError && cause.code === 'wallet_already_exists'
@@ -1277,6 +1372,22 @@
     } finally {
       credential = '';
       confirmation = '';
+      busy = false;
+    }
+  }
+
+  async function retryFinalPolicyQr() {
+    if (!mobileSessionId || busy) return;
+    busy = true;
+    error = '';
+    try {
+      mobileFinalFrames = await walletService.finalizePairingOnDesktop(mobileSessionId);
+      mobileFinalOpen = true;
+      createdWalletNeedsFinalPolicy = false;
+    } catch (cause) {
+      createErrorTitle = 'Phone pairing still incomplete';
+      error = localizedError(cause, $locale, 'Could not prepare the final wallet QR.');
+    } finally {
       busy = false;
     }
   }
@@ -1399,6 +1510,13 @@
                 >{/if}</button
             >
           </div>
+          <WarningNotice
+            title={translate($locale, 'Miniscript signer compatibility')}
+            body={translate(
+              $locale,
+              'Recovery and inheritance are not enabled yet. Ledger, Jade/Jade Plus and BitBox02 models are candidates only; no direct USB Miniscript workflow is certified in Groot. Standard multisig and phone pairing keep their existing support.'
+            )}
+          />
           <div class="policy-choice-insight">
             <span>{translate($locale, 'About this plan')}</span><InsightTip
               label={translate(
@@ -1798,16 +1916,10 @@
       <aside class="safety-panel">
         <ShieldCheck size={22} />
         <h2>{translate($locale, 'Before you continue')}</h2>
-        <p>
-          {translate(
-            $locale,
-            'Groot stores public descriptors only. It cannot spend without enough signatures.'
-          )}
-        </p>
         <ul>
-          <li>{translate($locale, 'Back up the wallet descriptor.')}</li>
-          <li>{translate($locale, 'Verify each fingerprint on its device.')}</li>
-          <li>{translate($locale, 'Keep devices in separate places.')}</li>
+          <li>{translate($locale, 'Save the wallet descriptor.')}</li>
+          <li>{translate($locale, 'Verify keys on each signer.')}</li>
+          <li>{translate($locale, 'Store signers separately.')}</li>
         </ul>
         <button class="hardware-help-card" onclick={() => openHardwareHelp()}
           ><CircleHelp size={17} /><span
@@ -1815,7 +1927,7 @@
               >{translate($locale, 'Coldcard, BitBox02, Ledger, Trezor, Jade')}</small
             ></span
           ><ChevronRight size={14} /></button
-        ><code>{MULTISIG_ACCOUNT_PATH}</code>
+        >
       </aside>
     </div>
   {:else if stage === 'review' && preview}
@@ -2134,21 +2246,26 @@
               onclick={openExistingWallet}>{translate($locale, 'Open existing wallet')}</Button
             >{/if}
         </WarningNotice>{/if}
-      <div class="coordinator-actions">
-        <Button variant="secondary" disabled={busy} onclick={() => (stage = 'review')}>
-          <ArrowLeft size={16} />{translate($locale, 'Back to verification')}
-        </Button>
-        <Button
-          size="large"
-          disabled={!saved ||
-            !policyReadinessAcknowledged ||
-            !credential ||
-            credential !== confirmation}
-          loading={busy}
-          loadingLabel={translate($locale, 'Creating wallet…')}
-          onclick={create}>{translate($locale, 'Create wallet')}</Button
+      {#if createdWalletNeedsFinalPolicy}
+        <Button class="full" loading={busy} onclick={retryFinalPolicyQr}
+          >{translate($locale, 'Retry final phone QR')}</Button
         >
-      </div>
+      {:else}<div class="coordinator-actions">
+          <Button variant="secondary" disabled={busy} onclick={() => (stage = 'review')}>
+            <ArrowLeft size={16} />{translate($locale, 'Back to verification')}
+          </Button>
+          <Button
+            size="large"
+            disabled={!saved ||
+              !policyReadinessAcknowledged ||
+              !credential ||
+              credential !== confirmation}
+            loading={busy}
+            loadingLabel={translate($locale, 'Creating wallet…')}
+            onclick={create}>{translate($locale, 'Create wallet')}</Button
+          >
+        </div>
+      {/if}
     </section>
   {/if}
 </div>
@@ -2196,6 +2313,20 @@
   onclose={closeSignerPicker}
 >
   <div class="source-list">
+    {#if templateKind === 'standard' && defaultConfig.network !== 'mainnet'}<button
+        disabled={hasGrootPhoneSigner}
+        onclick={startMobilePairing}
+        ><Smartphone size={18} /><span
+          ><strong>{translate($locale, 'Add a Groot phone')}</strong><small
+            >{translate(
+              $locale,
+              hasGrootPhoneSigner
+                ? 'One Groot phone signer per wallet in V1'
+                : 'Accountless · encrypted two-QR pairing'
+            )}</small
+          ></span
+        ><ChevronRight size={15} /></button
+      >{/if}
     {#if templateKind === 'standard'}<button onclick={scanHardware}
         ><Cpu size={18} /><span
           ><strong>{translate($locale, 'Connect hardware device')}</strong><small
@@ -2244,6 +2375,119 @@
         ></span
       >
     </div>{/if}
+</Modal>
+<Modal
+  open={mobilePairOpen}
+  dismissible={false}
+  wide={mobilePairScan && !mobileCandidate}
+  title={translate($locale, 'Add a Groot phone')}
+  description={translate($locale, 'Create one words-only phone signer.')}
+  onclose={cancelMobilePairing}
+>
+  <div class="mobile-pairing-flow">
+    {#if mobilePairAccepted}
+      <WarningNotice
+        role="status"
+        icon
+        title={translate($locale, 'Phone key added')}
+        body={translate(
+          $locale,
+          'Keep the phone on its waiting screen. After you add the remaining signers and create the wallet, desktop will show one final QR for the phone.'
+        )}
+      />
+      <Button class="full" onclick={continueAfterMobileSigner}
+        >{translate($locale, 'Continue wallet setup')}</Button
+      >
+    {:else if mobilePairBusy}<HardwareActionPrompt
+        title={translate($locale, 'Creating one-time invitation')}
+        detail={translate($locale, 'Groot is generating a fresh 128-bit BIP129 token.')}
+        label={translate($locale, 'Pairing invitation in progress')}
+      />{:else if mobileInvitation && !mobilePairScan && !mobileCandidate}
+      <AnimatedUrQr
+        frames={mobileInvitation.frames}
+        label={translate($locale, 'Groot phone invitation QR')}
+      />
+      <div class="comparison-code">
+        <small>{translate($locale, 'Both devices must show')}</small><strong
+          >{mobileInvitation.comparisonCode}</strong
+        >
+      </div>
+      <WarningNotice
+        role="note"
+        icon
+        title={translate($locale, 'One phone, one invitation')}
+        body={translate(
+          $locale,
+          'On the fresh phone choose “Connect desktop app,” scan this QR, and keep the response private.'
+        )}
+      />
+      <Button class="full" onclick={() => (mobilePairScan = true)}
+        >{translate($locale, 'Scan phone QR code')}</Button
+      >
+    {:else if mobileInvitation && mobilePairScan && !mobileCandidate}
+      {#if mobilePairError}<p class="form-error" role="alert">{mobilePairError}</p>{/if}
+      <UrQrScanner
+        acceptedTypes={['groot-bsms']}
+        prompt={translate($locale, 'Point the camera at the encrypted phone response')}
+        onframe={receiveMobileResponse}
+        onreset={() => {
+          mobileResponseFrames = [];
+          mobilePairError = '';
+        }}
+      />
+    {:else if mobileInvitation && mobileCandidate}
+      <div class="device-scan paired-mobile">
+        <Smartphone size={20} /><strong>{mobileCandidate.label}</strong><span
+          >{translate($locale, 'Phone key fingerprint')} {mobileCandidate.fingerprint}</span
+        >
+      </div>
+      <div class="comparison-code">
+        <small>{translate($locale, 'Confirm the phone shows the same digits')}</small><strong
+          >{mobileInvitation.comparisonCode}</strong
+        >
+      </div>
+      {#if mobilePairError}<p class="form-error" role="alert">{mobilePairError}</p>{/if}
+      <Button class="full" onclick={confirmMobileSigner}
+        >{translate($locale, 'Six digits match — add signer')}</Button
+      >
+    {:else if mobilePairError}<p class="form-error" role="alert">{mobilePairError}</p>{/if}
+    {#if !mobilePairAccepted}<Button
+        variant="secondary"
+        class="full"
+        disabled={mobilePairBusy}
+        onclick={cancelMobilePairing}>{translate($locale, 'Cancel pairing')}</Button
+      >{/if}
+  </div>
+</Modal>
+
+<Modal
+  open={mobileFinalOpen}
+  dismissible={false}
+  title={translate($locale, 'Return the final policy to the phone')}
+  description={translate(
+    $locale,
+    'Final phone step. This encrypted QR commits the wallet policy and first address.'
+  )}
+  onclose={() => {}}
+>
+  <div class="mobile-pairing-flow">
+    <AnimatedUrQr
+      frames={mobileFinalFrames}
+      label={translate($locale, 'Final shared wallet policy QR')}
+    />
+    <WarningNotice
+      role="note"
+      icon
+      title={translate($locale, 'Verify before funding')}
+      body={translate(
+        $locale,
+        'On the phone, check the same threshold and first address. Pairing is not complete until the phone accepts this policy.'
+      )}
+    />
+    <Button class="full" onclick={() => goto('/multisig')}
+      >{translate($locale, 'Phone accepted the wallet')}</Button
+    >
+  </div>
 </Modal>
 <Modal
   open={policyReviewOpen}
@@ -2357,7 +2601,7 @@
   title={translate($locale, 'Use Trezor standard wallet?')}
   description={translate(
     $locale,
-    'Passphrase protection can expose several independent wallets from the same device.'
+    'This selects the seed-derived wallet with no hardware passphrase.'
   )}
   onclose={() => {
     standardWalletOpen = false;
@@ -2368,22 +2612,11 @@
   <div class="credential-warning">
     <ShieldCheck size={17} />
     <p>
-      <strong>{translate($locale, 'No hardware passphrase for this signer')}</strong><span
-        >{translate(
-          $locale,
-          'This imports the key derived from the device seed alone. It does not disable, change, or\n        reveal any hidden passphrase wallet you may use elsewhere.'
-        )}</span
+      <strong>{translate($locale, 'Your hidden wallet is unchanged.')}</strong><span
+        >{translate($locale, 'Confirm this standard wallet to continue.')}</span
       >
     </p>
   </div>
-  <p class="policy-guidance">
-    {translate($locale, 'Choose this only if you intentionally want the Trezor')}
-    <strong>{translate($locale, 'standard wallet')}</strong>
-    {translate(
-      $locale,
-      'in this multisig\n    policy. Enabling or choosing a passphrase later opens a different hidden wallet; it does not change\n    this signer. The imported fingerprint is permanently bound to this policy.'
-    )}
-  </p>
   {#if hardwareBusy}<HardwareActionPrompt
       title={translate($locale, 'Importing the Trezor standard wallet')}
       detail={translate(
@@ -2534,3 +2767,1146 @@
   oncheck={runDraftHealthCheck}
   onrename={renameDraftSigner}
 />
+
+<style>
+  .path-visual.continuity-path-visual {
+    grid-template-columns: minmax(0, 1fr) 28px minmax(0, 1fr) 28px minmax(0, 1fr) 28px minmax(
+        0,
+        1fr
+      );
+    gap: 8px;
+  }
+  .path-visual.family-continuity-path {
+    grid-template-columns: minmax(0, 1fr) 36px minmax(0, 1fr) 36px minmax(0, 1fr);
+  }
+  @media (max-width: 760px) {
+    .path-visual.continuity-path-visual,
+    .path-visual.family-continuity-path {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .mobile-pairing-flow {
+    display: grid;
+    gap: 1rem;
+  }
+  .comparison-code {
+    display: grid;
+    justify-items: center;
+    gap: 0.25rem;
+    padding: 0.8rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+  }
+  .comparison-code small {
+    color: var(--muted);
+  }
+  .comparison-code strong {
+    font-size: 1.65rem;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.18em;
+  }
+  /* Keep the original cascade weight while constraining these rules to this owner. */
+
+  :global(.secondary-link):where(.secondary-link) {
+    min-height: 34px;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 7px 11px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-control);
+    color: var(--text);
+    font-size: var(--font-size-meta);
+    font-weight: 650;
+    text-decoration: none;
+    background: var(--panel);
+  }
+  :global(.secondary-link:hover):where(.secondary-link) {
+    border-color: var(--fr-blue);
+    color: var(--link);
+    background: var(--fr-blue-soft);
+  }
+  :global(.network-chip):where(.network-chip) {
+    border: 1px solid var(--border);
+    background: var(--panel);
+    color: var(--muted);
+    border-radius: 999px;
+    padding: 7px 11px;
+    font-size: var(--font-size-meta);
+    white-space: nowrap;
+  }
+  .policy-only-grid {
+    grid-template-columns: minmax(0, 1fr);
+    width: min(960px, 100%);
+    margin: 0 auto;
+  }
+  .policy-setup-card {
+    padding: 34px 36px;
+    border-radius: var(--radius-panel);
+    background:
+      radial-gradient(
+        circle at 50% 0%,
+        color-mix(in srgb, var(--fr-blue) 6%, transparent),
+        transparent 46%
+      ),
+      var(--panel);
+  }
+  :global(.coordinator-main):where(.coordinator-main) :global(.section-heading.compact) {
+    margin: 0 0 24px;
+  }
+  :global(.threshold-row):where(.threshold-row) {
+    display: grid;
+    grid-template-columns: 180px 1fr;
+    gap: 24px;
+    padding: 4px 0 22px;
+    border-bottom: 1px solid var(--border);
+  }
+  :global(.threshold-row):where(.threshold-row) > :global(div) {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    padding-top: 2px;
+  }
+  :global(.threshold-row):where(.threshold-row) > :global(div span) {
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+  }
+  :global(.threshold-row):where(.threshold-row) > :global(div strong) {
+    font-size: 14px;
+    margin-top: 4px;
+  }
+  :global(.threshold-row):where(.threshold-row) > :global(div small) {
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+  }
+  :global(.policy-recipes):where(.policy-recipes) {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin: 4px 0 22px;
+  }
+  :global(.policy-recipes):where(.policy-recipes) :global(button) {
+    position: relative;
+    min-height: 118px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 14px;
+    padding: 17px;
+    border: 1px solid var(--control-border);
+    border-radius: var(--radius-inset);
+    color: var(--text);
+    background: var(--surface-control);
+    cursor: pointer;
+    text-align: left;
+    transition:
+      transform 0.15s ease,
+      border-color 0.15s ease,
+      background 0.15s ease,
+      box-shadow 0.15s ease;
+  }
+  :global(.policy-recipes):where(.policy-recipes) :global(button:hover) {
+    transform: translateY(-2px);
+    border-color: color-mix(in srgb, var(--fr-blue) 65%, var(--control-border));
+    background: var(--panel-2);
+    box-shadow: 0 9px 24px rgba(0, 0, 0, 0.09);
+  }
+  :global(.policy-recipes):where(.policy-recipes) :global(button.active) {
+    border-color: var(--fr-blue);
+    background: var(--fr-blue-soft);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--fr-blue) 22%, transparent);
+  }
+  :global(.policy-recipes):where(.policy-recipes) :global(button > span) {
+    display: grid;
+    gap: 6px;
+  }
+  :global(.policy-recipes):where(.policy-recipes) :global(strong) {
+    font-size: 17px;
+    line-height: 1.15;
+  }
+  :global(.policy-recipes):where(.policy-recipes) :global(small) {
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+    line-height: 1.4;
+  }
+  :global(.policy-recipes):where(.policy-recipes) :global(em) {
+    color: var(--muted-2);
+    font-size: var(--font-size-meta);
+    font-style: normal;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  :global(.recovery-delay-options):where(.recovery-delay-options) {
+    gap: 12px;
+    margin: 24px 0 18px;
+  }
+  :global(.recovery-delay-title):where(.recovery-delay-title) {
+    grid-column: 1 / -1;
+    margin: 0 0 2px;
+    color: var(--text-soft);
+    font-size: var(--font-size-meta);
+    font-weight: 650;
+    line-height: 1.35;
+  }
+  :global(.recovery-delay-options):where(.recovery-delay-options) :global(button) {
+    min-height: 110px;
+    padding: 18px 20px;
+    border-color: color-mix(in srgb, var(--control-border) 76%, transparent);
+    border-radius: var(--radius-inset);
+  }
+  :global(.custom-threshold):where(.custom-threshold) {
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    padding-bottom: 8px;
+    border-bottom: 0;
+  }
+  :global(.custom-threshold):where(.custom-threshold) :global(.field) {
+    margin: 0;
+  }
+  :global(.cosigner-list):where(.cosigner-list) {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+    overflow: hidden;
+  }
+  :global(.cosigner-list):where(.cosigner-list) :global(article) {
+    min-height: 76px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+  }
+  :global(.cosigner-list):where(.cosigner-list) :global(article:last-child) {
+    border-bottom: 0;
+  }
+  :global(.cosigner-card):where(.cosigner-card) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 50px;
+    align-items: stretch;
+    padding: 0;
+    background: var(--panel);
+    transition:
+      background 0.15s ease,
+      box-shadow 0.15s ease;
+  }
+  :global(.cosigner-card:hover):where(.cosigner-card),
+  :global(.cosigner-card:has(.draft-cosigner-trigger:focus-visible)):where(.cosigner-card) {
+    background: color-mix(in srgb, var(--link) 5.5%, transparent);
+    box-shadow: inset 3px 0 0 var(--fr-blue);
+  }
+  :global(.draft-cosigner-trigger):where(.draft-cosigner-trigger) {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 100%;
+    min-width: 0;
+    display: grid;
+    grid-template-columns: 32px minmax(0, 1fr) 18px;
+    gap: 13px;
+    align-items: start;
+    padding: 16px 12px 16px 14px;
+    color: inherit;
+    text-align: left;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    cursor: pointer;
+  }
+  :global(.draft-cosigner-trigger:focus-visible):where(.draft-cosigner-trigger) {
+    position: relative;
+    z-index: 1;
+    outline: 2px solid var(--focus);
+    outline-offset: -2px;
+  }
+  :global(.draft-cosigner-trigger:hover):where(.draft-cosigner-trigger)
+    :global(.draft-row-chevron) {
+    transform: translateX(2px);
+    background: color-mix(in srgb, var(--link) 14%, transparent);
+  }
+  :global(.cosigner-card-body):where(.cosigner-card-body) {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 11px;
+  }
+  :global(.cosigner-name):where(.cosigner-name) {
+    color: var(--text);
+    font-size: 14px;
+    line-height: 1.3;
+  }
+  :global(.cosigner-metadata):where(.cosigner-metadata) {
+    min-width: 0;
+    display: grid;
+    grid-template-columns: minmax(120px, 0.7fr) minmax(105px, 0.45fr);
+    gap: 10px 16px;
+    margin: 0;
+  }
+  :global(.cosigner-metadata):where(.cosigner-metadata) > :global(span) {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 5px;
+  }
+  :global(.cosigner-metadata):where(.cosigner-metadata) :global(small) {
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+    font-weight: 650;
+    letter-spacing: 0.08em;
+    line-height: 1.2;
+    text-transform: uppercase;
+  }
+  :global(.cosigner-metadata):where(.cosigner-metadata) :global(code) {
+    color: var(--text-soft);
+    font-size: var(--font-size-meta);
+  }
+  :global(.cosigner-public-key):where(.cosigner-public-key) {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+  :global(.cosigner-public-key):where(.cosigner-public-key) :global(code) {
+    width: 100%;
+    padding: 8px 9px;
+    overflow-wrap: anywhere;
+    word-break: break-all;
+    white-space: normal;
+    line-height: 1.5;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--surface-inset);
+  }
+  :global(.source-badge):where(.source-badge) {
+    display: inline-flex;
+    align-items: center;
+    min-height: 22px;
+    padding: 3px 7px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--surface-inset);
+    color: var(--text-soft);
+    font-size: var(--font-size-meta);
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  :global(.remove-cosigner):where(.remove-cosigner) {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 32px;
+    height: 32px;
+    align-self: center;
+    justify-self: center;
+    display: grid;
+    place-items: center;
+    border: 1px solid transparent;
+    border-radius: var(--radius-control);
+    background: transparent;
+    color: var(--muted-2);
+    cursor: pointer;
+    transition:
+      color 0.15s ease,
+      background 0.15s ease,
+      border-color 0.15s ease;
+  }
+  :global(.remove-cosigner:hover):where(.remove-cosigner) {
+    color: var(--danger);
+    border-color: rgba(239, 100, 100, 0.18);
+    background: rgba(239, 100, 100, 0.07);
+  }
+  :global(.remove-cosigner:focus-visible):where(.remove-cosigner) {
+    outline: 2px solid var(--focus);
+    outline-offset: 1px;
+  }
+  :global(.cosigner-list):where(.cosigner-list) :global(.cosigner-trigger) {
+    width: 100%;
+    min-height: 76px;
+    display: grid;
+    grid-template-columns: 32px minmax(0, 1fr) auto 18px;
+    gap: 12px;
+    align-items: center;
+    padding: 11px 13px;
+    color: inherit;
+    text-align: left;
+    border-radius: 0;
+    transition: background 0.15s ease;
+  }
+  :global(.cosigner-list):where(.cosigner-list) :global(.cosigner-trigger:hover) {
+    background: var(--panel-2);
+  }
+  :global(.cosigner-list):where(.cosigner-list) :global(.cosigner-trigger:focus-visible) {
+    position: relative;
+    z-index: 1;
+    outline: 2px solid var(--focus);
+    outline-offset: -2px;
+  }
+  :global(.keys-empty):where(.keys-empty) {
+    min-height: 160px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    color: var(--muted-2);
+  }
+  :global(.keys-empty):where(.keys-empty) :global(strong) {
+    color: var(--text-soft);
+    margin-top: 5px;
+  }
+  :global(.keys-empty):where(.keys-empty) :global(span) {
+    font-size: var(--font-size-meta);
+  }
+  :global(.policy-errors):where(.policy-errors) {
+    margin-top: 12px;
+    padding: 10px 12px;
+    border: 1px solid rgba(239, 100, 100, 0.2);
+    background: rgba(239, 100, 100, 0.05);
+    border-radius: var(--radius-control);
+  }
+  :global(.policy-errors):where(.policy-errors) :global(p) {
+    color: var(--danger);
+    font-size: var(--font-size-meta);
+    margin: 3px 0;
+  }
+  :global(.cosigner-progress):where(.cosigner-progress) {
+    margin: 9px 2px 0;
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+  }
+  :global(.coordinator-actions):where(.coordinator-actions) {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 20px;
+  }
+  :global(.hardware-help-card):where(.hardware-help-card) {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 24px minmax(0, 1fr) 14px;
+    align-items: center;
+    gap: 8px;
+    margin: 14px 0 10px;
+    padding: 10px;
+    color: var(--text-soft);
+    text-align: left;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+    background: var(--surface-inset);
+    cursor: pointer;
+  }
+  :global(.hardware-help-card):where(.hardware-help-card) > :global(svg) {
+    color: var(--link);
+  }
+  :global(.hardware-help-card):where(.hardware-help-card) :global(span) {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+  :global(.hardware-help-card):where(.hardware-help-card) :global(strong) {
+    font-size: var(--font-size-meta);
+  }
+  :global(.hardware-help-card):where(.hardware-help-card) :global(small) {
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+  }
+  :global(.hardware-help-card:hover):where(.hardware-help-card) {
+    border-color: var(--border-strong);
+    background: var(--surface-hover);
+  }
+  :global(.import-error):where(.import-error) {
+    display: grid;
+    grid-template-columns: 22px minmax(0, 1fr);
+    align-items: start;
+    gap: 10px;
+    margin-top: 12px;
+    padding: 13px 14px;
+    border: 1px solid color-mix(in srgb, var(--danger) 30%, var(--border));
+    border-radius: var(--radius-control);
+    color: var(--danger);
+    background: color-mix(in srgb, var(--danger) 6%, transparent);
+  }
+  :global(.import-error):where(.import-error) > :global(svg) {
+    margin-top: 1px;
+  }
+  :global(.import-error):where(.import-error) > :global(span) {
+    min-width: 0;
+    display: grid;
+    gap: 4px;
+  }
+  :global(.import-error):where(.import-error) :global(strong) {
+    color: var(--danger);
+    font-size: var(--font-size-meta);
+  }
+  :global(.import-error):where(.import-error) :global(b) {
+    color: var(--text);
+    font-size: var(--font-size-meta);
+    font-weight: 650;
+    line-height: 1.45;
+  }
+  :global(.import-error):where(.import-error) :global(small) {
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+    line-height: 1.55;
+  }
+  :global(.signer-readiness-list):where(.signer-readiness-list) {
+    display: grid;
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+  :global(.signer-readiness-list):where(.signer-readiness-list) :global(article) {
+    display: grid;
+    grid-template-columns: 30px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 10px;
+    padding: 11px;
+    border: 1px solid color-mix(in srgb, var(--accent) 38%, var(--border));
+    border-radius: var(--radius-control);
+    background: var(--accent-soft);
+  }
+  :global(.signer-readiness-list):where(.signer-readiness-list) :global(article.complete) {
+    border-color: color-mix(in srgb, var(--success) 38%, var(--border));
+    background: color-mix(in srgb, var(--success) 7%, var(--panel));
+  }
+  :global(.signer-readiness-list):where(.signer-readiness-list) :global(article > span) {
+    display: grid;
+    width: 30px;
+    height: 30px;
+    place-items: center;
+    border-radius: var(--radius-control);
+    color: var(--accent);
+    background: var(--surface-icon);
+  }
+  :global(.signer-readiness-list):where(.signer-readiness-list) :global(article.complete > span) {
+    color: var(--success);
+  }
+  :global(.signer-readiness-list):where(.signer-readiness-list) :global(article > div) {
+    display: grid;
+    gap: 3px;
+    min-width: 0;
+  }
+  :global(.signer-readiness-list):where(.signer-readiness-list) :global(strong) {
+    font-size: var(--font-size-meta);
+  }
+  :global(.signer-readiness-list):where(.signer-readiness-list) :global(small) {
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+    line-height: 1.4;
+  }
+  :global(.hardware-guide):where(.hardware-guide) {
+    display: grid;
+    gap: 14px;
+  }
+  :global(.hardware-guide-tabs):where(.hardware-guide-tabs) {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
+  }
+  :global(.hardware-guide-tabs):where(.hardware-guide-tabs) :global(button) {
+    min-height: 36px;
+    padding: 6px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+    color: var(--muted);
+    background: var(--surface-control);
+    font-size: var(--font-size-meta);
+    cursor: pointer;
+  }
+  :global(.hardware-guide-tabs):where(.hardware-guide-tabs) :global(button.active) {
+    color: var(--text);
+    border-color: var(--fr-blue);
+    background: color-mix(in srgb, var(--link) 10%, transparent);
+  }
+  :global(.hardware-guide-body):where(.hardware-guide-body) {
+    display: grid;
+    grid-template-columns: 32px minmax(0, 1fr);
+    gap: 11px;
+    padding: 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+    background: var(--surface-inset);
+  }
+  :global(.hardware-guide-body):where(.hardware-guide-body) :global(strong) {
+    font-size: 13px;
+  }
+  :global(.hardware-guide-models):where(.hardware-guide-models) {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin-top: 7px;
+  }
+  :global(.hardware-guide-models):where(.hardware-guide-models) :global(span) {
+    padding: 3px 7px;
+    color: var(--text-soft);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--surface-control);
+    font-size: var(--font-size-meta);
+    line-height: 1.2;
+  }
+  :global(.hardware-guide-body):where(.hardware-guide-body) :global(ol) {
+    margin: 9px 0 0;
+    padding-left: 18px;
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+    line-height: 1.65;
+  }
+  :global(.hardware-guide):where(.hardware-guide) > :global(p) {
+    margin: 0;
+    padding: 11px 12px;
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+    line-height: 1.55;
+    border-left: 2px solid var(--fr-red);
+  }
+  :global(.hardware-guide):where(.hardware-guide) > :global(p strong) {
+    color: var(--text-soft);
+  }
+  :global(.review-policy):where(.review-policy) {
+    max-width: 720px;
+    margin: 0 auto;
+  }
+  :global(.review-policy):where(.review-policy) > :global(h2) {
+    font-size: 24px;
+    margin: 8px 0 0;
+  }
+  :global(.policy-summary):where(.policy-summary) {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border: 1px solid var(--border);
+    background: var(--surface-control);
+    border-radius: var(--radius-control);
+    padding: 14px;
+    margin: 20px 0 10px;
+  }
+  :global(.policy-summary):where(.policy-summary) :global(strong) {
+    color: var(--text);
+    font-size: 13px;
+  }
+  :global(.policy-summary):where(.policy-summary) :global(span) {
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+  }
+  :global(.backup-setup-sections):where(.backup-setup-sections) {
+    display: grid;
+    gap: 14px;
+    margin-top: 18px;
+  }
+  :global(.defer-policy-verification):where(.defer-policy-verification) {
+    display: grid;
+    grid-template-columns: 20px minmax(0, 1fr);
+    align-items: start;
+    gap: 9px;
+    width: 100%;
+    padding: 11px 12px;
+    border: 1px dashed var(--border-strong);
+    border-radius: var(--radius-control);
+    color: var(--muted);
+    background: transparent;
+    text-align: left;
+    cursor: pointer;
+  }
+  :global(.defer-policy-verification:hover:not(:disabled)):where(.defer-policy-verification) {
+    color: var(--text-soft);
+    border-color: var(--fr-blue);
+    background: var(--fr-blue-soft);
+  }
+  :global(.defer-policy-verification:disabled):where(.defer-policy-verification) {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+  :global(.defer-policy-verification):where(.defer-policy-verification) :global(span) {
+    display: grid;
+    gap: 3px;
+  }
+  :global(.defer-policy-verification):where(.defer-policy-verification) :global(strong) {
+    color: var(--text-soft);
+    font-size: var(--font-size-meta);
+  }
+  :global(.defer-policy-verification):where(.defer-policy-verification) :global(small) {
+    font-size: var(--font-size-meta);
+    line-height: 1.5;
+  }
+  :global(.backup-confirmation):where(.backup-confirmation) {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+    background: var(--surface-inset);
+  }
+  :global(.backup-confirmation):where(.backup-confirmation) :global(input) {
+    margin-top: 2px;
+    accent-color: var(--success);
+  }
+  :global(.backup-confirmation):where(.backup-confirmation) :global(span) {
+    display: grid;
+    gap: 3px;
+  }
+  :global(.backup-confirmation):where(.backup-confirmation) :global(strong) {
+    font-size: var(--font-size-meta);
+  }
+  :global(.backup-confirmation):where(.backup-confirmation) :global(small) {
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+    line-height: 1.45;
+  }
+  :global(.review-signers):where(.review-signers) {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 7px;
+    margin: 10px 0 20px;
+  }
+  :global(.review-signers):where(.review-signers) > :global(div) {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+    padding: 10px;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  :global(.review-signers):where(.review-signers) :global(svg) {
+    color: var(--success);
+  }
+  :global(.review-signers):where(.review-signers) :global(span) {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+  :global(.review-signers):where(.review-signers) :global(strong) {
+    font-size: var(--font-size-meta);
+  }
+  :global(.review-signers):where(.review-signers) :global(small) {
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+  }
+  :global(.cosigner-step-heading):where(.cosigner-step-heading) :global(.setup-step) {
+    display: block;
+    margin: 0 0 5px;
+  }
+  :global(.cosigner-step-heading):where(.cosigner-step-heading) :global(h2) {
+    margin: 0 0 4px;
+  }
+  :global(.template-grid):where(.template-grid) {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+  :global(.template-grid):where(.template-grid) :global(button) {
+    min-height: 94px;
+    border: 1px solid var(--border);
+    background: var(--surface-control);
+    color: var(--text);
+    border-radius: var(--radius-control);
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 7px;
+    text-align: left;
+    cursor: pointer;
+  }
+  :global(.template-grid):where(.template-grid) :global(button svg) {
+    color: var(--muted);
+  }
+  :global(.template-grid):where(.template-grid) :global(button strong) {
+    font-size: var(--font-size-meta);
+  }
+  :global(.template-grid):where(.template-grid) :global(button small) {
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+    line-height: 1.35;
+  }
+  :global(.template-grid):where(.template-grid) :global(button.active) {
+    border-color: var(--fr-blue);
+    background: color-mix(in srgb, var(--link) 10%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--link) 15%, transparent);
+  }
+  :global(.template-grid):where(.template-grid) :global(button.active svg) {
+    color: var(--link);
+  }
+  :global(.path-visual):where(.path-visual) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 48px minmax(0, 1fr);
+    align-items: stretch;
+    gap: 12px;
+    padding: 4px 0 0;
+  }
+  :global(.path-visual):where(.path-visual) > :global(span) {
+    min-height: 108px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 7px;
+    padding: 16px;
+    border: 1px solid var(--control-border);
+    border-radius: var(--radius-inset);
+    background: var(--surface-control);
+  }
+  :global(.path-visual):where(.path-visual) > :global(span:last-child) {
+    text-align: left;
+    border-color: color-mix(in srgb, var(--accent) 42%, var(--control-border));
+    background: color-mix(in srgb, var(--accent) 7%, var(--surface-control));
+  }
+  :global(.path-visual):where(.path-visual) :global(b) {
+    color: var(--link);
+    font-size: var(--font-size-meta);
+    letter-spacing: 0.1em;
+  }
+  :global(.path-visual):where(.path-visual) :global(strong) {
+    font-size: 15px;
+    line-height: 1.25;
+  }
+  :global(.path-visual):where(.path-visual) :global(.path-title) {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+  }
+  :global(.path-visual):where(.path-visual) :global(.path-title > .insight-tip) {
+    flex: 0 0 auto;
+  }
+  :global(.path-visual):where(.path-visual) :global(small) {
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+  }
+  :global(.path-visual):where(.path-visual) :global(i) {
+    align-self: center;
+    height: 2px;
+    background: linear-gradient(90deg, var(--fr-blue), var(--fr-red));
+  }
+  :global(.policy-delay-note):where(.policy-delay-note) {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    margin: 10px 2px 0;
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+  }
+  :global(.descriptor-toggle-row):where(.descriptor-toggle-row) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 28px;
+    align-items: center;
+    gap: 5px;
+    margin-bottom: 8px;
+  }
+  :global(.descriptor-toggle-row):where(.descriptor-toggle-row) :global(.descriptor-toggle) {
+    margin-bottom: 0;
+  }
+  :global(.descriptor-toggle-row):where(.descriptor-toggle-row) > :global(.insight-tip) {
+    justify-self: center;
+  }
+  :global(.descriptor-toggle):where(.descriptor-toggle) {
+    width: 100%;
+    min-height: 40px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    border-radius: var(--radius-control);
+    padding: 0 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: var(--font-size-meta);
+    cursor: pointer;
+  }
+  :global(.descriptor-toggle):where(.descriptor-toggle) :global(svg) {
+    transition: transform 0.15s;
+  }
+  :global(.descriptor-toggle):where(.descriptor-toggle) :global(svg.rotated) {
+    transform: rotate(180deg);
+  }
+  .policy-choice-heading :global(.setup-step),
+  .policy-configure-heading :global(.setup-step) {
+    display: block;
+    margin-bottom: 7px;
+  }
+  .policy-choice-heading :global(h2),
+  .policy-configure-heading :global(h2) {
+    font-size: 24px;
+    line-height: 1.18;
+    letter-spacing: -0.025em;
+  }
+  .policy-choice-heading :global(p),
+  .policy-configure-heading :global(p) {
+    max-width: 58ch;
+    margin-top: 8px;
+    font-size: var(--font-size-meta);
+    line-height: 1.5;
+  }
+  :global(.policy-template-grid):where(.policy-template-grid) :global(button) {
+    position: relative;
+    min-height: 192px;
+    padding: 20px;
+    gap: 17px;
+    border-radius: var(--radius-inset);
+    overflow: hidden;
+    transition:
+      transform 0.15s ease,
+      border-color 0.15s ease,
+      background 0.15s ease,
+      box-shadow 0.15s ease;
+  }
+  :global(.policy-template-grid):where(.policy-template-grid) :global(button::before) {
+    content: '';
+    position: absolute;
+    width: 96px;
+    height: 96px;
+    top: -50px;
+    right: -44px;
+    border-radius: 50%;
+    background: color-mix(in srgb, var(--policy-accent, var(--fr-blue)) 12%, transparent);
+    transition: transform 0.18s ease;
+  }
+  :global(.policy-template-grid):where(.policy-template-grid) :global(button.standard) {
+    --policy-accent: var(--fr-blue);
+  }
+  :global(.policy-template-grid):where(.policy-template-grid) :global(button.recovery) {
+    --policy-accent: var(--success);
+  }
+  :global(.policy-template-grid):where(.policy-template-grid) :global(button.inheritance) {
+    --policy-accent: var(--accent);
+  }
+  :global(.policy-template-grid):where(.policy-template-grid) :global(button:hover) {
+    transform: translateY(-3px);
+    border-color: color-mix(in srgb, var(--policy-accent) 70%, var(--control-border));
+    background: var(--panel-2);
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.11);
+  }
+  :global(.policy-template-grid):where(.policy-template-grid) :global(button:hover::before) {
+    transform: scale(1.14);
+  }
+  :global(.policy-template-grid):where(.policy-template-grid) :global(button.active) {
+    border-color: var(--policy-accent);
+    background: color-mix(in srgb, var(--policy-accent) 8%, var(--surface-control));
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--policy-accent) 20%, transparent);
+  }
+  :global(.policy-kind-icon):where(.policy-kind-icon) {
+    width: 42px;
+    height: 42px;
+    display: grid;
+    place-items: center;
+    color: var(--policy-accent);
+    background: color-mix(in srgb, var(--policy-accent) 12%, transparent);
+    border-radius: var(--radius-inset);
+  }
+  :global(.policy-kind-copy):where(.policy-kind-copy) {
+    display: grid;
+    gap: 8px;
+  }
+  :global(.policy-template-grid):where(.policy-template-grid) :global(.policy-kind-copy strong) {
+    font-size: 15px;
+    line-height: 1.2;
+  }
+  :global(.policy-template-grid):where(.policy-template-grid) :global(.policy-kind-copy small) {
+    max-width: 26ch;
+    font-size: var(--font-size-meta);
+    line-height: 1.45;
+  }
+  :global(.policy-kind-meta):where(.policy-kind-meta) {
+    margin-top: auto;
+    color: var(--muted-2);
+    font-size: var(--font-size-meta);
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  :global(.policy-kind-check):where(.policy-kind-check) {
+    position: absolute;
+    right: 15px;
+    bottom: 14px;
+    width: 25px;
+    height: 25px;
+    display: grid;
+    place-items: center;
+    color: #fff;
+    background: var(--policy-accent);
+    border: 2px solid color-mix(in srgb, #fff 82%, var(--policy-accent));
+    border-radius: 50%;
+    box-shadow: 0 2px 7px color-mix(in srgb, var(--policy-accent) 28%, transparent);
+  }
+  :global(.policy-kind-check):where(.policy-kind-check) :global(svg) {
+    color: #fff;
+    stroke: #fff;
+  }
+  :global(.policy-choice-insight):where(.policy-choice-insight) {
+    min-height: 34px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 5px;
+    margin-top: 8px;
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+    font-weight: 650;
+  }
+  :global(.policy-template-grid):where(.policy-template-grid) + :global(.coordinator-actions) {
+    margin-top: 28px;
+  }
+  :global(.policy-choice-insight):where(.policy-choice-insight) + :global(.coordinator-actions) {
+    margin-top: 12px;
+  }
+  .policy-configure-heading {
+    margin-top: 24px !important;
+  }
+  .policy-setup-card > :global(.field > span) {
+    font-size: 14px;
+  }
+  .policy-setup-card > :global(.field input) {
+    min-height: 48px;
+    font-size: 14px;
+  }
+  :global(.recovery-separation):where(.recovery-separation) {
+    display: grid;
+    grid-template-columns: 22px minmax(0, 1fr);
+    gap: 12px;
+    align-items: start;
+    padding: 15px 16px;
+    margin: 14px 0 22px;
+    border: 1px solid color-mix(in srgb, var(--accent) 24%, transparent);
+    border-radius: var(--radius-inset);
+    color: var(--accent);
+    background: var(--accent-soft);
+  }
+  :global(.recovery-separation):where(.recovery-separation) :global(span) {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+  :global(.recovery-separation):where(.recovery-separation) :global(strong) {
+    color: var(--text-soft);
+    font-size: 14px;
+  }
+  :global(.recovery-separation):where(.recovery-separation) :global(small) {
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+    line-height: 1.45;
+  }
+
+  @media (max-width: 760px) {
+    :global(.review-policy):where(.review-policy) :global(.coordinator-actions) {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 8px;
+    }
+    :global(.review-policy):where(.review-policy) :global(.coordinator-actions .button) {
+      width: 100%;
+    }
+    :global(.network-chip):where(.network-chip) {
+      display: none;
+    }
+    :global(.threshold-row):where(.threshold-row) {
+      grid-template-columns: 1fr;
+      gap: 0;
+    }
+    :global(.review-signers):where(.review-signers) {
+      grid-template-columns: 1fr;
+    }
+    :global(.cosigner-step-heading):where(.cosigner-step-heading) {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 14px;
+      align-items: start;
+    }
+    :global(.cosigner-step-heading):where(.cosigner-step-heading) :global(.button) {
+      width: 100%;
+    }
+    :global(.template-grid):where(.template-grid) {
+      grid-template-columns: 1fr;
+    }
+    :global(.template-grid):where(.template-grid) :global(button) {
+      min-height: 70px;
+    }
+    .policy-setup-card {
+      padding: 24px 18px;
+      border-radius: var(--radius-panel);
+    }
+    .policy-choice-heading :global(h2),
+    .policy-configure-heading :global(h2) {
+      font-size: 21px;
+    }
+    :global(.policy-template-grid):where(.policy-template-grid) :global(button) {
+      min-height: 118px;
+      display: grid;
+      grid-template-columns: 42px minmax(0, 1fr) auto;
+      grid-template-rows: auto auto;
+      align-items: start;
+      column-gap: 13px;
+      row-gap: 10px;
+      padding: 15px;
+    }
+    :global(.policy-kind-icon):where(.policy-kind-icon) {
+      grid-row: 1 / 3;
+    }
+    :global(.policy-kind-copy):where(.policy-kind-copy) {
+      grid-column: 2 / 4;
+      grid-row: 1;
+      padding-right: 18px;
+    }
+    :global(.policy-kind-meta):where(.policy-kind-meta) {
+      grid-column: 2;
+      grid-row: 2;
+      margin: 0;
+    }
+    :global(.policy-kind-check):where(.policy-kind-check) {
+      position: static;
+      grid-column: 3;
+      grid-row: 2;
+      width: 23px;
+      height: 23px;
+      justify-self: end;
+    }
+    :global(.policy-recipes):where(.policy-recipes) {
+      grid-template-columns: 1fr;
+    }
+    :global(.policy-recipes):where(.policy-recipes) :global(button) {
+      min-height: 92px;
+      flex-direction: row;
+      align-items: center;
+    }
+    :global(.policy-recipes):where(.policy-recipes) :global(em) {
+      margin-left: auto;
+    }
+    :global(.recovery-delay-options):where(.recovery-delay-options) {
+      gap: 10px;
+      margin: 22px 0 18px;
+    }
+    :global(.recovery-delay-title):where(.recovery-delay-title) {
+      margin-bottom: 4px;
+    }
+    :global(.recovery-delay-options):where(.recovery-delay-options) :global(button) {
+      min-height: 86px;
+      padding: 15px 16px;
+    }
+    :global(.path-visual):where(.path-visual) {
+      grid-template-columns: 1fr;
+    }
+    :global(.path-visual):where(.path-visual) :global(i) {
+      width: 2px;
+      height: 28px;
+      justify-self: center;
+      background: linear-gradient(180deg, var(--fr-blue), var(--fr-red));
+    }
+    :global(.path-visual):where(.path-visual) > :global(span) {
+      min-height: 92px;
+    }
+    :global(.cosigner-list):where(.cosigner-list) :global(.cosigner-trigger) {
+      grid-template-columns: 32px minmax(0, 1fr) auto;
+    }
+    :global(.cosigner-card):where(.cosigner-card) {
+      grid-template-columns: minmax(0, 1fr) 42px;
+    }
+    :global(.draft-cosigner-trigger):where(.draft-cosigner-trigger) {
+      grid-template-columns: 30px minmax(0, 1fr);
+      gap: 9px;
+      padding: 13px 7px 13px 9px;
+    }
+    :global(.cosigner-metadata):where(.cosigner-metadata) {
+      grid-template-columns: 1fr;
+    }
+    :global(.cosigner-public-key):where(.cosigner-public-key) {
+      grid-column: auto;
+    }
+    :global(.hardware-guide-tabs):where(.hardware-guide-tabs) {
+      grid-template-columns: 1fr 1fr;
+    }
+  }
+</style>

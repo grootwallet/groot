@@ -2,8 +2,8 @@
   import type { Snippet } from 'svelte';
 
   type Props = {
-    variant?: string;
-    size?: string;
+    variant?: 'default' | 'secondary' | 'ghost' | 'ghost-danger' | 'danger' | 'danger-outline';
+    size?: 'default' | 'small' | 'large' | 'sm';
     type?: 'button' | 'submit' | 'reset';
     href?: string;
     disabled?: boolean;
@@ -66,3 +66,19 @@
       >{:else}{@render children?.()}{/if}
   </button>
 {/if}
+
+<style>
+  /* Keep the original cascade weight while constraining these rules to this owner. */
+
+  :global(.button-loading-indicator):where(.button-loading-indicator) {
+    position: relative;
+    display: block;
+    flex: 0 0 16px;
+    width: 16px;
+    height: 16px;
+    border: 2px solid currentColor;
+    border-right-color: transparent;
+    border-radius: 50%;
+    animation: groot-spinner-rotation 1s linear infinite;
+  }
+</style>

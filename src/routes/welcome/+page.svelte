@@ -13,6 +13,8 @@
     KeyRound,
     Settings,
     ShieldCheck,
+    Smartphone,
+    RotateCcw,
     X
   } from '@lucide/svelte';
   import Button from '$lib/components/Button.svelte';
@@ -33,6 +35,7 @@
     MIN_SUPPLEMENTAL_COIN_FLIPS,
     MIN_SUPPLEMENTAL_DICE_ROLLS,
     walletService,
+    type RuntimePlatform,
     type SupplementalEntropyInput
   } from '$lib/wallet';
   import { beforeNavigate, goto } from '$app/navigation';
@@ -67,6 +70,7 @@
   let draggedWord = $state<RecoveryWord | null>(null);
   let supplementalSource = $state<'none' | 'coin' | 'dice'>('none');
   let supplementalOutcomes = $state('');
+  let runtimeIdentity = $state<RuntimePlatform | null>(null);
   let createdMasterFingerprint = $state('');
   let createdWalletDescriptor = $state('');
   let fingerprintCopied = $state(false);
@@ -93,6 +97,7 @@
   );
 
   onMount(async () => {
+    runtimeIdentity = await walletService.runtimePlatform();
     hasExistingWallet = await walletService.exists();
     if (hasExistingWallet && page.url.searchParams.get('add') !== '1') await goto('/unlock');
   });
@@ -297,7 +302,7 @@
   }
 </script>
 
-<div class="onboarding-overlay">
+<div class="onboarding-overlay" class:welcome-home={mode === 'home'}>
   <header class="onboarding-brand">
     <span class="onboarding-brand-lockup"><BrandLockup /></span><small
       >{networkName(defaultConfig.network).toUpperCase()}</small
@@ -309,7 +314,11 @@
         onclick={returnToWallet}><X size={17} /></button
       >{/if}
   </header>
-  <main class="onboarding-card" class:wallet-choice-card={mode === 'choose'}>
+  <main
+    class="onboarding-card"
+    class:home-card={mode === 'home'}
+    class:wallet-choice-card={mode === 'choose'}
+  >
     {#if mode === 'home'}
       <span class="hero-mark"><BrandMark size={34} /></span>
       <h1>
@@ -355,6 +364,48 @@
             /></span
           >
         </button>
+        {#if runtimeIdentity?.mobile && defaultConfig.network !== 'mainnet'}<a
+            class="wallet-type-card multisig"
+            href="/mobile/pair"
+          >
+            <span class="wallet-type-icon"><Smartphone size={20} /></span>
+            <span class="wallet-type-copy"
+              ><strong>{translate($locale, 'Connect desktop app')}</strong><small
+                >{translate($locale, 'Add this phone as one signer in a shared wallet.')}</small
+              ></span
+            >
+            <span class="wallet-type-footer"
+              ><span class="wallet-type-meta">{translate($locale, 'No account')}</span>
+              <ArrowRight class="wallet-type-arrow" size={17} /></span
+            >
+          </a>
+          <a class="wallet-type-card multisig" href="/mobile/recover">
+            <span class="wallet-type-icon"><RotateCcw size={20} /></span>
+            <span class="wallet-type-copy"
+              ><strong>{translate($locale, 'Restore phone signer')}</strong><small
+                >{translate(
+                  $locale,
+                  'Recover a shared wallet from desktop and its 24 words.'
+                )}</small
+              ></span
+            >
+            <span class="wallet-type-footer"
+              ><span class="wallet-type-meta">{translate($locale, 'Replacement phone')}</span>
+              <ArrowRight class="wallet-type-arrow" size={17} /></span
+            >
+          </a>
+          <a class="wallet-type-card hardware" href="/mobile/watch">
+            <span class="wallet-type-icon"><Eye size={20} /></span>
+            <span class="wallet-type-copy"
+              ><strong>{translate($locale, 'Watch desktop wallet')}</strong><small
+                >{translate($locale, 'Import a hardware wallet without its signing key.')}</small
+              ></span
+            >
+            <span class="wallet-type-footer"
+              ><span class="wallet-type-meta">{translate($locale, 'Watch-only')}</span>
+              <ArrowRight class="wallet-type-arrow" size={17} /></span
+            >
+          </a>{/if}
         <button
           class="wallet-type-card hardware"
           onclick={() => beginExternalWalletSetup('/hardware/new')}
@@ -578,7 +629,7 @@
             </p>
           </div>
           <Button variant="secondary" class="full" onclick={() => (revealed = true)}
-            ><Eye size={16} />{translate($locale, 'I’m private — reveal words')}</Button
+            ><Eye size={16} />{translate($locale, 'I’m private. Reveal words')}</Button
           >
         </div>
       {/if}
@@ -861,3 +912,739 @@
     {/if}
   </main>
 </div>
+
+<style>
+  /* Keep the original cascade weight while constraining these rules to this owner. */
+
+  :global(.credential-ack):where(.credential-ack) :global(input) {
+    width: 15px;
+    height: 15px;
+    margin: 1px 0 0;
+    accent-color: var(--accent);
+  }
+  :global(.credential-ack):where(.credential-ack) :global(p) {
+    min-width: 0;
+    margin: 0;
+  }
+  :global(.onboarding-brand):where(.onboarding-brand) {
+    height: 72px;
+    flex-shrink: 0;
+    padding: 0 28px;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    color: var(--text);
+    font-size: 14px;
+    font-weight: 600;
+  }
+  :global(.onboarding-brand-lockup):where(.onboarding-brand-lockup) {
+    width: 104px;
+    flex: 0 0 104px;
+    display: inline-flex;
+    line-height: 0;
+  }
+  :global(.onboarding-brand):where(.onboarding-brand) :global(small) {
+    margin-left: auto;
+    color: var(--muted-2);
+    font-size: var(--font-size-meta);
+    letter-spacing: 0.15em;
+  }
+  :global(.onboarding-settings):where(.onboarding-settings),
+  :global(.onboarding-exit):where(.onboarding-exit) {
+    width: 34px;
+    height: 34px;
+    margin-left: 7px;
+    display: grid;
+    place-items: center;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+    color: var(--muted);
+    background: var(--panel);
+    cursor: pointer;
+  }
+  :global(.onboarding-settings:hover):where(.onboarding-settings),
+  :global(.onboarding-exit:hover):where(.onboarding-exit) {
+    color: var(--text);
+    border-color: var(--border-strong);
+  }
+  :global(.onboarding-settings:focus-visible):where(.onboarding-settings),
+  :global(.onboarding-exit:focus-visible):where(.onboarding-exit) {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+  }
+  :global(.hero-mark):where(.hero-mark) {
+    width: 46px;
+    height: 46px;
+    background: var(--brand-tile);
+    color: var(--brand-mark);
+    border-radius: var(--radius-inset);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  :global(.onboarding-actions):where(.onboarding-actions) {
+    display: grid;
+    gap: 9px;
+  }
+  :global(.wallet-type-grid):where(.wallet-type-grid) {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px;
+  }
+  :global(.wallet-type-card):where(.wallet-type-card) {
+    position: relative;
+    min-width: 0;
+    min-height: 194px;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 17px;
+    color: var(--text);
+    background: var(--surface-control);
+    border: 1px solid var(--control-border);
+    border-radius: var(--radius-inset);
+    text-align: left;
+    text-decoration: none;
+    cursor: pointer;
+    overflow: hidden;
+    transition:
+      transform 0.15s ease,
+      border-color 0.15s ease,
+      background 0.15s ease,
+      box-shadow 0.15s ease;
+  }
+  :global(.wallet-type-card::before):where(.wallet-type-card) {
+    content: '';
+    position: absolute;
+    width: 92px;
+    height: 92px;
+    top: -48px;
+    right: -42px;
+    border-radius: 50%;
+    background: color-mix(in srgb, var(--wallet-type-accent, var(--fr-blue)) 12%, transparent);
+    transition:
+      opacity 0.18s ease,
+      transform 0.18s ease;
+  }
+  :global(.wallet-type-card:hover):where(.wallet-type-card) {
+    transform: translateY(-3px);
+    border-color: color-mix(
+      in srgb,
+      var(--wallet-type-accent, var(--fr-blue)) 70%,
+      var(--control-border)
+    );
+    background: var(--panel-2);
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.11);
+  }
+  :global(.wallet-type-card:hover::before):where(.wallet-type-card) {
+    opacity: 0.8;
+    transform: scale(1.14);
+  }
+  :global(.wallet-type-card:focus-visible):where(.wallet-type-card) {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+  }
+  :global(.wallet-type-card.software):where(.wallet-type-card) {
+    --wallet-type-accent: var(--accent);
+  }
+  :global(.wallet-type-card.hardware):where(.wallet-type-card) {
+    --wallet-type-accent: var(--fr-blue);
+  }
+  :global(.wallet-type-card.multisig):where(.wallet-type-card) {
+    --wallet-type-accent: var(--success);
+  }
+  :global(.wallet-type-icon):where(.wallet-type-icon) {
+    width: 38px;
+    height: 38px;
+    display: grid;
+    place-items: center;
+    color: var(--wallet-type-accent, var(--fr-blue));
+    background: color-mix(in srgb, var(--wallet-type-accent, var(--fr-blue)) 12%, transparent);
+    border-radius: var(--radius-control);
+    transition:
+      transform 0.18s ease,
+      background-color 0.18s ease;
+  }
+  :global(.wallet-type-card:hover):where(.wallet-type-card) :global(.wallet-type-icon) {
+    transform: translateY(-1px) scale(1.04);
+    background: color-mix(in srgb, var(--wallet-type-accent, var(--fr-blue)) 17%, transparent);
+  }
+  :global(.wallet-type-copy):where(.wallet-type-copy) {
+    min-width: 0;
+    display: grid;
+    gap: 8px;
+  }
+  :global(.wallet-type-copy):where(.wallet-type-copy) :global(strong) {
+    font-size: 13px;
+    line-height: 1.3;
+  }
+  :global(.wallet-type-copy):where(.wallet-type-copy) :global(small) {
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+    line-height: 1.45;
+  }
+  :global(.wallet-type-footer):where(.wallet-type-footer) {
+    margin-top: auto;
+    width: 100%;
+    min-width: 0;
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 10px;
+  }
+  :global(.wallet-type-meta):where(.wallet-type-meta) {
+    min-width: 0;
+    color: var(--muted-2);
+    font-size: var(--font-size-meta);
+    font-weight: 650;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  :global(.wallet-type-card:hover):where(.wallet-type-card) :global(.wallet-type-arrow) {
+    color: var(--wallet-type-accent, var(--fr-blue));
+    transform: translateX(3px);
+  }
+  :global(.trust-line):where(.trust-line) {
+    color: var(--muted-2);
+    font-size: var(--font-size-meta);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    margin-top: 25px;
+  }
+  :global(.back-link):where(.back-link) {
+    border: 0;
+    background: none;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0;
+    font-size: var(--font-size-meta);
+    cursor: pointer;
+  }
+  :global(.setup-points):where(.setup-points) {
+    display: grid;
+    gap: 17px;
+    margin-bottom: 27px;
+  }
+  :global(.setup-points):where(.setup-points) > :global(div) {
+    display: flex;
+    gap: 12px;
+    color: var(--muted);
+  }
+  :global(.setup-points):where(.setup-points) :global(span) {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+  :global(.setup-points):where(.setup-points) :global(strong) {
+    color: var(--text-soft);
+    font-size: var(--font-size-meta);
+  }
+  :global(.setup-points):where(.setup-points) :global(small) {
+    font-size: var(--font-size-meta);
+  }
+  :global(.supplemental-entropy):where(.supplemental-entropy) {
+    margin: 0 0 18px;
+    padding: 0 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+    background: var(--surface-control);
+  }
+  :global(.supplemental-entropy):where(.supplemental-entropy) :global(summary) {
+    padding: 13px 0;
+    color: var(--text-soft);
+    font-size: var(--font-size-meta);
+    font-weight: 650;
+    cursor: pointer;
+  }
+  :global(.supplemental-entropy):where(.supplemental-entropy) > :global(p) {
+    margin: 0 0 13px;
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+    line-height: 1.55;
+  }
+  :global(.entropy-source-options):where(.entropy-source-options) {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+    margin-bottom: 14px;
+  }
+  :global(.entropy-source-options):where(.entropy-source-options) :global(button),
+  :global(.entropy-result-buttons):where(.entropy-result-buttons) :global(button) {
+    min-height: 34px;
+    border: 1px solid var(--control-border);
+    border-radius: 6px;
+    color: var(--muted);
+    background: var(--panel);
+    font-size: var(--font-size-meta);
+    cursor: pointer;
+  }
+  :global(.entropy-source-options):where(.entropy-source-options) :global(button.active) {
+    color: var(--link);
+    border-color: var(--fr-blue);
+    background: var(--fr-blue-soft);
+  }
+  :global(.entropy-entry):where(.entropy-entry) {
+    display: grid;
+    gap: 10px;
+    padding: 12px 0 14px;
+    border-top: 1px solid var(--border);
+  }
+  :global(.entropy-progress):where(.entropy-progress) {
+    display: flex;
+    align-items: start;
+    justify-content: space-between;
+    gap: 12px;
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+    line-height: 1.45;
+  }
+  :global(.entropy-progress):where(.entropy-progress) :global(strong) {
+    flex: none;
+    color: var(--text-soft);
+    font-size: var(--font-size-meta);
+    font-variant-numeric: tabular-nums;
+  }
+  :global(.entropy-outcomes):where(.entropy-outcomes) {
+    min-height: 37px;
+    padding: 8px 10px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--panel-2);
+  }
+  :global(.entropy-outcomes):where(.entropy-outcomes) :global(code) {
+    overflow: hidden;
+    color: var(--text-soft);
+    font:
+      9px/1.3 'SFMono-Regular',
+      Consolas,
+      ui-monospace,
+      monospace;
+    letter-spacing: 0.08em;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  :global(.entropy-outcomes):where(.entropy-outcomes) :global(small) {
+    flex: none;
+    color: var(--muted-2);
+    font-size: 11px;
+  }
+  :global(.entropy-result-buttons):where(.entropy-result-buttons) {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 6px;
+  }
+  :global(.entropy-result-buttons.coin):where(.entropy-result-buttons) {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  :global(.entropy-result-buttons):where(.entropy-result-buttons)
+    :global(button:hover:not(:disabled)) {
+    color: var(--link);
+    border-color: var(--fr-blue);
+  }
+  :global(.entropy-result-buttons):where(.entropy-result-buttons) :global(button:disabled) {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+  :global(.entropy-edit-actions):where(.entropy-edit-actions) {
+    display: flex;
+    gap: 12px;
+  }
+  :global(.entropy-edit-actions):where(.entropy-edit-actions) :global(button) {
+    padding: 0;
+    border: 0;
+    color: var(--muted);
+    background: transparent;
+    font-size: var(--font-size-meta);
+    cursor: pointer;
+  }
+  :global(.entropy-edit-actions):where(.entropy-edit-actions) :global(button:disabled) {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+  :global(.supplemental-entropy):where(.supplemental-entropy) :global(.entropy-caution) {
+    margin: 0;
+    color: var(--muted-2);
+    font-size: var(--font-size-meta);
+    line-height: 1.5;
+  }
+  :global(.entropy-caution):where(.entropy-caution) :global(strong) {
+    color: var(--text-soft);
+  }
+  :global(.mnemonic-grid):where(.mnemonic-grid) {
+    display: grid;
+    grid-auto-flow: column;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-rows: repeat(8, auto);
+    gap: 7px;
+    margin-bottom: 12px;
+  }
+  :global(.mnemonic-grid):where(.mnemonic-grid) > :global(div) {
+    height: 39px;
+    color: var(--text);
+    background: var(--surface-control);
+    display: grid;
+    grid-template-columns: 25px minmax(0, 1fr);
+    align-items: center;
+    min-width: 0;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0 11px;
+  }
+  :global(.mnemonic-grid):where(.mnemonic-grid) :global(span) {
+    color: var(--muted-2);
+    font-family: 'SFMono-Regular', Consolas, ui-monospace, monospace;
+    font-size: var(--font-size-meta);
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+    text-align: right;
+    transform: translateY(1px);
+  }
+  :global(.mnemonic-grid):where(.mnemonic-grid) :global(strong) {
+    color: var(--text);
+    min-width: 0;
+    margin-left: 12px;
+    font-family: 'SFMono-Regular', Consolas, ui-monospace, monospace;
+    font-size: var(--font-size-meta);
+    font-weight: 500;
+    line-height: 1;
+    text-align: left;
+    transform: translateY(1px);
+  }
+  :global(.mnemonic-verification):where(.mnemonic-verification) {
+    display: grid;
+    gap: 16px;
+    margin: 20px 0 10px;
+  }
+  :global(.mnemonic-slots):where(.mnemonic-slots) {
+    display: grid;
+    grid-auto-flow: column;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-rows: repeat(8, 36px);
+    gap: 6px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  :global(.mnemonic-slots):where(.mnemonic-slots) :global(li) {
+    min-width: 0;
+    display: grid;
+    grid-template-columns: 22px minmax(0, 1fr);
+    align-items: center;
+    padding: 0 8px;
+    color: var(--muted-2);
+    background: var(--panel-2);
+    border: 1px dashed var(--border-strong);
+    border-radius: 6px;
+    font:
+      8px/1 'SFMono-Regular',
+      Consolas,
+      ui-monospace,
+      monospace;
+  }
+  :global(.mnemonic-slots):where(.mnemonic-slots) :global(li.filled) {
+    color: var(--text);
+    background: var(--fr-blue-soft);
+    border-style: solid;
+    border-color: color-mix(in srgb, var(--fr-blue) 50%, var(--border));
+  }
+  :global(.mnemonic-slots):where(.mnemonic-slots) :global(li > span) {
+    text-align: right;
+  }
+  :global(.mnemonic-slots):where(.mnemonic-slots) :global(li > small) {
+    margin-left: 8px;
+    color: var(--muted-2);
+    font-size: var(--font-size-meta);
+  }
+  :global(.mnemonic-slots):where(.mnemonic-slots) :global(li > button) {
+    min-width: 0;
+    overflow: hidden;
+    margin-left: 8px;
+    padding: 0;
+    border: 0;
+    color: inherit;
+    background: transparent;
+    font:
+      500 9px/1 'SFMono-Regular',
+      Consolas,
+      ui-monospace,
+      monospace;
+    text-align: left;
+    text-overflow: ellipsis;
+    cursor: grab;
+  }
+  :global(.mnemonic-pool):where(.mnemonic-pool) {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    min-height: 78px;
+    padding: 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+    background: var(--surface-control);
+  }
+  :global(.mnemonic-pool):where(.mnemonic-pool) :global(button) {
+    min-height: 28px;
+    padding: 0 10px;
+    border: 1px solid var(--control-border);
+    border-radius: 6px;
+    color: var(--text-soft);
+    background: var(--panel);
+    font:
+      500 9px/1 'SFMono-Regular',
+      Consolas,
+      ui-monospace,
+      monospace;
+    cursor: grab;
+  }
+  :global(.mnemonic-pool):where(.mnemonic-pool) :global(button:disabled) {
+    visibility: hidden;
+  }
+  :global(.verification-hint):where(.verification-hint) {
+    margin: 0 0 14px !important;
+    color: var(--muted-2) !important;
+    font-size: var(--font-size-meta) !important;
+  }
+  :global(.recovery-reveal-gate):where(.recovery-reveal-gate) {
+    display: grid;
+    grid-template-columns: 34px minmax(0, 1fr);
+    gap: 12px;
+    margin: 18px 0 14px;
+    padding: 18px;
+    background: var(--surface-control);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+  }
+  :global(.recovery-reveal-icon):where(.recovery-reveal-icon) {
+    width: 34px;
+    height: 34px;
+    display: grid;
+    place-items: center;
+    color: var(--fr-red);
+    background: color-mix(in srgb, var(--fr-red) 9%, transparent);
+    border-radius: var(--radius-control);
+  }
+  :global(.recovery-reveal-gate):where(.recovery-reveal-gate) :global(strong) {
+    display: block;
+    margin: 1px 0 4px;
+    color: var(--text);
+    font-size: var(--font-size-meta);
+  }
+  :global(.recovery-reveal-gate):where(.recovery-reveal-gate) :global(p) {
+    margin: 0 !important;
+    color: var(--muted) !important;
+    font-size: var(--font-size-meta) !important;
+    line-height: 1.5 !important;
+  }
+  :global(.recovery-reveal-gate):where(.recovery-reveal-gate) :global(.button) {
+    grid-column: 1 / -1;
+    margin-top: 4px;
+  }
+  :global(.reveal-button):where(.reveal-button) {
+    border: 0;
+    background: transparent;
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0 auto 21px;
+  }
+  :global(.credential-intro):where(.credential-intro) {
+    margin-bottom: 22px !important;
+  }
+  :global(.credential-form):where(.credential-form) {
+    display: grid;
+    gap: 15px;
+  }
+  :global(.credential-form):where(.credential-form) :global(.field) {
+    margin: 0;
+  }
+  :global(.software-credential-form):where(.software-credential-form)
+    > :global(.field:nth-child(2)) {
+    margin-top: 7px;
+  }
+  :global(.credential-form):where(.credential-form) :global(.field small) {
+    min-height: 14px;
+  }
+  :global(.wallet-created-confirmation):where(.wallet-created-confirmation) {
+    display: grid;
+    justify-items: center;
+    gap: 14px;
+    margin-top: 24px;
+    text-align: center;
+  }
+  :global(.wallet-created-confirmation):where(.wallet-created-confirmation) > :global(h1),
+  :global(.wallet-created-confirmation):where(.wallet-created-confirmation) > :global(p) {
+    margin: 0;
+  }
+  :global(.wallet-created-confirmation):where(.wallet-created-confirmation) > :global(h1) {
+    font-size: 24px;
+    line-height: 1.2;
+    letter-spacing: -0.03em;
+  }
+  :global(.wallet-created-confirmation):where(.wallet-created-confirmation) > :global(p) {
+    max-width: 390px;
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+    line-height: 1.5;
+  }
+  :global(.wallet-created-icon):where(.wallet-created-icon) {
+    display: grid;
+    width: 46px;
+    height: 46px;
+    place-items: center;
+    border-radius: var(--radius-inset);
+    background: color-mix(in srgb, var(--success) 10%, transparent);
+    color: var(--success);
+  }
+  :global(.master-fingerprint-result):where(.master-fingerprint-result) {
+    display: grid;
+    width: 100%;
+    gap: 8px;
+  }
+  :global(.master-fingerprint-label):where(.master-fingerprint-label) > :global(span),
+  :global(.fingerprint-check-note):where(.fingerprint-check-note) {
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+  }
+  :global(.master-fingerprint-label):where(.master-fingerprint-label) {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+  }
+  :global(.master-fingerprint-result):where(.master-fingerprint-result)
+    :global(.readable-address-block) {
+    width: 100%;
+  }
+  :global(.master-fingerprint-result):where(.master-fingerprint-result) :global(.readable-address) {
+    min-height: 58px;
+  }
+  :global(.master-fingerprint-result):where(.master-fingerprint-result)
+    :global(.readable-address-groups) {
+    gap: 12px;
+    font-size: 22px;
+    font-weight: 750;
+    letter-spacing: 0.08em;
+  }
+  :global(.fingerprint-check-note):where(.fingerprint-check-note) {
+    line-height: 1.5;
+  }
+  :global(.created-wallet-export):where(.created-wallet-export) {
+    width: 100%;
+    display: grid;
+    gap: 7px;
+  }
+  :global(.created-wallet-details):where(.created-wallet-details) {
+    width: 100%;
+    text-align: left;
+  }
+  :global(.created-wallet-details):where(.created-wallet-details) > :global(summary) {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    width: fit-content;
+    padding-block: 7px;
+  }
+  :global(.created-wallet-details):where(.created-wallet-details) > :global(summary::marker),
+  :global(.created-wallet-details):where(.created-wallet-details)
+    > :global(summary::-webkit-details-marker) {
+    display: none;
+    content: '';
+  }
+  :global(.created-wallet-details):where(.created-wallet-details) > :global(summary svg) {
+    transition: transform 0.15s ease;
+  }
+  :global(.created-wallet-details):where(.created-wallet-details) > :global(summary svg.rotated) {
+    transform: rotate(90deg);
+  }
+  :global(.created-wallet-details[open]):where(.created-wallet-details) > :global(summary) {
+    margin-bottom: 9px;
+  }
+  :global(.created-wallet-export):where(.created-wallet-export) > :global(p) {
+    margin: 0;
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+    line-height: 1.45;
+  }
+  :global(.created-wallet-export):where(.created-wallet-export) > :global(span) {
+    color: var(--muted-2);
+    font-size: var(--font-size-meta);
+    line-height: 1.45;
+  }
+  :global(.credential-form):where(.credential-form) :global(.field-error) {
+    color: var(--danger);
+  }
+
+  @media (max-width: 760px), (pointer: coarse) {
+    :global(.welcome-home) :global(.onboarding-brand-lockup) {
+      display: none;
+    }
+    :global(.onboarding-settings):where(.onboarding-settings),
+    :global(.onboarding-exit):where(.onboarding-exit) {
+      width: 44px;
+      height: 44px;
+    }
+  }
+
+  @media (max-width: 760px) {
+    :global(.onboarding-brand):where(.onboarding-brand) {
+      padding: 0 18px;
+    }
+    :global(.wallet-type-grid):where(.wallet-type-grid) {
+      grid-template-columns: 1fr;
+    }
+    :global(.wallet-type-card):where(.wallet-type-card) {
+      min-height: 108px;
+      display: grid;
+      grid-template-columns: 38px minmax(0, 1fr) auto;
+      grid-template-rows: auto auto;
+      align-items: start;
+      column-gap: 13px;
+      row-gap: 8px;
+      padding: 13px 14px;
+    }
+    :global(.wallet-type-icon):where(.wallet-type-icon) {
+      grid-row: 1 / 3;
+      margin-top: 2px;
+    }
+    :global(.wallet-type-copy):where(.wallet-type-copy) {
+      grid-column: 2 / 4;
+      grid-row: 1;
+      padding-right: 17px;
+    }
+    :global(.wallet-type-footer):where(.wallet-type-footer) {
+      grid-column: 2 / 4;
+      grid-row: 2;
+      margin: 0;
+    }
+    :global(.entropy-source-options):where(.entropy-source-options) {
+      grid-template-columns: 1fr;
+    }
+    :global(.entropy-source-options):where(.entropy-source-options) :global(button),
+    :global(.entropy-result-buttons):where(.entropy-result-buttons) :global(button) {
+      min-height: 44px;
+    }
+    :global(.entropy-progress):where(.entropy-progress),
+    :global(.entropy-outcomes):where(.entropy-outcomes) {
+      display: grid;
+    }
+    :global(.mnemonic-grid):where(.mnemonic-grid) {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-template-rows: repeat(12, auto);
+    }
+    :global(.mnemonic-slots):where(.mnemonic-slots) {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-template-rows: repeat(12, 36px);
+    }
+  }
+</style>

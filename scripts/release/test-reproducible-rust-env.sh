@@ -6,7 +6,11 @@ helper="$repo_root/scripts/release/reproducible-rust-env.sh"
 normalizer="$repo_root/scripts/release/normalize-macho-uuid.mjs"
 fixture_root="$(mktemp -d "${TMPDIR:-/tmp}/groot-rust-remap.XXXXXX")"
 fixture_root="$(cd "$fixture_root" && pwd -P)"
-trap 'rm -rf "$fixture_root"' EXIT
+fixture_alias_parent="$(mktemp -d "${TMPDIR:-/tmp}/groot-rust-remap-alias.XXXXXX")"
+fixture_alias_parent="$(cd "$fixture_alias_parent" && pwd -P)"
+fixture_root_logical="$fixture_alias_parent/fixture"
+ln -s "$fixture_root" "$fixture_root_logical"
+trap 'rm -rf "$fixture_alias_parent" "$fixture_root"' EXIT
 
 fail() {
   echo "Rust path-remapping test failed: $1" >&2
@@ -26,7 +30,7 @@ macho_uuid() {
 
 build_fixture() {
   local identity="$1"
-  local machine_root="$fixture_root/$identity/Users/$identity"
+  local machine_root="$fixture_root_logical/$identity/Users/$identity"
   local source_root="$machine_root/source"
   local cargo_home="$machine_root/cargo"
   local cargo_source="$cargo_home/registry/src/example.invalid-0000000000000000/remap-fixture-0.1.0"
@@ -93,6 +97,17 @@ if env CARGO_HOME="$fixture_root/invalid-cargo" CARGO_ENCODED_RUSTFLAGS= bash -c
   fail "an externally defined CARGO_ENCODED_RUSTFLAGS was accepted"
 fi
 
+strings_shim="$fixture_root/strings-shim"
+mkdir -p "$strings_shim"
+cat > "$strings_shim/strings" <<'EOF'
+#!/usr/bin/env bash
+exit 9
+EOF
+chmod +x "$strings_shim/strings"
+if PATH="$strings_shim:$PATH" assert_no_unremapped_paths "$helper" "/path/that/is/not/present" 2>/dev/null; then
+  fail "a strings tool failure was accepted as a clean executable scan"
+fi
+
 build_fixture alice
 build_fixture bob
 
@@ -129,6 +144,9 @@ for location in source cargo target; do
   for identity in alice bob; do
     if binary_contains "$fixture_root/output/$identity/$location/Groot" "$fixture_root"; then
       fail "the physical fixture root survived in the $location executable"
+    fi
+    if binary_contains "$fixture_root/output/$identity/$location/Groot" "$fixture_root_logical"; then
+      fail "the logical fixture root survived in the $location executable"
     fi
     if binary_contains "$fixture_root/output/$identity/$location/Groot" "/Users/$identity"; then
       fail "the host identity $identity survived in the $location executable"

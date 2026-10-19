@@ -50,6 +50,18 @@ pub(super) fn ensure_mainnet_core_ready_for_admission(
     }
 }
 
+fn ensure_sync_source_supported_on_platform(source: &WalletSyncSource) -> ApiResult<()> {
+    if cfg!(any(target_os = "ios", target_os = "android"))
+        && matches!(source, WalletSyncSource::CompactFilters { .. })
+    {
+        return Err(api_error(
+            "invalid_node_config",
+            "Compact-filter sync is experimental and unavailable on mobile. Configure Bitcoin Core instead.",
+        ));
+    }
+    Ok(())
+}
+
 pub(crate) fn profile_compatibility_for(
     profile: &WalletProfile,
     directory: &Path,
@@ -64,9 +76,20 @@ pub(crate) fn profile_compatibility_for(
 }
 
 #[tauri::command]
-pub fn wallet_exists(app: AppHandle) -> ApiResult<bool> {
-    let registry = load_registry(&app)?;
-    Ok(registered_wallets_exist(&registry))
+pub async fn wallet_exists(app: AppHandle) -> ApiResult<bool> {
+    // Pairing-storage reconciliation can delete or restore staging state. It
+    // must run under the same serialized operation lock as
+    // `coordination_mobile_complete`, never concurrently with an in-flight
+    // completion that is actively writing the same profile directory.
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let _operation = operation_guard(&state)?;
+        super::coordination_commands::reconcile_mobile_pairing_storage(&app)?;
+        let registry = load_registry(&app)?;
+        Ok(registered_wallets_exist(&registry))
+    })
+    .await
+    .map_err(internal)?
 }
 
 pub(crate) fn registered_wallets_exist(registry: &WalletRegistry) -> bool {
@@ -124,6 +147,10 @@ pub fn network_setup_sources(
             }
             let config = read_node_config_for(&app, profile.id).ok()?;
             let ready = unlocked.is_unlocked(profile.id)
+                && (!cfg!(any(target_os = "ios", target_os = "android"))
+                    || read_sync_source_for(&app, profile.id)
+                        .and_then(|source| ensure_sync_source_supported_on_platform(&source))
+                        .is_ok())
                 && match config.auth {
                     RpcAuthMode::Cookie => true,
                     RpcAuthMode::UserPass => node_auth
@@ -157,36 +184,49 @@ pub async fn wallet_rename(app: AppHandle, name: String) -> ApiResult<WalletProf
 }
 
 #[tauri::command]
-pub fn wallet_inactivity_timeout_save(
+pub async fn wallet_inactivity_timeout_save(
     app: AppHandle,
-    state: State<'_, AppState>,
     minutes: u16,
 ) -> ApiResult<WalletRegistry> {
-    let _operation = operation_guard(&state)?;
-    require_unlocked(&app, &state)?;
-    let mut registry = load_registry(&app)?;
-    registry.inactivity_timeout_minutes = minutes;
-    registry.validate().map_err(registry_api_error)?;
-    save_registry(&app, &registry)?;
+    let expected_wallet_id = load_registry(&app)?.selected_wallet_id;
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
 
-    let timeout = Duration::from_secs(u64::from(minutes) * 60);
-    let expired_wallets = state
-        .unlocked_wallets
-        .lock()
-        .map_err(internal)?
-        .prune_expired_at(Instant::now(), timeout);
-    if !expired_wallets.is_empty() {
-        let mut node_auth = state.node_auth.lock().map_err(internal)?;
-        let mut authenticated_descriptors = state
-            .authenticated_software_descriptors
-            .lock()
-            .map_err(internal)?;
-        for wallet_id in expired_wallets {
-            node_auth.remove(&wallet_id);
-            authenticated_descriptors.remove(&wallet_id);
+        let _operation = operation_guard(&state)?;
+        if load_registry(&app)?.selected_wallet_id != expected_wallet_id {
+            return Err(api_error(
+                "wallet_selection_changed",
+                "The selected wallet changed. Retry in the current wallet.",
+            ));
         }
-    }
-    Ok(registry)
+
+        require_unlocked(&app, &state)?;
+        let mut registry = load_registry(&app)?;
+        registry.inactivity_timeout_minutes = minutes;
+        registry.validate().map_err(registry_api_error)?;
+        save_registry(&app, &registry)?;
+
+        let timeout = Duration::from_secs(u64::from(minutes) * 60);
+        let expired_wallets = state
+            .unlocked_wallets
+            .lock()
+            .map_err(internal)?
+            .prune_expired_at(Instant::now(), timeout);
+        if !expired_wallets.is_empty() {
+            let mut node_auth = state.node_auth.lock().map_err(internal)?;
+            let mut authenticated_descriptors = state
+                .authenticated_software_descriptors
+                .lock()
+                .map_err(internal)?;
+            for wallet_id in expired_wallets {
+                node_auth.remove(&wallet_id);
+                authenticated_descriptors.remove(&wallet_id);
+            }
+        }
+        Ok(registry)
+    })
+    .await
+    .map_err(internal)?
 }
 
 #[tauri::command]
@@ -219,267 +259,315 @@ pub async fn wallet_select(app: AppHandle, wallet_id: String) -> ApiResult<Walle
 }
 
 #[tauri::command]
-pub fn wallet_generate_mnemonic(
+pub async fn wallet_generate_mnemonic(
     app: AppHandle,
-    state: State<'_, AppState>,
     supplemental_entropy: Option<SupplementalEntropyDto>,
 ) -> ApiResult<bool> {
-    let _operation = operation_guard(&state)?;
-    let supplemental_digest = supplemental_entropy
-        .map(supplemental_entropy_digest)
-        .transpose()?;
-    let mnemonic = generate_software_mnemonic(supplemental_digest.as_deref())?;
-    let words = Zeroizing::new(mnemonic.to_string());
-    let outcome = native_backup::present(&app, words.as_str()).map_err(internal)?;
-    if outcome.cancelled {
-        state.pending_mnemonic.lock().map_err(internal)?.take();
-        return Err(api_error(
-            "onboarding_cancelled",
-            "Recovery-word backup was cancelled.",
-        ));
-    }
-    let backup_verified = outcome.verified;
-    *state.pending_mnemonic.lock().map_err(internal)? = Some(PendingMnemonic {
-        words,
-        created_at: now(),
-        backup_verified,
-    });
-    Ok(backup_verified)
+    require_software_key_operation()?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+
+        let _operation = operation_guard(&state)?;
+        let supplemental_digest = supplemental_entropy
+            .map(supplemental_entropy_digest)
+            .transpose()?;
+        let mnemonic = generate_software_mnemonic(supplemental_digest.as_deref())?;
+        let words = Zeroizing::new(mnemonic.to_string());
+        let outcome = native_backup::present(&app, words.as_str()).map_err(internal)?;
+        if outcome.cancelled {
+            state.pending_mnemonic.lock().map_err(internal)?.take();
+            return Err(api_error(
+                "onboarding_cancelled",
+                "Recovery-word backup was cancelled.",
+            ));
+        }
+        let backup_verified = outcome.verified;
+        *state.pending_mnemonic.lock().map_err(internal)? = Some(PendingMnemonic {
+            words,
+            created_at: now(),
+            backup_verified,
+        });
+        Ok(backup_verified)
+    })
+    .await
+    .map_err(internal)?
 }
 
 #[tauri::command]
-pub fn wallet_cancel_onboarding(
-    state: State<'_, AppState>,
+pub async fn wallet_cancel_onboarding(
+    app: AppHandle,
     preserve_mainnet_admission: Option<bool>,
 ) -> ApiResult<()> {
-    let _operation = operation_guard(&state)?;
-    state.pending_mnemonic.lock().map_err(internal)?.take();
-    if preserve_mainnet_admission != Some(true) {
-        clear_mainnet_node_admission(&state)?;
-    }
-    Ok(())
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+
+        let _operation = operation_guard(&state)?;
+        state.pending_mnemonic.lock().map_err(internal)?.take();
+        if preserve_mainnet_admission != Some(true) {
+            clear_mainnet_node_admission(&state)?;
+        }
+        Ok(())
+    })
+    .await
+    .map_err(internal)?
 }
 
 #[tauri::command]
-pub fn wallet_create(
+pub async fn wallet_create(
     app: AppHandle,
-    state: State<'_, AppState>,
     name: String,
     credential: String,
     network_setup_source_wallet_id: Option<String>,
 ) -> ApiResult<SoftwareWalletCreation> {
     let credential = Zeroizing::new(credential);
-    let _operation = operation_guard(&state)?;
-    let _admission_cleanup = clear_new_wallet_admission_on_exit(&state);
-    validate_new_wallet_passphrase(credential.as_str())?;
-    let pending = state
-        .pending_mnemonic
-        .lock()
-        .map_err(internal)?
-        .take()
-        .ok_or_else(|| {
-            api_error(
+    require_software_key_operation()?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+
+        let _operation = operation_guard(&state)?;
+        let _admission_cleanup = clear_new_wallet_admission_on_exit(&state);
+        validate_new_wallet_passphrase(credential.as_str())?;
+        let pending = state
+            .pending_mnemonic
+            .lock()
+            .map_err(internal)?
+            .take()
+            .ok_or_else(|| {
+                api_error(
+                    "onboarding_expired",
+                    "Generate and confirm a new recovery-word backup first.",
+                )
+            })?;
+        if !onboarding_session_is_fresh(pending.created_at, now()) {
+            return Err(api_error(
                 "onboarding_expired",
-                "Generate and confirm a new recovery-word backup first.",
-            )
-        })?;
-    if !onboarding_session_is_fresh(pending.created_at, now()) {
-        return Err(api_error(
-            "onboarding_expired",
-            "Recovery-word confirmation expired. Generate a new wallet again.",
-        ));
-    }
-    let mnemonic = Mnemonic::parse(pending.words.as_str()).map_err(internal)?;
-    let master_fingerprint = software_wallet_master_fingerprint(&mnemonic, credential.as_str())?;
-    let authenticated_descriptors = software_wallet_descriptors(&mnemonic, credential.as_str())?;
-    let network_setup_copied = match create_from_mnemonic(
-        &app,
-        &state,
-        name,
-        mnemonic,
-        credential.as_str(),
-        pending.backup_verified,
-        network_setup_source_wallet_id.as_deref(),
-    ) {
-        Ok(network_setup_copied) => network_setup_copied,
-        Err(error) => {
-            *state.pending_mnemonic.lock().map_err(internal)? = Some(pending);
-            return Err(error);
+                "Recovery-word confirmation expired. Generate a new wallet again.",
+            ));
         }
-    };
-    let selected = selected_profile_of_kind(&app, WalletKind::SingleKey)?.id;
-    state
-        .authenticated_software_descriptors
-        .lock()
-        .map_err(internal)?
-        .insert(selected, authenticated_descriptors.clone());
-    unlock_selected(&app, &state)?;
-    diagnostics::record(
-        &app,
-        &state,
-        diagnostics::DiagnosticEventKind::WalletCreated,
-        diagnostics::DiagnosticOutcome::Succeeded,
-        diagnostics::DiagnosticContext {
-            wallet_kind: Some(diagnostics::DiagnosticWalletKind::Software),
-            ..Default::default()
-        },
-        None,
-    );
-    Ok(SoftwareWalletCreation {
-        master_fingerprint,
-        external_descriptor: authenticated_descriptors.0,
-        internal_descriptor: authenticated_descriptors.1,
-        network_setup_copied,
+        let mnemonic = Mnemonic::parse(pending.words.as_str()).map_err(internal)?;
+        let master_fingerprint =
+            software_wallet_master_fingerprint(&mnemonic, credential.as_str())?;
+        let authenticated_descriptors =
+            software_wallet_descriptors(&mnemonic, credential.as_str())?;
+        let network_setup_copied = match create_from_mnemonic(
+            &app,
+            &state,
+            name,
+            mnemonic,
+            credential.as_str(),
+            pending.backup_verified,
+            network_setup_source_wallet_id.as_deref(),
+        ) {
+            Ok(network_setup_copied) => network_setup_copied,
+            Err(error) => {
+                *state.pending_mnemonic.lock().map_err(internal)? = Some(pending);
+                return Err(error);
+            }
+        };
+        let selected = selected_profile_of_kind(&app, WalletKind::SingleKey)?.id;
+        state
+            .authenticated_software_descriptors
+            .lock()
+            .map_err(internal)?
+            .insert(selected, authenticated_descriptors.clone());
+        unlock_selected(&app, &state)?;
+        diagnostics::record(
+            &app,
+            &state,
+            diagnostics::DiagnosticEventKind::WalletCreated,
+            diagnostics::DiagnosticOutcome::Succeeded,
+            diagnostics::DiagnosticContext {
+                wallet_kind: Some(diagnostics::DiagnosticWalletKind::Software),
+                ..Default::default()
+            },
+            None,
+        );
+        Ok(SoftwareWalletCreation {
+            master_fingerprint,
+            external_descriptor: authenticated_descriptors.0,
+            internal_descriptor: authenticated_descriptors.1,
+            network_setup_copied,
+        })
     })
+    .await
+    .map_err(internal)?
 }
 
 #[tauri::command]
-pub fn wallet_recover(
-    app: AppHandle,
-    state: State<'_, AppState>,
-    name: String,
-    credential: String,
-) -> ApiResult<()> {
+pub async fn wallet_recover(app: AppHandle, name: String, credential: String) -> ApiResult<()> {
     let credential = Zeroizing::new(credential);
-    let _operation = operation_guard(&state)?;
-    let _admission_cleanup = clear_new_wallet_admission_on_exit(&state);
-    validate_wallet_passphrase(credential.as_str())?;
-    let mnemonic_words = native_backup::recover(&app)
-        .map_err(internal)?
-        .ok_or_else(|| api_error("onboarding_cancelled", "Wallet recovery was cancelled."))?;
-    if mnemonic_words.len() > MAX_MNEMONIC_INPUT_BYTES {
-        return Err(api_error(
-            "invalid_mnemonic",
-            "Enter a valid 24-word recovery phrase.",
-        ));
-    }
-    let mnemonic = Mnemonic::parse(mnemonic_words.trim())
-        .map_err(|_| api_error("invalid_mnemonic", "Enter a valid 24-word recovery phrase."))?;
-    if mnemonic.word_count() != 24 {
-        return Err(api_error(
-            "invalid_mnemonic",
-            "Groot requires exactly 24 recovery words.",
-        ));
-    }
-    let authenticated_descriptors = software_wallet_descriptors(&mnemonic, credential.as_str())?;
-    create_from_mnemonic(
-        &app,
-        &state,
-        name,
-        mnemonic,
-        credential.as_str(),
-        true,
-        None,
-    )?;
-    let selected = selected_profile_of_kind(&app, WalletKind::SingleKey)?.id;
-    state
-        .authenticated_software_descriptors
-        .lock()
-        .map_err(internal)?
-        .insert(selected, authenticated_descriptors);
-    unlock_selected(&app, &state)?;
-    diagnostics::record(
-        &app,
-        &state,
-        diagnostics::DiagnosticEventKind::WalletRecovered,
-        diagnostics::DiagnosticOutcome::Succeeded,
-        diagnostics::DiagnosticContext {
-            trigger: diagnostics::DiagnosticTrigger::Recovery,
-            wallet_kind: Some(diagnostics::DiagnosticWalletKind::Software),
-            ..Default::default()
-        },
-        None,
-    );
-    Ok(())
+    require_software_key_operation()?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+
+        let _operation = operation_guard(&state)?;
+        let _admission_cleanup = clear_new_wallet_admission_on_exit(&state);
+        validate_wallet_passphrase(credential.as_str())?;
+        let mnemonic_words = native_backup::recover(&app)
+            .map_err(internal)?
+            .ok_or_else(|| api_error("onboarding_cancelled", "Wallet recovery was cancelled."))?;
+        if mnemonic_words.len() > MAX_MNEMONIC_INPUT_BYTES {
+            return Err(api_error(
+                "invalid_mnemonic",
+                "Enter a valid 24-word recovery phrase.",
+            ));
+        }
+        let mnemonic = Mnemonic::parse(mnemonic_words.trim())
+            .map_err(|_| api_error("invalid_mnemonic", "Enter a valid 24-word recovery phrase."))?;
+        if mnemonic.word_count() != 24 {
+            return Err(api_error(
+                "invalid_mnemonic",
+                "Groot requires exactly 24 recovery words.",
+            ));
+        }
+        let authenticated_descriptors =
+            software_wallet_descriptors(&mnemonic, credential.as_str())?;
+        create_from_mnemonic(
+            &app,
+            &state,
+            name,
+            mnemonic,
+            credential.as_str(),
+            true,
+            None,
+        )?;
+        let selected = selected_profile_of_kind(&app, WalletKind::SingleKey)?.id;
+        state
+            .authenticated_software_descriptors
+            .lock()
+            .map_err(internal)?
+            .insert(selected, authenticated_descriptors);
+        unlock_selected(&app, &state)?;
+        diagnostics::record(
+            &app,
+            &state,
+            diagnostics::DiagnosticEventKind::WalletRecovered,
+            diagnostics::DiagnosticOutcome::Succeeded,
+            diagnostics::DiagnosticContext {
+                trigger: diagnostics::DiagnosticTrigger::Recovery,
+                wallet_kind: Some(diagnostics::DiagnosticWalletKind::Software),
+                ..Default::default()
+            },
+            None,
+        );
+        Ok(())
+    })
+    .await
+    .map_err(internal)?
 }
 
 #[tauri::command]
-pub fn wallet_verify_backup(
+pub async fn wallet_verify_backup(app: AppHandle, credential: String) -> ApiResult<bool> {
+    let credential = Zeroizing::new(credential);
+    require_software_key_operation()?;
+    let expected_wallet_id = selected_profile(&app)?.id;
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+
+        let _operation = operation_guard(&state)?;
+        if selected_profile(&app)?.id != expected_wallet_id {
+            return Err(api_error(
+                "wallet_selection_changed",
+                "The selected wallet changed. Retry in the current wallet.",
+            ));
+        }
+
+        require_unlocked(&app, &state)?;
+        let profile = selected_profile_of_kind(&app, WalletKind::SingleKey)?;
+        if profile.backup_verified {
+            return Ok(true);
+        }
+        check_auth_throttle(&app, &state)?;
+        let credential_result = decrypt_mnemonic(&app, credential.as_str());
+        record_auth_result(&app, &state, &credential_result)?;
+        let mnemonic = credential_result?;
+        let words = Zeroizing::new(mnemonic.to_string());
+        if !native_backup::verify(&app, words.as_str()).map_err(internal)? {
+            return Ok(false);
+        }
+
+        let mut registry = load_registry(&app)?;
+        let selected = registry
+            .wallets
+            .iter_mut()
+            .find(|wallet| wallet.id == profile.id)
+            .ok_or_else(|| registry_api_error(RegistryError::UnknownSelection))?;
+        selected.backup_verified = true;
+        save_registry(&app, &registry)?;
+        diagnostics::record(
+            &app,
+            &state,
+            diagnostics::DiagnosticEventKind::BackupVerified,
+            diagnostics::DiagnosticOutcome::Succeeded,
+            diagnostics::DiagnosticContext {
+                wallet_kind: Some(diagnostics::DiagnosticWalletKind::Software),
+                ..Default::default()
+            },
+            None,
+        );
+        Ok(true)
+    })
+    .await
+    .map_err(internal)?
+}
+
+#[tauri::command]
+pub async fn wallet_reveal_and_verify_backup(
     app: AppHandle,
-    state: State<'_, AppState>,
     credential: String,
 ) -> ApiResult<bool> {
     let credential = Zeroizing::new(credential);
-    let _operation = operation_guard(&state)?;
-    require_unlocked(&app, &state)?;
-    let profile = selected_profile_of_kind(&app, WalletKind::SingleKey)?;
-    if profile.backup_verified {
-        return Ok(true);
-    }
-    check_auth_throttle(&app, &state)?;
-    let credential_result = decrypt_mnemonic(&app, credential.as_str());
-    record_auth_result(&app, &state, &credential_result)?;
-    let mnemonic = credential_result?;
-    let words = Zeroizing::new(mnemonic.to_string());
-    if !native_backup::verify(&app, words.as_str()).map_err(internal)? {
-        return Ok(false);
-    }
+    require_software_key_operation()?;
+    let expected_wallet_id = selected_profile(&app)?.id;
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
 
-    let mut registry = load_registry(&app)?;
-    let selected = registry
-        .wallets
-        .iter_mut()
-        .find(|wallet| wallet.id == profile.id)
-        .ok_or_else(|| registry_api_error(RegistryError::UnknownSelection))?;
-    selected.backup_verified = true;
-    save_registry(&app, &registry)?;
-    diagnostics::record(
-        &app,
-        &state,
-        diagnostics::DiagnosticEventKind::BackupVerified,
-        diagnostics::DiagnosticOutcome::Succeeded,
-        diagnostics::DiagnosticContext {
-            wallet_kind: Some(diagnostics::DiagnosticWalletKind::Software),
-            ..Default::default()
-        },
-        None,
-    );
-    Ok(true)
-}
+        let _operation = operation_guard(&state)?;
+        if selected_profile(&app)?.id != expected_wallet_id {
+            return Err(api_error(
+                "wallet_selection_changed",
+                "The selected wallet changed. Retry in the current wallet.",
+            ));
+        }
 
-#[tauri::command]
-pub fn wallet_reveal_and_verify_backup(
-    app: AppHandle,
-    state: State<'_, AppState>,
-    credential: String,
-) -> ApiResult<bool> {
-    let credential = Zeroizing::new(credential);
-    let _operation = operation_guard(&state)?;
-    require_unlocked(&app, &state)?;
-    let profile = selected_profile_of_kind(&app, WalletKind::SingleKey)?;
-    if profile.backup_verified {
-        return Ok(true);
-    }
-    check_auth_throttle(&app, &state)?;
-    let credential_result = decrypt_mnemonic(&app, credential.as_str());
-    record_auth_result(&app, &state, &credential_result)?;
-    let mnemonic = credential_result?;
-    let words = Zeroizing::new(mnemonic.to_string());
-    let outcome = native_backup::present(&app, words.as_str()).map_err(internal)?;
-    if outcome.cancelled || !outcome.verified {
-        return Ok(false);
-    }
+        require_unlocked(&app, &state)?;
+        let profile = selected_profile_of_kind(&app, WalletKind::SingleKey)?;
+        if profile.backup_verified {
+            return Ok(true);
+        }
+        check_auth_throttle(&app, &state)?;
+        let credential_result = decrypt_mnemonic(&app, credential.as_str());
+        record_auth_result(&app, &state, &credential_result)?;
+        let mnemonic = credential_result?;
+        let words = Zeroizing::new(mnemonic.to_string());
+        let outcome = native_backup::present(&app, words.as_str()).map_err(internal)?;
+        if outcome.cancelled || !outcome.verified {
+            return Ok(false);
+        }
 
-    let mut registry = load_registry(&app)?;
-    let selected = registry
-        .wallets
-        .iter_mut()
-        .find(|wallet| wallet.id == profile.id)
-        .ok_or_else(|| registry_api_error(RegistryError::UnknownSelection))?;
-    selected.backup_verified = true;
-    save_registry(&app, &registry)?;
-    diagnostics::record(
-        &app,
-        &state,
-        diagnostics::DiagnosticEventKind::BackupVerified,
-        diagnostics::DiagnosticOutcome::Succeeded,
-        diagnostics::DiagnosticContext {
-            wallet_kind: Some(diagnostics::DiagnosticWalletKind::Software),
-            ..Default::default()
-        },
-        None,
-    );
-    Ok(true)
+        let mut registry = load_registry(&app)?;
+        let selected = registry
+            .wallets
+            .iter_mut()
+            .find(|wallet| wallet.id == profile.id)
+            .ok_or_else(|| registry_api_error(RegistryError::UnknownSelection))?;
+        selected.backup_verified = true;
+        save_registry(&app, &registry)?;
+        diagnostics::record(
+            &app,
+            &state,
+            diagnostics::DiagnosticEventKind::BackupVerified,
+            diagnostics::DiagnosticOutcome::Succeeded,
+            diagnostics::DiagnosticContext {
+                wallet_kind: Some(diagnostics::DiagnosticWalletKind::Software),
+                ..Default::default()
+            },
+            None,
+        );
+        Ok(true)
+    })
+    .await
+    .map_err(internal)?
 }
 
 #[tauri::command]
@@ -555,6 +643,42 @@ pub async fn wallet_lock(app: AppHandle) -> ApiResult<()> {
             },
             None,
         );
+        Ok(())
+    })
+    .await
+    .map_err(internal)?
+}
+
+#[tauri::command]
+pub async fn wallet_lock_all(app: AppHandle) -> ApiResult<()> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        cancel_foreground_sync(&state)?;
+        let _operation = operation_guard(&state)?;
+        state.proposals.lock().map_err(internal)?.clear();
+        state.unlocked_wallets.lock().map_err(internal)?.lock_all();
+        *state.pending_mnemonic.lock().map_err(internal)? = None;
+        state.verified_recovery.lock().map_err(internal)?.clear();
+        state
+            .pending_hardware_pins
+            .lock()
+            .map_err(internal)?
+            .clear();
+        *state.recent_hardware_scan.lock().map_err(internal)? = None;
+        state.node_auth.lock().map_err(internal)?.clear();
+        state
+            .authenticated_software_descriptors
+            .lock()
+            .map_err(internal)?
+            .clear();
+        state.saved_files.lock().map_err(internal)?.clear();
+        #[cfg(target_os = "macos")]
+        state.pending_pdf_exports.lock().map_err(internal)?.clear();
+        state
+            .pending_policy_verifications
+            .lock()
+            .map_err(internal)?
+            .clear();
         Ok(())
     })
     .await
@@ -726,10 +850,15 @@ pub(crate) fn validate_notification_acknowledgements(ids: &[String]) -> ApiResul
 
 #[tauri::command]
 pub async fn address_create(app: AppHandle, labels: Vec<String>) -> ApiResult<ReceiveAddressDto> {
+    let expected_wallet_id = load_registry(&app)?.selected_wallet_id;
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<AppState>();
         let _operation = operation_guard(&state)?;
+        if load_registry(&app)?.selected_wallet_id != expected_wallet_id {
+            return Err(api_error("wallet_selection_changed", "The selected wallet changed. Retry in the current wallet."));
+        }
         let wallet_id = require_unlocked(&app, &state)?;
+        coordination_commands::require_receive_authority(&app, &selected_profile(&app)?.kind)?;
         let labels = normalize_labels(labels)?;
         let label = labels[0].clone();
         let mut db = open_db(&app)?;
@@ -791,8 +920,19 @@ pub async fn address_create(app: AppHandle, labels: Vec<String>) -> ApiResult<Re
 }
 
 #[tauri::command]
-pub fn address_discard(app: AppHandle, state: State<'_, AppState>, id: u32) -> ApiResult<()> {
+pub async fn address_discard(app: AppHandle, id: u32) -> ApiResult<()> {
+    let expected_wallet_id = load_registry(&app)?.selected_wallet_id;
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+
     let _operation = operation_guard(&state)?;
+        if load_registry(&app)?.selected_wallet_id != expected_wallet_id {
+            return Err(api_error(
+                "wallet_selection_changed",
+                "The selected wallet changed. Retry in the current wallet.",
+            ));
+        }
+
     require_unlocked(&app, &state)?;
     let db = open_db(&app)?;
     let changed = db
@@ -819,6 +959,9 @@ pub fn address_discard(app: AppHandle, state: State<'_, AppState>, id: u32) -> A
         None,
     );
     Ok(())
+    })
+    .await
+    .map_err(internal)?
 }
 
 #[tauri::command]
@@ -988,44 +1131,62 @@ pub(crate) fn current_mempool_fee_rate(
 }
 
 #[tauri::command]
-pub fn fees_estimate(app: AppHandle, state: State<'_, AppState>) -> ApiResult<FeeEstimatesDto> {
-    if is_regtest() {
+pub async fn fees_estimate(app: AppHandle) -> ApiResult<FeeEstimatesDto> {
+    let expected_wallet_id = if is_regtest() {
+        None
+    } else {
+        Some(selected_profile(&app)?.id)
+    };
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let _operation = operation_guard(&state)?;
+        if expected_wallet_id.is_some() && Some(selected_profile(&app)?.id) != expected_wallet_id {
+            return Err(api_error(
+                "wallet_selection_changed",
+                "The selected wallet changed. Retry in the current wallet.",
+            ));
+        }
+
+        if is_regtest() {
+            let estimates = FeeEstimatesDto {
+                economy: 1.0,
+                standard: 2.0,
+                priority: 5.0,
+                source: "Regtest policy",
+            };
+            update_public_network_status(&app, Some(estimates.priority), None)?;
+            return Ok(estimates);
+        }
+        require_unlocked(&app, &state)?;
+        let client = rpc_client(&app, &state)?;
+        checked_chain_identity(&client)?;
+        let historical = ordered_fee_estimates(
+            estimate_core_fee(&client, 144, EstimateMode::Economical)?,
+            estimate_core_fee(&client, 6, EstimateMode::Economical)?,
+            estimate_core_fee(&client, 2, EstimateMode::Economical)?,
+        );
+        let current_mempool_rate = client.get_raw_mempool_verbose().ok().and_then(|entries| {
+            current_mempool_fee_rate(
+                entries
+                    .into_values()
+                    .map(|entry| (entry.vsize, entry.fees.modified.to_sat())),
+                historical.0,
+            )
+        });
+        let (economy, standard, priority) = current_mempool_rate
+            .map(|rate| (rate, rate, rate))
+            .unwrap_or(historical);
         let estimates = FeeEstimatesDto {
-            economy: 1.0,
-            standard: 2.0,
-            priority: 5.0,
-            source: "Regtest policy",
+            economy,
+            standard,
+            priority,
+            source: "Bitcoin Core",
         };
         update_public_network_status(&app, Some(estimates.priority), None)?;
-        return Ok(estimates);
-    }
-    require_unlocked(&app, &state)?;
-    let client = rpc_client(&app, &state)?;
-    checked_chain_identity(&client)?;
-    let historical = ordered_fee_estimates(
-        estimate_core_fee(&client, 144, EstimateMode::Economical)?,
-        estimate_core_fee(&client, 6, EstimateMode::Economical)?,
-        estimate_core_fee(&client, 2, EstimateMode::Economical)?,
-    );
-    let current_mempool_rate = client.get_raw_mempool_verbose().ok().and_then(|entries| {
-        current_mempool_fee_rate(
-            entries
-                .into_values()
-                .map(|entry| (entry.vsize, entry.fees.modified.to_sat())),
-            historical.0,
-        )
-    });
-    let (economy, standard, priority) = current_mempool_rate
-        .map(|rate| (rate, rate, rate))
-        .unwrap_or(historical);
-    let estimates = FeeEstimatesDto {
-        economy,
-        standard,
-        priority,
-        source: "Bitcoin Core",
-    };
-    update_public_network_status(&app, Some(estimates.priority), None)?;
-    Ok(estimates)
+        Ok(estimates)
+    })
+    .await
+    .map_err(internal)?
 }
 
 #[tauri::command]
@@ -1286,35 +1447,49 @@ pub fn wallet_sync_source(app: AppHandle) -> ApiResult<WalletSyncSource> {
 }
 
 #[tauri::command]
-pub fn wallet_sync_source_save(
+pub async fn wallet_sync_source_save(
     app: AppHandle,
-    state: State<'_, AppState>,
     source: WalletSyncSource,
     credential: String,
 ) -> ApiResult<WalletSyncSource> {
     let credential = Zeroizing::new(credential);
-    let _operation = operation_guard(&state)?;
-    require_unlocked(&app, &state)?;
-    source
-        .validate(network())
-        .map_err(network_config_api_error)?;
-    check_auth_throttle(&app, &state)?;
-    let verified = verify_selected_credential(&app, credential.as_str());
-    record_auth_result(&app, &state, &verified)?;
-    verified?;
-    write_private_json(&sync_source_path(&app)?, &source)?;
-    diagnostics::record(
-        &app,
-        &state,
-        diagnostics::DiagnosticEventKind::NetworkConfigurationChanged,
-        diagnostics::DiagnosticOutcome::Succeeded,
-        diagnostics::DiagnosticContext {
-            sync_source: Some(diagnostics::sync_source(&source)),
-            ..Default::default()
-        },
-        None,
-    );
-    Ok(source)
+    let expected_wallet_id = load_registry(&app)?.selected_wallet_id;
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+
+        let _operation = operation_guard(&state)?;
+        if load_registry(&app)?.selected_wallet_id != expected_wallet_id {
+            return Err(api_error(
+                "wallet_selection_changed",
+                "The selected wallet changed. Retry in the current wallet.",
+            ));
+        }
+
+        require_unlocked(&app, &state)?;
+        ensure_sync_source_supported_on_platform(&source)?;
+        source
+            .validate(network())
+            .map_err(network_config_api_error)?;
+        check_auth_throttle(&app, &state)?;
+        let verified = verify_selected_credential(&app, credential.as_str());
+        record_auth_result(&app, &state, &verified)?;
+        verified?;
+        write_private_json(&sync_source_path(&app)?, &source)?;
+        diagnostics::record(
+            &app,
+            &state,
+            diagnostics::DiagnosticEventKind::NetworkConfigurationChanged,
+            diagnostics::DiagnosticOutcome::Succeeded,
+            diagnostics::DiagnosticContext {
+                sync_source: Some(diagnostics::sync_source(&source)),
+                ..Default::default()
+            },
+            None,
+        );
+        Ok(source)
+    })
+    .await
+    .map_err(internal)?
 }
 
 #[tauri::command]
@@ -1640,14 +1815,18 @@ pub async fn wallet_full_rescan(
             } else {
                 remember_core_mempool_snapshot(&state, profile.id, Some(mempool_snapshot));
             }
+            let persisted = db.transaction().map_err(internal)?;
+            let reconciled = reconcile_broadcast_proposals(&wallet, &persisted)?;
             let snapshot = snapshot_from(
                 &wallet,
-                &db,
+                &persisted,
                 Some(now().to_string()),
                 is_multisig,
                 delayed_policy.as_ref(),
             )?;
-            enqueue_snapshot_notifications(&db, &snapshot)?;
+            enqueue_snapshot_notifications(&persisted, &snapshot)?;
+            enqueue_reconciled_broadcasts(&persisted, &reconciled, snapshot.balance.total)?;
+            persisted.commit().map_err(internal)?;
             Ok(snapshot)
         })();
         let finish_result = load_recovery_scan_record(&db).and_then(|record| {
@@ -1698,6 +1877,16 @@ pub async fn node_config_save(
         cancel_foreground_sync(&state)?;
         let _operation = operation_guard(&state)?;
         require_unlocked(&app, &state)?;
+        #[cfg(mobile)]
+        if matches!(
+            config.backend,
+            crate::network::ChainBackend::LocalCore { .. }
+        ) {
+            return Err(api_error(
+                "invalid_node_config",
+                "A mobile device must connect to a remote Bitcoin Core node over TLS or Tor.",
+            ));
+        }
         config.validate().map_err(network_config_api_error)?;
         check_auth_throttle(&app, &state)?;
         let verified = verify_selected_credential(&app, credential.as_str());
@@ -1817,6 +2006,7 @@ pub async fn network_setup_adopt(
 
         let config = read_node_config_for(&app, source)?;
         let sync_source = read_sync_source_for(&app, source)?;
+        ensure_sync_source_supported_on_platform(&sync_source)?;
         let client = match config.auth {
             RpcAuthMode::Cookie => candidate_rpc_client(&config, "")?,
             RpcAuthMode::UserPass => {
@@ -1921,6 +2111,7 @@ pub(super) fn adopt_network_setup_for_new_profile(
 
     let config = read_node_config_for(app, source)?;
     let sync_source = read_sync_source_for(app, source)?;
+    ensure_sync_source_supported_on_platform(&sync_source)?;
     let (password, status) = match config.auth {
         RpcAuthMode::Cookie => {
             let status = checked_node_status(&candidate_rpc_client(&config, "")?, config.clone())?;

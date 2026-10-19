@@ -1325,7 +1325,7 @@ fn confirmed_activity_prefers_first_observation_over_future_block_time() {
 fn coldcard_policy_acknowledgement_is_serialized_before_authorization() {
     let source = include_str!("../wallet.rs");
     let command = source
-        .split("pub fn multisig_acknowledge_coldcard_policy")
+        .split("pub async fn multisig_acknowledge_coldcard_policy")
         .nth(1)
         .unwrap()
         .split("fn snapshot_from")
@@ -1334,6 +1334,27 @@ fn coldcard_policy_acknowledgement_is_serialized_before_authorization() {
     let guard = command.find("operation_guard(&state)").unwrap();
     let authorization = command.find("require_unlocked(&app, &state)").unwrap();
     assert!(guard < authorization);
+}
+
+#[test]
+fn wallet_exists_reconciles_pairing_storage_only_under_the_operation_lock() {
+    // The startup poll must not race coordination_mobile_complete: an
+    // unguarded reconcile could delete a profile directory or restore a
+    // tombstone while completion is actively writing it.
+    let source = include_str!("profile_commands.rs");
+    let command = source
+        .split("pub async fn wallet_exists")
+        .nth(1)
+        .unwrap()
+        .split("pub(crate) fn registered_wallets_exist")
+        .next()
+        .unwrap();
+    let guard = command.find("operation_guard(&state)").unwrap();
+    let reconcile = command
+        .find("reconcile_mobile_pairing_storage(&app)")
+        .unwrap();
+    assert!(guard < reconcile);
+    assert!(command.find("spawn_blocking").unwrap() < guard);
 }
 
 #[test]
@@ -6613,4 +6634,211 @@ fn deletion_requires_keys_and_separate_software_passphrase_backups() {
         "backup_mismatch"
     );
     assert!(validate_wallet_deletion_backup(WalletKind::SingleKey, true, 1, true, true).is_ok());
+}
+
+#[test]
+fn mobile_key_operations_fail_closed_without_affecting_desktop() {
+    assert!(validate_key_operation_platform(false).is_ok());
+    let error = validate_key_operation_platform(true).unwrap_err();
+    assert_eq!(error.code, "mobile_operation_unavailable");
+    assert!(error.existing_wallet_id.is_none());
+    assert!(error.details.is_none());
+}
+
+#[test]
+fn software_mobile_capability_is_explicitly_ios_testnet4_only() {
+    for network in ["regtest", "signet", "testnet4", "mainnet", "multi"] {
+        assert!(validate_software_key_platform(false, false, network).is_ok());
+        assert_eq!(
+            validate_software_key_platform(true, false, network).is_ok(),
+            network == "testnet4"
+        );
+        assert!(validate_software_key_platform(false, true, network).is_err());
+    }
+}
+
+#[test]
+fn mobile_key_operation_guards_precede_command_work() {
+    for (source, names) in [
+        (
+            include_str!("profile_commands.rs"),
+            vec![
+                "wallet_generate_mnemonic",
+                "wallet_create",
+                "wallet_recover",
+                "wallet_verify_backup",
+                "wallet_reveal_and_verify_backup",
+            ],
+        ),
+        (
+            include_str!("transaction_commands.rs"),
+            vec!["tx_sign_and_broadcast"],
+        ),
+        (
+            include_str!("multisig_proposal_commands.rs"),
+            vec!["hardware_sign_multisig", "multisig_proposal_broadcast"],
+        ),
+        (
+            include_str!("hardware_commands.rs"),
+            vec![
+                "hardware_sign_external",
+                "external_signer_proposal_broadcast",
+            ],
+        ),
+    ] {
+        for name in names {
+            let function = source.split(&format!("fn {name}(")).nth(1).unwrap();
+            let body = function.split_once('{').unwrap().1.trim_start();
+            let body = body
+                .strip_prefix("let credential = Zeroizing::new(credential);")
+                .unwrap_or(body)
+                .trim_start();
+            assert!(
+                body.starts_with("require_desktop_key_operation()?;")
+                    || body.starts_with("require_software_key_operation()?;"),
+                "{name} must reject mobile before performing work"
+            );
+        }
+    }
+}
+
+#[test]
+fn accepted_broadcast_preserves_txid_after_sqlite_failure_without_a_false_snapshot() {
+    let mut db = Connection::open_in_memory().unwrap();
+    db.execute_batch("CREATE TABLE recording(value INTEGER); CREATE TRIGGER reject_recording BEFORE INSERT ON recording BEGIN SELECT RAISE(ABORT, 'synthetic storage failure'); END;").unwrap();
+    let txid = Txid::from_byte_array([42; 32]);
+    let outcome = accepted_broadcast_result(txid, || {
+        let transaction = db.transaction().map_err(internal)?;
+        transaction
+            .execute("INSERT INTO recording VALUES(1)", [])
+            .map_err(internal)?;
+        Err(internal("unreachable after injected failure"))
+    });
+    assert_eq!(outcome.txid, txid.to_string());
+    assert!(outcome.snapshot.is_none());
+    assert!(outcome.persistence_pending && outcome.sync_pending);
+    assert_eq!(
+        db.query_row("SELECT COUNT(*) FROM recording", [], |row| row
+            .get::<_, u64>(0))
+            .unwrap(),
+        0
+    );
+    let encoded = serde_json::to_value(outcome).unwrap();
+    assert!(encoded["snapshot"].is_null());
+    assert_eq!(encoded["persistencePending"], true);
+}
+
+#[test]
+fn accepted_broadcast_distinguishes_committed_state_from_a_later_sync_failure() {
+    let (wallet, _, _, txid) = anchor_reconciliation_wallet(71, 72, 73);
+    let db = Connection::open_in_memory().unwrap();
+    init_app_schema(&db).unwrap();
+    let snapshot = snapshot_from(&wallet, &db, None, false, None).unwrap();
+    let outcome = accepted_broadcast_result(txid, || Ok((snapshot, true)));
+    assert!(outcome.snapshot.is_some());
+    assert!(outcome.sync_pending);
+    assert!(!outcome.persistence_pending);
+}
+
+#[test]
+fn sync_reconciles_only_exact_observed_proposals_atomically_and_after_reopen() {
+    let path =
+        std::env::temp_dir().join(format!("groot-broadcast-repair-{}.sqlite", Uuid::new_v4()));
+    let (wallet, _, _, txid) = anchor_reconciliation_wallet(74, 75, 76);
+    let observed = wallet.get_tx(txid).unwrap().tx_node.tx.as_ref().clone();
+    let psbt = Psbt::from_unsigned_tx(observed).unwrap();
+    let mut other = psbt.clone();
+    other.unsigned_tx.output[0].value = Amount::from_sat(123);
+    let mut db = Connection::open(&path).unwrap();
+    init_app_schema(&db).unwrap();
+    for (id, psbt, status) in [
+        ("accepted", &psbt, "ready"),
+        ("foreign", &other, "collecting"),
+        ("cancelled", &psbt, "cancelled"),
+    ] {
+        db.execute("INSERT INTO groot_proposals (proposal_id,recipient,label,amount,fee,fee_rate,psbt,status,created_at) VALUES(?1,'synthetic','Synthetic',1,1,1,?2,?3,1)", params![id, encode_psbt(psbt), status]).unwrap();
+    }
+    label_provenance::assign_labels(
+        &db,
+        &["Synthetic intent".to_owned()],
+        LabelOrigin::Payment,
+        "transaction_intent",
+        "accepted",
+        1,
+    )
+    .unwrap();
+    db.execute("INSERT INTO groot_accelerations (proposal_id, method, original_txid, original_kind, original_direction, original_amount, original_date, original_label, created_at) VALUES('accepted','rbf',?1,'payment','sent',1,'1','Synthetic',1)", [Txid::from_byte_array([77;32]).to_string()]).unwrap();
+    {
+        let transaction = db.transaction().unwrap();
+        let repaired = reconcile_broadcast_proposals(&wallet, &transaction).unwrap();
+        assert_eq!(repaired, [txid]);
+        enqueue_reconciled_broadcasts(&transaction, &repaired, 0).unwrap();
+        // Dropping the transaction simulates a failed local commit.
+    }
+    assert_eq!(
+        db.query_row(
+            "SELECT status FROM groot_proposals WHERE proposal_id='accepted'",
+            [],
+            |r| r.get::<_, String>(0)
+        )
+        .unwrap(),
+        "ready"
+    );
+    assert!(notifications::pending(&db).unwrap().is_empty());
+    assert_eq!(
+        db.query_row(
+            "SELECT COUNT(*) FROM groot_label_assignments WHERE subject_kind='transaction'",
+            [],
+            |r| r.get::<_, u64>(0)
+        )
+        .unwrap(),
+        0
+    );
+    assert!(db
+        .query_row(
+            "SELECT replacement_txid FROM groot_accelerations WHERE proposal_id='accepted'",
+            [],
+            |r| r.get::<_, Option<String>>(0)
+        )
+        .unwrap()
+        .is_none());
+    {
+        let transaction = db.transaction().unwrap();
+        let repaired = reconcile_broadcast_proposals(&wallet, &transaction).unwrap();
+        enqueue_reconciled_broadcasts(&transaction, &repaired, 0).unwrap();
+        transaction.commit().unwrap();
+    }
+    drop(db);
+    let db = Connection::open(&path).unwrap();
+    assert!(reconcile_broadcast_proposals(&wallet, &db)
+        .unwrap()
+        .is_empty());
+    assert_eq!(notifications::pending(&db).unwrap().len(), 1);
+    assert_eq!(db.query_row("SELECT COUNT(*) FROM groot_label_assignments WHERE subject_kind='transaction' AND subject_id=?1", [txid.to_string()], |r| r.get::<_, u64>(0)).unwrap(), 1);
+    assert_eq!(
+        db.query_row(
+            "SELECT replacement_txid FROM groot_accelerations WHERE proposal_id='accepted'",
+            [],
+            |r| r.get::<_, String>(0)
+        )
+        .unwrap(),
+        txid.to_string()
+    );
+    for (id, status) in [
+        ("accepted", "broadcast"),
+        ("foreign", "collecting"),
+        ("cancelled", "cancelled"),
+    ] {
+        assert_eq!(
+            db.query_row(
+                "SELECT status FROM groot_proposals WHERE proposal_id=?1",
+                [id],
+                |r| r.get::<_, String>(0)
+            )
+            .unwrap(),
+            status
+        );
+    }
+    drop(db);
+    fs::remove_file(path).unwrap();
 }

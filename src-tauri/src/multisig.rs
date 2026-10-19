@@ -21,7 +21,7 @@ pub enum CosignerSource {
     Virtual,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CosignerInput {
     pub id: String,

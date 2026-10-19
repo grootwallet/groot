@@ -1,16 +1,18 @@
 # Code cleanup plan
 
-Current priorities for the rc02 source, 2026-10-13. This replaces the dated code-health and cleanup reports. Counts identify review hotspots, not quality targets.
+Current priorities for the rc02 source, 2026-10-13. This replaces the dated code-health and cleanup reports. Counts identify review hotspots, not quality targets. The CSS entry count reflects the subsequent 5.3 extraction; other counts describe the rc02 snapshot.
 
-| Area                                    |  Lines | Next change                                                           |
-| --------------------------------------- | -----: | --------------------------------------------------------------------- |
-| `src/app.css`                           | 11,950 | Split by responsibility without changing cascade order                |
-| `src-tauri/src/wallet.rs`               |  8,153 | Extract one cohesive native domain at a time                          |
-| `src/routes/multisig/send/+page.svelte` |  3,432 | Separate presentation state from transaction authority                |
-| `src/routes/settings/+page.svelte`      |  2,819 | Group node, security and appearance orchestration                     |
-| `src/routes/send/+page.svelte`          |  2,747 | Share proven fee/draft/acceleration presentation logic                |
-| `src/lib/wallet/dummy.ts`               |  2,714 | Split existing WalletPort facets while preserving deterministic state |
-| `src/lib/wallet/tauri.ts`               |  1,016 | Separate low-risk diagnostics/export calls first                      |
+| Area                                    | Lines | Next change                                                            |
+| --------------------------------------- | ----: | ---------------------------------------------------------------------- |
+| `src/app.css`                           |    12 | Ordered entry point; private rules moved to existing components/routes |
+| `src-tauri/src/wallet.rs`               | 8,153 | Extract one cohesive native domain at a time                           |
+| `src/routes/multisig/send/+page.svelte` | 3,432 | Separate presentation state from transaction authority                 |
+| `src/routes/settings/+page.svelte`      | 2,819 | Group node, security and appearance orchestration                      |
+| `src/routes/send/+page.svelte`          | 2,747 | Share proven fee/draft/acceleration presentation logic                 |
+| `src/lib/wallet/dummy.ts`               | 2,714 | Split existing WalletPort facets while preserving deterministic state  |
+| `src/lib/wallet/tauri.ts`               | 1,016 | Separate low-risk diagnostics/export calls first                       |
+
+The [CSS verification record](testing/css-refactoring-5.3.md) records the scoped extraction and remaining shared compatibility contracts. The [5.3 CSS refactoring plan](css-refactoring-plan.md) specifies global foundations, component/route ownership, preservation checks and the staged completion campaign.
 
 ## Order
 

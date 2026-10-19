@@ -267,14 +267,24 @@ fn multisig_tx_prepare_blocking(
 }
 
 #[tauri::command]
-pub fn multisig_policy_renewal_prepare(
+pub async fn multisig_policy_renewal_prepare(
     app: AppHandle,
-    state: State<'_, AppState>,
     outpoint: String,
     labels: Vec<String>,
     fee_rate: String,
 ) -> ApiResult<MultisigProposalDto> {
+    let expected_wallet_id = load_registry(&app)?.selected_wallet_id;
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+
     let _operation = operation_guard(&state)?;
+        if load_registry(&app)?.selected_wallet_id != expected_wallet_id {
+            return Err(api_error(
+                "wallet_selection_changed",
+                "The selected wallet changed. Retry in the current wallet.",
+            ));
+        }
+
     require_unlocked(&app, &state)?;
     let labels = normalize_labels(labels)?;
     let label = labels[0].clone();
@@ -371,18 +381,31 @@ pub fn multisig_policy_renewal_prepare(
     drop(wallet);
     transaction.commit().map_err(internal)?;
     load_multisig_proposal(&mut db, &metadata, &proposal_id)
+    })
+    .await
+    .map_err(internal)?
 }
 
 #[tauri::command]
-pub fn multisig_delayed_spend_prepare(
+pub async fn multisig_delayed_spend_prepare(
     app: AppHandle,
-    state: State<'_, AppState>,
     outpoint: String,
     recipient: String,
     labels: Vec<String>,
     fee_rate: String,
 ) -> ApiResult<MultisigProposalDto> {
+    let expected_wallet_id = load_registry(&app)?.selected_wallet_id;
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+
     let _operation = operation_guard(&state)?;
+        if load_registry(&app)?.selected_wallet_id != expected_wallet_id {
+            return Err(api_error(
+                "wallet_selection_changed",
+                "The selected wallet changed. Retry in the current wallet.",
+            ));
+        }
+
     require_unlocked(&app, &state)?;
     let labels = normalize_labels(labels)?;
     let label = labels[0].clone();
@@ -492,6 +515,9 @@ pub fn multisig_delayed_spend_prepare(
     drop(wallet);
     transaction.commit().map_err(internal)?;
     load_multisig_proposal(&mut db, &metadata, &proposal_id)
+    })
+    .await
+    .map_err(internal)?
 }
 
 #[tauri::command]
@@ -802,36 +828,59 @@ fn require_available_proposal_inputs(proposal: &MultisigProposalDto) -> ApiResul
 }
 
 #[tauri::command]
-pub fn multisig_proposal_import(
+pub async fn multisig_proposal_import(
     app: AppHandle,
-    state: State<'_, AppState>,
     proposal_id: String,
     reviewed_psbt: String,
     signed_psbt: String,
 ) -> ApiResult<MultisigProposalDto> {
-    let _operation = operation_guard(&state)?;
-    require_unlocked(&app, &state)?;
-    let metadata = read_multisig_metadata(&app)?;
-    let mut db = open_multisig_db(&app)?;
-    let current = load_multisig_proposal(&mut db, &metadata, &proposal_id)?;
-    require_reviewed_psbt_unchanged(
-        &current.psbt,
-        &reviewed_psbt,
-        "The proposal changed after review. Reload it before importing a signature.",
-    )?;
-    drop(db);
-    import_multisig_proposal(&app, &proposal_id, &signed_psbt)
+    let expected_wallet_id = load_registry(&app)?.selected_wallet_id;
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+
+        let _operation = operation_guard(&state)?;
+        if load_registry(&app)?.selected_wallet_id != expected_wallet_id {
+            return Err(api_error(
+                "wallet_selection_changed",
+                "The selected wallet changed. Retry in the current wallet.",
+            ));
+        }
+
+        require_unlocked(&app, &state)?;
+        let metadata = read_multisig_metadata(&app)?;
+        let mut db = open_multisig_db(&app)?;
+        let current = load_multisig_proposal(&mut db, &metadata, &proposal_id)?;
+        require_reviewed_psbt_unchanged(
+            &current.psbt,
+            &reviewed_psbt,
+            "The proposal changed after review. Reload it before importing a signature.",
+        )?;
+        drop(db);
+        import_multisig_proposal(&app, &proposal_id, &signed_psbt)
+    })
+    .await
+    .map_err(internal)?
 }
 
 #[tauri::command]
-pub fn multisig_proposal_discard_signature(
+pub async fn multisig_proposal_discard_signature(
     app: AppHandle,
-    state: State<'_, AppState>,
     proposal_id: String,
     reviewed_psbt: String,
     signer_fingerprint: String,
 ) -> ApiResult<MultisigProposalDto> {
+    let expected_wallet_id = load_registry(&app)?.selected_wallet_id;
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+
     let _operation = operation_guard(&state)?;
+        if load_registry(&app)?.selected_wallet_id != expected_wallet_id {
+            return Err(api_error(
+                "wallet_selection_changed",
+                "The selected wallet changed. Retry in the current wallet.",
+            ));
+        }
+
     require_unlocked(&app, &state)?;
     let metadata = read_multisig_metadata(&app)?;
     let mut db = open_multisig_db(&app)?;
@@ -871,6 +920,9 @@ pub fn multisig_proposal_discard_signature(
         ));
     }
     load_multisig_proposal(&mut db, &metadata, &proposal_id)
+    })
+    .await
+    .map_err(internal)?
 }
 
 #[tauri::command]
@@ -881,6 +933,7 @@ pub async fn hardware_sign_multisig(
     device_id: String,
     reviewed_psbt: String,
 ) -> ApiResult<MultisigProposalDto> {
+    require_desktop_key_operation()?;
     let context = diagnostics::DiagnosticContext {
         wallet_kind: Some(diagnostics::DiagnosticWalletKind::Multisig),
         ..Default::default()
@@ -1012,6 +1065,7 @@ pub async fn multisig_proposal_broadcast(
     credential: String,
 ) -> ApiResult<BroadcastResultDto> {
     let credential = Zeroizing::new(credential);
+    require_desktop_key_operation()?;
     let diagnostic_app = app.clone();
     let context = diagnostics::DiagnosticContext {
         wallet_kind: Some(diagnostics::DiagnosticWalletKind::Multisig),
@@ -1042,25 +1096,23 @@ pub async fn multisig_proposal_broadcast(
             &reviewed_psbt,
         )?;
         let txid = broadcast_transaction(&app, &state, &db, &proposal_id, &transaction)?;
-        let delayed_policy = delayed_policy_context(&metadata)?;
-        let snapshot = commit_multisig_broadcast(
-            &mut db,
-            &transaction,
-            &proposal_id,
-            &txid,
-            None,
-            delayed_policy.as_ref(),
-        )?;
-        let (snapshot, sync_pending) =
-            match sync_wallet_atomically(&app, &state, &mut db, true, None) {
-                Ok(snapshot) => (snapshot, false),
-                Err(_) => (snapshot, true),
-            };
-        Ok(BroadcastResultDto {
-            txid: txid.to_string(),
-            snapshot,
-            sync_pending,
-        })
+        Ok(accepted_broadcast_result(txid, || {
+            let delayed_policy = delayed_policy_context(&metadata)?;
+            let snapshot = commit_multisig_broadcast(
+                &mut db,
+                &transaction,
+                &proposal_id,
+                &txid,
+                None,
+                delayed_policy.as_ref(),
+            )?;
+            let (snapshot, sync_pending) =
+                match sync_wallet_atomically(&app, &state, &mut db, true, None) {
+                    Ok(snapshot) => (snapshot, false),
+                    Err(_) => (snapshot, true),
+                };
+            Ok((snapshot, sync_pending))
+        }))
     })
     .await
     .map_err(internal)?;
@@ -1076,12 +1128,19 @@ pub async fn multisig_proposal_broadcast(
 }
 
 #[tauri::command]
-pub fn multisig_proposal_cancel(
-    app: AppHandle,
-    state: State<'_, AppState>,
-    proposal_id: String,
-) -> ApiResult<()> {
+pub async fn multisig_proposal_cancel(app: AppHandle, proposal_id: String) -> ApiResult<()> {
+    let expected_wallet_id = load_registry(&app)?.selected_wallet_id;
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+
     let _operation = operation_guard(&state)?;
+        if load_registry(&app)?.selected_wallet_id != expected_wallet_id {
+            return Err(api_error(
+                "wallet_selection_changed",
+                "The selected wallet changed. Retry in the current wallet.",
+            ));
+        }
+
     require_unlocked(&app, &state)?;
     let db = open_multisig_db(&app)?;
     let changed = db.execute(
@@ -1096,6 +1155,9 @@ pub fn multisig_proposal_cancel(
             "Payment proposal was not found or is no longer active.",
         ))
     }
+    })
+    .await
+    .map_err(internal)?
 }
 
 fn require_requested_network_setup(source_wallet_id: Option<&str>, copied: bool) -> ApiResult<()> {

@@ -24,7 +24,81 @@ pub fn recover(app: &AppHandle) -> Result<Option<Zeroizing<String>>, String> {
 
 #[cfg(target_os = "macos")]
 mod macos;
-#[cfg(not(target_os = "macos"))]
+
+#[cfg(target_os = "ios")]
+pub fn present(_app: &AppHandle, words: &str) -> Result<BackupOutcome, String> {
+    use std::ffi::c_char;
+
+    if words.split_whitespace().count() != 24 || words.as_bytes().contains(&0) {
+        return Err("Native backup requires exactly 24 recovery words.".to_owned());
+    }
+    let mut payload = Zeroizing::new(words.as_bytes().to_vec());
+    payload.push(0);
+    unsafe extern "C" {
+        fn groot_present_ios_recovery_words(words_utf8: *const c_char) -> i32;
+    }
+    // SAFETY: The Objective-C boundary copies this bounded, NUL-terminated UTF-8
+    // string before returning. The backing bytes remain alive for the call and
+    // are zeroized immediately afterward.
+    match unsafe { groot_present_ios_recovery_words(payload.as_ptr().cast()) } {
+        1 => Ok(BackupOutcome {
+            cancelled: false,
+            verified: false,
+        }),
+        0 => Ok(BackupOutcome {
+            cancelled: true,
+            verified: false,
+        }),
+        _ => Err("The native iOS recovery sheet could not be presented.".to_owned()),
+    }
+}
+
+#[cfg(target_os = "ios")]
+pub fn recover(_app: &AppHandle) -> Result<Option<Zeroizing<String>>, String> {
+    collect_ios_words(false)
+}
+
+#[cfg(target_os = "ios")]
+pub fn verify(_app: &AppHandle, words: &str) -> Result<bool, String> {
+    let Some(entered) = collect_ios_words(true)? else {
+        return Ok(false);
+    };
+    let expected =
+        bip39::Mnemonic::parse(words).map_err(|_| "The backup words are malformed.".to_owned())?;
+    Ok(bip39::Mnemonic::parse(entered.trim()).is_ok_and(|actual| actual == expected))
+}
+
+#[cfg(target_os = "ios")]
+fn collect_ios_words(verification: bool) -> Result<Option<Zeroizing<String>>, String> {
+    use std::{ffi::CStr, os::raw::c_char};
+
+    const CAPACITY: usize = 512;
+    let mut output = Zeroizing::new(vec![0_u8; CAPACITY]);
+    unsafe extern "C" {
+        fn groot_recover_ios_mnemonic(
+            output: *mut c_char,
+            capacity: usize,
+            verification: bool,
+        ) -> i32;
+    }
+    // SAFETY: iOS writes at most `capacity - 1` UTF-8 bytes and a trailing NUL into this
+    // owned buffer. The buffer remains alive for the call and is zeroized after parsing.
+    match unsafe {
+        groot_recover_ios_mnemonic(output.as_mut_ptr().cast(), output.len(), verification)
+    } {
+        1 => {
+            let value = CStr::from_bytes_until_nul(&output)
+                .map_err(|_| "The native iOS recovery phrase was malformed.".to_owned())?
+                .to_str()
+                .map_err(|_| "The native iOS recovery phrase was not valid UTF-8.".to_owned())?;
+            Ok(Some(Zeroizing::new(value.to_owned())))
+        }
+        0 => Ok(None),
+        _ => Err("The native iOS recovery sheet could not be presented.".to_owned()),
+    }
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "ios")))]
 pub fn present(app: &AppHandle, words: &str) -> Result<BackupOutcome, String> {
     use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 
@@ -34,7 +108,7 @@ pub fn present(app: &AppHandle, words: &str) -> Result<BackupOutcome, String> {
         .title("Check your surroundings")
         .kind(MessageDialogKind::Warning)
         .buttons(MessageDialogButtons::OkCancelCustom(
-            "I'm private — reveal words".to_owned(),
+            "I'm private. Reveal words".to_owned(),
             "Cancel".to_owned(),
         ))
         .blocking_show();
@@ -72,31 +146,29 @@ pub fn present(app: &AppHandle, words: &str) -> Result<BackupOutcome, String> {
     })
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_os = "ios")))]
 pub fn verify(_app: &AppHandle, _words: &str) -> Result<bool, String> {
     Err("Recovery-word verification is not yet available on this platform.".to_owned())
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_os = "ios")))]
 pub fn recover(_app: &AppHandle) -> Result<Option<Zeroizing<String>>, String> {
     Err("Native recovery-word entry is not yet available on this platform.".to_owned())
 }
 
-#[cfg(any(not(target_os = "macos"), test))]
+#[cfg(any(not(any(target_os = "macos", target_os = "ios")), test))]
 fn format_words(words: &str) -> Result<String, String> {
     let words = words.split_whitespace().collect::<Vec<_>>();
     if words.len() != 24 {
         return Err("Native backup requires exactly 24 recovery words.".to_owned());
     }
 
-    Ok((0..8)
-        .map(|row| {
-            [row, row + 8, row + 16]
-                .into_iter()
-                .map(|index| format!("{:>2}. {:<8}", index + 1, words[index]))
-                .collect::<Vec<_>>()
-                .join("     ")
-        })
+    // Platforms without a dedicated native grid use a sequential list because
+    // their generic alert font cannot align space-padded columns reliably.
+    Ok(words
+        .iter()
+        .enumerate()
+        .map(|(index, word)| format!("{}. {}", index + 1, word))
         .collect::<Vec<_>>()
         .join("\n"))
 }
@@ -106,7 +178,7 @@ mod tests {
     use super::format_words;
 
     #[test]
-    fn recovery_words_are_formatted_as_an_eight_by_three_grid() {
+    fn recovery_words_are_formatted_as_an_unambiguous_sequential_list() {
         let words = (1..=24)
             .map(|index| format!("word{index}"))
             .collect::<Vec<_>>()
@@ -114,11 +186,11 @@ mod tests {
         let formatted = format_words(&words).expect("valid words");
         let rows = formatted.lines().collect::<Vec<_>>();
 
-        assert_eq!(rows.len(), 8);
-        assert!(rows[0].contains(" 1. word1"));
-        assert!(rows[0].contains(" 9. word9"));
-        assert!(rows[0].contains("17. word17"));
-        assert!(rows[7].contains("24. word24"));
+        assert_eq!(rows.len(), 24);
+        assert_eq!(rows[0], "1. word1");
+        assert_eq!(rows[8], "9. word9");
+        assert_eq!(rows[16], "17. word17");
+        assert_eq!(rows[23], "24. word24");
     }
 
     #[test]

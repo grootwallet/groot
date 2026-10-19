@@ -1,6 +1,8 @@
 # User flows
 
-State transitions for the current rc04 source. [Product behavior](product-spec.md) owns policy; [design system](design-system.md) owns presentation; [status](implementation-status.md) owns availability. Do not append historical overrides here.
+Desktop state transitions from the shipped 5.2.0 baseline. The [5.3 mobile plan](mobile-5.3-plan.md) owns mobile candidate flows; internal iOS Testnet4 key and QR signer flows are enabled under ADR 0096 for acceptance testing, while other mobile platforms/networks, USB signing and multisig broadcast remain blocked. [Product behavior](product-spec.md) owns policy; [design system](design-system.md) owns presentation; [status](implementation-status.md) owns availability. Do not append historical overrides here.
+
+ADR 0093 requires phone software create/restore and desktop-led multisig phone pairing/recovery/signing as distinct mobile flows. They are wired in the RC2 candidate; complete physical acceptance remains pending. QR shares public policy and PSBTs, never private keys; the [RC2 record](testing/5.3.0-rc2-mobile-keys.md) records what is actually verified.
 
 ## Create and restore
 
@@ -87,3 +89,7 @@ Settings exposes Updates beside build identity; the side menu exposes it only af
 `Updates → manual check OR daily opt-in → newer stable offer / no update / offline / rate limit → signed-manifest verification → bounded installer download → digest verification → reveal → explicit user installation`
 
 Closing in-flight work cancels it; failed/cancelled stages are removed. Missing owner trust key disables preparation with an inline reason. Wallet dialogs take precedence; corner actions and release toasts do not overlap them.
+
+## Accepted payment with local recording pending
+
+After Core accepts a payment, local storage failure keeps the accepted transaction ID visible with an inline warning and success notification. Do not offer another payment from that result. Sync repairs the existing saved proposal from exact canonical transaction identity; a missing snapshot is never replaced by an invented balance. Later refresh failure after a committed broadcast remains a separate pending-refresh state (ADR 0090).

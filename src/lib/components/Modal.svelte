@@ -12,6 +12,7 @@
     onclose,
     attentionSignal = 0,
     wide = false,
+    dismissible = true,
     upper = false,
     fixedViewport = false,
     children
@@ -89,7 +90,7 @@
   });
 
   function handleKeydown(event: KeyboardEvent) {
-    if (event.key === 'Escape') {
+    if (dismissible && event.key === 'Escape') {
       event.preventDefault();
       onclose();
       return;
@@ -123,7 +124,7 @@
     class:modal-layer-upper={upper}
     use:portal
     role="presentation"
-    onclick={(e) => e.target === e.currentTarget && onclose()}
+    onclick={(e) => dismissible && e.target === e.currentTarget && onclose()}
   >
     <div
       bind:this={dialog}
@@ -143,11 +144,158 @@
           <h2>{title}</h2>
           {#if description}<p>{description}</p>{/if}
         </div>
-        <button class="icon-button" aria-label={translate($locale, 'Close')} onclick={onclose}
-          ><X size={18} /></button
+        <button
+          disabled={!dismissible}
+          class="icon-button"
+          aria-label={translate($locale, 'Close')}
+          onclick={() => {
+            if (dismissible) onclose?.();
+          }}><X size={18} /></button
         >
       </header>
       <div class="modal-body">{@render children?.()}</div>
     </div>
   </div>
 {/if}
+
+<style>
+  /* Keep the original cascade weight while constraining these rules to this owner. */
+
+  :global(.modal-layer):where(.modal-layer) {
+    position: fixed;
+    inset: 0;
+    height: 100dvh;
+    box-sizing: border-box;
+    z-index: 100;
+    overflow: hidden;
+    overscroll-behavior: contain;
+    background: rgba(0, 0, 0, 0.76);
+    -webkit-backdrop-filter: blur(8px);
+    backdrop-filter: blur(8px);
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: clamp(48px, 5vh, 60px) 18px 18px;
+  }
+  :global(.modal-layer.modal-layer-upper):where(.modal-layer) {
+    padding-top: clamp(48px, 5vh, 60px);
+  }
+  :global(.modal):where(.modal) {
+    width: min(480px, 100%);
+    max-height: min(720px, 100%);
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    color: var(--text);
+    background: var(--panel);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-panel);
+    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
+  }
+  :global(.modal.modal-wide):where(.modal) {
+    width: min(760px, 100%);
+  }
+  :global(.modal.modal-fixed-viewport):where(.modal) {
+    height: min(720px, 100%);
+  }
+  :global(.modal.modal-fixed-viewport):where(.modal) :global(.modal-body) {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    overflow: hidden;
+    scrollbar-gutter: auto;
+  }
+  :global(.modal.modal-fixed-viewport):where(.modal) :global(.hardware-inline-error) {
+    flex: none;
+    margin-top: 0;
+  }
+  :global(.modal:focus-visible):where(.modal) {
+    outline: none;
+  }
+  :global(.modal.modal-attention):where(.modal) {
+    animation: modal-attention 360ms ease-out;
+  }
+  :global(.modal-header):where(.modal-header) {
+    padding: 20px 20px 16px;
+    display: flex;
+    justify-content: space-between;
+    gap: 20px;
+    border-bottom: 1px solid var(--border);
+  }
+  :global(.modal-header):where(.modal-header) :global(h2) {
+    font-size: 16px;
+    margin: 0;
+  }
+  :global(.modal-header):where(.modal-header) :global(p) {
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+    line-height: 1.45;
+    margin: 6px 0 0;
+  }
+  :global(.icon-button):where(.icon-button) {
+    width: 30px;
+    height: 30px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+  }
+  :global(.icon-button:hover):where(.icon-button) {
+    color: var(--text);
+    background: var(--surface-hover);
+  }
+  :global(.icon-button:focus-visible):where(.icon-button) {
+    outline: 2px solid var(--focus);
+    outline-offset: 1px;
+  }
+  :global(.modal-body):where(.modal-body) {
+    min-height: 0;
+    flex: 1 1 auto;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+    padding: 20px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    :global(.modal.modal-attention):where(.modal) {
+      animation: none !important;
+      outline: 2px solid var(--focus);
+      outline-offset: -2px;
+    }
+  }
+
+  @media (max-width: 760px) {
+    :global(.modal-layer):where(.modal-layer) {
+      position: fixed;
+      inset: 0;
+      height: auto;
+      min-height: 0;
+      align-items: flex-end;
+      padding: max(10px, env(safe-area-inset-top)) 10px max(10px, env(safe-area-inset-bottom));
+    }
+    :global(.modal-layer.modal-layer-upper):where(.modal-layer) {
+      align-items: flex-end;
+      padding-top: max(10px, env(safe-area-inset-top));
+    }
+    :global(.modal-layer.modal-layer-upper):where(.modal-layer) :global(.modal) {
+      max-height: calc(100dvh - max(20px, env(safe-area-inset-top) + env(safe-area-inset-bottom)));
+    }
+    :global(.modal):where(.modal) {
+      width: 100%;
+      max-height: calc(100dvh - max(20px, env(safe-area-inset-top) + env(safe-area-inset-bottom)));
+      border-radius: var(--radius-panel);
+    }
+    :global(.modal-header):where(.modal-header) {
+      padding: 17px 16px 13px;
+    }
+    :global(.modal-body):where(.modal-body) {
+      padding: 16px;
+    }
+  }
+</style>

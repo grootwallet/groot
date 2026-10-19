@@ -54,14 +54,20 @@ codesign --verify --strict "$built_executable"
 node scripts/release/normalize-macho-uuid.mjs "$built_executable"
 codesign --verify --strict "$built_executable"
 effective_cargo_home="${CARGO_HOME:-$HOME/.cargo}"
+effective_cargo_home_logical="$(cd "$effective_cargo_home" && pwd -L)"
 effective_cargo_home="$(cd "$effective_cargo_home" && pwd -P)"
+logical_cargo_target="$(cd "$cargo_target" && pwd -L)"
 physical_home="$(cd "$HOME" && pwd -P)"
-for forbidden_path in "$repo_root" "$effective_cargo_home" "$cargo_target" "$physical_home"; do
-  if strings "$built_executable" | awk -v needle="$forbidden_path" \
-    'index($0, needle) { found = 1 } END { exit !found }'; then
-    fail "executable contains an unremapped host path"
-  fi
-done
+assert_no_unremapped_paths \
+  "$built_executable" \
+  "$repo_root" \
+  "$effective_cargo_home_logical" \
+  "$effective_cargo_home" \
+  "$logical_cargo_target" \
+  "$cargo_target" \
+  "$HOME" \
+  "$physical_home" \
+  || fail "executable path scan failed"
 
 install -m 0755 "$built_executable" "$release_out/Groot"
 node scripts/release/generate-sbom.mjs "$release_out/groot.cdx.json" "$release_out/Groot"

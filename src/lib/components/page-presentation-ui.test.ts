@@ -1,3 +1,4 @@
+import { readUiStyles } from '../testing/ui-styles';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
@@ -13,7 +14,7 @@ const settings = readRoute('settings');
 const send = readRoute('send');
 const multisigSend = readRoute('multisig/send');
 const feeSelector = readFileSync(new URL('./FeeSelector.svelte', import.meta.url), 'utf8');
-const appCss = readFileSync(new URL('../../app.css', import.meta.url), 'utf8');
+const appCss = readUiStyles();
 
 describe('shared page presentation', () => {
   it('keeps primary wallet pages to one title without route eyebrows or subtitles', () => {

@@ -8,6 +8,8 @@ cd "$(dirname "$0")/../.."
 core_modules=(
   auth.rs
   bsms.rs
+  coordination.rs
+  coordination_transport.rs
   build_network.rs
   external_signer.rs
   multisig.rs
@@ -69,7 +71,7 @@ echo "Reporting adapters separately through whole-library coverage: ${adapter_mo
 
 # Nested files under `wallet/` and `native_backup/` are extracted pieces of
 # those already-classified orchestration/platform adapters, not new core scope.
-adapter_pattern="src/(compact_filters|direct_rpc|hardware|label_provenance|lib|main|managed_gateway|native_backup|network|process_lock|registry|secure_store|tor_rpc|wallet)(\\.rs|/.*\\.rs)$"
+adapter_pattern="src/(compact_filters|direct_rpc|hardware|label_provenance|lib|main|managed_gateway|native_backup|network|process_lock|registry|secure_store|tor_rpc|updates|wallet)(\\.rs|/.*\\.rs)$"
 cargo llvm-cov \
   --locked \
   --manifest-path src-tauri/Cargo.toml \

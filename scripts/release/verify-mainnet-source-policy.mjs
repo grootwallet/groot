@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { readFileSync, readdirSync } from 'node:fs';
-import { createHash } from 'node:crypto';
+import { createHash, createPublicKey } from 'node:crypto';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { stripSourceComments } from '../quality/source-lexing.mjs';
@@ -15,17 +15,31 @@ const pinnedPolicySources = new Map([
   ['src-tauri/src/session.rs', '82da6d3a2643710aaa0974f69f0fb7c932172a401ecf33c186e440c8170f35e0'],
   ['.env.mainnet', '1623f3f97de588daea2bbeae1f9c56ebc896b6bc2c22ac238563b46b688ced85'],
   ['.env.multi', '33fc3d5022968d9eaa25bfe749c0b01691c0570611a65255100718d2c50df723'],
-  ['package.json', '5a676beee268ddb8a752914b91c857a021c792b2566795570df9a6cf602b521f'],
-  ['src-tauri/Cargo.toml', '9d8628de6c1b75f34a704879c4116663a510da9ad4c6e6a80a16716b6bd33e65'],
-  ['src-tauri/tauri.conf.json', '9e2c1d166c5ae7def18053931abc67abc3214e8b60d4f57dab30ce6d2fe27931'],
+  ['package.json', '531eadbe75143f477350e4978d1dd1482d63424a09d307af8503e52938648b61'],
+  ['src-tauri/Cargo.toml', '974c507bc95a266203cf82dea36da2a3e4ef1058dac11d44b966fb0793c68499'],
+  ['src-tauri/tauri.conf.json', '9a3cad2ed29c56ecc5884372ebfaf7ef3409b2106f0844d23c964051cb19c13c'],
   ['LICENSE', 'c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4'],
-  ['NOTICE', 'b39c98ac4d5186a7418ee71e1a8a7a29fb574ada3a7c58184c00125dda8d511d'],
+  ['NOTICE', '4689769c203e1aa8bbc76f0864388cb5f406e4b05b26888df20576c57fa9c3ab'],
   ['THIRD_PARTY_NOTICES.md', 'a181753f36eb3e475cddf31a69d2e75f01a86a79c70de252abb1e73a059407db'],
   [
     'docs/mainnet-release-authorization.json',
-    '1af74a51167285b70812c16c4300e8a61b3e114245d0c7ad15755017dc3e5b2e'
+    'ba0fe28278fe99401c06324c977d0a5bf79785272c0720ed190da7839ef07d40'
   ],
-  ['src-tauri/src/lib.rs', '19dbeaae0dc6de6e8690f656aa78f149e109b6a2e616cc75d280dbd3cfc2e089'],
+  [
+    'docs/release-update-key.hex',
+    '1a5ac5019d65fee6bf904ac5a302400acd1224b518c6030a7be96a95cfa15f42'
+  ],
+  [
+    'docs/release-update-key.pem',
+    '4f0307df2320a341e6aefc95ff58f202db001436dcdf14878d517f06148f4c97'
+  ],
+  [
+    'docs/release-git-tag-signing-5.2.0.asc',
+    '6cb2edbd1f62d60db2f3646486a4f67ff2e82a7fd29b41742599055d8122f5b6'
+  ],
+  ['src-tauri/src/lib.rs', '24028069084118c610e824e9a8c2695a10c89cc84a1f4de5c91178d19e19135c'],
+  ['src-tauri/src/updates.rs', '23a82cd00f9860f802de3dcc644ed52a4e13b9f64c7c6621de14ff5580d9bbb1'],
+  ['src-tauri/src/bsms.rs', '1cf6eef5de13b4124ceac9bdb24064e109658632e90cddb5c5ec84eb30a479f3'],
   [
     'src-tauri/src/managed_gateway.rs',
     '7e5bf0ab7c25346448e4423bab2e748de96684612230c38b797a075fef5866d0'
@@ -34,7 +48,7 @@ const pinnedPolicySources = new Map([
     'scripts/network/check-native-builds.sh',
     '3a984ab7ef5f0d7c29d689d2ab39e114d61f1db0efd29a632cea980d7284bef4'
   ],
-  ['src/lib/config.ts', 'f32c494bcc72879a6d3f554c322f272d04cdc61d5f668b7b36bbd1a7133ab4be'],
+  ['src/lib/config.ts', '62d858fbd346888ad9f407ed0caeab96c2fd201a5e6e1d6d465c2b293595c82c'],
   ['src-tauri/build.rs', 'ed1866cf57502e61199d75df9ff407b5ed0be54043ad94525ef6579ad98dfcb7'],
   [
     'src-tauri/src/release_policy.rs',
@@ -70,7 +84,7 @@ const pinnedPolicySources = new Map([
     'bd019caa540dcf49428c3665c3ceb1e6c6699b2d53e33f4a6a51899194bb69ed'
   ],
   ['src-tauri/src/proposal.rs', 'b450b07613edad8922bb54756d0152f551d714937a66065611124bcd80ecdc86'],
-  ['src-tauri/src/wallet.rs', '1c76fe79177ccae21c2adc522177f57607460431516945b82634e8d87be536ed'],
+  ['src-tauri/src/wallet.rs', '6ad3d6ced7278505001c41c3d992833cea1ebab730a261fb140ab10ab7d2b60e'],
   [
     'src-tauri/src/wallet/diagnostics.rs',
     'e531480fd53ffa5db664d7a80c1bdf806351e648c0f09727cdde32fc0d24158a'
@@ -89,15 +103,19 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src-tauri/src/wallet/hardware_commands.rs',
-    'f8371154b46ab25e544584f49f582c5885432f1d9e083e6a9f85523ad320a380'
+    'aad873868714129b1f4703b7f120270d47584cba35cb012ad13e40e1e4554001'
   ],
   [
     'src-tauri/src/wallet/label_interchange.rs',
-    '104ec552d91c45caacdfe97ef73bf3479793d1973aa93783d77593822d8d76c5'
+    '2860bad8c740c384594643a617a9cde2e5c3bd5499efa951d9f78f6a30576bf3'
+  ],
+  [
+    'src-tauri/src/wallet/pin_change.rs',
+    '13391f95716019e886b207ad576e0cf669a1ee4354e606cecef36959958ec5e8'
   ],
   [
     'src-tauri/src/wallet/multisig_setup_commands.rs',
-    'bd324a59434f11f8c448c8358d8a4a7dde280d27b4b137a9d246ae823c239076'
+    '48b70a7eb79064d22465494349b3f3a0016bafc57f82989b2d62792ad118d994'
   ],
   [
     'src-tauri/src/wallet/multisig_proposal_commands.rs',
@@ -105,7 +123,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src-tauri/src/wallet/profile_commands.rs',
-    '43801d0a506847e7ba58b734cda59757e90c46b8bb5bbfc59b41ea5f28c69026'
+    'dc27d36c9653e8ff6092b1a3d952ed3e4895e959c963192a39fdba8f50a32e91'
   ],
   [
     'src-tauri/src/wallet/payment_draft_commands.rs',
@@ -117,7 +135,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src-tauri/src/wallet/recovery_scan.rs',
-    '71e80492e276b775b48767e0b35a38aa2d3b924de79ed3dd8e6dd6edcb831cdb'
+    '44792cf2450854ccf6efc226ca258388abb4626b79cf2522e9b9043baa00aa4e'
   ],
   [
     'src-tauri/src/wallet/transaction_commands.rs',
@@ -137,11 +155,11 @@ const pinnedPolicySources = new Map([
   ],
   [
     'scripts/release/build-unsigned-mainnet.sh',
-    '35b13554ff2de5ff9e7fa5a43d28338502fadbda23a9f0e4a41b688a830ed160'
+    'befb799f37a66900cc59cbf2bbf9cfaf075ed47176341bb6cc3bb0f53e12ffff'
   ],
   [
     'scripts/release/build-unsigned-multi.sh',
-    '2b41651abb9e67ce8239a915a897f0d2513f5280c47e890b450417b788cf031f'
+    '45ea9a423449298d8bcd6fc32349ccfa6b5605a5f18d09ceabdb00d98802c8eb'
   ],
   [
     'scripts/release/verify-native-frontend-output.mjs',
@@ -165,11 +183,27 @@ const pinnedPolicySources = new Map([
   ],
   [
     'scripts/release/check-mainnet-gate.sh',
-    '6bd211e3ee92044c70c49d9d84fa5cd3e197f900fb83fc8b5c9d4fc614225027'
+    '257eda7362ccb8b9550a498cc4f9826840191c631e03c90dd07c0d6ca326b5dc'
   ],
   [
     'scripts/release/generate-sbom.mjs',
-    '906d23f8b2e5b151d60fd00ba2abebe19d35b4c3d66540b8e79fafd48487f32c'
+    '6f3928ae89c26c4408c4406eb615d5270daa5abae25c367bc7493bc6e8c82fbb'
+  ],
+  [
+    'scripts/release/generate-release-notes.mjs',
+    '2b5d0f764d1b9c9a810a17b101e65a014d9b6b33fccbd4b3c4295242aba8a465'
+  ],
+  [
+    'scripts/release/verify-update-bundle.mjs',
+    'c79a73d116f9ce087c77023fd0b3ca6bdca1d9b2d3f5281daf88831c52b0d185'
+  ],
+  [
+    'docs/release-notes-5.2.0.md',
+    '2730c57cbb527e5037d1bcd55bd05da5ed33679b0a85ed4fe7705430f51c27f1'
+  ],
+  [
+    'scripts/release/release-version.mjs',
+    '236470c381436d43b51736e8aa7106560289206907ae9216d260880538852a48'
   ],
   [
     'scripts/release/create-macos-dmg.mjs',
@@ -193,7 +227,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'scripts/release/reproducible-rust-env.sh',
-    '8f309ced5719b7e57ef314df6574c875b1495b491be591d62a59bd2fc58e13ae'
+    '404df4d19ebc6901cdb07d23cb42cad2545826ced71086b7e7463104e53d5e03'
   ],
   [
     'scripts/release/normalize-macho-uuid.mjs',
@@ -201,20 +235,26 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src/lib/components/AppShell.svelte',
-    '189d2685397973da0fa763036ff43449841da90ae0b4c4fb95e8bd3960b0f3a4'
+    '420528be7a6eedc697b88b4b9f8c1ebb1bc9046481697ac981bdf44068cb51dc'
   ],
+  ['src/lib/app-updates.ts', 'f274f7614fb278b403acbc61f849912fea20437c0614b999898b2f85e0500c70'],
+  ['src/lib/release-notes.ts', 'd65ea90c0442d61b7bb74d3110ec0a9462a24395ba49db8dd223405f92cd6152'],
   [
     'src/lib/wallet/live-sync.ts',
-    'a5c477820a08a6fda433fbf8c7ac9b0a2d36ede2e16593f0f0c3aebd6538a33c'
+    '978773bb0b99dcdb15ebbd1146ea0852cacb761ae756ebf00734ac4d85e22814'
   ],
-  ['src/lib/wallet/tauri.ts', '30802302cd851cda5bf4cee6967be47a48dcb30e98b1dc528c4e7ebc7ee535c0'],
+  ['src/lib/wallet/tauri.ts', '30cad2a3c39640d93bff7805a81b533db36840b9a95df0df5b99b8ccb4acd9a9'],
   [
     'src/lib/wallet/contracts/errors.ts',
     'd5f7120ca3ea63a9f7f95c9e14b01b27dbcfb1dc52ac4974d6271963e8eff15f'
   ],
   [
     'src/lib/wallet/contracts/port.ts',
-    '761dcdb5a73c91e5e61bd819b15104df2ee70287bf54940f9803bb0ca85fa73c'
+    '5a7cef395cf6a2e984889f369caf14b1d4fabcd2df2e8eec957c3bb19ec4c726'
+  ],
+  [
+    'src/lib/wallet/contracts/updates.ts',
+    '33bcbb1173d503a74b411de3bf890bd9f62bc4c7d44457b34c9671fc001903a3'
   ],
   [
     'src/lib/wallet/contracts/runtime.ts',
@@ -226,13 +266,13 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src/routes/welcome/+page.svelte',
-    '032001a48d335a533746861e874f34df9518b5097596e9cc502af01b1e60bce0'
+    '86c95b644af93749b582cd54944d432a9a7135199904600a3a68dfe224914270'
   ],
   [
     'src/routes/unlock/+page.svelte',
     'c54b2083ad8e8d968e509eb4c17bd4977b81cbd10c6af12c101a72b7caa9b28f'
   ],
-  ['src/routes/+page.svelte', '46f1a0064d27e93b8646952d379dfdef217db213b69ccbf00ac70de76f5ee54d'],
+  ['src/routes/+page.svelte', '23807865477081103e45e9fc33cba8eb23c7d4701e93a035957c30c287e134e4'],
   [
     'src/routes/activity/+page.svelte',
     'e9139fabf8456f5c7bb692cf91a612c49dcb875a715acafcd5ec9420e5e692f6'
@@ -243,11 +283,11 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src/routes/multisig/receive/+page.svelte',
-    '71c483c9658003ca4e130fb0fd09320beedc4f1bf3ecb91ed4ee2534264edd69'
+    'b7395c5d1a458c1a569b9b5e1869265ee15f94ae93935cad3b33baffcc6b05cb'
   ],
   [
     'src/routes/settings/+page.svelte',
-    '93ca9da3a672fed3a2d07ebc355885ebc8e13fba1bafb3fab518144110b4d7e5'
+    'b4fdd80399c61ad0184b67c3e179e560724870efdb1072c36ce526780743ec94'
   ],
   [
     'services/core-gateway/gateway.py',
@@ -275,11 +315,23 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src/routes/hardware/new/+page.svelte',
-    'fdc998607fdd6abf2a3fc297f3dfa9f84ffaa59b11e851e4f13f93753bbf3cbf'
+    '0f2bd4c50b5960a16b7394a283102c260d449f4cdf787239b2dfb41eb26ac1ac'
   ],
   [
     'src/routes/multisig/new/+page.svelte',
-    '7f64640a98b12a86b84187e65bc4abd98e963921c6c169f6fcf7f61038cf4200'
+    '27e8a9509ac9dbf064ce066881b9ec467607e0f9fa02ba63eb1aa049e73d3860'
+  ],
+  [
+    'src/routes/multisig/recover/+page.svelte',
+    'e0bb095ee7dc9398a7184889a618d844a71726b184f0dd7870accdca4e86edff'
+  ],
+  [
+    'src/routes/multisig/delete/+page.svelte',
+    '42b75881b2ec16e6cd3f63905cece1a5205e19a68a085b7ca6e449d952128530'
+  ],
+  [
+    'src/routes/multisig/backup/+page.svelte',
+    'e680f74aa4c7b98c4f46d33ae46a1899355377c95c18c66ffcbfa4c7be74ff32'
   ],
   [
     'src/lib/multisig/policy.ts',
@@ -325,6 +377,25 @@ export function validatePinnedPolicySources(read, readBytes) {
     if (actual !== expected) {
       throw new Error(`${path} changed after the mainnet-candidate policy snapshot was reviewed`);
     }
+  }
+}
+
+export function validateUpdateKeyPair(rawHexSource, publicPemSource) {
+  const rawHex = rawHexSource.trim();
+  if (!/^[0-9a-f]{64}$/.test(rawHex)) {
+    throw new Error('the updater raw public key must be exactly 32 lowercase hex bytes');
+  }
+  let publicDer;
+  try {
+    publicDer = createPublicKey(publicPemSource).export({ format: 'der', type: 'spki' });
+  } catch {
+    throw new Error('the updater public PEM is not a valid public key');
+  }
+  const expectedDer = Buffer.from(`302a300506032b6570032100${rawHex}`, 'hex');
+  if (!publicDer.equals(expectedDer)) {
+    throw new Error(
+      'the updater raw public key and public PEM do not identify the same Ed25519 key'
+    );
   }
 }
 
@@ -584,6 +655,7 @@ function crateRustSources() {
 
 export function validateMainnetSourcePolicy(read, readBytes) {
   validatePinnedPolicySources(read, readBytes);
+  validateUpdateKeyPair(read('docs/release-update-key.hex'), read('docs/release-update-key.pem'));
   validateBrowserNetworkSource(read('src/lib/config.ts'));
   validateBuildScriptSource(read('src-tauri/build.rs'));
   validateReleasePolicySource(read('src-tauri/src/release_policy.rs'));

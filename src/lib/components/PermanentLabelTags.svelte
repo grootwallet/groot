@@ -44,3 +44,46 @@
     </ul>
   {/if}
 {/if}
+
+<style>
+  /* Keep the original cascade weight while constraining these rules to this owner. */
+
+  :global(.permanent-label-tags):where(.permanent-label-tags) {
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    list-style: none;
+  }
+  :global(.permanent-label-tag):where(.permanent-label-tag),
+  :global(.permanent-label-tags-hidden):where(.permanent-label-tags-hidden) {
+    width: fit-content;
+    max-width: min(180px, 100%);
+    padding: 3px 6px;
+    overflow: hidden;
+    color: var(--text-soft) !important;
+    background: color-mix(in srgb, var(--fr-blue) 8%, var(--panel));
+    border: 1px solid color-mix(in srgb, var(--link) 24%, var(--border));
+    border-radius: 5px;
+    font-size: var(--font-size-meta) !important;
+    font-weight: 600;
+    line-height: 1.2;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  :global(.permanent-label-tags-hidden):where(.permanent-label-tags-hidden) {
+    color: var(--muted) !important;
+  }
+  :global(.permanent-label-tags.prominent):where(.permanent-label-tags) {
+    justify-content: flex-end;
+  }
+  :global(.permanent-label-tags.prominent):where(.permanent-label-tags)
+    :global(.permanent-label-tag) {
+    max-width: min(220px, 100%);
+    padding: 5px 8px;
+    border-radius: 6px;
+    font-size: var(--font-size-meta) !important;
+  }
+</style>

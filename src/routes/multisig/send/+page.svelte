@@ -144,6 +144,7 @@
     pin = $state(''),
     imported = $state(''),
     txid = $state(''),
+    persistencePending = $state(false),
     broadcastExplorerError = $state(''),
     error = $state(''),
     importError = $state(''),
@@ -1522,6 +1523,8 @@
         pin
       );
       txid = result.txid;
+      persistencePending = result.persistencePending === true;
+      if (persistencePending) toast({ title: 'Local recording pending', tone: 'warning' });
     } catch (cause) {
       if (cause instanceof WalletError && cause.code === 'transaction_confirmed') {
         markAccelerationConfirmed();
@@ -1730,9 +1733,11 @@
       imported = await walletService.decodePsbtUr(scannedFrames);
       qrScanOpen = false;
       await importPsbt();
+      return true;
     } catch (cause) {
-      const message = localizedError(cause, $locale, '');
-      if (!message.includes('Keep scanning')) error = message || 'The QR frame was rejected.';
+      if (cause instanceof WalletError && cause.code === 'qr_incomplete') return false;
+      error = localizedError(cause, $locale, 'The QR frame was rejected.');
+      throw cause;
     }
   }
 </script>
@@ -1952,6 +1957,15 @@
                 {networkName(defaultConfig.network)}
                 {translate($locale, 'network.')}{/if}
             </p>
+            {#if persistencePending}
+              <WarningNotice
+                title={translate($locale, 'Local recording pending')}
+                body={translate(
+                  $locale,
+                  'The transaction was accepted, but its local record could not be saved. Sync this wallet before making another payment. Do not resend it.'
+                )}
+              />
+            {/if}
             <button class="hash-box" type="button" onclick={copyBroadcastTxid}
               ><span>{translate($locale, 'Transaction ID')}</span><code
                 >{compactIdentifier(txid)}</code
@@ -3220,7 +3234,14 @@
     $locale,
     'Groot accepts only crypto-psbt UR frames and verifies the exact proposal before merging.'
   )}
-  onclose={() => (qrScanOpen = false)}><UrQrScanner onframe={receiveUrFrame} /></Modal
+  onclose={() => (qrScanOpen = false)}
+  ><UrQrScanner
+    onframe={receiveUrFrame}
+    onreset={() => {
+      scannedFrames = [];
+      error = '';
+    }}
+  /></Modal
 >
 <Modal
   open={discardDraftOpen}
@@ -3430,3 +3451,223 @@
   detail={translate($locale, 'Internal wallet output · not the recipient')}
   onclose={() => (hardwareChangeAddressOpen = false)}
 />
+
+<style>
+  /* Keep the original cascade weight while constraining these rules to this owner. */
+
+  :global(.policy-renewal-banner):where(.policy-renewal-banner) {
+    display: grid;
+    grid-template-columns: 34px minmax(0, 1fr);
+    gap: 12px;
+    margin-bottom: 14px;
+    padding: 14px;
+    border: 1px solid color-mix(in srgb, var(--link) 30%, var(--border));
+    border-radius: var(--radius-inset);
+    background: color-mix(in srgb, var(--link) 6%, var(--panel));
+  }
+  :global(.policy-renewal-banner):where(.policy-renewal-banner) > :global(span) {
+    width: 34px;
+    height: 34px;
+    display: grid;
+    place-items: center;
+    border-radius: var(--radius-control);
+    color: var(--link);
+    background: var(--surface-icon);
+  }
+  :global(.policy-renewal-banner):where(.policy-renewal-banner) > :global(div) {
+    min-width: 0;
+  }
+  :global(.policy-renewal-banner):where(.policy-renewal-banner) :global(strong) {
+    font-size: 14px;
+  }
+  :global(.policy-renewal-banner):where(.policy-renewal-banner) :global(p),
+  :global(.policy-renewal-banner):where(.policy-renewal-banner) :global(ul),
+  :global(.policy-renewal-banner):where(.policy-renewal-banner) :global(details) {
+    margin: 4px 0 0;
+    color: var(--text-soft);
+    font-size: var(--font-size-meta);
+    line-height: 1.5;
+  }
+  :global(.policy-renewal-banner):where(.policy-renewal-banner) :global(ul) {
+    padding-left: 17px;
+  }
+  :global(.policy-renewal-banner):where(.policy-renewal-banner) :global(summary) {
+    width: fit-content;
+    cursor: pointer;
+    color: var(--link);
+    font-weight: 650;
+  }
+  :global(.policy-renewal-banner):where(.policy-renewal-banner) :global(details[open] summary) {
+    margin-bottom: 4px;
+  }
+  :global(.renewal-coin-summary):where(.renewal-coin-summary) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 2px 12px;
+    margin-bottom: 18px;
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+    background: var(--surface-inset);
+  }
+  :global(.renewal-coin-summary):where(.renewal-coin-summary) :global(span),
+  :global(.renewal-coin-summary):where(.renewal-coin-summary) :global(small) {
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+  }
+  :global(.renewal-coin-summary):where(.renewal-coin-summary) :global(strong) {
+    grid-row: 1 / 3;
+    grid-column: 2;
+    align-self: center;
+    font-size: 13px;
+  }
+  :global(.renewal-review):where(.renewal-review) {
+    border-color: color-mix(in srgb, var(--link) 24%, var(--border));
+  }
+  :global(.multisig-signing-layout):where(.multisig-signing-layout) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 250px;
+    align-items: start;
+    gap: 16px;
+  }
+  .proposal-review-primary {
+    border-top: 0;
+  }
+  .proposal-review-primary > :global(div:last-child) {
+    border-bottom: 0;
+  }
+  :global(.hardware-phase-reference):where(.hardware-phase-reference) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 10px;
+    padding: 10px 12px;
+    border: 1px solid color-mix(in srgb, var(--fr-blue) 42%, var(--border));
+    border-radius: var(--radius-control);
+    background: color-mix(in srgb, var(--fr-blue) 6%, var(--panel));
+  }
+  :global(.hardware-phase-reference):where(.hardware-phase-reference) :global(span) {
+    display: grid;
+    gap: 3px;
+  }
+  :global(.hardware-phase-reference):where(.hardware-phase-reference) :global(strong) {
+    font-size: var(--font-size-meta);
+  }
+  :global(.hardware-phase-reference):where(.hardware-phase-reference) :global(small) {
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+    line-height: 1.4;
+  }
+  :global(.hardware-policy-help):where(.hardware-policy-help) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 4px 12px;
+    align-items: center;
+    margin-top: 12px;
+    padding: 11px 12px;
+    border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border));
+    border-radius: var(--radius-control);
+    background: var(--accent-soft);
+  }
+  :global(.hardware-policy-help):where(.hardware-policy-help) :global(strong),
+  :global(.hardware-policy-help):where(.hardware-policy-help) :global(span) {
+    grid-column: 1;
+  }
+  :global(.hardware-policy-help):where(.hardware-policy-help) :global(strong) {
+    font-size: var(--font-size-meta);
+  }
+  :global(.hardware-policy-help):where(.hardware-policy-help) :global(span) {
+    color: var(--text-soft);
+    font-size: var(--font-size-meta);
+    line-height: 1.45;
+  }
+  :global(.hardware-policy-help):where(.hardware-policy-help) :global(.button) {
+    grid-column: 2;
+    grid-row: 1 / 3;
+  }
+
+  :global(.hardware-review-step):where(.hardware-review-step) {
+    margin: 0 0 2px;
+    color: var(--link);
+    font-size: 0.78rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .signed-psbt-options {
+    margin-top: 14px;
+    border-bottom: 0;
+  }
+  .signed-psbt-options > :global(.button) {
+    margin: 0 0 12px;
+  }
+  :global(.selection-technical):where(.selection-technical) {
+    margin-top: 4px;
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+  }
+  :global(.selection-technical):where(.selection-technical) :global(summary) {
+    width: fit-content;
+    cursor: pointer;
+  }
+  :global(.selection-technical):where(.selection-technical) > :global(span) {
+    display: block;
+    margin-top: 4px;
+  }
+  :global(.recovery-key-option):where(.recovery-key-option) {
+    display: grid;
+    grid-template-columns: 30px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 14px;
+    padding: 12px 14px;
+    border: 1px solid color-mix(in srgb, var(--danger) 34%, var(--border));
+    border-radius: var(--radius-inset);
+    background: color-mix(in srgb, var(--danger) 6%, var(--panel));
+  }
+  :global(.recovery-key-option):where(.recovery-key-option) > :global(span) {
+    display: grid;
+    width: 30px;
+    height: 30px;
+    place-items: center;
+    border-radius: var(--radius-control);
+    color: var(--link);
+    background: var(--surface-icon);
+  }
+  :global(.recovery-key-option):where(.recovery-key-option) > :global(div) {
+    display: grid;
+    gap: 2px;
+  }
+  :global(.recovery-key-option):where(.recovery-key-option) :global(strong) {
+    font-size: var(--font-size-meta);
+  }
+  :global(.recovery-key-option):where(.recovery-key-option) :global(small) {
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+    line-height: 1.4;
+  }
+
+  @media (max-width: 700px) {
+    :global(.recovery-key-option):where(.recovery-key-option) {
+      grid-template-columns: 30px minmax(0, 1fr);
+    }
+
+    :global(.recovery-key-option):where(.recovery-key-option) :global(.button) {
+      grid-column: 1 / -1;
+      width: 100%;
+    }
+  }
+
+  @media (max-width: 760px) {
+    :global(.multisig-signing-layout):where(.multisig-signing-layout) {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  @media (min-width: 761px) and (max-width: 1050px) {
+    :global(.multisig-signing-layout):where(.multisig-signing-layout) {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

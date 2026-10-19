@@ -1,6 +1,12 @@
 # Product behavior
 
-Canonical behavior for the current rc04 source. [Current status](implementation-status.md) separates implementation from release certification. Public Mainnet approval remains bound to v0.5.1 commit `c731fa1c`; later candidates require their own authorization.
+Canonical desktop behavior from the shipped 5.2.0 baseline, with the gated 5.3 mobile development boundary below. [Current status](implementation-status.md) separates implementation from release certification. ADR 0088 conditionally authorizes v5.2.0 only when the final source, annotated tag, fresh remote main, reproduced evidence and signed/notarized published package all bind to one reviewed commit.
+
+## Mobile development boundary
+
+The [5.3 mobile plan](mobile-5.3-plan.md) and ADRs 0093–0096 cover an internal Testnet4 iOS software wallet and QR multisig signer. The current candidate wires native backup/recovery, new device-protected secrets, bounded pairing and exact-PSBT review/signing; physical acceptance remains in progress. Mainnet mobile, Android key operations, mobile USB signing and mobile multisig broadcast stay blocked. Desktop behavior and existing wallet files are preserved.
+
+A phone software wallet keeps its own BIP84 key and labelled receive authority. A multisig phone contributes an independent BIP48 key; desktop receives its public account, verifies the complete policy and later validates returned PSBT signatures. QR never transfers a seed, private descriptor, app credential or RPC credential. Shared and mobile watch-only receive requests are allocated on desktop to avoid independent address-index reuse. General label/history synchronization and a relay are not implemented. See the [candidate record](testing/5.3.0-rc2-mobile-keys.md) for actual evidence.
 
 ## Wallets and credentials
 
@@ -34,7 +40,7 @@ The multi-network desktop app switches Regtest/Testnet4/Mainnet through global S
 
 ## History and connectivity
 
-Before first history verification, do not present a numeric balance as verified. Ask for privacy approval: use Groot's network for simplicity and speed, or set up a private node. Approval saves genesis height 0 and starts a resumable scan. Declining opens the Bitcoin Core connection dialog directly. Partial observations do not block an explicitly targeted genesis retry (ADRs 0084/0085).
+Before first history verification, do not present a numeric balance as verified. Ask for privacy approval: use Groot's network for simplicity and speed, or set up a private node. Resolve the configured backend before showing its specific privacy disclosure or enabling approval; a failed lookup stays blocked with an inline retry. Approval saves genesis height 0 and starts a resumable scan. Declining opens the Bitcoin Core connection dialog directly. Partial observations do not block an explicitly targeted genesis retry (ADRs 0084/0085).
 
 Settings owns authenticated birthday, recovery gap and full-rescan controls. A birthday must precede possible wallet activity and cannot exceed the verified tip. Gaps remain 20–1,000 and cannot be reduced below already revealed receive/change runs. A pruned node must retain required history; errors show the native retention facts and a retry. Progress reaches 100% only after pending transactions and the atomic result are reconciled. Lock/restart can reattach to saved progress; cancellation never presents discarded run progress as completed history.
 
@@ -54,7 +60,7 @@ Full address/xpub views group four characters with a short final block; copy ret
 
 Hardware address verification is address-specific. Discovery candidates use amber **Select to identify**; selected-device unlock instructions remain distinct. Fresh full-account identity proof precedes device display, policy registration and signing. Standard multisig must have policy/first-address verification on enough signers to intersect every signing quorum before receiving. Policy first-address detail uses the same comparison/derivation component as Receive for all devices.
 
-BIP329 exports representable public labels/spendability deterministically. Import is bounded, additive and atomic: conflicts leave the wallet unchanged. Restored-wallet address ownership is derived in Rust across receive indexes 0–9,999 plus indexed ownership. Matching xpub records report matched signer keys and preserve current editable signer names. Labels are not a seed/descriptor backup or live synchronization protocol.
+BIP329 exports representable public labels/spendability deterministically. Import is bounded, additive and atomic: conflicts leave the wallet unchanged. Restored-wallet address ownership is derived in Rust across receive indexes 0–9,999 plus indexed ownership, but an import that would exceed Groot's supported recovery gap is rejected atomically. Matching xpub records report matched signer keys and preserve current editable signer names. Labels are not a seed/descriptor backup or live synchronization protocol.
 
 ## Send, coins and activity
 
@@ -62,7 +68,7 @@ Use integer satoshis and positive validated sat/vB rates. Economy/Standard/Prior
 
 Coin selection offers automatic strategies or exact eligible inputs. Frozen coins never enter either path. Review explains amounts, fees, change and source linkage from the actual unsigned PSBT. Self-transfers show Rust-proven **Consolidating** totals and a fee-only wallet debit; labels do not prove ownership.
 
-Proposals and collected signatures persist across restart. Leaving signing preserves the proposal; discarding requires confirmation. Each imported partial signature must cryptographically verify against the unchanged proposal. Final authorization rechecks wallet/session identity, canonical prevouts, outputs and policy before broadcast. A successful broadcast remains success if later sync fails; show the pending refresh separately.
+Proposals and collected signatures persist across restart. Leaving signing preserves the proposal; discarding requires confirmation. Each imported partial signature must cryptographically verify against the unchanged proposal. Final authorization rechecks wallet/session identity, canonical prevouts, outputs and policy before broadcast. A successful broadcast remains success if later sync fails; show the pending refresh separately. If local recording fails after Core accepts it, retain the accepted transaction ID with a durable warning, no fabricated snapshot, and no invitation to resend. Sync reconciles the exact saved proposal with canonical wallet history; the pending-result screen directs the user to sync instead of resending (ADR 0090).
 
 RBF preserves the intended recipient amount; CPFP spends an eligible wallet output. Failed or stale quotes block signing. Before final submission verify the original is still in the configured mempool. A confirmed original leaves the saved proposal read-only with explicit discard; never erase the confirmed payment. Separate RPC checks and submission are not atomic.
 
@@ -82,7 +88,7 @@ App logs contain allowlisted lifecycle/outcome codes and safe scalar context, ne
 
 On the first opening of each new exact version, show dismissible baked-in EN/FR/ES notes offline. Dismissal is an app preference, independent of wallet identity. Updates offers a manual GitHub check and an explicit once-daily opt-in; explain IP/app-version disclosure before enabling it. Settings places a small text Updates action beside the build identity. The side-menu text action appears only for a detected newer stable release. Newer stable releases expose a small corner action without covering wallet modals, toasts or mobile navigation.
 
-Rust selects exact repository/platform assets and verifies the signed Ed25519 manifest and streamed installer digest before offering Reveal installer. No automatic replacement or wallet migration. Missing owner key/signatures fail closed; rc04 contains no production trust key. Offline, no-update, failure, retry, loading and cancellation remain visible. See [update procedure](release-update-rollback.md).
+Rust selects exact repository/platform assets and verifies the signed Ed25519 manifest and streamed installer digest before offering Reveal installer. No automatic replacement or wallet migration. The production public verification key is source-pinned; missing or invalid signatures fail closed. Offline, no-update, failure, retry, loading and cancellation remain visible. See [update procedure](release-update-rollback.md).
 
 ## Exclusions
 

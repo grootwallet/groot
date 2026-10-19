@@ -68,7 +68,17 @@ import { pendingBalanceBreakdown, sortTransactions } from './presentation';
 export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
   async checkUpdate(): Promise<import('./contracts').UpdateOffer | null> {
     if (sessionStorage.getItem('fixture-update-delay') === '1')
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      await new Promise<void>((resolve) => {
+        const timeout = setTimeout(resolve, 10_000);
+        window.addEventListener(
+          'groot-fixture-update-ready',
+          () => {
+            clearTimeout(timeout);
+            resolve();
+          },
+          { once: true }
+        );
+      });
     const fixture = sessionStorage.getItem('fixture-app-update');
     if (fixture === 'offline' || fixture === 'rate_limited') throw fixture;
     return fixture === 'available' ? { version: '5.2.0', verificationReady: true } : null;
@@ -78,7 +88,9 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
       throw 'verification_failed';
     return { filename: 'Groot-5.2.0-fixture.dmg', revealToken: 'fixture-only' };
   }
-  async cancelUpdate(): Promise<void> {}
+  async cancelUpdate(): Promise<void> {
+    window.dispatchEvent(new Event('groot-fixture-update-ready'));
+  }
   async revealUpdate(_token: string): Promise<void> {}
   private multisigSetupDraftValue: import('./contracts').MultisigSetupDraft | null = null;
   private paymentDrafts = new Map<string, PaymentDraft>();
@@ -198,7 +210,7 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
   async runtimePlatform() {
     return {
       platform: 'browser' as const,
-      mobile: false,
+      mobile: typeof window !== 'undefined' && matchMedia('(max-width: 760px)').matches,
       network: defaultConfig.network,
       networkSwitching: false,
       version: APP_VERSION,
@@ -370,6 +382,9 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
   async lock() {
     if (this._selectedWalletId) this._unlockedWalletIds.delete(this._selectedWalletId);
   }
+  async lockAll() {
+    this._unlockedWalletIds.clear();
+  }
   async deleteWallet(
     credential: string,
     confirmation: string,
@@ -437,6 +452,28 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     this.multisigSetupDraftValue = null;
   }
   async nodeConfig() {
+    const params = typeof location === 'undefined' ? null : new URLSearchParams(location.search);
+    if (params?.has('fixture-node-config-delay'))
+      await new Promise<void>((resolve) => {
+        const timeout = setTimeout(resolve, 10_000);
+        window.addEventListener(
+          'groot-fixture-node-config-ready',
+          () => {
+            clearTimeout(timeout);
+            resolve();
+          },
+          { once: true }
+        );
+      });
+    if (params?.has('fixture-node-config-error'))
+      throw new WalletError('internal_error', 'Synthetic node configuration failure.');
+    if (params?.has('fixture-managed-node'))
+      return {
+        backend: { type: 'remote_core' as const, url: 'https://bitcoin-rpc.usegroot.com/' },
+        auth: 'user_pass' as const,
+        username: 'groot-0123456789abcdef01234567',
+        torProxy: null
+      };
     return structuredClone(this._nodeConfig);
   }
   async publicNetworkStatus() {
@@ -831,7 +868,12 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
         'initial_scan_required',
         'Complete the first wallet-history scan before syncing.'
       );
-    return this.snapshot();
+    const walletId = this._selectedWalletId;
+    const kind = this._profiles.find((profile) => profile.id === walletId)?.kind;
+    const snapshot = await this.snapshot();
+    if (walletId && kind && this._selectedWalletId === walletId)
+      this.#emit({ type: 'wallet_updated', walletId, walletKind: kind, snapshot });
+    return snapshot;
   }
 
   async cancelSync() {}
@@ -1232,11 +1274,16 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     const txid = this._accelerations.has(proposalId)
       ? '1b8cf4e8a09c7d12883143f9ab3fdf1d5f25a4784a96b35ec2e7a6c120437bad'
       : '0a7bf3d7a98d8bc981975320eba8e9b8ac1aa92145dcf018e48c3c2f8c19e2aa';
+    if (
+      typeof location !== 'undefined' &&
+      new URLSearchParams(location.search).has('fixture-broadcast-record-error')
+    )
+      return { txid, snapshot: null, syncPending: true, persistencePending: true };
     this.#recordFixtureBroadcast(proposalId, proposal, txid);
     this._balance = Math.max(0, this._balance - Number(proposal.total));
     this.#emit({ type: 'transaction_broadcast', txid, balance: sats(this._balance) });
     this._proposals.delete(proposalId);
-    return { txid, snapshot: await this.snapshot(), syncPending: false };
+    return { txid, snapshot: await this.snapshot(), syncPending: false, persistencePending: false };
   }
 
   async listHardwareDevices() {
@@ -1700,6 +1747,16 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     if (!proposal?.canFinalize) throw new WalletError('insufficient_signatures', 'Sign first.');
     if (proposal.psbt !== reviewedPsbt)
       throw new WalletError('proposal_mismatch', 'The signed proposal changed after review.');
+    if (
+      typeof location !== 'undefined' &&
+      new URLSearchParams(location.search).has('fixture-broadcast-record-error')
+    )
+      return {
+        txid: '0a7bf3d7a98d8bc981975320eba8e9b8ac1aa92145dcf018e48c3c2f8c19e2aa',
+        snapshot: null,
+        syncPending: true,
+        persistencePending: true
+      };
     this._externalProposals.delete(proposalId);
     return {
       txid: '0a7bf3d7a98d8bc981975320eba8e9b8ac1aa92145dcf018e48c3c2f8c19e2aa',
@@ -2231,8 +2288,8 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
           : null
     };
   }
-  async syncMultisig(_automatic = false) {
-    return this.snapshot();
+  async syncMultisig(automatic = false) {
+    return this.sync(automatic);
   }
   async createMultisigAddress(labels: string[]) {
     if (
@@ -2306,10 +2363,7 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     const parts = multipart.filter((part): part is NonNullable<typeof part> => part !== null);
     const total = parts[0]?.total ?? 0;
     if (parts.length < total)
-      throw new WalletError(
-        'internal_error',
-        `Keep scanning (${parts.length} of ${total} frames).`
-      );
+      throw new WalletError('qr_incomplete', `Keep scanning (${parts.length} of ${total} frames).`);
     return atob(
       parts
         .sort((a, b) => a.index - b.index)
@@ -2536,12 +2590,17 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
       throw new WalletError('invalid_credential', 'Incorrect app PIN.');
     if (!proposal.canFinalize)
       throw new WalletError('internal_error', 'Collect the required signatures first.');
+    const txid = '7d4a2c7f9e317f9859d7a8566fe02d773afb09fcddb617dbda98bfba8f721234';
+    if (
+      typeof location !== 'undefined' &&
+      new URLSearchParams(location.search).has('fixture-broadcast-record-error')
+    )
+      return { txid, snapshot: null, syncPending: true, persistencePending: true };
     proposal.status = 'broadcast';
     this._balance = Math.max(0, this._balance - Number(proposal.total));
-    const txid = '7d4a2c7f9e317f9859d7a8566fe02d773afb09fcddb617dbda98bfba8f721234';
     this.#recordFixtureBroadcast(proposalId, proposal, txid);
     this.#emit({ type: 'transaction_broadcast', txid, balance: sats(this._balance) });
-    return { txid, snapshot: await this.snapshot(), syncPending: false };
+    return { txid, snapshot: await this.snapshot(), syncPending: false, persistencePending: false };
   }
   async discardMultisigSignature(
     proposalId: string,
@@ -2574,6 +2633,105 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     const proposal = this._multisigProposals.get(proposalId);
     if (!proposal) throw new WalletError('proposal_not_found', 'Payment proposal was not found.');
     proposal.status = 'cancelled';
+  }
+  async createPairingInvitation(
+    _walletName: string,
+    _threshold: number,
+    _signerCount: number
+  ): ReturnType<WalletPort['createPairingInvitation']> {
+    throw new WalletError('unsupported_operation', 'Device pairing requires the native Groot app.');
+  }
+  async coordinationStatus() {
+    return {
+      shared: false,
+      role: null,
+      canSignOnThisDevice: false,
+      mobileSignerFingerprint: null,
+      keyProtection: null
+    };
+  }
+  async encodeWatchOnlyQr(_content: string): ReturnType<WalletPort['encodeWatchOnlyQr']> {
+    throw new WalletError('unsupported_operation', 'Watch-only QR export requires the native app.');
+  }
+  async decodeWatchOnlyQr(_frames: string[]): ReturnType<WalletPort['decodeWatchOnlyQr']> {
+    throw new WalletError('unsupported_operation', 'Watch-only QR import requires the native app.');
+  }
+  async cancelPairing(_sessionId: string) {}
+  async decodePairingInvitation(
+    _frames: string[]
+  ): ReturnType<WalletPort['decodePairingInvitation']> {
+    throw new WalletError('unsupported_operation', 'Device pairing requires the native Groot app.');
+  }
+  async pendingMobilePairings(): ReturnType<WalletPort['pendingMobilePairings']> {
+    return [];
+  }
+  async resumePairingOnMobile(
+    _sessionId: string,
+    _credential: string
+  ): ReturnType<WalletPort['resumePairingOnMobile']> {
+    throw new WalletError('unsupported_operation', 'Device pairing requires the native Groot app.');
+  }
+  async awaitFinalPairingPolicy(
+    _sessionId: string,
+    _credential: string
+  ): ReturnType<WalletPort['awaitFinalPairingPolicy']> {
+    throw new WalletError('unsupported_operation', 'Device pairing requires the native Groot app.');
+  }
+  async acceptPairingOnMobile(
+    _invitationJson: string,
+    _signerLabel: string,
+    _credential: string
+  ): ReturnType<WalletPort['acceptPairingOnMobile']> {
+    throw new WalletError('unsupported_operation', 'Device pairing requires the native Groot app.');
+  }
+  async acceptMobileSigner(_frames: string[]): ReturnType<WalletPort['acceptMobileSigner']> {
+    throw new WalletError('unsupported_operation', 'Device pairing requires the native Groot app.');
+  }
+  async finalizePairingOnDesktop(
+    _sessionId: string
+  ): ReturnType<WalletPort['finalizePairingOnDesktop']> {
+    throw new WalletError('unsupported_operation', 'Device pairing requires the native Groot app.');
+  }
+  async inspectFinalPairingOnMobile(
+    _frames: string[]
+  ): ReturnType<WalletPort['inspectFinalPairingOnMobile']> {
+    throw new WalletError('unsupported_operation', 'Device pairing requires the native Groot app.');
+  }
+  async completePairingOnMobile(
+    _frames: string[],
+    _credential: string
+  ): ReturnType<WalletPort['completePairingOnMobile']> {
+    throw new WalletError('unsupported_operation', 'Device pairing requires the native Groot app.');
+  }
+  async mobileRecoveryRecord(): ReturnType<WalletPort['mobileRecoveryRecord']> {
+    throw new WalletError('unsupported_operation', 'Phone recovery requires the native Groot app.');
+  }
+  async inspectMobileRecoveryRecord(
+    _frames: string[]
+  ): ReturnType<WalletPort['inspectMobileRecoveryRecord']> {
+    throw new WalletError('unsupported_operation', 'Phone recovery requires the native Groot app.');
+  }
+  async recoverMobileSigner(
+    _frames: string[],
+    _credential: string
+  ): ReturnType<WalletPort['recoverMobileSigner']> {
+    throw new WalletError('unsupported_operation', 'Phone recovery requires the native Groot app.');
+  }
+  async reviewMobilePsbt(_psbt: string): ReturnType<WalletPort['reviewMobilePsbt']> {
+    throw new WalletError('unsupported_operation', 'Mobile signing requires the native Groot app.');
+  }
+  async checkMobileSigner(_credential: string): ReturnType<WalletPort['checkMobileSigner']> {
+    throw new WalletError(
+      'unsupported_operation',
+      'Phone key checks require the native Groot app.'
+    );
+  }
+  async signMobilePsbt(
+    _reviewedPsbt: string,
+    _revisionId: string,
+    _credential: string
+  ): ReturnType<WalletPort['signMobilePsbt']> {
+    throw new WalletError('unsupported_operation', 'Mobile signing requires the native Groot app.');
   }
   async verifyMultisigAddress(deviceId: string, addressId: number) {
     const rejectReview =

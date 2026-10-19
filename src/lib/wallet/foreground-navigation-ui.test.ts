@@ -1,3 +1,4 @@
+import { readUiStyles } from '../testing/ui-styles';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
@@ -11,6 +12,14 @@ const multisigCommands = readFileSync(
   'utf8'
 );
 const overview = readFileSync(new URL('../../routes/+page.svelte', import.meta.url), 'utf8');
+const settings = readFileSync(
+  new URL('../../routes/settings/+page.svelte', import.meta.url),
+  'utf8'
+);
+const walletCore = readFileSync(
+  new URL('../../../src-tauri/src/wallet.rs', import.meta.url),
+  'utf8'
+);
 const unlock = readFileSync(new URL('../../routes/unlock/+page.svelte', import.meta.url), 'utf8');
 const activity = readFileSync(
   new URL('../../routes/activity/+page.svelte', import.meta.url),
@@ -22,7 +31,7 @@ const multisigReceive = readFileSync(
   new URL('../../routes/multisig/receive/+page.svelte', import.meta.url),
   'utf8'
 );
-const appStyles = readFileSync(new URL('../../app.css', import.meta.url), 'utf8');
+const appStyles = readUiStyles();
 
 describe('foreground wallet navigation', () => {
   it('focuses the selected wallet credential after the locked route finishes loading', () => {
@@ -91,6 +100,14 @@ describe('foreground wallet navigation', () => {
       monitor.indexOf("goto('/unlock')")
     );
     expect(monitor).not.toContain('cancelFullRescan');
+
+    const backgroundLockStart = appShell.indexOf('async function enforceMobileBackgroundLock()');
+    const backgroundLockEnd = appShell.indexOf('onMount(() =>', backgroundLockStart);
+    const backgroundLock = appShell.slice(backgroundLockStart, backgroundLockEnd);
+    expect(backgroundLock).toContain('walletService.cancelHardwareOperations()');
+    expect(backgroundLock).toContain('walletService.cancelSync()');
+    expect(backgroundLock).toContain('walletService.lockAll()');
+    expect(backgroundLock).not.toContain('cancelFullRescan');
 
     const manualLockStart = appShell.indexOf('async function lockSelectedWallet()');
     const manualLockEnd = appShell.indexOf('async function refreshSetupDraft()', manualLockStart);

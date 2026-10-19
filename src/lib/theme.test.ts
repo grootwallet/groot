@@ -1,8 +1,9 @@
+import { readUiStyles } from './testing/ui-styles';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { applyTheme, currentTheme, resolveTheme, THEME_COLORS, THEME_STORAGE_KEY } from './theme';
 
-const css = readFileSync(new URL('../app.css', import.meta.url), 'utf8');
+const css = readUiStyles();
 const appHtml = readFileSync(new URL('../app.html', import.meta.url), 'utf8');
 
 function declarations(source: string): Record<string, string> {

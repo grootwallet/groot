@@ -19,7 +19,6 @@ import type {
   SupplementalEntropyInput,
   WalletProfile,
   WalletRegistry,
-  RuntimePlatform,
   WalletSelection
 } from './contracts';
 import type {
@@ -63,6 +62,39 @@ type BackendError = {
   details?: import('./contracts').WalletErrorDetails;
 };
 type NotificationEnvelope = { id: string; event: WalletEvent };
+export type NativeWalletSyncSource =
+  | { type: 'bitcoin_core' }
+  | {
+      type: 'compact_filters';
+      peers: string[];
+      required_peers: number;
+      discover_peers: boolean;
+      tor_proxy?: string | null;
+    };
+
+export function toNativeWalletSyncSource(source: WalletSyncSource): NativeWalletSyncSource {
+  return source.type === 'bitcoin_core'
+    ? source
+    : {
+        type: source.type,
+        peers: source.peers,
+        required_peers: source.requiredPeers,
+        discover_peers: source.discoverPeers,
+        tor_proxy: source.torProxy ?? null
+      };
+}
+
+export function fromNativeWalletSyncSource(source: NativeWalletSyncSource): WalletSyncSource {
+  return source.type === 'bitcoin_core'
+    ? source
+    : {
+        type: source.type,
+        peers: source.peers,
+        requiredPeers: source.required_peers,
+        discoverPeers: source.discover_peers,
+        torProxy: source.tor_proxy ?? null
+      };
+}
 const NOTIFICATION_BATCH_SIZE = 256;
 const MAX_NOTIFICATION_BATCHES_PER_DRAIN = 32;
 
@@ -163,6 +195,10 @@ export class TauriWalletAdapter implements WalletPort {
   #hardwareListRequest: Promise<HardwareDevice[]> | null = null;
   #typedHardwareListRequests = new Map<string, Promise<HardwareDevice[]>>();
 
+  runtimePlatform() {
+    return command<import('./contracts').RuntimePlatform>('runtime_platform');
+  }
+
   paymentDraft() {
     return command<PaymentDraft | null>('payment_draft');
   }
@@ -179,9 +215,6 @@ export class TauriWalletAdapter implements WalletPort {
     return command<void>('payment_draft_clear');
   }
 
-  runtimePlatform() {
-    return command<RuntimePlatform>('runtime_platform');
-  }
   async switchNetwork(network: SwitchableNetwork) {
     await command<void>('bitcoin_network_switch', { selectedNetwork: network });
   }
@@ -272,6 +305,9 @@ export class TauriWalletAdapter implements WalletPort {
     this.#generation++;
     return command<void>('wallet_lock');
   }
+  lockAll() {
+    return command<void>('wallet_lock_all');
+  }
   deleteWallet(
     credential: string,
     confirmation: string,
@@ -319,13 +355,16 @@ export class TauriWalletAdapter implements WalletPort {
     return command<NodeStatus>('node_connection_test');
   }
   syncSource() {
-    return command<WalletSyncSource>('wallet_sync_source');
+    return command<NativeWalletSyncSource>('wallet_sync_source').then(fromNativeWalletSyncSource);
   }
   syncStatus() {
     return command<WalletSyncStatus | null>('wallet_sync_status');
   }
   saveSyncSource(source: WalletSyncSource, credential: string) {
-    return command<WalletSyncSource>('wallet_sync_source_save', { source, credential });
+    return command<NativeWalletSyncSource>('wallet_sync_source_save', {
+      source: toNativeWalletSyncSource(source),
+      credential
+    }).then(fromNativeWalletSyncSource);
   }
   inspectPaymentRequest(value: string) {
     return command<PaymentRequestInspection>('payment_request_inspect', { value });
@@ -525,7 +564,7 @@ export class TauriWalletAdapter implements WalletPort {
       reviewBinding,
       credential
     });
-    result.snapshot = normalizeSnapshot(result.snapshot);
+    if (result.snapshot) result.snapshot = normalizeSnapshot(result.snapshot);
     this.#scheduleNotifications(false, walletId, generation);
     return result;
   }
@@ -728,7 +767,7 @@ export class TauriWalletAdapter implements WalletPort {
       reviewedPsbt,
       credential
     });
-    result.snapshot = normalizeSnapshot(result.snapshot);
+    if (result.snapshot) result.snapshot = normalizeSnapshot(result.snapshot);
     this.#scheduleNotifications(false, walletId, generation);
     return result;
   }
@@ -952,12 +991,99 @@ export class TauriWalletAdapter implements WalletPort {
       reviewedPsbt,
       credential
     });
-    result.snapshot = normalizeSnapshot(result.snapshot);
+    if (result.snapshot) result.snapshot = normalizeSnapshot(result.snapshot);
     this.#scheduleNotifications(true, walletId, generation);
     return result;
   }
   cancelMultisigProposal(proposalId: string) {
     return command<void>('multisig_proposal_cancel', { proposalId });
+  }
+  createPairingInvitation(walletName: string, threshold: number, signerCount: number) {
+    return command<import('./contracts').PairingInvitation>('coordination_pairing_invitation', {
+      walletName,
+      threshold,
+      signerCount
+    });
+  }
+  coordinationStatus() {
+    return command<import('./contracts').CoordinationStatus>('coordination_status');
+  }
+  encodeWatchOnlyQr(content: string) {
+    return command<string[]>('coordination_watch_only_encode', { content });
+  }
+  decodeWatchOnlyQr(frames: string[]) {
+    return command<string>('coordination_watch_only_decode', { frames });
+  }
+  cancelPairing(sessionId: string) {
+    return command<void>('coordination_pairing_cancel', { sessionId });
+  }
+  decodePairingInvitation(frames: string[]) {
+    return command<import('./contracts').DecodedPairingInvitation>(
+      'coordination_decode_invitation',
+      { frames }
+    );
+  }
+  pendingMobilePairings() {
+    return command<import('./contracts').PendingMobilePairing[]>(
+      'coordination_pending_mobile_pairings'
+    );
+  }
+  resumePairingOnMobile(sessionId: string, credential: string) {
+    return command<import('./contracts').PairingResponse>('coordination_mobile_resume', {
+      sessionId,
+      credential
+    });
+  }
+  awaitFinalPairingPolicy(sessionId: string, credential: string) {
+    return command<void>('coordination_mobile_await_final', { sessionId, credential });
+  }
+  acceptPairingOnMobile(invitationJson: string, signerLabel: string, credential: string) {
+    return command<import('./contracts').PairingResponse>('coordination_mobile_accept', {
+      invitationJson,
+      signerLabel,
+      credential
+    });
+  }
+  acceptMobileSigner(frames: string[]) {
+    return command<import('$lib/multisig/policy').CosignerDraft>('coordination_desktop_accept', {
+      frames
+    });
+  }
+  finalizePairingOnDesktop(sessionId: string) {
+    return command<string[]>('coordination_desktop_finalize', { sessionId });
+  }
+  inspectFinalPairingOnMobile(frames: string[]) {
+    return command<string>('coordination_mobile_final_inspect', { frames });
+  }
+  completePairingOnMobile(frames: string[], credential: string) {
+    return command<MultisigWallet>('coordination_mobile_complete', { frames, credential });
+  }
+  mobileRecoveryRecord() {
+    return command<string[]>('coordination_mobile_recovery_record');
+  }
+  inspectMobileRecoveryRecord(frames: string[]) {
+    return command<import('./contracts').MobileRecoveryRecord>(
+      'coordination_mobile_recovery_inspect',
+      { frames }
+    );
+  }
+  recoverMobileSigner(frames: string[], credential: string) {
+    return command<MultisigWallet>('coordination_mobile_recover', { frames, credential });
+  }
+  reviewMobilePsbt(psbt: string) {
+    return command<import('./contracts').MobilePsbtReview>('coordination_mobile_psbt_review', {
+      psbt
+    });
+  }
+  checkMobileSigner(credential: string) {
+    return command<CosignerHealthCheck>('coordination_mobile_signer_check', { credential });
+  }
+  signMobilePsbt(reviewedPsbt: string, revisionId: string, credential: string) {
+    return command<import('./contracts').SignedMobilePsbt>('coordination_mobile_sign_psbt', {
+      reviewedPsbt,
+      revisionId,
+      credential
+    });
   }
   savePsbt(suggestedFilename: string, psbt: string) {
     return command<SavedFileResult>('psbt_file_save', { suggestedFilename, psbt });

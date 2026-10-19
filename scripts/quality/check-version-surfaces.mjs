@@ -29,7 +29,7 @@ if (mismatches.length > 0) {
   );
 }
 
-// ADR 0087 changes only this owner's 5.2 release naming; public authorization is independent.
+// ADRs 0087/0092 admit owner-selected names; public authorization is independent.
 if (!isAcceptedReleaseVersion(expectedVersion)) {
   throw new Error(
     `Version gate failed: ${expectedVersion} is outside the accepted release naming decisions.`

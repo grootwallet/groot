@@ -47,17 +47,20 @@ test('disabled loading buttons keep visibly rotating until the operation ends', 
   page
 }) => {
   await page.goto('/multisig');
+  await expect(page.getByRole('heading', { name: 'Family wallet', exact: true })).toBeVisible();
+  await page.waitForLoadState('networkidle');
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
   const indicator = page.locator('.button-loading-indicator');
-  await page.evaluate(() => {
-    const button = document.createElement('button');
-    button.className = 'button';
-    button.disabled = true;
-    button.setAttribute('aria-busy', 'true');
-    button.innerHTML =
-      '<span class="button-loading-indicator" aria-hidden="true"></span><span>Working…</span>';
-    document.body.append(button);
+  await page.evaluate(async () => {
+    const path = '/src/lib/testing/loading-button.ts';
+    const { mountLoadingButton } = await import(path);
+    const target = document.createElement('div');
+    document.body.append(target);
+    mountLoadingButton(target);
   });
   await expect(indicator).toBeVisible();
+  await expect(indicator).toHaveCSS('animation-name', 'groot-spinner-rotation');
+  await expect(indicator).toHaveCSS('animation-duration', '1s');
   expect(await indicator.evaluate((element) => getComputedStyle(element, '::after').content)).toBe(
     'none'
   );
@@ -1039,14 +1042,16 @@ test('keeps advanced wallet actions compact with one multipath descriptor', asyn
   await descriptors.getByRole('button', { name: 'Close' }).click();
 });
 
-test('shows signer details and runs honest health checks', async ({ page }) => {
+test('keeps hardware checks available for imported signers and hides them for offline keys', async ({
+  page
+}) => {
   await page.goto('/multisig');
 
   await expect(page.locator('.saved-cosigner-list article')).toHaveCount(3);
   await expect(page.locator('.signer-readiness-list')).toHaveCount(0);
 
   await page.getByRole('button', { name: 'View Coldcard details' }).click();
-  const coldcardDialog = page.getByRole('dialog', { name: 'Coldcard' });
+  const coldcardDialog = page.getByRole('dialog', { name: 'Coldcard', exact: true });
   await expect(coldcardDialog).toBeVisible();
   await expect(coldcardDialog.getByText('f00dbabe', { exact: true })).toBeVisible();
   await expect(coldcardDialog.getByText("m/48'/1'/0'/2'", { exact: true })).toBeVisible();
@@ -1054,10 +1059,18 @@ test('shows signer details and runs honest health checks', async ({ page }) => {
   await expect(coldcardDialog.getByText('Setup not recorded', { exact: true })).toBeVisible();
   await expect(coldcardDialog.getByRole('button', { name: 'Review setup' })).toBeVisible();
   await coldcardDialog.getByRole('button', { name: 'View public account key (xpub)' }).click();
-  const xpubDialog = page.getByRole('dialog', { name: 'Coldcard public account key (xpub)' });
+  const xpubDialog = page.getByRole('dialog', {
+    name: 'Coldcard public account key (xpub)',
+    exact: true
+  });
   await expect(
     xpubDialog.getByRole('button', { name: 'Copy exact Public account key (xpub)' })
   ).toBeVisible();
+  const xpubBounds = await xpubDialog.boundingBox();
+  const xpubViewport = page.viewportSize();
+  expect(xpubBounds && xpubViewport).toBeTruthy();
+  expect(xpubBounds!.y).toBeGreaterThanOrEqual(0);
+  expect(xpubBounds!.y + xpubBounds!.height).toBeLessThanOrEqual(xpubViewport!.height);
   await xpubDialog.getByRole('button', { name: 'Close' }).click();
   await expect(coldcardDialog.getByText('Not checked yet', { exact: true })).toBeVisible();
   await coldcardDialog.getByRole('button', { name: 'Check signer' }).click();
@@ -1073,17 +1086,14 @@ test('shows signer details and runs honest health checks', async ({ page }) => {
 
   await page.getByRole('button', { name: 'View Offline backup details' }).click();
   const backupDialog = page.getByRole('dialog', { name: 'Offline backup' });
-  await expect(backupDialog.getByText('Signer check', { exact: true })).toBeVisible();
-  await backupDialog.getByRole('button', { name: 'Check signer' }).click();
-  await expect(
-    backupDialog.getByText('This signer has no interactive USB device type.')
-  ).toBeVisible();
+  await expect(backupDialog.locator('.ready-badge')).toHaveText('Ready');
+  await expect(backupDialog.getByRole('button', { name: 'Check signer' })).toHaveCount(0);
   await backupDialog.getByRole('button', { name: 'Close' }).click();
 
   await page.reload();
   await page.getByRole('button', { name: 'View Coldcard details' }).click();
-  const restoredHealth = page.getByRole('dialog', { name: 'Coldcard' });
-  await expect(restoredHealth.getByText('Not checked yet', { exact: true })).toBeVisible();
+  const restoredDetails = page.getByRole('dialog', { name: 'Coldcard' });
+  await expect(restoredDetails.getByRole('button', { name: 'Check signer' })).toBeVisible();
 });
 
 test('uses the same wallet navigation for a multisig policy', async ({ page }) => {
@@ -1347,6 +1357,9 @@ test('offers safe recipes and advanced M-of-N control', async ({ page }, testInf
     await expect(selectedMark).toBeVisible();
     await expect(selectedMark).toHaveCSS('stroke', 'rgb(255, 255, 255)');
   }
+  await expect(page.getByText('Miniscript signer compatibility', { exact: true })).toBeVisible();
+  await expect(page.getByText(/no direct USB Miniscript workflow is certified/)).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Partner continuity/ })).toBeDisabled();
   const assistedRecovery = page.getByRole('button', { name: /^Family continuity/ });
   await expect(assistedRecovery).toBeDisabled();
   await expect(assistedRecovery).toContainText('Coming soon');
@@ -1522,9 +1535,7 @@ test('explicitly selects a Trezor standard wallet without changing hidden wallet
   await standard.click();
 
   const choice = page.getByRole('dialog', { name: 'Use Trezor standard wallet?' });
-  await expect(choice).toContainText(
-    /It does not disable, change, or\s+reveal any hidden passphrase wallet/
-  );
+  await expect(choice).toContainText('Your hidden wallet is unchanged.');
   await choice.getByRole('button', { name: 'Use standard wallet' }).click();
   await expect(
     choice.getByRole('status', { name: 'Hardware signer import in progress' })
@@ -1887,7 +1898,7 @@ test('creates and verifies a simple 2-of-3 descriptor wallet', async ({ page }) 
   await expect(signingPolicyReview.getByText('Policy reference saved in Groot')).toBeVisible();
   await signingPolicyReview.getByRole('button', { name: 'Review & sign on Ledger' }).click();
   await signingPolicyReview
-    .getByRole('button', { name: 'Wallet policy reviewed — show transaction' })
+    .getByRole('button', { name: 'Wallet policy reviewed. Show transaction' })
     .click();
   await expect(signingPolicyReview).toBeHidden();
   await expect(paymentSigners.getByText('1 of 2 collected')).toBeVisible();
@@ -1950,8 +1961,12 @@ test('creates and verifies a simple 2-of-3 descriptor wallet', async ({ page }) 
   await page.evaluate(() => {
     window.print = () => document.documentElement.setAttribute('data-print-called', 'true');
   });
-  await page.getByRole('button', { name: 'Save PDF' }).click();
-  await expect(page.locator('html')).toHaveAttribute('data-print-called', 'true');
+  if ((page.viewportSize()?.width ?? 1180) > 760) {
+    await page.getByRole('button', { name: 'Save PDF' }).click();
+    await expect(page.locator('html')).toHaveAttribute('data-print-called', 'true');
+  } else {
+    await expect(page.getByRole('button', { name: 'Save PDF' })).toHaveCount(0);
+  }
   await page.getByLabel('Backup file import').setInputFiles({
     name: 'family-vault-backup.json',
     mimeType: 'application/json',

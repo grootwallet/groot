@@ -9,6 +9,7 @@ import {
   validateCrateDatabaseOpenSources,
   validateMainnetSourcePolicy,
   validateReleasePolicySource,
+  validateUpdateKeyPair,
   validateWalletOpenGuardSource
 } from './verify-mainnet-source-policy.mjs';
 
@@ -53,6 +54,18 @@ test('pins every reviewed mainnet-critical source byte', () => {
       ),
     /groot-dmg-background\.png changed after the mainnet-candidate policy snapshot/
   );
+});
+
+test('requires the runtime and offline updater keys to be the same Ed25519 key', () => {
+  const rawHex = readFileSync(`${repoRoot}docs/release-update-key.hex`, 'utf8');
+  const publicPem = readFileSync(`${repoRoot}docs/release-update-key.pem`, 'utf8');
+  assert.doesNotThrow(() => validateUpdateKeyPair(rawHex, publicPem));
+  assert.throws(
+    () => validateUpdateKeyPair(`${'00'.repeat(31)}01`, publicPem),
+    /do not identify the same Ed25519 key/
+  );
+  assert.throws(() => validateUpdateKeyPair(rawHex, 'not a PEM'), /not a valid public key/);
+  assert.throws(() => validateUpdateKeyPair(rawHex.toUpperCase(), publicPem), /lowercase hex/);
 });
 
 test('browser gate accepts only the four reviewed build identities', () => {

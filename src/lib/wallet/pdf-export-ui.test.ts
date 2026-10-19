@@ -1,3 +1,4 @@
+import { readUiStyles } from '../testing/ui-styles';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
@@ -9,7 +10,7 @@ const policyRoute = readFileSync(
   new URL('../../routes/multisig/+page.svelte', import.meta.url),
   'utf8'
 );
-const appCss = readFileSync(new URL('../../app.css', import.meta.url), 'utf8');
+const appCss = readUiStyles();
 const renderer = readFileSync(
   new URL('../../../static/pdf-backup-renderer.html', import.meta.url),
   'utf8'
@@ -39,8 +40,6 @@ describe('native PDF backup presentation', () => {
     expect(policyRoute).toContain('{networkName(snapshot?.network ?? defaultConfig.network)}');
     expect(policyRoute).not.toContain(' · Spending policy');
     expect(policyRoute).not.toContain('Native SegWit · sortedmulti');
-    expect(appCss).toMatch(
-      /\.vault-hero \.formatted-amount small\s*\{[^}]*margin-left:\s*0\.28em;/s
-    );
+    expect(appCss).toMatch(/\.formatted-amount > small\s*\{[^}]*margin-inline-start:\s*0\.5rem;/s);
   });
 });

@@ -158,6 +158,7 @@
   let maxSpendActive = $state(false);
   let maxSpendRequestRevision = 0;
   let txid = $state('');
+  let persistencePending = $state(false);
   let broadcastTxidCopied = $state(false);
   let broadcastExplorerError = $state('');
   let sentAmount = $state(0);
@@ -883,9 +884,11 @@
         );
       }
       txid = result.txid;
+      persistencePending = result.persistencePending === true;
+      if (persistencePending) toast({ title: 'Local recording pending', tone: 'warning' });
       sentAmount = Number(proposal.amount);
       balanceSyncPending = result.syncPending;
-      available = result.snapshot.balance.total;
+      if (result.snapshot) available = result.snapshot.balance.total;
       passphrase = '';
       step = 4;
     } catch (cause) {
@@ -2230,12 +2233,21 @@
                 )}{:else}{translate(
                   $locale,
                   'Your payment was accepted by the Bitcoin network.'
-                )}{/if}{#if balanceSyncPending}
+                )}{/if}{#if balanceSyncPending && !persistencePending}{' '}
                 {translate(
                   $locale,
                   'Balance refresh is pending; sync when the node is available.'
                 )}{/if}
             </p>
+            {#if persistencePending}
+              <WarningNotice
+                title={translate($locale, 'Local recording pending')}
+                body={translate(
+                  $locale,
+                  'The transaction was accepted, but its local record could not be saved. Sync this wallet before making another payment. Do not resend it.'
+                )}
+              />
+            {/if}
             <button class="hash-box" type="button" onclick={copyBroadcastTxid}
               ><span>{translate($locale, 'Transaction ID')}</span><code
                 >{compactIdentifier(txid)}</code
@@ -2243,6 +2255,7 @@
             >
             <div class="success-actions">
               <Button
+                disabled={persistencePending}
                 onclick={() => {
                   step = 1;
                   address = '';
@@ -2253,6 +2266,7 @@
                   txid = '';
                   sentAmount = 0;
                   balanceSyncPending = false;
+                  persistencePending = false;
                   accelerationMethod = null;
                   broadcastExplorerError = '';
                 }}>{translate($locale, 'Make another payment')}</Button
@@ -2745,3 +2759,59 @@
   detail={translate($locale, 'Internal wallet output · not the recipient')}
   onclose={() => (hardwareChangeAddressOpen = false)}
 />
+
+<style>
+  /* Keep the original cascade weight while constraining these rules to this owner. */
+
+  :global(.sign-card):where(.sign-card) {
+    text-align: center;
+  }
+  :global(.sign-card):where(.sign-card) :global(.sign-icon) {
+    margin: 5px auto 18px;
+  }
+  :global(.sign-card):where(.sign-card) :global(h2) {
+    font-size: 18px;
+    margin: 0;
+  }
+  :global(.sign-card):where(.sign-card) > :global(p) {
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+    line-height: 1.5;
+    max-width: 380px;
+    margin: 8px auto 24px;
+  }
+  :global(.sign-card):where(.sign-card) :global(.sign-back-action) {
+    margin-top: 8px;
+  }
+  :global(.sign-card):where(.sign-card) :global(.field) {
+    text-align: left;
+  }
+  :global(.signed-transaction-review):where(.signed-transaction-review) > :global(.details-list) {
+    border-top: 0;
+  }
+  :global(.signed-transaction-review):where(.signed-transaction-review)
+    > :global(.details-list > div:last-child) {
+    border-bottom: 0;
+  }
+  :global(.signed-transaction-review):where(.signed-transaction-review) {
+    width: 100%;
+    box-sizing: border-box;
+    margin: 4px 0 12px;
+    padding: 0 14px 5px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+    background: var(--surface-control);
+    text-align: left;
+  }
+  :global(.signed-transaction-review):where(.signed-transaction-review) :global(.details-list) {
+    margin: 0;
+  }
+  :global(.signed-transaction-review):where(.signed-transaction-review) > :global(.details-list) {
+    border-top: 0;
+  }
+  :global(.signed-transaction-review):where(.signed-transaction-review)
+    :global(.proposal-review-details) {
+    margin-top: 2px;
+    border-bottom: 0;
+  }
+</style>

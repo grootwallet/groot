@@ -2605,103 +2605,116 @@ fn read_hardware_external_signer(
 }
 
 #[tauri::command]
-pub fn external_signer_create(
+pub async fn external_signer_create(
     app: AppHandle,
-    state: State<'_, AppState>,
     name: String,
     signer: ExternalSignerInput,
     credential: String,
 ) -> ApiResult<ExternalSignerWallet> {
     let credential = Zeroizing::new(credential);
-    let _operation = operation_guard(&state)?;
-    let _admission_cleanup = clear_new_wallet_admission_on_exit(&state);
-    let name = name.trim();
-    if name.is_empty() || name.chars().count() > 48 {
-        return Err(api_error(
-            "invalid_wallet_name",
-            "Wallet names must contain 1 to 48 characters.",
-        ));
-    }
-    validate_label_formatting(&signer.label)?;
-    validate_credential(credential.as_str())?;
-    signer.validate().map_err(external_signer_api_error)?;
-    require_mainnet_hardware_admission(
-        &state,
-        &signer.fingerprint,
-        &signer.xpub,
-        &signer.derivation_path,
-        signer.device_type.as_deref(),
-    )?;
-    let (external_descriptor, internal_descriptor) =
-        external_signer::descriptors(&signer).map_err(external_signer_api_error)?;
-    let metadata = ExternalSignerWallet {
-        version: 1,
-        name: name.to_owned(),
-        signer,
-        external_descriptor,
-        internal_descriptor,
-    };
-    let (id, dir) = prepare_profile_directory(&app)?;
-    let result = (|| {
-        let permit = database_open_permit_for_new_wallet(&state)?;
-        let mut db = open_wallet_database(&dir.join("wallet.sqlite"), &permit)?;
-        init_app_schema(&db)?;
-        let wallet = Wallet::create(
-            metadata.external_descriptor.clone(),
-            metadata.internal_descriptor.clone(),
-        )
-        .network(network())
-        .create_wallet(&mut db)
-        .map_err(internal)?;
-        write_private_json(&dir.join("wallet.json"), &metadata)?;
-        let marker = format!("groot-external-signer:{}", metadata.external_descriptor);
-        persist_secret_material(
-            &dir.join("secret.json"),
-            marker.as_bytes(),
-            credential.as_str(),
-            id,
+    let expected_wallet_id = load_registry(&app)?.selected_wallet_id;
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+
+        let _operation = operation_guard(&state)?;
+        if load_registry(&app)?.selected_wallet_id != expected_wallet_id {
+            return Err(api_error(
+                "wallet_selection_changed",
+                "The selected wallet changed. Retry in the current wallet.",
+            ));
+        }
+
+        let _admission_cleanup = clear_new_wallet_admission_on_exit(&state);
+        let name = name.trim();
+        if name.is_empty() || name.chars().count() > 48 {
+            return Err(api_error(
+                "invalid_wallet_name",
+                "Wallet names must contain 1 to 48 characters.",
+            ));
+        }
+        validate_label_formatting(&signer.label)?;
+        validate_credential(credential.as_str())?;
+        signer.validate().map_err(external_signer_api_error)?;
+        require_mainnet_hardware_admission(
+            &state,
+            &signer.fingerprint,
+            &signer.xpub,
+            &signer.derivation_path,
+            signer.device_type.as_deref(),
         )?;
-        profile_commands::persist_mainnet_node_admission_for_new_profile(
+        let (external_descriptor, internal_descriptor) =
+            external_signer::descriptors(&signer).map_err(external_signer_api_error)?;
+        let metadata = ExternalSignerWallet {
+            version: 1,
+            name: name.to_owned(),
+            signer,
+            external_descriptor,
+            internal_descriptor,
+        };
+        let (id, dir) = prepare_profile_directory(&app)?;
+        let result = (|| {
+            let permit = database_open_permit_for_new_wallet(&state)?;
+            let mut db = open_wallet_database(&dir.join("wallet.sqlite"), &permit)?;
+            init_app_schema(&db)?;
+            let wallet = Wallet::create(
+                metadata.external_descriptor.clone(),
+                metadata.internal_descriptor.clone(),
+            )
+            .network(network())
+            .create_wallet(&mut db)
+            .map_err(internal)?;
+            write_private_json(&dir.join("wallet.json"), &metadata)?;
+            let marker = format!("groot-external-signer:{}", metadata.external_descriptor);
+            persist_secret_material(
+                &dir.join("secret.json"),
+                marker.as_bytes(),
+                credential.as_str(),
+                id,
+            )?;
+            profile_commands::persist_mainnet_node_admission_for_new_profile(
+                &app,
+                &state,
+                id,
+                credential.as_str(),
+            )?;
+            // Unlike a Groot-generated seed, an imported hardware signer may have
+            // received bitcoin at any point in the chain. Start from genesis unless
+            // the user later narrows the saved birthday explicitly.
+            persist_initial_recovery_scan_settings(&db, 0)?;
+            commit_profile(
+                &app,
+                WalletProfile {
+                    id,
+                    name: metadata.name.clone(),
+                    network: network_name().to_owned(),
+                    kind: WalletKind::WatchOnly,
+                    descriptor_checksum: descriptor_checksum(
+                        &wallet.public_descriptor(KeychainKind::External).to_string(),
+                    )?,
+                    created_at: now(),
+                    backup_verified: true,
+                },
+                &metadata.external_descriptor,
+            )
+        })();
+        finish_new_profile_attempt(&state, id, &dir, result.is_ok())?;
+        result?;
+        unlock_selected(&app, &state)?;
+        diagnostics::record(
             &app,
             &state,
-            id,
-            credential.as_str(),
-        )?;
-        // Unlike a Groot-generated seed, an imported hardware signer may have
-        // received bitcoin at any point in the chain. Start from genesis unless
-        // the user later narrows the saved birthday explicitly.
-        persist_initial_recovery_scan_settings(&db, 0)?;
-        commit_profile(
-            &app,
-            WalletProfile {
-                id,
-                name: metadata.name.clone(),
-                network: network_name().to_owned(),
-                kind: WalletKind::WatchOnly,
-                descriptor_checksum: descriptor_checksum(
-                    &wallet.public_descriptor(KeychainKind::External).to_string(),
-                )?,
-                created_at: now(),
-                backup_verified: true,
+            diagnostics::DiagnosticEventKind::WalletCreated,
+            diagnostics::DiagnosticOutcome::Succeeded,
+            diagnostics::DiagnosticContext {
+                wallet_kind: Some(diagnostics::DiagnosticWalletKind::Hardware),
+                ..Default::default()
             },
-            &metadata.external_descriptor,
-        )
-    })();
-    finish_new_profile_attempt(&state, id, &dir, result.is_ok())?;
-    result?;
-    unlock_selected(&app, &state)?;
-    diagnostics::record(
-        &app,
-        &state,
-        diagnostics::DiagnosticEventKind::WalletCreated,
-        diagnostics::DiagnosticOutcome::Succeeded,
-        diagnostics::DiagnosticContext {
-            wallet_kind: Some(diagnostics::DiagnosticWalletKind::Hardware),
-            ..Default::default()
-        },
-        None,
-    );
-    Ok(metadata)
+            None,
+        );
+        Ok(metadata)
+    })
+    .await
+    .map_err(internal)?
 }
 
 #[tauri::command]
@@ -2764,31 +2777,45 @@ pub(crate) fn external_signer_backup(descriptor: String) -> ApiResult<ExternalSi
 }
 
 #[tauri::command]
-pub fn external_signer_export_descriptor(
+pub async fn external_signer_export_descriptor(
     app: AppHandle,
-    state: State<'_, AppState>,
     credential: String,
 ) -> ApiResult<ExternalSignerBackupDto> {
     let credential = Zeroizing::new(credential);
-    let _operation = operation_guard(&state)?;
-    require_unlocked(&app, &state)?;
-    check_auth_throttle(&app, &state)?;
-    let verified = verify_external_signer_credential(&app, credential.as_str());
-    record_auth_result(&app, &state, &verified)?;
-    verified?;
-    let backup = external_signer_backup(read_external_signer_metadata(&app)?.external_descriptor)?;
-    diagnostics::record(
-        &app,
-        &state,
-        diagnostics::DiagnosticEventKind::BackupExported,
-        diagnostics::DiagnosticOutcome::Succeeded,
-        diagnostics::DiagnosticContext {
-            wallet_kind: Some(diagnostics::DiagnosticWalletKind::Hardware),
-            ..Default::default()
-        },
-        None,
-    );
-    Ok(backup)
+    let expected_wallet_id = load_registry(&app)?.selected_wallet_id;
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+
+        let _operation = operation_guard(&state)?;
+        if load_registry(&app)?.selected_wallet_id != expected_wallet_id {
+            return Err(api_error(
+                "wallet_selection_changed",
+                "The selected wallet changed. Retry in the current wallet.",
+            ));
+        }
+
+        require_unlocked(&app, &state)?;
+        check_auth_throttle(&app, &state)?;
+        let verified = verify_external_signer_credential(&app, credential.as_str());
+        record_auth_result(&app, &state, &verified)?;
+        verified?;
+        let backup =
+            external_signer_backup(read_external_signer_metadata(&app)?.external_descriptor)?;
+        diagnostics::record(
+            &app,
+            &state,
+            diagnostics::DiagnosticEventKind::BackupExported,
+            diagnostics::DiagnosticOutcome::Succeeded,
+            diagnostics::DiagnosticContext {
+                wallet_kind: Some(diagnostics::DiagnosticWalletKind::Hardware),
+                ..Default::default()
+            },
+            None,
+        );
+        Ok(backup)
+    })
+    .await
+    .map_err(internal)?
 }
 
 pub(crate) fn external_proposal_dto(
@@ -2984,35 +3011,58 @@ fn import_external_proposal_in_db(
 }
 
 #[tauri::command]
-pub fn external_signer_proposal_import(
+pub async fn external_signer_proposal_import(
     app: AppHandle,
-    state: State<'_, AppState>,
     proposal_id: String,
     reviewed_psbt: String,
     signed_psbt: String,
 ) -> ApiResult<MultisigProposalDto> {
-    let _operation = operation_guard(&state)?;
-    require_unlocked(&app, &state)?;
-    let metadata = read_external_signer_metadata(&app)?;
-    let mut db = open_db(&app)?;
-    let current = load_external_proposal(&mut db, &metadata, &proposal_id)?;
-    require_external_proposal_inputs_available(current.inputs_available)?;
-    require_reviewed_psbt_unchanged(
-        &current.psbt,
-        &reviewed_psbt,
-        "The proposal changed after review. Reload it before importing a signature.",
-    )?;
-    import_external_proposal_in_db(&mut db, &metadata, &proposal_id, &signed_psbt)
+    let expected_wallet_id = load_registry(&app)?.selected_wallet_id;
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+
+        let _operation = operation_guard(&state)?;
+        if load_registry(&app)?.selected_wallet_id != expected_wallet_id {
+            return Err(api_error(
+                "wallet_selection_changed",
+                "The selected wallet changed. Retry in the current wallet.",
+            ));
+        }
+
+        require_unlocked(&app, &state)?;
+        let metadata = read_external_signer_metadata(&app)?;
+        let mut db = open_db(&app)?;
+        let current = load_external_proposal(&mut db, &metadata, &proposal_id)?;
+        require_external_proposal_inputs_available(current.inputs_available)?;
+        require_reviewed_psbt_unchanged(
+            &current.psbt,
+            &reviewed_psbt,
+            "The proposal changed after review. Reload it before importing a signature.",
+        )?;
+        import_external_proposal_in_db(&mut db, &metadata, &proposal_id, &signed_psbt)
+    })
+    .await
+    .map_err(internal)?
 }
 
 #[tauri::command]
-pub fn external_signer_proposal_discard_signature(
+pub async fn external_signer_proposal_discard_signature(
     app: AppHandle,
-    state: State<'_, AppState>,
     proposal_id: String,
     reviewed_psbt: String,
 ) -> ApiResult<MultisigProposalDto> {
+    let expected_wallet_id = load_registry(&app)?.selected_wallet_id;
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+
     let _operation = operation_guard(&state)?;
+        if load_registry(&app)?.selected_wallet_id != expected_wallet_id {
+            return Err(api_error(
+                "wallet_selection_changed",
+                "The selected wallet changed. Retry in the current wallet.",
+            ));
+        }
+
     require_unlocked(&app, &state)?;
     let metadata = read_external_signer_metadata(&app)?;
     let mut db = open_db(&app)?;
@@ -3046,6 +3096,9 @@ pub fn external_signer_proposal_discard_signature(
         ));
     }
     load_external_proposal(&mut db, &metadata, &proposal_id)
+    })
+    .await
+    .map_err(internal)?
 }
 
 #[tauri::command]
@@ -3056,6 +3109,7 @@ pub async fn hardware_sign_external(
     device_id: String,
     reviewed_psbt: String,
 ) -> ApiResult<MultisigProposalDto> {
+    require_desktop_key_operation()?;
     let context = diagnostics::DiagnosticContext {
         wallet_kind: Some(diagnostics::DiagnosticWalletKind::Hardware),
         ..Default::default()
@@ -3138,6 +3192,7 @@ pub async fn external_signer_proposal_broadcast(
     credential: String,
 ) -> ApiResult<BroadcastResultDto> {
     let credential = Zeroizing::new(credential);
+    require_desktop_key_operation()?;
     let diagnostic_app = app.clone();
     let context = diagnostics::DiagnosticContext {
         wallet_kind: Some(diagnostics::DiagnosticWalletKind::Hardware),
@@ -3206,50 +3261,48 @@ pub async fn external_signer_proposal_broadcast(
         }
         let transaction = psbt.extract_tx().map_err(internal)?;
         let txid = broadcast_transaction(&app, &state, &db, &proposal_id, &transaction)?;
-        let mut persisted = db.transaction().map_err(internal)?;
-        let mut wallet = load_wallet_transaction(&mut persisted)?;
-        apply_locally_broadcast_transaction(&mut wallet, &transaction);
-        let changed = persisted.execute(
-            "UPDATE groot_proposals SET status = 'broadcast', txid = ?1 WHERE proposal_id = ?2 AND status = 'ready'",
-            params![txid.to_string(), proposal_id],
-        ).map_err(internal)?;
-        if changed != 1 {
-            return Err(api_error(
-                "proposal_mismatch",
-                "The proposal changed while it was being broadcast.",
-            ));
-        }
-        label_provenance::bind_broadcast_transaction(
-            &persisted,
-            &proposal_id,
-            &txid.to_string(),
-            now(),
-        )
-        .map_err(internal)?;
-        record_replacement(&persisted, &proposal_id, &txid)?;
-        let snapshot = snapshot_from(&wallet, &persisted, None, false, None)?;
-        notifications::enqueue(
-            &persisted,
-            &WalletNotification::TransactionBroadcast {
-                txid: txid.to_string(),
-                balance: snapshot.balance.total,
-            },
-            now(),
-        )
-        .map_err(internal)?;
-        wallet.persist(&mut persisted).map_err(internal)?;
-        drop(wallet);
-        persisted.commit().map_err(internal)?;
-        let (snapshot, sync_pending) =
-            match sync_wallet_atomically(&app, &state, &mut db, false, None) {
-                Ok(snapshot) => (snapshot, false),
-                Err(_) => (snapshot, true),
-            };
-        Ok(BroadcastResultDto {
-            txid: txid.to_string(),
-            snapshot,
-            sync_pending,
-        })
+        Ok(accepted_broadcast_result(txid, || {
+            let mut persisted = db.transaction().map_err(internal)?;
+            let mut wallet = load_wallet_transaction(&mut persisted)?;
+            apply_locally_broadcast_transaction(&mut wallet, &transaction);
+            let changed = persisted.execute(
+                "UPDATE groot_proposals SET status = 'broadcast', txid = ?1 WHERE proposal_id = ?2 AND status = 'ready'",
+                params![txid.to_string(), proposal_id],
+            ).map_err(internal)?;
+            if changed != 1 {
+                return Err(api_error(
+                    "proposal_mismatch",
+                    "The proposal changed while it was being broadcast.",
+                ));
+            }
+            label_provenance::bind_broadcast_transaction(
+                &persisted,
+                &proposal_id,
+                &txid.to_string(),
+                now(),
+            )
+            .map_err(internal)?;
+            record_replacement(&persisted, &proposal_id, &txid)?;
+            let snapshot = snapshot_from(&wallet, &persisted, None, false, None)?;
+            notifications::enqueue(
+                &persisted,
+                &WalletNotification::TransactionBroadcast {
+                    txid: txid.to_string(),
+                    balance: snapshot.balance.total,
+                },
+                now(),
+            )
+            .map_err(internal)?;
+            wallet.persist(&mut persisted).map_err(internal)?;
+            drop(wallet);
+            persisted.commit().map_err(internal)?;
+            let (snapshot, sync_pending) =
+                match sync_wallet_atomically(&app, &state, &mut db, false, None) {
+                    Ok(snapshot) => (snapshot, false),
+                    Err(_) => (snapshot, true),
+                };
+            Ok((snapshot, sync_pending))
+        }))
     })
     .await
     .map_err(internal)?;
@@ -3265,12 +3318,19 @@ pub async fn external_signer_proposal_broadcast(
 }
 
 #[tauri::command]
-pub fn external_signer_proposal_cancel(
-    app: AppHandle,
-    state: State<'_, AppState>,
-    proposal_id: String,
-) -> ApiResult<()> {
+pub async fn external_signer_proposal_cancel(app: AppHandle, proposal_id: String) -> ApiResult<()> {
+    let expected_wallet_id = load_registry(&app)?.selected_wallet_id;
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+
     let _operation = operation_guard(&state)?;
+        if load_registry(&app)?.selected_wallet_id != expected_wallet_id {
+            return Err(api_error(
+                "wallet_selection_changed",
+                "The selected wallet changed. Retry in the current wallet.",
+            ));
+        }
+
     require_unlocked(&app, &state)?;
     let db = open_db(&app)?;
     let changed = db.execute(
@@ -3289,6 +3349,9 @@ pub fn external_signer_proposal_cancel(
         .map_err(internal)?
         .remove(&proposal_id);
     Ok(())
+    })
+    .await
+    .map_err(internal)?
 }
 
 #[tauri::command]

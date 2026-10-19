@@ -36,17 +36,23 @@ Use focused checks while iterating, then mandatory validation and applicable ext
 
 `pnpm regtest:start` uses isolated `.regtest` Core data. `pnpm dev:native:regtest` selects the pinned runtime and saved isolated native profile. `pnpm dev:regtest` is only the browser fixture. Real-Core integration creates disposable data; never redirect it to a physical certification profile or replace a saved profile to make a test pass.
 
+## iOS foundation
+
+For ADR 0089 development, run `bash scripts/dev/tauri-ios-foundation.sh check`, then `init` once and `build`. This uses the pinned runtime, a distinct development bundle identifier, fixed Testnet4 under ADR 0091, bundled assets and isolated Cargo output. It creates an unsigned debug archive without installing or selecting a phone. Generated Apple files remain ignored. Device installation requires inspected development signing, an explicitly selected connected/unlocked phone and disposable data; see the [5.3 plan](mobile-5.3-plan.md). Native compile evidence does not certify pairing, signing, recovery or mobile support. Preserve release-source pins and report any mismatch rather than updating reviewed hashes. The [native review/device checklist](testing/5.3-native-review.md) separates the unsigned foundation archive from later pairing and signer acceptance.
+
+The RC2 signer rehearsal follows ADRs 0094–0096 and the [candidate record](testing/5.3.0-rc2-mobile-keys.md). The build script prepares generated version/framework metadata, excludes build-only libraries, verifies the actual Testnet4 library and strips debugging sections before development signing. These packaging checks do not replace physical key authorization, backup/recovery or QR signing acceptance.
+
 ## Packaging
 
 Build from a clean tracked/untracked commit. Generate fresh target-specific SBOM/provenance after the executable exists. Generated output remains untracked.
 
-| Purpose                           | Command/boundary                                                                                                                                      |
-| --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Supporting unsigned build         | `pnpm release:unsigned`; fixed Mainnet: `pnpm release:unsigned:mainnet`                                                                               |
-| Production multi-network evidence | `pnpm release:unsigned:multi`; two clean machines, frozen signed HWI input, identical executable                                                      |
-| Freeze signed HWI                 | `pnpm release:prepare:signed-hwi`; pinned upstream digest, approved HWI-only entitlement, timestamp and provenance                                    |
-| Production macOS package          | `pnpm release:package:macos:ga`; compare reproduced executable before outer signing/notarization/stapling; no rebuild or HWI entitlement on Groot     |
-| Private test candidate            | `pnpm build:native:multi:internal` or `pnpm build:native:mainnet:internal`; exact clean commit, pinned HWI, ad-hoc `REHEARSAL_ONLY`, verified app/DMG |
+| Purpose                           | Command/boundary                                                                                                                                                                                                |
+| --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Supporting unsigned build         | `pnpm release:unsigned`; fixed Mainnet: `pnpm release:unsigned:mainnet`                                                                                                                                         |
+| Production multi-network evidence | `pnpm release:unsigned:multi`; normally two clean machines, frozen signed HWI input, identical executable. ADR 0088 permits two clean checkouts with fresh isolated build state on the same Mac for v5.2.0 only |
+| Freeze signed HWI                 | `pnpm release:prepare:signed-hwi`; pinned upstream digest, approved HWI-only entitlement, timestamp and provenance                                                                                              |
+| Production macOS package          | `pnpm release:package:macos:ga`; compare reproduced executable before outer signing/notarization/stapling; no rebuild or HWI entitlement on Groot                                                               |
+| Private test candidate            | `pnpm build:native:multi:internal` or `pnpm build:native:mainnet:internal`; exact clean commit, pinned HWI, ad-hoc `REHEARSAL_ONLY`, verified app/DMG                                                           |
 
 Public packaging requires the accepted version/tag authorization and identical local HEAD, fresh `origin/main` and peeled annotated tag. It never creates/imports/prints signing credentials. Developer ID/notarization credentials must already be configured. Internal builders provide no production signing, notarization, push or public authorization.
 
