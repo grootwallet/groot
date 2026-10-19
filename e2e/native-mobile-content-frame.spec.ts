@@ -17,6 +17,8 @@ for (const theme of ['light', 'dark']) {
       navBox = await navigation.boundingBox();
     expect(mainBox && actionBox && navBox).toBeTruthy();
     expect(mainBox!.y).toBe(0);
+    expect(navBox!.height).toBe(49);
+    expect(navBox!.y + navBox!.height).toBe(844);
     expect(mainBox!.y + mainBox!.height).toBeLessThanOrEqual(actionBox!.y - 8);
     expect(actionBox!.y + actionBox!.height).toBeLessThanOrEqual(navBox!.y - 8);
     await main.evaluate((node) => {

@@ -1705,10 +1705,24 @@
       --mobile-bottom-reserve: 0px;
     }
     :global(.app-shell.native-mobile.mobile-navigation-visible) {
-      --mobile-bottom-reserve: calc(64px + env(safe-area-inset-bottom, 0px));
+      --mobile-bottom-reserve: calc(49px + env(safe-area-inset-bottom, 0px));
     }
     :global(.app-shell.native-mobile.mobile-actions-visible) {
-      --mobile-bottom-reserve: calc(134px + env(safe-area-inset-bottom, 0px));
+      --mobile-bottom-reserve: calc(119px + env(safe-area-inset-bottom, 0px));
+    }
+    :global(.app-shell.native-mobile .mobile-nav) {
+      height: calc(49px + env(safe-area-inset-bottom, 0px));
+    }
+    :global(.app-shell.native-mobile .mobile-nav a) {
+      gap: 2px;
+      font-size: 12px;
+    }
+    :global(.app-shell.native-mobile .mobile-nav a svg) {
+      width: 20px;
+      height: 20px;
+    }
+    :global(.app-shell.native-mobile .mobile-actions) {
+      bottom: calc(61px + env(safe-area-inset-bottom, 0px));
     }
     :global(.app-shell.native-mobile:not(.onboarding-shell) .main) {
       position: fixed;
