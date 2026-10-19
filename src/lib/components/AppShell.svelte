@@ -30,6 +30,7 @@
     defaultConfig,
     networkSwitchingBuild
   } from '$lib/config';
+  import { isMobileSetupRoute } from '$lib/wallet/setup-navigation';
   import { requiresMobileNodeSetup } from '$lib/wallet/network-readiness';
   import { applyMultisigNetwork } from '$lib/multisig/policy';
   import { onMount } from 'svelte';
@@ -184,7 +185,10 @@
     '/multisig/recover'
   ]);
   const routeCancelsSync = (pathname: string) =>
-    walletSetupRoutes.has(pathname) || pathname === '/unlock' || pathname === '/diagnostics';
+    walletSetupRoutes.has(pathname) ||
+    isMobileSetupRoute(pathname) ||
+    pathname === '/unlock' ||
+    pathname === '/diagnostics';
   const active = (href: string) =>
     href === '/settings'
       ? page.url.pathname === href || page.url.pathname === '/diagnostics'
@@ -228,11 +232,7 @@
   let visibleNav = $derived(policyContext ? nav : nav.slice(0, 3));
   let mobileItems = $derived(policyContext ? nav : nav.slice(0, 3));
   let onboardingRoute = $derived(walletSetupRoutes.has(page.url.pathname));
-  let mobileSetupRoute = $derived(
-    page.url.pathname === '/mobile/pair' ||
-      page.url.pathname === '/mobile/watch' ||
-      page.url.pathname === '/mobile/recover'
-  );
+  let mobileSetupRoute = $derived(isMobileSetupRoute(page.url.pathname));
   let lockedRoute = $derived(page.url.pathname === '/unlock');
   let settingsRoute = $derived(page.url.pathname === '/settings');
   let diagnosticsRoute = $derived(page.url.pathname === '/diagnostics');
@@ -729,6 +729,7 @@
       if (
         !selection.unlocked &&
         !onboardingRoute &&
+        !mobileSetupRoute &&
         !lockedRoute &&
         !settingsRoute &&
         !diagnosticsRoute
@@ -859,6 +860,7 @@
       async (selection) => {
         if (
           selection.profile.id !== selectedWalletId ||
+          mobileSetupRoute ||
           lockedRoute ||
           settingsRoute ||
           diagnosticsRoute
@@ -871,8 +873,9 @@
       },
       () =>
         startupState !== 'ready' ||
-        isPrototypeWallet ||
+        (isPrototypeWallet && !mobileRuntime) ||
         onboardingRoute ||
+        mobileSetupRoute ||
         lockedRoute ||
         navigationPending ||
         !selectedWalletId ||

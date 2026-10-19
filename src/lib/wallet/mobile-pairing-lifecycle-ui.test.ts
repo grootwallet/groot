@@ -160,7 +160,7 @@ describe('mobile pairing lifecycle UI', () => {
   });
 
   it('keeps pairing focused by hiding wallet navigation and explaining the desktop handoff', () => {
-    expect(appShellSource).toContain("page.url.pathname === '/mobile/pair'");
+    expect(appShellSource).toContain('isMobileSetupRoute(page.url.pathname)');
     expect(appShellSource).toContain('!mobileSetupRoute');
     expect(desktopRouteSource).toContain('desktop will show one final QR for the phone.');
     expect(routeSource).toContain('Finish wallet setup on desktop');

@@ -93,3 +93,5 @@ Closing in-flight work cancels it; failed/cancelled stages are removed. Missing 
 ## Accepted payment with local recording pending
 
 After Core accepts a payment, local storage failure keeps the accepted transaction ID visible with an inline warning and success notification. Do not offer another payment from that result. Sync repairs the existing saved proposal from exact canonical transaction identity; a missing snapshot is never replaced by an invented balance. Later refresh failure after a committed broadcast remains a separate pending-refresh state (ADR 0090).
+
+Separate mobile setup (`/mobile/pair`, `/mobile/recover`, `/mobile/watch`) remains reachable when an existing selected wallet is locked, including direct startup and Add another wallet. These routes pause selected-wallet session redirects and background sync; they never unlock that wallet. Phone-key creation/recovery still requires its own native backup and credential/device authorization. Background locking and authenticated wallet/signing routes remain protected.
