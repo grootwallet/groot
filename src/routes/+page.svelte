@@ -895,6 +895,7 @@
   </header>
   {#if mobileSyncSetupRequired}<div class="mobile-sync-notice">
       <WarningNotice
+        class="compact-action"
         title={translate($locale, 'Set up wallet sync')}
         body={translate($locale, 'Connect a trusted node to sync this wallet.')}
         ><Button size="small" variant="secondary" href="/settings#network-services"
@@ -1023,10 +1024,10 @@
   {#if phoneBackupUnverified}
     <WarningNotice
       title={translate($locale, 'Recovery backup not verified')}
-      body={translate($locale, 'Verify your written recovery words.')}
+      class="compact-action"
     >
       <Button size="small" variant="secondary" href="/multisig"
-        >{translate($locale, 'Verify phone backup')}</Button
+        >{translate($locale, 'Verify now')}</Button
       >
     </WarningNotice>
   {/if}

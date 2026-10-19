@@ -76,3 +76,7 @@ Native mobile full-screen setup reserves the top and landscape side safe areas b
 Mobile signer routes compose the existing InstructionCard, Button, PasswordField, QR, address and warning controls. InstructionCard may omit its title when the flow supplies an existing heading inside; its surface and spacing stay owned by that component. Shared foundation CSS and the earlier scoped ownership remain intact.
 
 Native mobile setup keeps build information in Settings instead of a fixed footer over onboarding actions. Its content scroller starts below the status-bar safe area. Stacked sync and backup notices remain in document flow; only one missing-connection notice is shown.
+
+Unlocked mobile screens omit the brand header and start below the system safe area. Sync and backup reminders use compact inline actions with 44px touch targets; recovery verification remains available. This presentation change has no BIP or persisted-format impact.
+
+Native mobile navigation uses a 49px tab row plus the system bottom safe area, 20px icons and 12px labels. Keep the home indicator clear; do not add a second bottom spacer.

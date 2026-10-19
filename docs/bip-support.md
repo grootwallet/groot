@@ -84,3 +84,5 @@ The RC4 existing-wallet setup navigation correction has no BIP impact: pairing r
 RC5 backup deferral: no BIP support or wire-format change. BIP39 word verification is optional during phone pairing; the existing verification flag remains false until a successful native check. BIP48 key/policy identity checks and BIP129 invitation binding are unchanged.
 
 RC6: no BIP or wire-format impact from mobile layout/copy, completed-camera cleanup or the Keychain access-policy adjustment in ADR 0097. Credentials and phone-key derivation remain unchanged.
+
+Unlocked mobile screens omit the brand header and start below the system safe area. Sync and backup reminders use compact inline actions with 44px touch targets; recovery verification remains available. This presentation change has no BIP or persisted-format impact.

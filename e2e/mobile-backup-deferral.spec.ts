@@ -102,7 +102,11 @@ for (const theme of ['light', 'dark']) {
       if (!process.env.MOBILE_KEY_EVIDENCE_DIR) return;
       const directory = resolve(process.env.MOBILE_KEY_EVIDENCE_DIR, info.project.name);
       mkdirSync(directory, { recursive: true });
-      await page.screenshot({ path: resolve(directory, `${theme}-${name}.png`), fullPage: true });
+      await page.screenshot({
+        animations: 'disabled',
+        path: resolve(directory, `${theme}-${name}.png`),
+        fullPage: true
+      });
     };
     await page.getByRole('button', { name: 'Allow camera', exact: true }).click();
     await expect

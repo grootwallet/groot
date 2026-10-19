@@ -641,7 +641,7 @@
     {#if coordination?.role === 'mobile_cosigner' && !phoneBackupVerified}
       <WarningNotice
         title={translate($locale, 'Recovery backup not verified')}
-        body={translate($locale, 'Verify your written recovery words.')}
+        class="compact-action"
       >
         <Button
           size="small"
