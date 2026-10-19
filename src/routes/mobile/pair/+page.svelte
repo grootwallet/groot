@@ -3,6 +3,7 @@
   import { onDestroy, onMount } from 'svelte';
   import { ArrowLeft, Check, LockKeyhole, ScanLine, ShieldCheck, Smartphone } from '@lucide/svelte';
   import AnimatedUrQr from '$lib/components/AnimatedUrQr.svelte';
+  import WarningNotice from '$lib/components/WarningNotice.svelte';
   import Button from '$lib/components/Button.svelte';
   import InstructionCard from '$lib/components/InstructionCard.svelte';
   import PasswordField from '$lib/components/PasswordField.svelte';
@@ -273,6 +274,16 @@
     current={pairingStep}
     label={translate($locale, 'Pairing progress')}
   />
+
+  {#if response && !response.backupVerified}
+    <WarningNotice
+      title={translate($locale, 'Recovery backup not verified')}
+      body={translate(
+        $locale,
+        'Pairing can continue. Verify your written phone words from the shared wallet after setup.'
+      )}
+    />
+  {/if}
 
   {#if stage === 'invite'}
     {#if pendingPairings.length > 0}

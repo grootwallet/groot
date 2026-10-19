@@ -555,26 +555,30 @@ fn consuming_pairing_cannot_claim_an_unrelated_registered_wallet() {
 
 #[test]
 fn staged_mobile_response_is_recreated_exactly_after_restart() {
-    let invitation = invitation(1_900);
-    let staged = PendingMobileSecret {
-        version: 1,
-        invitation: invitation.clone(),
-        mnemonic: Zeroizing::new(mobile_mnemonic().to_string()),
-        signer_label: "Recovered phone session".to_owned(),
-        backup_verified: true,
-        awaiting_final_policy: true,
-    };
-    let first = pairing_response_from_staged(&staged).unwrap();
-    let encoded = serde_json::to_vec(&staged).unwrap();
-    let reopened: PendingMobileSecret = serde_json::from_slice(&encoded).unwrap();
-    let second = pairing_response_from_staged(&reopened).unwrap();
-    assert_eq!(first.session_id, second.session_id);
-    assert_eq!(first.fingerprint, second.fingerprint);
-    assert_eq!(first.xpub_checksum, second.xpub_checksum);
-    assert_eq!(first.comparison_code, second.comparison_code);
-    assert_eq!(first.frames, second.frames);
-    assert!(first.awaiting_final_policy);
-    assert!(second.awaiting_final_policy);
+    for backup_verified in [false, true] {
+        let invitation = invitation(1_900);
+        let staged = PendingMobileSecret {
+            version: 1,
+            invitation: invitation.clone(),
+            mnemonic: Zeroizing::new(mobile_mnemonic().to_string()),
+            signer_label: "Recovered phone session".to_owned(),
+            backup_verified,
+            awaiting_final_policy: true,
+        };
+        let first = pairing_response_from_staged(&staged).unwrap();
+        let encoded = serde_json::to_vec(&staged).unwrap();
+        let reopened: PendingMobileSecret = serde_json::from_slice(&encoded).unwrap();
+        let second = pairing_response_from_staged(&reopened).unwrap();
+        assert_eq!(first.session_id, second.session_id);
+        assert_eq!(first.fingerprint, second.fingerprint);
+        assert_eq!(first.xpub_checksum, second.xpub_checksum);
+        assert_eq!(first.comparison_code, second.comparison_code);
+        assert_eq!(first.frames, second.frames);
+        assert_eq!(first.backup_verified, backup_verified);
+        assert_eq!(second.backup_verified, backup_verified);
+        assert!(first.awaiting_final_policy);
+        assert!(second.awaiting_final_policy);
+    }
 }
 
 #[test]
