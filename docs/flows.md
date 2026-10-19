@@ -101,3 +101,5 @@ Phone-key pairing uses the same optional native backup verification as software 
 After a QR is completely verified, release its camera stream and replace the preview with a compact success result before credential entry. Native mobile content scrolls between the fixed safe header and bottom controls, never beneath them. Keep setup copy brief; phone signer connections are QR. iOS uses Groot credentials without repeated platform prompts; an old key may need one final platform approval (ADR 0097).
 
 Unlocked mobile screens omit the brand header and start below the system safe area. Sync and backup reminders use compact inline actions with 44px touch targets; recovery verification remains available. This presentation change has no BIP or persisted-format impact.
+
+Watch-only QR import retains an explicit Back to wallet action when mobile branding is hidden; leaving before camera permission resolves releases the eventual stream.

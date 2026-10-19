@@ -541,7 +541,12 @@
   });
 
   afterNavigate(({ from, to }) => {
-    if (mobileRuntime && from?.url.pathname !== to?.url.pathname && !to?.url.hash && mainElement) {
+    if (
+      mobileRuntime &&
+      from?.url?.pathname !== to?.url?.pathname &&
+      !to?.url?.hash &&
+      mainElement
+    ) {
       mainElement.scrollTop = 0;
     }
     navigationPending = false;

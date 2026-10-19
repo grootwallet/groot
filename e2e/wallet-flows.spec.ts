@@ -1105,10 +1105,22 @@ test('creates an external-signer wallet, signs by cable, and configures its isol
 test('localizes hardware scan progress in French', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('groot-language', 'fr'));
   await page.goto('/hardware/new');
+  await page.evaluate(async () => {
+    const path = '/src/lib/wallet/index.ts';
+    const { walletService } = await import(path);
+    walletService.listHardwareDevices = () =>
+      new Promise((resolve) => {
+        (window as Window & { releaseHardwareScan?: () => void }).releaseHardwareScan = () =>
+          resolve([]);
+      });
+  });
   await page.getByRole('button', { name: /Connecter par câble/ }).click();
   await expect(
     page.getByRole('status', { name: 'Configuration du signataire matériel en cours' })
   ).toContainText('Recherche de tous les signataires matériels USB…');
+  await page.evaluate(() =>
+    (window as Window & { releaseHardwareScan: () => void }).releaseHardwareScan()
+  );
 });
 
 test('imports a public hardware backup without requiring a wallet name first', async ({ page }) => {
@@ -2650,7 +2662,7 @@ test('closing a phone QR scan while camera permission is pending releases the st
       )
     )
     .toBe(true);
-  await page.getByRole('link', { name: 'Groot home', exact: true }).click();
+  await page.getByRole('link', { name: 'Back to wallet', exact: true }).click();
   await expect(page).toHaveURL(/\/$/);
   await page.evaluate(() =>
     (window as unknown as { releaseCameraPermission: () => void }).releaseCameraPermission()

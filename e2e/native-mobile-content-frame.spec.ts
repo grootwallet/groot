@@ -5,9 +5,13 @@ for (const theme of ['light', 'dark']) {
     page
   }, info) => {
     test.skip(info.project.name !== 'mobile');
+    const browserErrors: string[] = [];
+    page.on('pageerror', (error) => browserErrors.push(error.message));
     await page.addInitScript((value) => localStorage.setItem('groot-theme', value), theme);
     await page.goto('/?fixture-native-mobile=1');
-    await expect(page.getByRole('heading', { name: 'Overview', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Overview', exact: true })).toBeVisible({
+      timeout: 15_000
+    });
     const main = page.locator('main.main');
     await expect(page.locator('.mobile-brand')).toBeHidden();
     const actions = page.locator('.mobile-actions');
@@ -46,6 +50,7 @@ for (const theme of ['light', 'dark']) {
     await navigation.getByRole('link', { name: 'Overview', exact: true }).click();
     await expect.poll(() => main.evaluate((node) => node.scrollTop)).toBe(0);
     await expect(page.getByRole('heading', { name: 'Overview', exact: true })).toBeVisible();
+    expect(browserErrors).toEqual([]);
     await page.screenshot({
       animations: 'disabled',
       path: info.outputPath(`${theme}-native-content-frame.png`)

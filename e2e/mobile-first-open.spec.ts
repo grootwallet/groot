@@ -35,9 +35,14 @@ for (const theme of ['light', 'dark']) {
     // Keep the simulated device identity stable across SPA navigation, as native does.
     await page.evaluate(async () => {
       const path = '/src/lib/wallet/index.ts';
-      const { walletService } = await import(path);
+      const { walletService, WalletError } = await import(path);
       const runtime = await walletService.runtimePlatform();
       walletService.runtimePlatform = async () => runtime;
+      // Native mobile cannot sync before a trusted endpoint is configured.
+      // Keep the browser adapter from silently completing this offline fixture.
+      walletService.sync = async () => {
+        throw new WalletError('network_unavailable', 'Synthetic mobile node is not configured.');
+      };
     });
     await modal.getByRole('button', { name: 'Set up my own node' }).click();
     await expect(page.getByRole('dialog', { name: 'Connect Bitcoin Core' })).toBeVisible();
