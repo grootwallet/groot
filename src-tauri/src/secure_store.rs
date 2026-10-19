@@ -519,8 +519,26 @@ fn load_ios_metadata(
     context: SecureStoreContext,
 ) -> Result<Zeroizing<Vec<u8>>, SecureStoreError> {
     let key = ios_device_key(context, false)?;
-    let portable = unwrap_ios_metadata(metadata, context, &key)?;
-    decrypt_metadata(&portable, credential, context)
+    decrypt_ios_metadata_with_key(metadata, credential, context, &key, |key| {
+        #[cfg(target_os = "ios")]
+        remember_ios_device_key(context, key)?;
+        #[cfg(not(target_os = "ios"))]
+        let _ = key;
+        Ok(())
+    })
+}
+
+fn decrypt_ios_metadata_with_key(
+    metadata: Metadata,
+    credential: &str,
+    context: SecureStoreContext,
+    key: &[u8],
+    remember: impl FnOnce(&[u8]) -> Result<(), SecureStoreError>,
+) -> Result<Zeroizing<Vec<u8>>, SecureStoreError> {
+    let portable = unwrap_ios_metadata(metadata, context, key)?;
+    let secret = decrypt_metadata(&portable, credential, context)?;
+    remember(key)?;
+    Ok(secret)
 }
 
 #[cfg(target_os = "ios")]
@@ -558,6 +576,33 @@ fn ios_device_key(
     Ok(key)
 }
 
+#[cfg(target_os = "ios")]
+fn remember_ios_device_key(
+    context: SecureStoreContext,
+    key: &[u8],
+) -> Result<(), SecureStoreError> {
+    use std::ffi::CString;
+    let scope = CString::new(format!(
+        "{}.{}",
+        context.wallet_id,
+        context.purpose.as_str()
+    ))
+    .map_err(|_| SecureStoreError::Unavailable)?;
+    unsafe extern "C" {
+        fn groot_ios_remember_device_key(
+            scope: *const std::ffi::c_char,
+            key: *const u8,
+            capacity: usize,
+        ) -> i32;
+    }
+    // SAFETY: native code copies this bounded key synchronously; Rust retains zeroizing ownership.
+    let status = unsafe { groot_ios_remember_device_key(scope.as_ptr(), key.as_ptr(), key.len()) };
+    if status != 0 {
+        return Err(device_key_error(status));
+    }
+    Ok(())
+}
+
 #[cfg(not(target_os = "ios"))]
 fn ios_device_key(
     _context: SecureStoreContext,
@@ -579,6 +624,45 @@ mod tests {
     use super::*;
     use std::io::{self, Write};
     use std::time::Instant;
+
+    #[test]
+    fn device_policy_copy_requires_successful_groot_authentication() {
+        let context = SecureStoreContext {
+            wallet_id: Uuid::new_v4(),
+            purpose: SecureStorePurpose::WalletSecret,
+        };
+        let key = [7_u8; KEY_BYTES];
+        let wrapped = || {
+            wrap_ios_metadata(
+                new_metadata(b"synthetic-secret", "correct", context).unwrap(),
+                context,
+                &key,
+            )
+            .unwrap()
+        };
+        let called = std::cell::Cell::new(false);
+        assert!(
+            decrypt_ios_metadata_with_key(wrapped(), "wrong", context, &key, |_| {
+                called.set(true);
+                Ok(())
+            })
+            .is_err()
+        );
+        assert!(!called.get());
+        let secret = decrypt_ios_metadata_with_key(wrapped(), "correct", context, &key, |_| {
+            called.set(true);
+            Ok(())
+        })
+        .unwrap();
+        assert!(called.get());
+        assert_eq!(secret.as_slice(), b"synthetic-secret");
+        assert!(
+            decrypt_ios_metadata_with_key(wrapped(), "correct", context, &key, |_| Err(
+                SecureStoreError::Unavailable
+            ))
+            .is_err()
+        );
+    }
 
     #[test]
     fn device_authentication_cancel_is_distinct_and_unknown_statuses_fail_closed() {

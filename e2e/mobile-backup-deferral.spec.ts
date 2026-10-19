@@ -18,7 +18,7 @@ for (const theme of ['light', 'dark']) {
     await page.route(/\/qr-scanner\.js(?:\?|$)/, (route) =>
       route.fulfill({
         contentType: 'application/javascript',
-        body: 'export default class { constructor(_video, emit) { window.emitPhoneFrame = () => emit({ data: "ur:groot-invite/synthetic" }); } async start() {} stop() {} destroy() {} }'
+        body: 'export default class { constructor(_video, emit) { window.emitPhoneFrame = (frame = "ur:groot-invite/synthetic") => emit({ data: frame }); } async start() {} stop() {} destroy() {} }'
       })
     );
     await page.goto('/mobile/pair');
@@ -43,6 +43,32 @@ for (const theme of ['light', 'dark']) {
         frames: ['ur:bytes/synthetic'],
         awaitingFinalPolicy: false
       });
+      const multisigWallet = walletService.multisigWallet.bind(walletService);
+      walletService.multisigWallet = async () => {
+        const wallet = await multisigWallet();
+        return (
+          wallet && {
+            ...wallet,
+            cosigners: wallet.cosigners.map((signer: object, index: number) =>
+              index === 0
+                ? {
+                    ...signer,
+                    label: 'Synthetic phone',
+                    fingerprint: 'abcd1234',
+                    deviceType: 'groot-mobile',
+                    source: 'qr'
+                  }
+                : signer
+            )
+          }
+        );
+      };
+      walletService.awaitFinalPairingPolicy = async () => {};
+      walletService.inspectFinalPairingOnMobile = async () => 'synthetic-session';
+      walletService.completePairingOnMobile = async (_frames: string[], credential: string) => {
+        if (credential !== 'synthetic-correct-pin')
+          throw new WalletError('invalid_credential', 'Incorrect app PIN.');
+      };
       walletService.coordinationStatus = async () => ({
         shared: true,
         role: 'mobile_cosigner',
@@ -91,11 +117,26 @@ for (const theme of ['light', 'dark']) {
     await expect(page.getByText('Recovery backup not verified', { exact: true })).toBeVisible();
     await expect(page.getByRole('img', { name: /Encrypted mobile signer QR/ })).toBeVisible();
     await capture('pairing-backup-deferred');
-    await page.evaluate(async () => {
-      const path = '/node_modules/@sveltejs/kit/src/runtime/app/navigation.js';
-      const { goto } = await import(path);
-      await goto('/multisig');
-    });
+    await page.getByLabel('Local app PIN', { exact: true }).fill('synthetic-correct-pin');
+    await page.getByRole('button', { name: 'Desktop scanned this phone key', exact: true }).click();
+    await page.getByRole('button', { name: 'Allow camera', exact: true }).click();
+    await expect(page.locator('.scanner')).toHaveClass(/camera-active/);
+    await page.evaluate(() =>
+      (window as Window & { emitPhoneFrame: (frame: string) => void }).emitPhoneFrame(
+        'ur:groot-wallet/synthetic'
+      )
+    );
+    await expect(page.getByText('QR verified', { exact: true })).toBeVisible();
+    await expect(page.getByLabel('Animated QR camera preview')).toHaveCount(0);
+    await expect(page.locator('.scan-progress')).toHaveCount(0);
+    await capture('final-qr-verified-before-pin');
+    await page.getByLabel('Local app PIN', { exact: true }).fill('synthetic-wrong-pin');
+    await page.getByRole('button', { name: 'Accept wallet policy', exact: true }).click();
+    await expect(page.locator('.inline-error')).toHaveText('Incorrect app PIN.');
+    await expect(page.getByLabel('Local app PIN', { exact: true })).toHaveValue('');
+    await expect(page.getByLabel('Animated QR camera preview')).toHaveCount(0);
+    await page.getByLabel('Local app PIN', { exact: true }).fill('synthetic-correct-pin');
+    await page.getByRole('button', { name: 'Accept wallet policy', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Family wallet', exact: true })).toBeVisible();
     const reminder = page.getByText('Recovery backup not verified', { exact: true });
     await expect(reminder).toBeVisible();
@@ -121,5 +162,12 @@ for (const theme of ['light', 'dark']) {
       'Recovery backup verified'
     );
     await capture('phone-backup-verified');
+    await page.getByRole('button', { name: 'View Synthetic phone details', exact: true }).click();
+    const signerDialog = page.getByRole('dialog');
+    await expect(
+      signerDialog.locator('.connection-detail').getByText('QR connection', { exact: true })
+    ).toBeVisible();
+    await expect(signerDialog.getByText('USB connection needed', { exact: true })).toHaveCount(0);
+    await capture('phone-qr-connection-details');
   });
 }

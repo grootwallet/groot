@@ -1,6 +1,42 @@
 import type { CatalogSection } from './types';
 
 export const coordinationCopy = {
+  'Pair phone': { fr: 'Associer le téléphone', es: 'Emparejar teléfono' },
+  'Back up the policy and verify its first address.': {
+    fr: 'Sauvegardez la politique et vérifiez sa première adresse.',
+    es: 'Guarda la política y verifica su primera dirección.'
+  },
+  'Any {count} keys can sign.': {
+    fr: '{count} clés au choix peuvent signer.',
+    es: 'Pueden firmar cualesquiera {count} claves.'
+  },
+
+  'Connect a trusted node to sync this wallet.': {
+    fr: 'Connectez un nœud de confiance pour synchroniser ce portefeuille.',
+    es: 'Conecta un nodo de confianza para sincronizar esta cartera.'
+  },
+  'Desktop coordinator': { fr: 'Coordinateur sur ordinateur', es: 'Coordinador de escritorio' },
+  'Finish on desktop': { fr: 'Terminer sur ordinateur', es: 'Terminar en el ordenador' },
+  'Phone signer · QR connection': {
+    fr: 'Signataire mobile · connexion QR',
+    es: 'Firmante móvil · conexión QR'
+  },
+  'QR connection': { fr: 'Connexion QR', es: 'Conexión QR' },
+  'QR verified': { fr: 'QR vérifié', es: 'QR verificado' },
+  'Scan the final wallet QR shown on desktop.': {
+    fr: 'Scannez le QR final du portefeuille sur l’ordinateur.',
+    es: 'Escanea el QR final de la cartera en el ordenador.'
+  },
+  'Verify your written recovery words.': {
+    fr: 'Vérifiez vos mots de récupération écrits.',
+    es: 'Verifica las palabras de recuperación que has anotado.'
+  },
+  'Verify your written words later in Policy.': {
+    fr: 'Vérifiez vos mots plus tard dans Politique.',
+    es: 'Verifica tus palabras más tarde en Política.'
+  },
+  'Watch-only wallet': { fr: 'Portefeuille en lecture seule', es: 'Cartera de solo lectura' },
+
   'Backup verification failed': {
     fr: 'Échec de la vérification de la sauvegarde',
     es: 'No se pudo verificar la copia de seguridad'

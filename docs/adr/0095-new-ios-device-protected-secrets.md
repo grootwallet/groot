@@ -25,3 +25,7 @@ Use the already locked `cc` version 1.2.67 to compile the existing iOS Objective
 Missing wrapper, rejected device authentication, malformed/unknown envelopes or unavailable passcode protection fail closed; do not fall back to a portable write. New-profile/staging failures preserve existing wallets. No phone-signer PIN change until its atomic multi-file rotation is designed. Keychain deletion/secure erasure is not implied by file deletion.
 
 Unit tests must prove both layers, context binding, wrong credential/device key, tampering, malformed metadata and unsupported versions. iOS compilation, physical authentication/cancel/lock/restart, clean recovery and reinstall/restore behavior are separate evidence. Destructive device-wide passcode/biometric changes cannot be automated as ordinary app tests. No release gate or reviewed source pin changes are authorized by this ADR.
+
+## Superseded authentication policy
+
+ADR 0097 supersedes per-read user presence at the owner’s request. Device binding, passcode-required device-only storage, envelope compatibility and recovery boundaries remain. Original Keychain items and ciphertext are retained; see that ADR for the credential-gated additive access-policy copy.

@@ -40,3 +40,5 @@ This page describes 5.3 development from the shipped `5.2.0` baseline at `733bc5
 Keep one row per capability. Update it when scope or evidence changes; do not append release diaries or historical test totals. Standards and limitations belong in [`bip-support.md`](bip-support.md). Release authorization remains exact-commit scoped.
 
 Documentation cleanup has **no BIP, API, schema, dependency or runtime impact**. It corrects stale descriptions without extending support.
+
+RC6 replaces repeated iOS key-access prompts with Groot credential authorization while retaining device-bound v6 files and original legacy Keychain items (ADR 0097). Mobile safe scroll bounds, compact setup copy, phone QR connection labels and completed-camera cleanup have dedicated browser regressions. Physical verification remains candidate-specific.

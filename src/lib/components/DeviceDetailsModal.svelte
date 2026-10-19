@@ -61,6 +61,9 @@
   let nameError = $state('');
   let renaming = $state(false);
 
+  function signerSourceName(signer: CosignerDraft) {
+    return signer.deviceType === 'groot-mobile' ? 'QR connection' : sourceName(signer.source);
+  }
   function sourceName(source: CosignerSource) {
     if (deviceContext === LOCAL_MOBILE_SIGNER_CONTEXT) return 'Phone key';
     return {
@@ -81,6 +84,7 @@
   }
 
   function connectionLabel() {
+    if (signer?.deviceType === 'groot-mobile') return 'QR connection';
     if (deviceContext === LOCAL_MOBILE_SIGNER_CONTEXT) return 'This phone';
     if (deviceContext === DESKTOP_MANAGED_SIGNER_CONTEXT) return 'Connect on desktop';
     return signer?.source === 'usb' || signer?.source === 'virtual'
@@ -143,7 +147,7 @@
       <div class="device-identity">
         <span><KeyRound size={20} /></span>
         <div>
-          <strong>{translate($locale, sourceName(signer.source))}</strong><small
+          <strong>{translate($locale, signerSourceName(signer))}</strong><small
             >{translate(
               $locale,
               deviceContext === LOCAL_MOBILE_SIGNER_CONTEXT
@@ -213,7 +217,9 @@
         </div>
         <div>
           <dt>{translate($locale, 'Key source')}</dt>
-          <dd>{translate($locale, sourceName(signer.source))}</dd>
+          <dd>
+            {translate($locale, signerSourceName(signer))}
+          </dd>
         </div>
         {#if signer.deviceType}<div>
             <dt>{translate($locale, 'Device type')}</dt>

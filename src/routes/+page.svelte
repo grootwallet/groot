@@ -879,10 +879,7 @@
         syncInProgress ||
         recoveryScanIsActive(recoveryStatus)}
       title={mobileSyncSetupRequired
-        ? translate(
-            $locale,
-            'Configure a trusted remote Bitcoin Core node before refreshing this wallet on mobile.'
-          )
+        ? translate($locale, 'Connect a trusted node to sync this wallet.')
         : syncButtonTitle}
       onclick={() => sync(true)}
       ><RefreshCw
@@ -899,10 +896,7 @@
   {#if mobileSyncSetupRequired}<div class="mobile-sync-notice">
       <WarningNotice
         title={translate($locale, 'Set up wallet sync')}
-        body={translate(
-          $locale,
-          'Configure a trusted remote Bitcoin Core node before refreshing this wallet on mobile.'
-        )}
+        body={translate($locale, 'Connect a trusted node to sync this wallet.')}
         ><Button size="small" variant="secondary" href="/settings#network-services"
           >{translate($locale, 'Configure sync')}</Button
         ></WarningNotice
@@ -1029,10 +1023,7 @@
   {#if phoneBackupUnverified}
     <WarningNotice
       title={translate($locale, 'Recovery backup not verified')}
-      body={translate(
-        $locale,
-        'Confirm your written words so you know this wallet can be recovered.'
-      )}
+      body={translate($locale, 'Verify your written recovery words.')}
     >
       <Button size="small" variant="secondary" href="/multisig"
         >{translate($locale, 'Verify phone backup')}</Button
@@ -1046,10 +1037,7 @@
     >
       <ShieldCheck size={18} /><span
         ><strong>{translate($locale, 'Recovery backup not verified')}</strong><small
-          >{translate(
-            $locale,
-            'Confirm your written words so you know this wallet can be recovered.'
-          )}</small
+          >{translate($locale, 'Verify your written recovery words.')}</small
         ></span
       ><Button
         size="small"
@@ -1965,5 +1953,8 @@
       max-height: calc(100dvh - 180px);
       overflow-y: auto;
     }
+  }
+  .page > :global(.warning-notice) {
+    margin-bottom: 1rem;
   }
 </style>

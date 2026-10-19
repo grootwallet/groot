@@ -163,8 +163,8 @@ describe('mobile pairing lifecycle UI', () => {
     expect(appShellSource).toContain('isMobileSetupRoute(page.url.pathname)');
     expect(appShellSource).toContain('!mobileSetupRoute');
     expect(desktopRouteSource).toContain('desktop will show one final QR for the phone.');
-    expect(routeSource).toContain('Finish wallet setup on desktop');
-    expect(routeSource).toContain('It will show one final wallet QR next.');
+    expect(routeSource).toContain('Finish on desktop');
+    expect(routeSource).toContain('Scan the final wallet QR shown on desktop.');
     expect(routeSource).toContain('class="full pairing-exit" href="/"');
   });
 
