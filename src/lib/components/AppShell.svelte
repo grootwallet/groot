@@ -920,6 +920,7 @@
   data-sveltekit-preload-data="hover"
   class:onboarding-shell={onboardingRoute}
   class:native-mobile={mobileRuntime}
+  class:wallet-unlocked={selectedWalletUnlocked}
   class:mobile-navigation-visible={!restrictedUtilityRoute && !onboardingRoute && !mobileSetupRoute}
   class:mobile-actions-visible={showQuickActions}
   class:prototype-shell={isPrototypeWallet}
@@ -1688,8 +1689,17 @@
       pointer-events: none;
       z-index: 90;
     }
+    :global(.app-shell.native-mobile) {
+      --mobile-header-height: 52px;
+    }
+    :global(.app-shell.wallet-unlocked .mobile-brand) {
+      display: none;
+    }
+    :global(.app-shell.native-mobile.wallet-unlocked) {
+      --mobile-header-height: 0px;
+    }
     :global(.app-shell.native-mobile:not(.onboarding-shell))::before {
-      height: calc(env(safe-area-inset-top, 0px) + 52px);
+      height: calc(env(safe-area-inset-top, 0px) + var(--mobile-header-height));
     }
     :global(.app-shell.native-mobile) {
       --mobile-bottom-reserve: 0px;
@@ -1702,7 +1712,8 @@
     }
     :global(.app-shell.native-mobile:not(.onboarding-shell) .main) {
       position: fixed;
-      inset: calc(env(safe-area-inset-top, 0px) + 52px) 0 var(--mobile-bottom-reserve);
+      inset: calc(env(safe-area-inset-top, 0px) + var(--mobile-header-height)) 0
+        var(--mobile-bottom-reserve);
       min-height: 0;
       margin: 0;
       overflow-y: auto;

@@ -95,3 +95,5 @@ Rust selects exact repository/platform assets and verifies the signed Ed25519 ma
 No cloud backup, editable permanent labels, Lightning, address book, arbitrary policy editor, terminated-app push or Payjoin sessions. Public platform support and future policy/services require the [roadmap](roadmap.md) gates. The Apache-2.0 core must remain recoverable and usable without paid services.
 
 On iOS, Groot credentials authorize key access without repeated iOS passcode prompts (ADR 0097). Existing protected keys may need one final device approval when first accessed; encrypted wallet files and original Keychain entries remain intact.
+
+Unlocked mobile screens omit the brand header and start below the system safe area. Sync and backup reminders use compact inline actions with 44px touch targets; recovery verification remains available. This presentation change has no BIP or persisted-format impact.

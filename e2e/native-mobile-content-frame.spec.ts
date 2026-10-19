@@ -9,15 +9,14 @@ for (const theme of ['light', 'dark']) {
     await page.goto('/?fixture-native-mobile=1');
     await expect(page.getByRole('heading', { name: 'Overview', exact: true })).toBeVisible();
     const main = page.locator('main.main');
-    const brand = page.locator('.mobile-brand');
+    await expect(page.locator('.mobile-brand')).toBeHidden();
     const actions = page.locator('.mobile-actions');
     const navigation = page.locator('.mobile-nav');
     const mainBox = await main.boundingBox(),
-      brandBox = await brand.boundingBox(),
       actionBox = await actions.boundingBox(),
       navBox = await navigation.boundingBox();
-    expect(mainBox && brandBox && actionBox && navBox).toBeTruthy();
-    expect(mainBox!.y).toBeGreaterThanOrEqual(brandBox!.y + brandBox!.height);
+    expect(mainBox && actionBox && navBox).toBeTruthy();
+    expect(mainBox!.y).toBe(0);
     expect(mainBox!.y + mainBox!.height).toBeLessThanOrEqual(actionBox!.y - 8);
     expect(actionBox!.y + actionBox!.height).toBeLessThanOrEqual(navBox!.y - 8);
     await main.evaluate((node) => {
@@ -29,6 +28,9 @@ for (const theme of ['light', 'dark']) {
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
       true
     );
-    await page.screenshot({ path: info.outputPath(`${theme}-native-content-frame.png`) });
+    await page.screenshot({
+      animations: 'disabled',
+      path: info.outputPath(`${theme}-native-content-frame.png`)
+    });
   });
 }

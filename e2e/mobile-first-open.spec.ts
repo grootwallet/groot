@@ -18,25 +18,48 @@ for (const theme of ['light', 'dark']) {
     await page.getByRole('button', { name: 'Add wallet', exact: true }).click();
     await page.getByRole('link', { name: /Watch desktop wallet/ }).scrollIntoViewIfNeeded();
     await expect(page.locator('.build-identity-onboarding')).toHaveCount(0);
-    await page.screenshot({ path: info.outputPath(`phone-choices-${theme}.png`) });
+    await page.screenshot({
+      animations: 'disabled',
+      path: info.outputPath(`phone-choices-${theme}.png`)
+    });
 
     await page.goto('/?fixture-initial-history-required=1&fixture-native-mobile=1');
     const modal = page.getByRole('dialog', { name: 'Approve wallet-history scan' });
     await expect(modal.getByText('Set up wallet sync', { exact: true })).toBeVisible();
     await expect(modal).toContainText('Groot managed access is Mainnet-only');
     await expect(modal.getByRole('button', { name: 'Approve and scan' })).toBeDisabled();
-    await page.screenshot({ path: info.outputPath(`phone-remote-setup-${theme}.png`) });
+    await page.screenshot({
+      animations: 'disabled',
+      path: info.outputPath(`phone-remote-setup-${theme}.png`)
+    });
+    // Keep the simulated device identity stable across SPA navigation, as native does.
+    await page.evaluate(async () => {
+      const path = '/src/lib/wallet/index.ts';
+      const { walletService } = await import(path);
+      const runtime = await walletService.runtimePlatform();
+      walletService.runtimePlatform = async () => runtime;
+    });
     await modal.getByRole('button', { name: 'Set up my own node' }).click();
     await expect(page.getByRole('dialog', { name: 'Connect Bitcoin Core' })).toBeVisible();
-    await page.goto('/?fixture-initial-history-required=1&fixture-native-mobile=1');
+    await page
+      .getByRole('dialog', { name: 'Connect Bitcoin Core' })
+      .getByRole('button', { name: 'Close', exact: true })
+      .click();
+    await page.locator('.mobile-nav').getByRole('link', { name: 'Overview', exact: true }).click();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
     const setup = page.locator('.mobile-sync-notice');
     await expect(setup).toContainText('Set up wallet sync');
     await expect(page.locator('.initial-history-scan')).toHaveCount(0);
+    expect((await setup.boundingBox())!.height).toBeLessThanOrEqual(100);
+    await expect(page.locator('.mobile-brand')).toBeHidden();
     const next = setup.locator('xpath=following-sibling::*[1]');
     const a = await setup.boundingBox(),
       b = await next.boundingBox();
     expect(b!.y).toBeGreaterThanOrEqual(a!.y + a!.height);
-    await page.screenshot({ path: info.outputPath(`phone-overview-notices-${theme}.png`) });
+    await page.screenshot({
+      animations: 'disabled',
+      path: info.outputPath(`phone-overview-notices-${theme}.png`)
+    });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
       true
     );
