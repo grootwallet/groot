@@ -1,7 +1,7 @@
 <script lang="ts">
   import { locale } from '$lib/i18n';
   import { translate, localizedError } from '$lib/i18n-catalog';
-  import { Camera, CameraOff } from '@lucide/svelte';
+  import { Camera, CameraOff, Check } from '@lucide/svelte';
   import { onDestroy } from 'svelte';
   import Button from './Button.svelte';
   import type QrScanner from 'qr-scanner';
@@ -17,7 +17,7 @@
     prompt?: string;
     onreset?: () => void;
   }>();
-  let video: HTMLVideoElement;
+  let video = $state<HTMLVideoElement>();
   let error = $state('');
   let scanned = $state(0);
   let starting = $state(false);
@@ -55,7 +55,12 @@
         if (!next) continue;
         scanComplete = (await onframe(next)) === true;
       }
-      if (scanComplete) scanner?.stop();
+      if (scanComplete) {
+        scanner?.destroy();
+        scanner = undefined;
+        cameraActive = false;
+        pendingFrames.length = 0;
+      }
     } catch (cause) {
       error = localizedError(cause, $locale, 'This QR could not be verified.');
       pendingFrames.length = 0;
@@ -127,6 +132,7 @@
       const { default: QrScanner } = await import('qr-scanner');
       if (stopped) return;
 
+      if (!video) throw new Error('camera_unavailable');
       scanner = new QrScanner(
         video,
         (result) => {
@@ -142,8 +148,8 @@
         }
       );
       await scanner.start();
-      if (stopped) {
-        scanner.destroy();
+      if (stopped || scanComplete) {
+        scanner?.destroy();
         return;
       }
       cameraActive = true;
@@ -173,32 +179,36 @@
 </script>
 
 <div class="scanner" class:camera-active={cameraActive}>
-  <div class="camera-frame" class:camera-inactive={!cameraActive}>
-    <video
-      bind:this={video}
-      muted
-      playsinline
-      aria-label={translate($locale, 'Animated QR camera preview')}
-    ></video>
-    <div class="scan-guide" aria-hidden="true"></div>
-  </div>
-  <div class="scan-status">
-    {#if error}<CameraOff size={16} /><span>{translate($locale, error)}</span
-      >{:else if cameraActive}<Camera size={16} /><span
-        >{translate(
-          $locale,
-          starting
-            ? 'Requesting camera permission…'
-            : scanned
-              ? scanned === 1
-                ? '{count} unique frame scanned'
-                : '{count} unique frames scanned'
-              : prompt,
-          { count: scanned }
-        )}</span
-      >{:else}<CameraOff size={16} /><span
-        >{translate($locale, 'Allow camera access to scan this QR.')}</span
-      >{/if}
+  {#if !scanComplete}<div class="camera-frame" class:camera-inactive={!cameraActive}>
+      <video
+        bind:this={video}
+        muted
+        playsinline
+        aria-label={translate($locale, 'Animated QR camera preview')}
+      ></video>
+      <div class="scan-guide" aria-hidden="true"></div>
+    </div>
+  {/if}
+  <div class="scan-status" role="status">
+    {#if scanComplete}<Check size={16} /><span>{translate($locale, 'QR verified')}</span>
+    {:else}
+      {#if error}<CameraOff size={16} /><span>{translate($locale, error)}</span
+        >{:else if cameraActive}<Camera size={16} /><span
+          >{translate(
+            $locale,
+            starting
+              ? 'Requesting camera permission…'
+              : scanned
+                ? scanned === 1
+                  ? '{count} unique frame scanned'
+                  : '{count} unique frames scanned'
+                : prompt,
+            { count: scanned }
+          )}</span
+        >{:else}<CameraOff size={16} /><span
+          >{translate($locale, 'Allow camera access to scan this QR.')}</span
+        >{/if}
+    {/if}
   </div>
   {#if cameraActive && expectedParts > 0}
     <div class="scan-progress" aria-live="polite">
@@ -208,7 +218,7 @@
       <span>{progressLabel}</span>
     </div>
   {/if}
-  {#if !cameraActive}
+  {#if !cameraActive && !scanComplete}
     <Button class="scanner-retry full" loading={starting} onclick={startCamera}
       >{translate($locale, error ? 'Try camera again' : 'Allow camera')}</Button
     >

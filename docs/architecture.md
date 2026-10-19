@@ -72,7 +72,7 @@ Public descriptor/BSMS/JSON and PSBT/UR imports are bounded, parsed natively, ne
 
 ## Mobile foundation
 
-ADRs 0093–0096 restore the retained coordination domains through WalletPort, with native iOS secret sheets and worker-based commands. New iOS wallet-secret files add a device-authorized Keychain layer (secure-store v6); desktop/node-auth files retain their existing portable format, and existing files are not silently converted. The fixed Testnet4 development identity and actual linked-library/network check remain mandatory. Native capability guards reject other mobile signing platforms/networks and keep USB signing/multisig broadcast on desktop.
+ADRs 0093–0096 restore the retained coordination domains through WalletPort, with native iOS secret sheets and worker-based commands. New iOS wallet-secret files add a device-bound Keychain layer (secure-store v6, with credential-based access under ADR 0097); desktop/node-auth files retain their existing portable format, and existing files are not silently converted. The fixed Testnet4 development identity and actual linked-library/network check remain mandatory. Native capability guards reject other mobile signing platforms/networks and keep USB signing/multisig broadcast on desktop.
 
 BIP129 QR enrollment authenticates signer records and binds the final complete public policy. Mobile review parses the actual PSBT and signs its exact revision; desktop keeps signature-only validation and merge. Desktop owns receive allocation for paired/watch-only phone views; standalone software wallets retain local authority. No live metadata sync or relay is introduced. [Current candidate evidence](testing/5.3.0-rc2-mobile-keys.md) distinguishes unit/Core passes from unfinished physical acceptance.
 
@@ -85,3 +85,5 @@ Shell presentation → WalletPort app-update methods → Rust `updates.rs`. This
 Allowlisted diagnostics retain stable codes and coarse scalar context, never arbitrary errors or sensitive payloads. Clipboard is explicit and typed; no secret reads or analytics sink. The [security model](security-model.md) owns control details.
 
 [Current status](implementation-status.md) owns capability claims, [ADRs](adr/) own decisions, and the [Mainnet checklist](mainnet-release-checklist.md) owns exact-candidate evidence. Release/source-hash guards, provenance and signatures are independent of runtime tests. Documentation cleanup does not refresh authorization or reviewed-source hashes.
+
+ADR 0097 retains iOS v6 ciphertext and device binding while using a separate passcode-protected, device-only Keychain account without per-read user presence. Legacy keys are copied only after successful Groot credential decryption; originals are retained. No persisted wallet format changes.

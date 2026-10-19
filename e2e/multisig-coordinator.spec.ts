@@ -755,13 +755,23 @@ test('spends end-to-end from the ready-made demo wallet', async ({ page }) => {
   await unsignedQrDialog.getByRole('button', { name: 'Close' }).click();
   await page.getByRole('button', { name: 'Sign with device' }).click();
   const hardwareDialog = page.getByRole('dialog', { name: 'Sign with hardware' });
-  const reviewPane = await hardwareDialog.locator('.single-hardware-review-pane').boundingBox();
-  const devicePane = await hardwareDialog.locator('.single-hardware-device-pane').boundingBox();
-  expect(reviewPane).not.toBeNull();
-  expect(devicePane).not.toBeNull();
-  if ((page.viewportSize()?.width ?? 1180) <= 760)
-    expect(devicePane!.y).toBeGreaterThanOrEqual(reviewPane!.y + reviewPane!.height);
-  else expect(devicePane!.x).toBeGreaterThanOrEqual(reviewPane!.x + reviewPane!.width);
+  await expect(hardwareDialog).toBeVisible();
+  // Discovery can resize the dialog between separate WebKit geometry reads.
+  // Measure both panes atomically and retain the same stacking constraint.
+  await expect
+    .poll(() =>
+      hardwareDialog.evaluate((dialog) => {
+        const review = dialog
+          .querySelector('.single-hardware-review-pane')
+          ?.getBoundingClientRect();
+        const device = dialog
+          .querySelector('.single-hardware-device-pane')
+          ?.getBoundingClientRect();
+        if (!review || !device) return false;
+        return innerWidth <= 760 ? device.y >= review.bottom : device.x >= review.right;
+      })
+    )
+    .toBe(true);
   await page.screenshot({
     path: test.info().outputPath(`multisig-cable-review-${page.viewportSize()?.width}.png`),
     animations: 'disabled'

@@ -920,6 +920,7 @@
   data-sveltekit-preload-data="hover"
   class:onboarding-shell={onboardingRoute}
   class:native-mobile={mobileRuntime}
+  class:mobile-navigation-visible={!restrictedUtilityRoute && !onboardingRoute && !mobileSetupRoute}
   class:mobile-actions-visible={showQuickActions}
   class:prototype-shell={isPrototypeWallet}
   class:locked-setup-visible={showSetupResume && lockedRoute}
@@ -1675,6 +1676,51 @@
     :global(.app-update-action):where(.app-update-action) {
       right: max(12px, env(safe-area-inset-right));
       bottom: calc(142px + env(safe-area-inset-bottom));
+    }
+  }
+  @media (max-width: 760px) {
+    :global(.app-shell.native-mobile)::before {
+      content: '';
+      position: fixed;
+      inset: 0 0 auto;
+      height: env(safe-area-inset-top, 0px);
+      background: var(--bg);
+      pointer-events: none;
+      z-index: 90;
+    }
+    :global(.app-shell.native-mobile:not(.onboarding-shell))::before {
+      height: calc(env(safe-area-inset-top, 0px) + 52px);
+    }
+    :global(.app-shell.native-mobile) {
+      --mobile-bottom-reserve: 0px;
+    }
+    :global(.app-shell.native-mobile.mobile-navigation-visible) {
+      --mobile-bottom-reserve: calc(64px + env(safe-area-inset-bottom, 0px));
+    }
+    :global(.app-shell.native-mobile.mobile-actions-visible) {
+      --mobile-bottom-reserve: calc(134px + env(safe-area-inset-bottom, 0px));
+    }
+    :global(.app-shell.native-mobile:not(.onboarding-shell) .main) {
+      position: fixed;
+      inset: calc(env(safe-area-inset-top, 0px) + 52px) 0 var(--mobile-bottom-reserve);
+      min-height: 0;
+      margin: 0;
+      overflow-y: auto;
+      overscroll-behavior-y: contain;
+      -webkit-overflow-scrolling: touch;
+    }
+    :global(.app-shell.native-mobile:not(.onboarding-shell) .main .page) {
+      padding-top: 16px;
+      padding-bottom: 24px;
+    }
+    :global(.app-shell.native-mobile .page-header) {
+      min-height: 0;
+      margin-bottom: 24px;
+    }
+    :global(.app-shell.native-mobile .mobile-brand) {
+      top: max(12px, env(safe-area-inset-top));
+      position: fixed;
+      z-index: 91;
     }
   }
 </style>

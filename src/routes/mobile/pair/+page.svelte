@@ -63,7 +63,7 @@
   const pageTitle = $derived(
     stage === 'invite' && pendingPairings.length === 0
       ? translate($locale, 'Join a shared wallet')
-      : translate($locale, 'Finish shared wallet setup')
+      : translate($locale, 'Pair phone')
   );
 
   function isTextEntry(element: Element | null): element is HTMLInputElement | HTMLTextAreaElement {
@@ -278,10 +278,7 @@
   {#if response && !response.backupVerified}
     <WarningNotice
       title={translate($locale, 'Recovery backup not verified')}
-      body={translate(
-        $locale,
-        'Pairing can continue. Verify your written phone words from the shared wallet after setup.'
-      )}
+      body={translate($locale, 'Verify your written words later in Policy.')}
     />
   {/if}
 
@@ -438,11 +435,8 @@
     <InstructionCard>
       <span class="step-icon"><ScanLine size={22} /></span>
       <div>
-        <strong>{translate($locale, 'Finish wallet setup on desktop')}</strong><small
-          >{translate(
-            $locale,
-            'Desktop is finishing setup. It will show one final wallet QR next. Keep this screen ready to scan it.'
-          )}</small
+        <strong>{translate($locale, 'Finish on desktop')}</strong><small
+          >{translate($locale, 'Scan the final wallet QR shown on desktop.')}</small
         >
       </div>
       {#if error}<p class="inline-error" role="alert">{error}</p>{/if}
@@ -494,6 +488,9 @@
   .pending-actions {
     display: grid;
     gap: 0.65rem;
+  }
+  .pairing-page :global(.warning-notice) {
+    margin-bottom: 1rem;
   }
   .pairing-page :global(.instruction-card > div:first-of-type) {
     display: grid;
@@ -559,5 +556,9 @@
   }
   .pairing-page :global(.pairing-exit) {
     margin-top: 1rem;
+  }
+  .pairing-page .page-header {
+    min-height: 0;
+    margin-bottom: 1.25rem;
   }
 </style>

@@ -264,6 +264,9 @@
       document.removeEventListener('keydown', closeEscape);
     };
   });
+  function signerSourceName(signer: CosignerDraft) {
+    return signer.deviceType === 'groot-mobile' ? 'QR connection' : sourceName(signer.source);
+  }
   function sourceName(source: CosignerSource) {
     return {
       usb: 'USB hardware',
@@ -620,10 +623,10 @@
           {translate(
             $locale,
             coordination?.role === 'mobile_cosigner'
-              ? 'Shared wallet · this phone holds one software signer and can sign reviewed desktop PSBTs.'
+              ? 'Phone signer · QR connection'
               : coordination?.role === 'desktop_coordinator'
-                ? 'Shared wallet · this desktop coordinates the policy and hardware signers.'
-                : 'A watch-only wallet whose spending policy is enforced by independent keys.'
+                ? 'Desktop coordinator'
+                : 'Watch-only wallet'
           )}
         </p>
       </div>
@@ -638,10 +641,7 @@
     {#if coordination?.role === 'mobile_cosigner' && !phoneBackupVerified}
       <WarningNotice
         title={translate($locale, 'Recovery backup not verified')}
-        body={translate(
-          $locale,
-          'Confirm your written words so you know this wallet can be recovered.'
-        )}
+        body={translate($locale, 'Verify your written recovery words.')}
       >
         <Button
           size="small"
@@ -890,11 +890,7 @@
                 $locale,
                 policyPresentation?.delayed
                   ? 'Payments normally use 2 of 3 primary keys. The separate backup key becomes available per coin after its wait.'
-                  : translate(
-                      $locale,
-                      'Sign with any {count} keys. Open a signer to inspect its identity, health, and wallet-policy status.',
-                      { count: wallet.threshold }
-                    )
+                  : translate($locale, 'Any {count} keys can sign.', { count: wallet.threshold })
               )}
             </p>
           </div>
@@ -912,7 +908,7 @@
                   ><strong>{signer.label}</strong><span
                     ><code>{signer.fingerprint.toLowerCase()}</code><i></i>{translate(
                       $locale,
-                      sourceName(signer.source)
+                      signerSourceName(signer)
                     )}{#if latestHealth(signer)}<i></i>{translate($locale, 'Checked')}
                       <LocalTimestamp
                         value={latestHealth(signer)!.checkedAt}
@@ -936,10 +932,7 @@
         <div>
           <h2>{translate($locale, 'Backups & recovery')}</h2>
           <p>
-            {translate(
-              $locale,
-              'Save the public policy, then verify it rebuilds the same first address.'
-            )}
+            {translate($locale, 'Back up the policy and verify its first address.')}
           </p>
         </div>
         <Button variant="secondary" class="full" href="/multisig/backup"
@@ -1627,5 +1620,8 @@
   .inline-error {
     margin: 0;
     color: var(--danger);
+  }
+  .coordinator-page > :global(.warning-notice) {
+    margin-bottom: 1rem;
   }
 </style>

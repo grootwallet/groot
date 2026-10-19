@@ -14,7 +14,7 @@ const MOBILE_DEVICE_TYPE: &str = "groot-mobile";
 
 fn new_mobile_key_protection() -> &'static str {
     if cfg!(target_os = "ios") {
-        "ios_keychain_user_presence_v6"
+        "ios_keychain_device_bound_v6"
     } else {
         "argon2id_pin_envelope_testnet_only"
     }
