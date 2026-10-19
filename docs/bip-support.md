@@ -72,3 +72,5 @@ The 5.3 defect remediation (ADR 0090) changes no BIP support, PSBT encoding, der
 The mobile-key scope correction (ADR 0093) and retained-branch audit change no BIP implementation or current support. Passing BIP129/174 tests on the retained branch are not merged mobile support or physical signing/recovery evidence.
 
 ADRs 0094–0096 restore the retained BIP129 encrypted enrollment and BIP174 QR phone-signing implementation for internal Testnet4 testing, with native first-address/policy checks. Existing backup/PSBT encodings and BIP39 software-passphrase versus phone-signer words-only derivation remain unchanged. Physical interoperability is not established by the local Core pass; see the RC2 candidate record.
+
+The RC3 mobile footer, notice spacing and first-scan configuration disclosure have no BIP impact. Node authentication, TLS/Tor validation, privacy consent and source-review gates remain unchanged.

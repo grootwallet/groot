@@ -1,6 +1,11 @@
 import type { CatalogSection } from './types';
 
 export const walletCopy = {
+  'Mobile Testnet4 sync requires a trusted remote Bitcoin Core node. Groot managed access is Mainnet-only.':
+    {
+      fr: 'La synchronisation Testnet4 sur mobile nécessite un nœud Bitcoin Core distant de confiance. L’accès géré par Groot est réservé à Mainnet.',
+      es: 'La sincronización Testnet4 en el móvil requiere un nodo Bitcoin Core remoto de confianza. El acceso gestionado por Groot solo está disponible en Mainnet.'
+    },
   'PDF export is unavailable on mobile. Use a public descriptor backup instead.': {
     fr: 'L’export PDF est indisponible sur mobile. Utilisez plutôt une sauvegarde du descripteur public.',
     es: 'La exportación PDF no está disponible en el móvil. Usa una copia del descriptor público.'

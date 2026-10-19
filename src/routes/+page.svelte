@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { requiresMobileNodeSetup } from '$lib/wallet/network-readiness';
   import { translate, localizedError } from '$lib/i18n-catalog';
   import { defaultConfig } from '$lib/config';
   import {
@@ -262,8 +263,7 @@
   const mobileSyncSetupRequired = $derived(
     mobileRuntime &&
       (syncSource?.type === 'compact_filters' ||
-        (syncSource?.type === 'bitcoin_core' &&
-          (!nodeConfig || nodeConfig.backend.type === 'local_core')))
+        (syncSource?.type === 'bitcoin_core' && requiresMobileNodeSetup(nodeConfig)))
   );
   let hardwareSignerDetails = $derived.by<CosignerDraft | null>(() =>
     hardwareSignerWallet
@@ -890,17 +890,19 @@
       />{mobileSyncSetupRequired ? translate($locale, 'Set up sync') : syncButtonLabel}</button
     >
   </header>
-  {#if mobileSyncSetupRequired}<WarningNotice
-      title={translate($locale, 'Set up wallet sync')}
-      body={translate(
-        $locale,
-        'Configure a trusted remote Bitcoin Core node before refreshing this wallet on mobile.'
-      )}
-      ><Button size="small" variant="secondary" href="/settings#network-services"
-        >{translate($locale, 'Configure sync')}</Button
-      ></WarningNotice
-    >{/if}
-  {#if initialHistoryRequired && !walletAwaitingAutomaticScan && !automaticInitialScanActive}
+  {#if mobileSyncSetupRequired}<div class="mobile-sync-notice">
+      <WarningNotice
+        title={translate($locale, 'Set up wallet sync')}
+        body={translate(
+          $locale,
+          'Configure a trusted remote Bitcoin Core node before refreshing this wallet on mobile.'
+        )}
+        ><Button size="small" variant="secondary" href="/settings#network-services"
+          >{translate($locale, 'Configure sync')}</Button
+        ></WarningNotice
+      >
+    </div>{/if}
+  {#if initialHistoryRequired && !mobileSyncSetupRequired && !walletAwaitingAutomaticScan && !automaticInitialScanActive}
     <section class="initial-history-scan" aria-live="polite">
       <div>
         <strong
@@ -1466,12 +1468,21 @@
 </Modal>
 
 <style>
+  @media (max-width: 760px) {
+    .dashboard-page .page-header {
+      min-height: 46px;
+      margin-bottom: 18px;
+    }
+  }
+  .mobile-sync-notice {
+    margin-bottom: 16px;
+  }
   /* Keep the original cascade weight while constraining these rules to this owner. */
 
   :global(.sync-progress):where(.sync-progress) {
     display: grid;
     gap: 9px;
-    margin: -18px 0 16px;
+    margin: 0 0 16px;
     padding: 12px 14px;
     border: 1px solid var(--border);
     border-radius: var(--radius-control);
@@ -1503,7 +1514,7 @@
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
     gap: 12px 18px;
-    margin: -18px 0 16px;
+    margin: 0 0 16px;
     padding: 13px 14px;
     border: 1px solid color-mix(in srgb, var(--accent) 38%, var(--border));
     border-radius: var(--radius-control);
@@ -1561,7 +1572,7 @@
     grid-template-columns: 28px minmax(0, 1fr) auto;
     align-items: center;
     gap: 11px;
-    margin: -18px 0 16px;
+    margin: 0 0 16px;
     padding: 12px 14px;
     border: 1px solid color-mix(in srgb, var(--accent) 34%, var(--border));
     border-radius: var(--radius-control);
