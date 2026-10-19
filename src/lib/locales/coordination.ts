@@ -1,6 +1,27 @@
 import type { CatalogSection } from './types';
 
 export const coordinationCopy = {
+  'Backup verification failed': {
+    fr: 'Échec de la vérification de la sauvegarde',
+    es: 'No se pudo verificar la copia de seguridad'
+  },
+  'Pairing can continue. Verify your written phone words from the shared wallet after setup.': {
+    fr: 'Vous pouvez continuer l’association. Vérifiez les mots écrits du téléphone depuis le portefeuille partagé après la configuration.',
+    es: 'Puedes continuar el emparejamiento. Verifica las palabras escritas del teléfono desde la cartera compartida después de configurarla.'
+  },
+  'Show recovery words': {
+    fr: 'Afficher les mots de récupération',
+    es: 'Mostrar las palabras de recuperación'
+  },
+  'Verify phone backup': {
+    fr: 'Vérifier la sauvegarde du téléphone',
+    es: 'Verificar la copia del teléfono'
+  },
+  'Verify phone recovery backup': {
+    fr: 'Vérifier la sauvegarde de récupération du téléphone',
+    es: 'Verificar la copia de recuperación del teléfono'
+  },
+
   'Receive on desktop': { fr: 'Recevoir sur ordinateur', es: 'Recibir en el ordenador' },
   'Create receive requests on desktop for paired and watch-only wallets. This avoids allocating the same address on two devices.':
     {

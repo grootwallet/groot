@@ -110,6 +110,12 @@
   let healthPinDevice = $state<HardwareDevice | null>(null);
   let healthPinError = $state('');
   let healthPinErrorCode = $state<WalletErrorCode | ''>('');
+  let phoneBackupVerified = $state(true);
+  let phoneBackupOpen = $state(false);
+  let phoneBackupCredential = $state('');
+  let phoneBackupError = $state('');
+  let phoneBackupBusy = $state(false);
+  let phoneBackupNotice = $state('');
   let phoneCheckOpen = $state(false);
   let phoneCheckCredential = $state('');
   let phoneCheckError = $state('');
@@ -124,10 +130,35 @@
   const policyPresentation = $derived(wallet ? walletPolicyPresentation(wallet) : null);
   const recoveryPolicyLabAvailable = $derived(hasMiniscriptPolicy(wallet));
   onDestroy(() => {
+    phoneBackupCredential = '';
     healthPinChallenge = '';
     healthPinPositions = '';
     phoneCheckCredential = '';
   });
+  async function verifyPhoneBackup(reveal = false) {
+    if (!phoneBackupCredential || phoneBackupBusy) return;
+    phoneBackupBusy = true;
+    phoneBackupError = '';
+    phoneBackupNotice = '';
+    try {
+      const verified = reveal
+        ? await walletService.revealAndVerifyBackup(phoneBackupCredential)
+        : await walletService.verifyBackup(phoneBackupCredential);
+      phoneBackupVerified = verified;
+      phoneBackupNotice = translate(
+        $locale,
+        verified ? 'Recovery backup verified' : 'Backup still unverified'
+      );
+      if (verified) phoneBackupOpen = false;
+      toast({ title: phoneBackupNotice, tone: verified ? 'success' : 'default' });
+    } catch (cause) {
+      phoneBackupError = localizedError(cause, $locale, 'Could not verify this recovery backup.');
+      toast({ title: 'Backup verification failed', description: phoneBackupError, tone: 'danger' });
+    } finally {
+      phoneBackupCredential = '';
+      phoneBackupBusy = false;
+    }
+  }
   async function loadPolicyWallet() {
     walletLoading = true;
     walletLoadError = '';
@@ -142,6 +173,12 @@
     if (!wallet) return;
     try {
       coordination = await walletService.coordinationStatus();
+      if (coordination.role === 'mobile_cosigner') {
+        const registry = await walletService.profiles();
+        phoneBackupVerified =
+          registry.wallets.find((profile) => profile.id === registry.selectedWalletId)
+            ?.backupVerified ?? false;
+      }
     } catch (cause) {
       toast({
         title: 'Device role unavailable',
@@ -598,6 +635,26 @@
       >
         <a href="/settings">{translate($locale, 'Open network settings')}</a>
       </WarningNotice>{/if}
+    {#if coordination?.role === 'mobile_cosigner' && !phoneBackupVerified}
+      <WarningNotice
+        title={translate($locale, 'Recovery backup not verified')}
+        body={translate(
+          $locale,
+          'Confirm your written words so you know this wallet can be recovered.'
+        )}
+      >
+        <Button
+          size="small"
+          variant="secondary"
+          onclick={() => {
+            phoneBackupError = '';
+            phoneBackupNotice = '';
+            phoneBackupOpen = true;
+          }}>{translate($locale, 'Verify now')}</Button
+        >
+      </WarningNotice>
+    {/if}
+    {#if phoneBackupNotice}<p role="status">{phoneBackupNotice}</p>{/if}
     <section class="vault-hero">
       <span><ShieldCheck size={22} /></span>
       <div class="vault-summary">
@@ -999,6 +1056,45 @@
       loading={phoneCheckBusy}
       loadingLabel={translate($locale, 'Checking…')}
       onclick={runPhoneHealthCheck}>{translate($locale, 'Check phone key')}</Button
+    >
+  </div>
+</Modal>
+<Modal
+  open={phoneBackupOpen}
+  title={translate($locale, 'Verify phone recovery backup')}
+  onclose={() => {
+    if (!phoneBackupBusy) {
+      phoneBackupOpen = false;
+      phoneBackupCredential = '';
+      phoneBackupError = '';
+    }
+  }}
+>
+  <PasswordField
+    label={translate($locale, 'App PIN')}
+    bind:value={phoneBackupCredential}
+    autocomplete="current-password"
+    error={phoneBackupError}
+  />
+  {#if phoneBackupNotice}<p role="status">{phoneBackupNotice}</p>{/if}
+  <div class="modal-footer">
+    <Button
+      variant="secondary"
+      disabled={phoneBackupBusy}
+      onclick={() => {
+        phoneBackupOpen = false;
+        phoneBackupCredential = '';
+      }}>{translate($locale, 'Verify later')}</Button
+    >
+    <Button
+      variant="secondary"
+      disabled={!phoneBackupCredential || phoneBackupBusy}
+      onclick={() => verifyPhoneBackup(true)}>{translate($locale, 'Show recovery words')}</Button
+    >
+    <Button
+      disabled={!phoneBackupCredential}
+      loading={phoneBackupBusy}
+      onclick={() => verifyPhoneBackup()}>{translate($locale, 'Verify now')}</Button
     >
   </div>
 </Modal>

@@ -10,7 +10,7 @@
   "bundle": {
     "iOS": {
       "minimumSystemVersion": "17.0",
-      "bundleVersion": "530004",
+      "bundleVersion": "530005",
       "frameworks": ["LocalAuthentication.framework"]
     }
   }

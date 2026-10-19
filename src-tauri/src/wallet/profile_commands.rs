@@ -456,6 +456,27 @@ pub async fn wallet_recover(app: AppHandle, name: String, credential: String) ->
     .map_err(internal)?
 }
 
+fn load_backup_mnemonic(
+    app: &AppHandle,
+    state: &State<'_, AppState>,
+    profile: &WalletProfile,
+    credential: &str,
+) -> ApiResult<Mnemonic> {
+    if profile.kind == WalletKind::Multisig {
+        return coordination_commands::load_mobile_backup_mnemonic(app, state, profile, credential);
+    }
+    if profile.kind != WalletKind::SingleKey {
+        return Err(api_error(
+            "wrong_wallet_kind",
+            "This wallet does not hold recovery words.",
+        ));
+    }
+    check_auth_throttle(app, state)?;
+    let result = decrypt_mnemonic(app, credential);
+    record_auth_result(app, state, &result)?;
+    result
+}
+
 #[tauri::command]
 pub async fn wallet_verify_backup(app: AppHandle, credential: String) -> ApiResult<bool> {
     let credential = Zeroizing::new(credential);
@@ -473,14 +494,11 @@ pub async fn wallet_verify_backup(app: AppHandle, credential: String) -> ApiResu
         }
 
         require_unlocked(&app, &state)?;
-        let profile = selected_profile_of_kind(&app, WalletKind::SingleKey)?;
+        let profile = selected_profile(&app)?;
         if profile.backup_verified {
             return Ok(true);
         }
-        check_auth_throttle(&app, &state)?;
-        let credential_result = decrypt_mnemonic(&app, credential.as_str());
-        record_auth_result(&app, &state, &credential_result)?;
-        let mnemonic = credential_result?;
+        let mnemonic = load_backup_mnemonic(&app, &state, &profile, credential.as_str())?;
         let words = Zeroizing::new(mnemonic.to_string());
         if !native_backup::verify(&app, words.as_str()).map_err(internal)? {
             return Ok(false);
@@ -500,7 +518,7 @@ pub async fn wallet_verify_backup(app: AppHandle, credential: String) -> ApiResu
             diagnostics::DiagnosticEventKind::BackupVerified,
             diagnostics::DiagnosticOutcome::Succeeded,
             diagnostics::DiagnosticContext {
-                wallet_kind: Some(diagnostics::DiagnosticWalletKind::Software),
+                wallet_kind: Some(diagnostics::wallet_kind(profile.kind)),
                 ..Default::default()
             },
             None,
@@ -531,14 +549,11 @@ pub async fn wallet_reveal_and_verify_backup(
         }
 
         require_unlocked(&app, &state)?;
-        let profile = selected_profile_of_kind(&app, WalletKind::SingleKey)?;
+        let profile = selected_profile(&app)?;
         if profile.backup_verified {
             return Ok(true);
         }
-        check_auth_throttle(&app, &state)?;
-        let credential_result = decrypt_mnemonic(&app, credential.as_str());
-        record_auth_result(&app, &state, &credential_result)?;
-        let mnemonic = credential_result?;
+        let mnemonic = load_backup_mnemonic(&app, &state, &profile, credential.as_str())?;
         let words = Zeroizing::new(mnemonic.to_string());
         let outcome = native_backup::present(&app, words.as_str()).map_err(internal)?;
         if outcome.cancelled || !outcome.verified {
@@ -559,7 +574,7 @@ pub async fn wallet_reveal_and_verify_backup(
             diagnostics::DiagnosticEventKind::BackupVerified,
             diagnostics::DiagnosticOutcome::Succeeded,
             diagnostics::DiagnosticContext {
-                wallet_kind: Some(diagnostics::DiagnosticWalletKind::Software),
+                wallet_kind: Some(diagnostics::wallet_kind(profile.kind)),
                 ..Default::default()
             },
             None,

@@ -76,3 +76,5 @@ ADRs 0094–0096 restore the retained BIP129 encrypted enrollment and BIP174 QR 
 The RC3 mobile footer, notice spacing and first-scan configuration disclosure have no BIP impact. Node authentication, TLS/Tor validation, privacy consent and source-review gates remain unchanged.
 
 The RC4 existing-wallet setup navigation correction has no BIP impact: pairing records, derivation, PSBTs, native key authorization and persisted formats are unchanged.
+
+RC5 backup deferral: no BIP support or wire-format change. BIP39 word verification is optional during phone pairing; the existing verification flag remains false until a successful native check. BIP48 key/policy identity checks and BIP129 invitation binding are unchanged.

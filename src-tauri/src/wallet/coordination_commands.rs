@@ -298,13 +298,8 @@ pub async fn coordination_mobile_accept(
                 "Mobile signer recovery-word backup was cancelled.",
             ));
         }
-        let backup_verified = native_backup::verify(&app, words.as_str()).map_err(internal)?;
-        if !backup_verified {
-            return Err(api_error(
-                "backup_mismatch",
-                "The written phone backup must be verified before pairing. No signer was saved.",
-            ));
-        }
+        // Viewing words is not verification. Preserve the native Verify later outcome.
+        let backup_verified = backup.verified;
         let (fingerprint, account, xpub) =
             derive_mobile_account(&mnemonic).map_err(coordination_api_error)?;
         let record = KeyRecord::encode_signed(&invitation.token, fingerprint, &account, label)
@@ -1270,7 +1265,23 @@ fn mobile_signer_check_inner(
     }
     require_unlocked(&app, &state)?;
     let profile = selected_profile_of_kind(&app, WalletKind::Multisig)?;
-    let coordination = read_coordination_metadata(&app, profile.id)?;
+    load_mobile_backup_mnemonic(&app, &state, &profile, credential.as_str())?;
+    Ok(CosignerHealthDto {
+        status: "healthy",
+        checked_at: now().to_string(),
+        summary: "Phone key matches this wallet.".to_owned(),
+    })
+}
+
+/// Load only this device's phone key and bind it to the selected public policy.
+/// Callers hold the operation guard and require an unlocked, unchanged selection.
+pub(super) fn load_mobile_backup_mnemonic(
+    app: &AppHandle,
+    state: &State<'_, AppState>,
+    profile: &WalletProfile,
+    credential: &str,
+) -> ApiResult<Mnemonic> {
+    let coordination = read_coordination_metadata(app, profile.id)?;
     if coordination.role != DeviceRole::MobileCosigner {
         return Err(api_error(
             "signing_unavailable",
@@ -1286,15 +1297,15 @@ fn mobile_signer_check_inner(
                 "The phone signer identity is missing.",
             )
         })?;
-    let wallet = read_multisig_metadata(&app)?;
-    check_auth_throttle(&app, &state)?;
+    let wallet = read_multisig_metadata(app)?;
+    check_auth_throttle(app, state)?;
     let loaded = secure_store::load(
-        &profile_directory(&app, profile.id)?.join("mobile-signer.json"),
-        credential.as_str(),
+        &profile_directory(app, profile.id)?.join("mobile-signer.json"),
+        credential,
         wallet_secret_context(profile.id),
     )
     .map_err(secure_store_error);
-    record_auth_result(&app, &state, &loaded)?;
+    record_auth_result(app, state, &loaded)?;
     let loaded = loaded?;
     let mut words = Zeroizing::new(String::from_utf8(loaded.to_vec()).map_err(internal)?);
     let mnemonic = Mnemonic::parse(words.as_str()).map_err(internal)?;
@@ -1304,11 +1315,7 @@ fn mobile_signer_check_inner(
             CoordinationError::DescriptorMismatch,
         ));
     }
-    Ok(CosignerHealthDto {
-        status: "healthy",
-        checked_at: now().to_string(),
-        summary: "Phone key matches this wallet.".to_owned(),
-    })
+    Ok(mnemonic)
 }
 
 fn mobile_signer_matches_wallet(

@@ -112,6 +112,7 @@
   let loadErrorCode = $state('');
   let networkSetupRequired = $state(false);
   let selectedProfile = $state<WalletProfile | null>(null);
+  let phoneBackupUnverified = $state(false);
   let verifyOpen = $state(false);
   let verifyCredential = $state('');
   let verifyError = $state('');
@@ -419,6 +420,11 @@
       // a retry after an offline preflight uses the single-key command for a
       // selected multisig wallet and returns `wrong_wallet_kind`.
       multisig = selectedProfile?.kind === 'multisig';
+      phoneBackupUnverified = Boolean(
+        multisig &&
+        !selectedProfile?.backupVerified &&
+        (await walletService.coordinationStatus()).role === 'mobile_cosigner'
+      );
       unlockSyncRequested = Boolean(
         selectedProfile && walletShell.consumeUnlockSync(selectedProfile.id)
       );
@@ -1019,6 +1025,19 @@
         onretry={() => sync(true)}
       />
     </div>
+  {/if}
+  {#if phoneBackupUnverified}
+    <WarningNotice
+      title={translate($locale, 'Recovery backup not verified')}
+      body={translate(
+        $locale,
+        'Confirm your written words so you know this wallet can be recovered.'
+      )}
+    >
+      <Button size="small" variant="secondary" href="/multisig"
+        >{translate($locale, 'Verify phone backup')}</Button
+      >
+    </WarningNotice>
   {/if}
   {#if selectedProfile?.kind === 'single_key' && !selectedProfile.backupVerified}
     <section
