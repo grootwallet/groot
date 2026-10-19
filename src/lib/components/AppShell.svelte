@@ -172,6 +172,7 @@
   import { configureMobileViewport } from '$lib/mobile-viewport';
   import { applyZoom, changeZoom, initZoom } from '$lib/zoom';
   let { children } = $props();
+  let mainElement = $state<HTMLElement>();
   const nav: Array<{ href: string; label: MessageKey; icon: typeof LayoutGrid }> = [
     { href: '/', label: 'overview', icon: LayoutGrid },
     { href: '/activity', label: 'activity', icon: Activity },
@@ -539,7 +540,10 @@
       void walletService.cancelSync().catch(() => undefined);
   });
 
-  afterNavigate(({ from }) => {
+  afterNavigate(({ from, to }) => {
+    if (mobileRuntime && from?.url.pathname !== to?.url.pathname && !to?.url.hash && mainElement) {
+      mainElement.scrollTop = 0;
+    }
     navigationPending = false;
     pendingDestination = '';
     const previousPath = from?.url?.pathname;
@@ -1003,7 +1007,7 @@
       aria-label={translate($locale, 'Groot home')}><BrandLockup /></a
     >
 
-    <main class="main">
+    <main class="main" bind:this={mainElement}>
       {#if isPrototypeWallet}<div class="demo-banner" role="status">
           <strong>{translate($locale, 'Interactive prototype')}</strong><span
             >{translate($locale, 'Dummy data only · Never use real funds or recovery words')}</span
