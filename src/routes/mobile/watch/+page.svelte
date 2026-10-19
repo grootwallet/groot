@@ -1,7 +1,7 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
   import { onDestroy } from 'svelte';
-  import { Eye, ScanLine, ShieldCheck } from '@lucide/svelte';
+  import { ArrowLeft, Eye, ScanLine, ShieldCheck } from '@lucide/svelte';
   import Button from '$lib/components/Button.svelte';
   import InstructionCard from '$lib/components/InstructionCard.svelte';
   import FieldCounter from '$lib/components/FieldCounter.svelte';
@@ -131,9 +131,15 @@
       />
     {/if}
   </InstructionCard>
+  <Button variant="secondary" class="full" href="/">
+    <ArrowLeft size={16} />{translate($locale, 'Back to wallet')}
+  </Button>
 </div>
 
 <style>
+  .watch-import-page > :global(.button) {
+    margin-top: 16px;
+  }
   .watch-import-page {
     padding-bottom: max(2rem, env(safe-area-inset-bottom));
   }
