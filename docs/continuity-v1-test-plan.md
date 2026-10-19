@@ -1,6 +1,6 @@
 # Continuity readiness checks
 
-Refs #17. This retained branch includes current main and rc02 feedback; the old 0.4.89 package is not current evidence. Perform physical tests only after 5.2 GA, against a separately identified test-network candidate.
+Refs #17. This retained branch includes the mobile 5.3.0-rc3 source, component-scoped CSS and defect corrections; the old 0.4.89 package is not current evidence. Perform physical tests only after 5.2 GA, against a separately identified test-network candidate.
 
 | Action                                                                   | Expected result                                                                                                      |
 | ------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------- |
