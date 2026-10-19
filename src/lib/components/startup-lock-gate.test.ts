@@ -67,8 +67,8 @@ describe('startup wallet lock gate', () => {
     expect(session).toBeGreaterThan(runtime);
     expect(shell).toContain('runtime.version !== APP_VERSION');
     expect(shell).toContain('<BuildIdentity runtime={runtimeIdentity} placement="sidebar" />');
-    expect(shell).toContain(
-      '{#if onboardingRoute}<BuildIdentity runtime={runtimeIdentity} placement="onboarding" />{/if}'
+    expect(shell).toMatch(
+      /\{#if onboardingRoute && !mobileRuntime\}\s*<BuildIdentity\s+runtime=\{runtimeIdentity\}\s+placement="onboarding"\s*\/>/
     );
     expect(settings).toContain('<BuildIdentity placement="settings" />');
     expect(buildIdentity).toContain("'Groot v{version} · {commit}'");

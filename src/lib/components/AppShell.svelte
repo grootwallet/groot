@@ -30,6 +30,7 @@
     defaultConfig,
     networkSwitchingBuild
   } from '$lib/config';
+  import { requiresMobileNodeSetup } from '$lib/wallet/network-readiness';
   import { applyMultisigNetwork } from '$lib/multisig/policy';
   import { onMount } from 'svelte';
   import { releaseNotes } from '$lib/release-notes';
@@ -214,7 +215,7 @@
   let currentZoom = 1;
   let shortcutLockPending = false;
   let walletSelectionTask: Promise<void> | undefined;
-  let mobileRuntime = false;
+  let mobileRuntime = $state(false);
   let pendingUnlockSyncWalletId: string | null = null;
   let runtimeIdentity = $state<RuntimePlatform | null>(null);
   let startupFailure = $state('');
@@ -255,7 +256,9 @@
   let initialApprovalWalletId = $state<string | null>(null);
   let initialApprovalBusy = $state(false);
   let initialApprovalError = $state('');
-  let initialApprovalBackend = $state<'loading' | 'managed' | 'private' | 'error'>('loading');
+  let initialApprovalBackend = $state<
+    'loading' | 'managed' | 'private' | 'setup_required' | 'error'
+  >('loading');
   let initialApprovalIsManaged = $derived(initialApprovalBackend === 'managed');
   let initialApprovalLookupGeneration = 0;
   const declinedInitialScans = new Set<string>();
@@ -272,10 +275,12 @@
       .then((config) => {
         if (initialApprovalWalletId === id && initialApprovalLookupGeneration === lookupGeneration)
           initialApprovalBackend =
-            config.backend.type === 'remote_core' &&
-            config.backend.url === 'https://bitcoin-rpc.usegroot.com/'
-              ? 'managed'
-              : 'private';
+            mobileRuntime && requiresMobileNodeSetup(config)
+              ? 'setup_required'
+              : config.backend.type === 'remote_core' &&
+                  config.backend.url === 'https://bitcoin-rpc.usegroot.com/'
+                ? 'managed'
+                : 'private';
       })
       .catch(() => {
         if (initialApprovalWalletId === id && initialApprovalLookupGeneration === lookupGeneration)
@@ -911,6 +916,7 @@
   data-sveltekit-preload-code="viewport"
   data-sveltekit-preload-data="hover"
   class:onboarding-shell={onboardingRoute}
+  class:native-mobile={mobileRuntime}
   class:mobile-actions-visible={showQuickActions}
   class:prototype-shell={isPrototypeWallet}
   class:locked-setup-visible={showSetupResume && lockedRoute}
@@ -1033,7 +1039,10 @@
       {/if}
     </main>
 
-    {#if onboardingRoute}<BuildIdentity runtime={runtimeIdentity} placement="onboarding" />{/if}
+    {#if onboardingRoute && !mobileRuntime}<BuildIdentity
+        runtime={runtimeIdentity}
+        placement="onboarding"
+      />{/if}
 
     {#if !restrictedUtilityRoute && !onboardingRoute && !mobileSetupRoute}<nav
         class="mobile-nav"
@@ -1097,7 +1106,9 @@
   title={translate($locale, 'Approve wallet-history scan')}
   description={translate(
     $locale,
-    'Use Groot’s network for simplicity and speed, or set up your own node for better privacy.'
+    mobileRuntime
+      ? 'Mobile Testnet4 sync requires a trusted remote Bitcoin Core node. Groot managed access is Mainnet-only.'
+      : 'Use Groot’s network for simplicity and speed, or set up your own node for better privacy.'
   )}
   onclose={() => {
     void declineInitialHistoryScan();
@@ -1112,6 +1123,14 @@
         body={translate(
           $locale,
           'Groot is checking which network will receive your wallet history.'
+        )}
+      />
+    {:else if initialApprovalBackend === 'setup_required'}
+      <WarningNotice
+        title={translate($locale, 'Set up wallet sync')}
+        body={translate(
+          $locale,
+          'Configure a trusted remote Bitcoin Core node before refreshing this wallet on mobile.'
         )}
       />
     {:else if initialApprovalBackend === 'error'}
@@ -1153,7 +1172,7 @@
       >{translate($locale, 'Set up my own node')}</Button
     ><Button
       loading={initialApprovalBusy}
-      disabled={initialApprovalBackend === 'loading' || initialApprovalBackend === 'error'}
+      disabled={initialApprovalBackend !== 'managed' && initialApprovalBackend !== 'private'}
       loadingLabel={translate($locale, 'Starting scan…')}
       onclick={approveInitialHistoryScan}>{translate($locale, 'Approve and scan')}</Button
     >
@@ -1396,6 +1415,11 @@
     margin-top: auto;
     display: grid;
     gap: 10px;
+  }
+  .native-mobile :global(.onboarding-overlay) {
+    top: env(safe-area-inset-top, 0px);
+    padding-top: 0;
+    padding-bottom: max(18px, env(safe-area-inset-bottom));
   }
   :global(.app-shell:has(.onboarding-overlay)):where(.app-shell)
     > :global(.build-identity-onboarding) {

@@ -76,3 +76,5 @@ ADRs 0094–0096 restore the retained BIP129 encrypted enrollment and BIP174 QR 
 ## Retained Continuity evidence
 
 Refs #17: BIPs 68/112 and descriptor foundations gain fixed Partner/Family compiler and primary-path checks. This does not certify named delayed spending or hardware support. Creation remains disabled. Existing BIP48 origins, BIP174 signature-only merge and descriptor backups are preserved; no standards dependency or persisted format changes.
+
+The RC3 mobile footer, notice spacing and first-scan configuration disclosure have no BIP impact. Node authentication, TLS/Tor validation, privacy consent and source-review gates remain unchanged.

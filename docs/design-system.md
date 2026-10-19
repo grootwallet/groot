@@ -74,3 +74,5 @@ Command on Apple platforms and Ctrl elsewhere use the existing Settings shortcut
 Native mobile full-screen setup reserves the top and landscape side safe areas before laying out its header. The mobile welcome home keeps the card's brand mark and omits the duplicate header lockup; network and settings remain visible, with 44-point touch targets. Native mobile uses a fixed viewport and prevents pinch zoom without blocking one-finger scrolling. Browser zoom and the desktop keyboard zoom described above remain available.
 
 Mobile signer routes compose the existing InstructionCard, Button, PasswordField, QR, address and warning controls. InstructionCard may omit its title when the flow supplies an existing heading inside; its surface and spacing stay owned by that component. Shared foundation CSS and the earlier scoped ownership remain intact.
+
+Native mobile setup keeps build information in Settings instead of a fixed footer over onboarding actions. Its content scroller starts below the status-bar safe area. Stacked sync and backup notices remain in document flow; only one missing-connection notice is shown.

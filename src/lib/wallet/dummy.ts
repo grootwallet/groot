@@ -209,7 +209,11 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
   }
   async runtimePlatform() {
     return {
-      platform: 'browser' as const,
+      platform:
+        typeof location !== 'undefined' &&
+        new URLSearchParams(location.search).has('fixture-native-mobile')
+          ? ('ios' as const)
+          : ('browser' as const),
       mobile: typeof window !== 'undefined' && matchMedia('(max-width: 760px)').matches,
       network: defaultConfig.network,
       networkSwitching: false,
