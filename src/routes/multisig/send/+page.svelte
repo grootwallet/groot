@@ -2176,6 +2176,9 @@
             <label class="field"
               ><span>{translate($locale, 'Send to')}</span><input
                 aria-label={translate($locale, 'Bitcoin address')}
+                autocapitalize="none"
+                autocorrect="off"
+                spellcheck={false}
                 bind:value={address}
                 oninput={clearDraftError}
                 placeholder="{addressPrefixForNetwork(defaultConfig.network)}q…"
@@ -2311,6 +2314,9 @@
               <div class="address-input-control">
                 <input
                   aria-label={translate($locale, 'Bitcoin address')}
+                  autocapitalize="none"
+                  autocorrect="off"
+                  spellcheck={false}
                   bind:value={address}
                   oninput={() => {
                     clearDraftError();

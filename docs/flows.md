@@ -103,3 +103,7 @@ After a QR is completely verified, release its camera stream and replace the pre
 Unlocked mobile screens omit the brand header and start below the system safe area. Sync and backup reminders use compact inline actions with 44px touch targets; recovery verification remains available. This presentation change has no BIP or persisted-format impact.
 
 Watch-only QR import retains an explicit Back to wallet action when mobile branding is hidden; leaving before camera permission resolves releases the eventual stream.
+
+Coldcard receive and policy-address checks report a missing device policy with instructions to save and import the existing policy file. They do not record address verification on this error. Other device, cancellation and transport errors retain their existing classification.
+
+Recipient fields disable OS capitalization, autocorrection and spellcheck so the system does not alter Bitcoin address text. Native network and checksum validation remains authoritative.

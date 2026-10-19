@@ -3406,13 +3406,10 @@ pub async fn hardware_verify_multisig_address(
         .await
         .map_err(internal)??;
     let response: HwiAddress = serde_json::from_slice(&displayed).map_err(internal)?;
-    let actual = response.address.ok_or_else(|| {
-        drop(response.error);
-        missing_hwi_value(
-            response.code,
-            "The device did not return the displayed address.",
-        )
-    })?;
+    let actual = response
+        .address
+        .clone()
+        .ok_or_else(|| missing_policy_address(&identity.device_type, response))?;
     if !hardware_display_matches_expected_address(&expected, &actual) {
         return Err(api_error(
             "hardware_address_mismatch",
@@ -3549,6 +3546,19 @@ pub(crate) fn bitbox_policy_address_error(
 
 fn missing_policy_address(device_type: &str, response: HwiAddress) -> ApiError {
     let code = response.code;
+    if device_type.eq_ignore_ascii_case("coldcard")
+        && code == Some(-7)
+        && response.error.as_deref().is_some_and(|error| {
+            error
+                .to_ascii_lowercase()
+                .contains("multisig wallet with those fingerprints not found")
+        })
+    {
+        return api_error(
+            "hardware_command_failed",
+            "Import this wallet policy on Coldcard first. Save the file from Policy → Coldcard → Review setup, then retry.",
+        );
+    }
     if let Some(error) = bitbox_policy_address_error(device_type, code, response.error.as_deref()) {
         return error;
     }
@@ -4469,5 +4479,56 @@ mod health_check_tests {
         upsert_hardware_health_check(&db, &latest).unwrap();
 
         assert_eq!(read_hardware_health_checks(&db).unwrap(), vec![latest]);
+    }
+}
+
+#[cfg(test)]
+mod coldcard_address_error_tests {
+    use super::*;
+
+    fn response(code: Option<i64>, message: &str) -> HwiAddress {
+        HwiAddress {
+            address: None,
+            error: Some(message.to_owned()),
+            code,
+        }
+    }
+
+    #[test]
+    fn missing_coldcard_policy_has_actionable_sanitized_guidance() {
+        let error = missing_policy_address("Coldcard", response(Some(-7),
+            "Coldcard Error: Multisig wallet with those fingerprints not found sensitive-vendor-detail"));
+        assert_eq!(error.code, "hardware_command_failed");
+        assert!(error
+            .message
+            .contains("Import this wallet policy on Coldcard first"));
+        assert!(!error.message.contains("sensitive-vendor-detail"));
+    }
+
+    #[test]
+    fn missing_policy_guidance_does_not_reclassify_other_devices_codes_or_errors() {
+        for (device, code, message) in [
+            (
+                "ledger",
+                Some(-7),
+                "Multisig wallet with those fingerprints not found",
+            ),
+            (
+                "coldcard",
+                Some(-14),
+                "Multisig wallet with those fingerprints not found",
+            ),
+            ("coldcard", Some(-7), "A different vendor error"),
+            (
+                "coldcard",
+                None,
+                "Multisig wallet with those fingerprints not found",
+            ),
+        ] {
+            let error = missing_policy_address(device, response(code, message));
+            assert!(!error
+                .message
+                .contains("Import this wallet policy on Coldcard first"));
+        }
     }
 }

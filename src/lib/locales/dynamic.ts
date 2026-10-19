@@ -4,6 +4,11 @@ import type { CatalogSection } from './types';
 // These keys are intentionally explicit so uncommon recovery/error paths cannot
 // silently fall back to English in a non-English session.
 export const dynamicCopy = {
+  'Import this wallet policy on Coldcard first. Save the file from Policy → Coldcard → Review setup, then retry.':
+    {
+      fr: 'Importez d’abord cette politique dans Coldcard. Enregistrez le fichier depuis Politique → Coldcard → Configuration, puis réessayez.',
+      es: 'Importa primero esta política en Coldcard. Guarda el archivo desde Política → Coldcard → Configuración y vuelve a intentarlo.'
+    },
   'Proposal discarded': { fr: 'Proposition supprimée', es: 'Propuesta descartada' },
   'Discard proposal': { fr: 'Supprimer la proposition', es: 'Descartar propuesta' },
   'Discard proposal?': { fr: 'Supprimer la proposition ?', es: '¿Descartar propuesta?' },

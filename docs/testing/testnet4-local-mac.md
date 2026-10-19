@@ -17,7 +17,11 @@ bitcoin-cli -testnet4 getconnectioncount
 
 Wait for `initialblockdownload` to become `false` before relying on wallet sync. On this Mac, the existing configuration prunes chain data to roughly 10 GB. Testnet4 has a separate `testnet4` subdirectory under `~/Library/Application Support/Bitcoin`. The running Mainnet node uses RPC 8332 and remains separate.
 
-In desktop Groot, select Testnet4, open network settings and connect your own Bitcoin Core node at `http://127.0.0.1:48332`, using its cookie at `~/Library/Application Support/Bitcoin/testnet4/.cookie`. Select the file; never paste or share its contents. Open the internal Groot app through the provided Testnet4 launcher to retain its isolated wallet profiles.
+In desktop Groot, select Testnet4, open network settings and connect your own Bitcoin Core node at `http://127.0.0.1:48332`. The current Testnet4 app supports protected RPC username/password authentication; automatic cookie discovery is limited to Regtest. Prefer an existing dedicated Core RPC credential. Never paste credentials into a URL, logs or public configuration. Open the internal Groot app through the provided Testnet4 launcher to retain its isolated wallet profiles.
+
+For the local RC7 rehearsal, the running node's cookie credentials were entered directly into Groot's protected authentication fields and saved encrypted for this wallet. Cookie contents were not printed or included in proof. Core rotates these credentials when it restarts, so this rehearsal connection must then be reconnected; this is not automatic Testnet4 cookie-file support.
+
+A pruned node cannot scan from genesis. Use a birthday known to precede this wallet's possible payments and later than the retained prune height, or use an archival node. A profile creation date alone does not establish the birthday of a restored wallet. Never move the birthday forward merely to suppress a pruning error.
 
 Stop only Testnet4:
 
