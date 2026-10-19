@@ -2430,3 +2430,28 @@ test('unknown-source received labels tokenize on Tab and save multiple permanent
   await expect(page.getByText('Recovered payment', { exact: true }).first()).toBeVisible();
   await expect(page.getByText('Family', { exact: true }).first()).toBeVisible();
 });
+
+test('recipient fields disable OS text correction on both send routes', async ({ page }) => {
+  for (const route of ['/send', '/multisig/send']) {
+    for (const theme of ['light', 'dark']) {
+      await page.goto(route);
+      await page.evaluate(
+        (value) => document.documentElement.setAttribute('data-theme', value),
+        theme
+      );
+      const recipient = page.getByLabel('Bitcoin address');
+      await expect(recipient).toHaveAttribute('autocapitalize', 'none');
+      await expect(recipient).toHaveAttribute('autocorrect', 'off');
+      await expect(recipient).toHaveAttribute('spellcheck', 'false');
+      const address = 'bcrt1qdummy00085n8k2r7v4cx9s6jlawephgzuqf5t8ul';
+      await recipient.fill(address);
+      await recipient.blur();
+      await expect(recipient).toHaveValue(address);
+      await page.screenshot({
+        path: test
+          .info()
+          .outputPath(`recipient-${route === '/send' ? 'single' : 'multi'}-${theme}.png`)
+      });
+    }
+  }
+});
