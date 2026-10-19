@@ -19,6 +19,16 @@ for (const theme of ['light', 'dark']) {
     expect(mainBox!.y).toBe(0);
     expect(navBox!.height).toBe(49);
     expect(navBox!.y + navBox!.height).toBe(844);
+    const selection = await navigation.locator('a.active').evaluate((node) => {
+      const style = getComputedStyle(node, '::before');
+      return {
+        width: parseFloat(style.width),
+        height: parseFloat(style.height),
+        bottom: style.bottom
+      };
+    });
+    expect(selection.width).toBe(selection.height);
+    expect(selection.bottom).toBe('0px');
     expect(mainBox!.y + mainBox!.height).toBeLessThanOrEqual(actionBox!.y - 8);
     expect(actionBox!.y + actionBox!.height).toBeLessThanOrEqual(navBox!.y - 8);
     await main.evaluate((node) => {

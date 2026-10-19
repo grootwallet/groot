@@ -1717,6 +1717,25 @@
       gap: 2px;
       font-size: 12px;
     }
+    :global(.app-shell.native-mobile .mobile-nav a) {
+      position: relative;
+      isolation: isolate;
+    }
+    :global(.app-shell.native-mobile .mobile-nav a.active) {
+      background: transparent;
+    }
+    :global(.app-shell.native-mobile .mobile-nav a.active)::before {
+      content: '';
+      position: absolute;
+      z-index: -1;
+      width: min(100%, calc(49px + env(safe-area-inset-bottom, 0px)));
+      aspect-ratio: 1;
+      bottom: calc(0px - env(safe-area-inset-bottom, 0px));
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--surface-active);
+      pointer-events: none;
+    }
     :global(.app-shell.native-mobile .mobile-nav a svg) {
       width: 20px;
       height: 20px;

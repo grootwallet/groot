@@ -80,3 +80,5 @@ Native mobile setup keeps build information in Settings instead of a fixed foote
 Unlocked mobile screens omit the brand header and start below the system safe area. Sync and backup reminders use compact inline actions with 44px touch targets; recovery verification remains available. This presentation change has no BIP or persisted-format impact.
 
 Native mobile navigation uses a 49px tab row plus the system bottom safe area, 20px icons and 12px labels. Keep the home indicator clear; do not add a second bottom spacer.
+
+The selected native tab uses a square background extending through the bottom safe-area strip. Icons and labels stay in the safe 49px row; the selection does not create a blank band below the active tab.
