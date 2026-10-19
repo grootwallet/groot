@@ -40,6 +40,12 @@ for (const theme of ['light', 'dark']) {
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
       true
     );
+    await navigation.getByRole('link', { name: 'Settings', exact: true }).click();
+    await expect(page).toHaveURL(/\/settings$/);
+    await expect.poll(() => main.evaluate((node) => node.scrollTop)).toBe(0);
+    await navigation.getByRole('link', { name: 'Overview', exact: true }).click();
+    await expect.poll(() => main.evaluate((node) => node.scrollTop)).toBe(0);
+    await expect(page.getByRole('heading', { name: 'Overview', exact: true })).toBeVisible();
     await page.screenshot({
       animations: 'disabled',
       path: info.outputPath(`${theme}-native-content-frame.png`)
