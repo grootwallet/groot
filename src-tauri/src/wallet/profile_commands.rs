@@ -1109,6 +1109,38 @@ pub(crate) fn ordered_fee_estimates(economy: f64, standard: f64, priority: f64) 
     (economy, standard, priority)
 }
 
+// Missing targets stay unavailable: a longer-target estimate is not a promise
+// about confirmation at a shorter target. This DTO is not persisted.
+pub(crate) fn partial_fee_estimates(
+    economy: Option<f64>,
+    standard: Option<f64>,
+    priority: Option<f64>,
+) -> ApiResult<FeeEstimatesDto> {
+    if economy.is_none() && standard.is_none() && priority.is_none() {
+        return Err(api_error(
+            "fee_estimate_unavailable",
+            "Bitcoin Core fee estimates are unavailable. Enter a custom sat/vB rate or try again later.",
+        ));
+    }
+    if let (Some(e), Some(s), Some(p)) = (economy, standard, priority) {
+        let (economy, standard, priority) = ordered_fee_estimates(e, s, p);
+        return Ok(FeeEstimatesDto {
+            economy: Some(economy),
+            standard: Some(standard),
+            priority: Some(priority),
+            source: "Bitcoin Core",
+        });
+    }
+    let standard = standard.map(|rate| rate.max(economy.unwrap_or(rate)));
+    let priority = priority.map(|rate| rate.max(standard.or(economy).unwrap_or(rate)));
+    Ok(FeeEstimatesDto {
+        economy,
+        standard,
+        priority,
+        source: "Bitcoin Core",
+    })
+}
+
 pub(crate) const SPARSE_MEMPOOL_LIMIT_VBYTES: u64 = 900_000;
 pub(crate) const MAX_BACKEND_FEE_RATE_SAT_VB: u64 = 1_000;
 
@@ -1164,40 +1196,42 @@ pub async fn fees_estimate(app: AppHandle) -> ApiResult<FeeEstimatesDto> {
 
         if is_regtest() {
             let estimates = FeeEstimatesDto {
-                economy: 1.0,
-                standard: 2.0,
-                priority: 5.0,
+                economy: Some(1.0),
+                standard: Some(2.0),
+                priority: Some(5.0),
                 source: "Regtest policy",
             };
-            update_public_network_status(&app, Some(estimates.priority), None)?;
+            update_public_network_status(&app, estimates.priority, None)?;
             return Ok(estimates);
         }
         require_unlocked(&app, &state)?;
         let client = rpc_client(&app, &state)?;
         checked_chain_identity(&client)?;
-        let historical = ordered_fee_estimates(
-            estimate_core_fee(&client, 144, EstimateMode::Economical)?,
-            estimate_core_fee(&client, 6, EstimateMode::Economical)?,
-            estimate_core_fee(&client, 2, EstimateMode::Economical)?,
-        );
-        let current_mempool_rate = client.get_raw_mempool_verbose().ok().and_then(|entries| {
-            current_mempool_fee_rate(
-                entries
-                    .into_values()
-                    .map(|entry| (entry.vsize, entry.fees.modified.to_sat())),
-                historical.0,
-            )
-        });
-        let (economy, standard, priority) = current_mempool_rate
-            .map(|rate| (rate, rate, rate))
-            .unwrap_or(historical);
-        let estimates = FeeEstimatesDto {
-            economy,
-            standard,
-            priority,
-            source: "Bitcoin Core",
-        };
-        update_public_network_status(&app, Some(estimates.priority), None)?;
+        let mut estimates = partial_fee_estimates(
+            estimate_core_fee(&client, 144, EstimateMode::Economical).ok(),
+            estimate_core_fee(&client, 6, EstimateMode::Economical).ok(),
+            estimate_core_fee(&client, 2, EstimateMode::Economical).ok(),
+        )?;
+        // Retain the existing bounded current-mempool adjustment only when all
+        // historical targets are available. Never fill a missing target.
+        if let (Some(economy), Some(_), Some(_)) =
+            (estimates.economy, estimates.standard, estimates.priority)
+        {
+            let current = client.get_raw_mempool_verbose().ok().and_then(|entries| {
+                current_mempool_fee_rate(
+                    entries
+                        .into_values()
+                        .map(|entry| (entry.vsize, entry.fees.modified.to_sat())),
+                    economy,
+                )
+            });
+            if let Some(rate) = current {
+                estimates.economy = Some(rate);
+                estimates.standard = Some(rate);
+                estimates.priority = Some(rate);
+            }
+        }
+        update_public_network_status(&app, estimates.priority, None)?;
         Ok(estimates)
     })
     .await

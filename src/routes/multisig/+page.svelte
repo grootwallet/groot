@@ -264,6 +264,11 @@
       document.removeEventListener('keydown', closeEscape);
     };
   });
+  function policyEvidenceLabel(verification: SignerPolicyVerification) {
+    return verification.scope === 'policy_file_acknowledgement'
+      ? 'Policy imported'
+      : 'Policy verified';
+  }
   function signerSourceName(signer: CosignerDraft) {
     return signer.deviceType === 'groot-mobile' ? 'QR connection' : sourceName(signer.source);
   }
@@ -333,6 +338,7 @@
         description: translate($locale, description),
         attention: false,
         verifiedAt: verification.verifiedAt,
+        acknowledgement: verification.scope === 'policy_file_acknowledgement',
         actionLabel: profile.registration === 'file_once' ? 'Review setup' : 'Verify again'
       };
     }
@@ -912,15 +918,17 @@
                     )}{#if latestHealth(signer)}<i></i>{translate($locale, 'Checked')}
                       <LocalTimestamp
                         value={latestHealth(signer)!.checkedAt}
-                      />{:else if verification}<i></i>{translate($locale, 'Policy verified')}
+                      />{:else if verification}<i></i>{translate(
+                        $locale,
+                        policyEvidenceLabel(verification)
+                      )}
                       <LocalTimestamp value={verification.verifiedAt} />{/if}</span
                   ></span
                 ><span
                   class="ready-badge"
                   class:attention={!signerDeviceContext(signer) &&
                     ((requiresPolicySetup(signer) && !verification) ||
-                      !policyRegistrationProfile(signer).supported ||
-                      latestHealth(signer)?.status === 'attention')}
+                      !policyRegistrationProfile(signer).supported)}
                   >{translate($locale, signerAvailabilityLabel(signer, verification))}</span
                 ><ChevronRight class="row-chevron" size={16} /></button
               >

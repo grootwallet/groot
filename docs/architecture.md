@@ -52,7 +52,7 @@ Mainnet fee protection, Bitcoin supply bounds, the single-recipient rule and coi
 
 ## Network boundary
 
-Core owns chain/mempool truth, fees and broadcast. Check the selected chain name and exact genesis before wallet-data reads. Mainnet database permits bind purpose, profile and the verified saved route; the separate throttle permit grants no wallet-data access.
+Core owns chain/mempool truth, fees and broadcast. The temporary fee-estimate DTO permits a null value per missing target; native conversion validates every returned rate, preserves available targets and never fills unavailable targets. Existing complete-target mempool adjustment remains bounded. This changes no persisted data format. Check the selected chain name and exact genesis before wallet-data reads. Mainnet database permits bind purpose, profile and the verified saved route; the separate throttle permit grants no wallet-data access.
 
 - Local Core is loopback-only.
 - Direct remote Core is HTTPS with platform certificate validation, no redirects, and bounded I/O. v3 onion HTTP requires an explicit numeric loopback SOCKS5 proxy; no local DNS/direct fallback.

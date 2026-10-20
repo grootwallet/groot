@@ -1,10 +1,11 @@
 <script lang="ts">
   import { locale } from '$lib/i18n';
   import { translate } from '$lib/i18n-catalog';
-  import { AlertTriangle, Check, ChevronRight, Download, ShieldCheck } from '@lucide/svelte';
+  import { Check, ChevronRight, Download, ShieldCheck } from '@lucide/svelte';
   import type { CosignerDraft } from '$lib/multisig/policy';
   import type { MultisigWallet } from '$lib/wallet';
   import Button from './Button.svelte';
+  import WarningNotice from './WarningNotice.svelte';
   import InstructionCard from './InstructionCard.svelte';
   import PolicySignerList from './PolicySignerList.svelte';
 
@@ -87,13 +88,14 @@
       ></span
     ></label
   >
-  {#if error}<div class="hardware-inline-error" role="alert">
-      <AlertTriangle size={18} /><span
-        ><strong>{translate($locale, 'Coldcard setup was not recorded')}</strong><small
-          >{error}</small
-        ></span
-      >
-    </div>{/if}
+  {#if error}<WarningNotice
+      tone="danger"
+      icon
+      role="alert"
+      ariaLive="polite"
+      title={translate($locale, 'Coldcard setup was not recorded')}
+      body={error}
+    />{/if}
   <div class="modal-footer policy-review-actions">
     {#if onback}<Button variant="secondary" disabled={busy} onclick={onback}
         >{translate($locale, 'Back')}</Button

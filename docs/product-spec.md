@@ -58,13 +58,13 @@ Allow concurrent payment requests. Only an unused awaiting-payment address may b
 
 Full address/xpub views group four characters with a short final block; copy returns the exact unspaced value. Descriptor view/copy/QR/export presents one public receive/change multipath descriptor.
 
-Hardware address verification is address-specific. Discovery candidates use amber **Select to identify**; selected-device unlock instructions remain distinct. Fresh full-account identity proof precedes device display, policy registration and signing. Standard multisig must have policy/first-address verification on enough signers to intersect every signing quorum before receiving. Policy first-address detail uses the same comparison/derivation component as Receive for all devices.
+Hardware address verification is address-specific. Discovery candidates use amber **Select to identify**; selected-device unlock instructions remain distinct. Fresh full-account identity proof precedes device display, policy registration and signing. A failed connection/identity health check does not revoke or recolour the separate saved policy-import acknowledgement. Coldcard microSD/Virtual Disk import is explicitly acknowledged by the user; its timestamp says Import recorded rather than implying USB policy/address verification. Standard multisig must have policy/first-address verification on enough signers to intersect every signing quorum before receiving. Policy first-address detail uses the same comparison/derivation component as Receive for all devices.
 
 BIP329 exports representable public labels/spendability deterministically. Import is bounded, additive and atomic: conflicts leave the wallet unchanged. Restored-wallet address ownership is derived in Rust across receive indexes 0–9,999 plus indexed ownership, but an import that would exceed Groot's supported recovery gap is rejected atomically. Matching xpub records report matched signer keys and preserve current editable signer names. Labels are not a seed/descriptor backup or live synchronization protocol.
 
 ## Send, coins and activity
 
-Use integer satoshis and positive validated sat/vB rates. Economy/Standard/Priority come from the exact configured Core backend; unavailable estimates stay unavailable. A validated custom rate remains possible. Regtest alone has a deterministic fee policy.
+Use integer satoshis and positive validated sat/vB rates. Economy/Standard/Priority come from the exact configured Core backend. Preserve each available target when another target has insufficient data; missing targets stay unavailable and cannot be selected. Never substitute a longer-target rate for a missing shorter-target estimate. A validated custom rate remains possible. Regtest alone has a deterministic fee policy.
 
 Coin selection offers automatic strategies or exact eligible inputs. Frozen coins never enter either path. Review explains amounts, fees, change and source linkage from the actual unsigned PSBT. Self-transfers show Rust-proven **Consolidating** totals and a fee-only wallet debit; labels do not prove ownership.
 

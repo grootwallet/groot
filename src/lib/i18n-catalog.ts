@@ -554,6 +554,15 @@ export const copyCatalog = {
     fr: 'Les descripteurs ont été restaurés. Effectuez une analyse complète avant de vous fier au solde.',
     es: 'Los descriptores se restauraron. Ejecuta un escaneo completo antes de confiar en el saldo.'
   },
+  'Import recorded': { fr: 'Importation enregistrée', es: 'Importación registrada' },
+  'Some fee estimates are unavailable': {
+    fr: 'Certaines estimations de frais sont indisponibles',
+    es: 'Algunas estimaciones de comisión no están disponibles'
+  },
+  'Choose an available estimate or enter a custom rate.': {
+    fr: 'Choisissez une estimation disponible ou saisissez un taux personnalisé.',
+    es: 'Elige una estimación disponible o introduce una tarifa personalizada.'
+  },
   'Fee estimates unavailable': {
     fr: 'Estimations de frais indisponibles',
     es: 'Estimaciones de comisión no disponibles'

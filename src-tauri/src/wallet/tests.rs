@@ -7021,3 +7021,30 @@ fn family_assistance_requires_a_parent_and_an_assistance_role() {
         }
     }
 }
+
+#[test]
+fn fee_estimates_preserve_each_available_target_without_filling_missing_targets() {
+    for mask in 0..8 {
+        let known = [0.2, 0.5, 1.25];
+        let available = |index: usize| ((mask & (1 << index)) != 0).then_some(known[index]);
+        let result = partial_fee_estimates(available(0), available(1), available(2));
+        if mask == 0 {
+            assert_eq!(result.err().unwrap().code, "fee_estimate_unavailable");
+            continue;
+        }
+        let result = result.unwrap();
+        assert_eq!(result.economy, available(0));
+        assert_eq!(result.standard, available(1));
+        assert_eq!(result.priority, available(2));
+        let json = serde_json::to_value(result).unwrap();
+        for (index, name) in ["economy", "standard", "priority"].into_iter().enumerate() {
+            assert_eq!(json[name].is_null(), available(index).is_none());
+        }
+    }
+    let result = partial_fee_estimates(Some(5.0), None, Some(1.0)).unwrap();
+    assert_eq!(result.standard, None);
+    assert_eq!(result.priority, Some(5.0));
+    let result = partial_fee_estimates(None, Some(5.0), Some(1.0)).unwrap();
+    assert_eq!(result.economy, None);
+    assert_eq!(result.priority, Some(5.0));
+}

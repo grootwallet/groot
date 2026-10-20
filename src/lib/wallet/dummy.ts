@@ -963,8 +963,8 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     }
     return {
       economy: feeRate(3),
-      standard: feeRate(7),
-      priority: feeRate(12),
+      standard: this._partialFeeEstimates ? null : feeRate(7),
+      priority: this._partialFeeEstimates ? null : feeRate(12),
       source: 'Bitcoin Core'
     };
   }
@@ -1434,6 +1434,14 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
   ) {
     await new Promise((resolve) => setTimeout(resolve, 200));
     const checkedAt = new Date().toISOString();
+    if (
+      typeof sessionStorage !== 'undefined' &&
+      sessionStorage.getItem('fixture-health-disconnected') === '1'
+    )
+      throw new WalletError(
+        'hardware_unavailable',
+        'The saved hardware signer was not found. Keep that signer connected and unlocked, then try again.'
+      );
     const connected = await this.importHardwareCosigner(deviceId, cosigner.label, true);
     const identityMatches =
       connected.fingerprint.toLowerCase() === cosigner.fingerprint.toLowerCase() &&

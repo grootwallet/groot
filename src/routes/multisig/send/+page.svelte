@@ -2031,9 +2031,12 @@
             {#if broadcastExplorerUrl}<div class="explorer-panel">
                 <button class="explorer-link" type="button" onclick={openBroadcastExplorer}
                   >{translate($locale, 'View on mempool.space')} <ExternalLink size={14} /></button
-                >{#if broadcastExplorerError}<p class="form-error" role="alert">
-                    {broadcastExplorerError}
-                  </p>{/if}
+                >{#if broadcastExplorerError}<WarningNotice
+                    tone="danger"
+                    icon
+                    role="alert"
+                    body={broadcastExplorerError}
+                  />{/if}
                 <p class="explorer-privacy">
                   {translate(
                     $locale,
@@ -2289,13 +2292,15 @@
                 }}
               />
             </details>
-            {#if error}<div class="hardware-inline-error send-form-error" role="alert">
-                <AlertTriangle size={18} /><span
-                  ><strong>{translate($locale, 'Payment could not be prepared')}</strong><small
-                    >{error}</small
-                  ></span
-                >
-              </div>{/if}
+            {#if error}<WarningNotice
+                tone="danger"
+                icon
+                role="alert"
+                ariaLive="polite"
+                class="send-form-error"
+                title={translate($locale, 'Payment could not be prepared')}
+                body={error}
+              />{/if}
             <Button
               type="submit"
               size="large"
@@ -2355,12 +2360,15 @@
                 }}
               />
             </details>
-            {#if error}<div class="hardware-inline-error send-form-error" role="alert">
-                <AlertTriangle size={18} /><span
-                  ><strong>{translate($locale, 'Protection renewal could not be prepared')}</strong
-                  ><small>{error}</small></span
-                >
-              </div>{/if}
+            {#if error}<WarningNotice
+                tone="danger"
+                icon
+                role="alert"
+                ariaLive="polite"
+                class="send-form-error"
+                title={translate($locale, 'Protection renewal could not be prepared')}
+                body={error}
+              />{/if}
             <Button
               type="submit"
               size="large"
@@ -2424,13 +2432,15 @@
             <Button type="submit" size="large" class="full" disabled={!intentValid}
               >{translate($locale, 'Continue to amount')}</Button
             >
-            {#if error}<div class="hardware-inline-error send-form-error" role="alert">
-                <AlertTriangle size={18} /><span
-                  ><strong>{translate($locale, 'Could not save payment draft')}</strong><small
-                    >{error}</small
-                  ></span
-                >
-              </div>{/if}
+            {#if error}<WarningNotice
+                tone="danger"
+                icon
+                role="alert"
+                ariaLive="polite"
+                class="send-form-error"
+                title={translate($locale, 'Could not save payment draft')}
+                body={error}
+              />{/if}
           </form>
         {:else if !proposal}
           <form
@@ -2657,13 +2667,15 @@
             {#if maxSpendRefreshing}<p class="available-balance-summary" role="status">
                 {translate($locale, 'Updating the maximum spendable amount for this fee…')}
               </p>{/if}
-            {#if error}<div class="hardware-inline-error send-form-error" role="alert">
-                <AlertTriangle size={18} /><span
-                  ><strong>{translate($locale, 'Payment could not be prepared')}</strong><small
-                    >{error}</small
-                  ></span
-                >
-              </div>{/if}
+            {#if error}<WarningNotice
+                tone="danger"
+                icon
+                role="alert"
+                ariaLive="polite"
+                class="send-form-error"
+                title={translate($locale, 'Payment could not be prepared')}
+                body={error}
+              />{/if}
             <div class="split-actions">
               <Button
                 variant="secondary"
@@ -2801,19 +2813,18 @@
                       )}</small
                     ></span
                   >
-                </div>{:else if proposalInputsUnavailable(proposal)}<div
-                  class="hardware-inline-error signing-transport-error"
+                </div>{:else if proposalInputsUnavailable(proposal)}<WarningNotice
+                  tone="danger"
+                  icon
                   role="alert"
-                >
-                  <AlertTriangle size={18} /><span
-                    ><strong>{translate($locale, 'Payment inputs unavailable')}</strong><small
-                      >{translate(
-                        $locale,
-                        'This proposal uses coins no longer available in this wallet. Sync, then cancel it and prepare a new payment. Do not sign or broadcast this PSBT.'
-                      )}</small
-                    ></span
-                  >
-                </div>{:else}
+                  ariaLive="polite"
+                  class="signing-transport-error"
+                  title={translate($locale, 'Payment inputs unavailable')}
+                  body={translate(
+                    $locale,
+                    'This proposal uses coins no longer available in this wallet. Sync, then cancel it and prepare a new payment. Do not sign or broadcast this PSBT.'
+                  )}
+                />{:else}
                 {#if !proposal.canFinalize}<div class="psbt-actions">
                     {#if !wallet?.recoveryTemplate}<Button variant="secondary" onclick={scan}
                         ><Cpu size={16} />{translate($locale, 'Sign with device')}</Button
@@ -2904,16 +2915,15 @@
                     class="full signature-requirement-action"
                     disabled
                     ariaLabel={signatureRequirementLabel}>{signatureRequirementLabel}</Button
-                  >{/if}{#if error}<div
-                    class="hardware-inline-error signing-transport-error"
+                  >{/if}{#if error}<WarningNotice
+                    tone="danger"
+                    icon
                     role="alert"
-                  >
-                    <AlertTriangle size={18} /><span
-                      ><strong>{translate($locale, 'Payment action failed')}</strong><small
-                        >{error}</small
-                      ></span
-                    >
-                  </div>{/if}{/if}<Button
+                    ariaLive="polite"
+                    class="signing-transport-error"
+                    title={translate($locale, 'Payment action failed')}
+                    body={error}
+                  />{/if}{/if}<Button
                 variant="ghost-danger"
                 class="full proposal-cancel-action"
                 disabled={busy}
@@ -3158,20 +3168,22 @@
             ><Download size={14} />{translate($locale, 'Save wallet policy')}</Button
           >
         </div>{/if}
-      {#if deviceError}<div class="hardware-inline-error" role="alert">
-          <AlertTriangle size={18} /><span
-            ><strong
-              >{translate(
-                $locale,
-                hardwareAction === 'identify'
-                  ? 'Signer identification failed'
-                  : 'This device could not sign'
-              )}</strong
-            ><small>{deviceError}</small></span
+      {#if deviceError}<WarningNotice
+          tone="danger"
+          icon
+          role="alert"
+          ariaLive="polite"
+          title={translate(
+            $locale,
+            hardwareAction === 'identify'
+              ? 'Signer identification failed'
+              : 'This device could not sign'
+          )}
+          body={deviceError}
           ><Button variant="secondary" size="small" onclick={scan}
             >{translate($locale, 'Rescan')}</Button
-          >
-        </div>{/if}
+          ></WarningNotice
+        >{/if}
     </div>
   </div>
 </Modal>
@@ -3280,12 +3292,14 @@
       bind:value={imported}
       oninput={() => (importError = '')}
       placeholder={translate($locale, 'cHNidP8…')}></textarea></label
-  >{#if importError}<div class="hardware-inline-error" role="alert">
-      <AlertTriangle size={18} /><span
-        ><strong>{translate($locale, 'Signed PSBT rejected')}</strong><small>{importError}</small
-        ></span
-      >
-    </div>{/if}
+  >{#if importError}<WarningNotice
+      tone="danger"
+      icon
+      role="alert"
+      ariaLive="polite"
+      title={translate($locale, 'Signed PSBT rejected')}
+      body={importError}
+    />{/if}
   <div class="modal-footer">
     <Button variant="secondary" disabled={busy} onclick={closePsbtImport}
       >{translate($locale, 'Cancel')}</Button
@@ -3326,12 +3340,14 @@
   onclose={() => (paymentScanOpen = false)}
 >
   <PaymentRequestQrScanner onscan={receivePaymentRequest} />
-  {#if paymentScanError}<div class="hardware-inline-error" role="alert">
-      <AlertTriangle size={18} /><span
-        ><strong>{translate($locale, 'QR code rejected')}</strong><small>{paymentScanError}</small
-        ></span
-      >
-    </div>{/if}
+  {#if paymentScanError}<WarningNotice
+      tone="danger"
+      icon
+      role="alert"
+      ariaLive="polite"
+      title={translate($locale, 'QR code rejected')}
+      body={paymentScanError}
+    />{/if}
 </Modal>
 
 <Modal
@@ -3366,7 +3382,12 @@
       <dd><PermanentLabelTags labels={submissionLabels} prominent /></dd>
     </div>
   </dl>
-  {#if discardDraftError}<p class="form-error" role="alert">{discardDraftError}</p>{/if}
+  {#if discardDraftError}<WarningNotice
+      tone="danger"
+      icon
+      role="alert"
+      body={discardDraftError}
+    />{/if}
   <div class="modal-footer">
     <Button
       variant="secondary"
@@ -3416,7 +3437,7 @@
         <dd>{proposal.signed} of {proposal.required} {translate($locale, 'collected')}</dd>
       </div>
     </dl>
-    {#if cancelError}<p class="form-error" role="alert">{cancelError}</p>{/if}
+    {#if cancelError}<WarningNotice tone="danger" icon role="alert" body={cancelError} />{/if}
     <div class="modal-footer">
       <Button
         variant="secondary"
@@ -3464,7 +3485,7 @@
         </dd>
       </div>
     </dl>
-    {#if discardError}<p class="form-error" role="alert">{discardError}</p>{/if}
+    {#if discardError}<WarningNotice tone="danger" icon role="alert" body={discardError} />{/if}
     <div class="modal-footer">
       <Button
         variant="secondary"
@@ -3775,6 +3796,11 @@
   @media (min-width: 761px) and (max-width: 1050px) {
     :global(.multisig-signing-layout):where(.multisig-signing-layout) {
       grid-template-columns: 1fr;
+    }
+  }
+  @media (max-width: 760px) {
+    .send-stage-card :global(.split-actions .button) {
+      scroll-margin-block: calc(160px + env(safe-area-inset-bottom));
     }
   }
 </style>

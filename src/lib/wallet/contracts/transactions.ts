@@ -40,9 +40,9 @@ export type ActivityPage = {
 };
 
 export type FeeEstimates = {
-  economy: FeeRate;
-  standard: FeeRate;
-  priority: FeeRate;
+  economy: FeeRate | null;
+  standard: FeeRate | null;
+  priority: FeeRate | null;
   source: string;
 };
 export type MaxSpend = { amount: Sats; fee: Sats };

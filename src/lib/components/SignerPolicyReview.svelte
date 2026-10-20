@@ -1,7 +1,7 @@
 <script lang="ts">
   import { locale } from '$lib/i18n';
   import { translate } from '$lib/i18n-catalog';
-  import { AlertTriangle, Check, ChevronRight, ShieldCheck } from '@lucide/svelte';
+  import { Check, ChevronRight, ShieldCheck } from '@lucide/svelte';
   import type { CosignerDraft } from '$lib/multisig/policy';
   import type {
     MultisigWallet,
@@ -16,6 +16,7 @@
   import { copyText } from '$lib/clipboard';
   import { toast } from '$lib/stores/toasts';
   import Button from './Button.svelte';
+  import WarningNotice from './WarningNotice.svelte';
   import LocalTimestamp from './LocalTimestamp.svelte';
   import PolicySignerList from './PolicySignerList.svelte';
   import HardwareAddressComparison from './HardwareAddressComparison.svelte';
@@ -211,11 +212,14 @@
         >{/if}
     </section>{/if}
 
-  {#if error}<div class="hardware-inline-error" role="alert" aria-live="polite">
-      <AlertTriangle size={18} /><span
-        ><strong>{translate($locale, 'Device needs attention')}</strong><small>{error}</small></span
-      >
-    </div>{/if}
+  {#if error}<WarningNotice
+      tone="danger"
+      icon
+      role="alert"
+      ariaLive="polite"
+      title={translate($locale, 'Device needs attention')}
+      body={error}
+    />{/if}
   <div class="modal-footer policy-review-actions">
     {#if onback}<Button variant="secondary" disabled={busy} onclick={onback}
         >{translate($locale, 'Back')}</Button

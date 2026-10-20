@@ -79,7 +79,7 @@
       if (!locked) {
         try {
           const fees = await walletService.estimateFees();
-          priorityFee = Number(fees.priority);
+          priorityFee = fees.priority === null ? null : Number(fees.priority);
         } catch {
           priorityFee = null;
         }

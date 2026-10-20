@@ -1292,9 +1292,9 @@ struct DelayedPolicyContext {
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FeeEstimatesDto {
-    economy: f64,
-    standard: f64,
-    priority: f64,
+    economy: Option<f64>,
+    standard: Option<f64>,
+    priority: Option<f64>,
     source: &'static str,
 }
 

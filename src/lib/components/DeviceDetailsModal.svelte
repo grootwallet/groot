@@ -1,4 +1,5 @@
 <script lang="ts">
+  import WarningNotice from './WarningNotice.svelte';
   import { locale } from '$lib/i18n';
   import { translate, localizedError } from '$lib/i18n-catalog';
   import {
@@ -50,6 +51,7 @@
       attention: boolean;
       actionLabel?: string;
       verifiedAt?: string;
+      acknowledgement?: boolean;
     } | null;
     deviceContext?: CoordinationSignerContext | null;
     onpolicy?: () => void;
@@ -194,7 +196,7 @@
                 >
               </div>
             </form>
-            {#if nameError}<p class="form-error" role="alert">{nameError}</p>{/if}
+            {#if nameError}<WarningNotice tone="danger" icon role="alert" body={nameError} />{/if}
           {:else}
             <span
               ><small>{translate($locale, 'Signer name')}</small><strong>{signer.label}</strong
@@ -250,7 +252,10 @@
             <strong>{translate($locale, 'Wallet policy')}</strong>
             <small>{translate($locale, policyStatus.description)}</small>
             {#if policyStatus.verifiedAt}<small
-                >{translate($locale, 'Last verified')}
+                >{translate(
+                  $locale,
+                  policyStatus.acknowledgement ? 'Import recorded' : 'Last verified'
+                )}
                 <LocalTimestamp value={policyStatus.verifiedAt} /></small
               >{/if}
           </div>
@@ -294,19 +299,27 @@
                 label={translate($locale, 'Checking signer')}
               />
             {:else}
-              <p>
-                {translate(
-                  $locale,
-                  health?.status === 'healthy'
-                    ? deviceContext === LOCAL_MOBILE_SIGNER_CONTEXT
-                      ? health.summary
-                      : 'Signer matches this wallet.'
-                    : (health?.summary ??
-                        (deviceContext === LOCAL_MOBILE_SIGNER_CONTEXT
-                          ? 'Enter the app PIN to prove this phone key still matches the wallet.'
-                          : 'Connect and unlock the signer to check it.'))
-                )}
-              </p>
+              {#if health?.status === 'attention'}<WarningNotice
+                  tone="danger"
+                  icon
+                  role="alert"
+                  title={translate($locale, 'Health check needs attention')}
+                  body={translate($locale, health.summary)}
+                />{:else}
+                <p>
+                  {translate(
+                    $locale,
+                    health?.status === 'healthy'
+                      ? deviceContext === LOCAL_MOBILE_SIGNER_CONTEXT
+                        ? health.summary
+                        : 'Signer matches this wallet.'
+                      : (health?.summary ??
+                          (deviceContext === LOCAL_MOBILE_SIGNER_CONTEXT
+                            ? 'Enter the app PIN to prove this phone key still matches the wallet.'
+                            : 'Connect and unlock the signer to check it.'))
+                  )}
+                </p>
+              {/if}
               {#if oncheck}<Button variant="secondary" class="full" onclick={() => oncheck?.()}
                   ><RefreshCw size={15} />{translate(
                     $locale,

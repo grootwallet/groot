@@ -3,6 +3,7 @@
   import { translate } from '$lib/i18n-catalog';
   import { Gauge } from '@lucide/svelte';
   import Amount from './Amount.svelte';
+  import WarningNotice from './WarningNotice.svelte';
   import type { FeeEstimates } from '$lib/wallet';
 
   let {
@@ -37,13 +38,13 @@
       <button
         type="button"
         class:active={!customActive && value === option.rate}
-        disabled={!estimates}
+        disabled={option.rate <= 0}
         onclick={() => {
           customChosen = false;
           onchange(option.rate);
         }}
         ><span><strong>{translate($locale, option.name)}</strong></span><b
-          >{translate($locale, estimates ? `${option.rate} sat/vB` : 'Unavailable')}</b
+          >{translate($locale, option.rate > 0 ? `${option.rate} sat/vB` : 'Unavailable')}</b
         ></button
       >
     {/each}
@@ -72,13 +73,25 @@
     >
   </div>
   <span class="fee-source">
-    {#if estimates}{translate($locale, 'Estimated fee')}
+    {#if value > 0}{translate($locale, 'Estimated fee')}
       <Amount value={estimatedFee} />{:else}{translate(
         $locale,
         'Estimate\n      unavailable · Enter a custom rate'
       )}{/if}
   </span>
-  {#if error}<p class="form-error" role="alert">{error}</p>{/if}
+  {#if error}<WarningNotice
+      tone="danger"
+      icon
+      role="alert"
+      title={translate($locale, 'Fee estimates unavailable')}
+      body={error}
+    />
+  {:else if estimates && options.some((option) => option.rate <= 0)}<WarningNotice
+      icon
+      role="status"
+      title={translate($locale, 'Some fee estimates are unavailable')}
+      body={translate($locale, 'Choose an available estimate or enter a custom rate.')}
+    />{/if}
 </div>
 
 <style>

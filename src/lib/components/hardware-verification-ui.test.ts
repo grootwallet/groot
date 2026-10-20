@@ -409,7 +409,8 @@ describe('hardware receive verification UI', () => {
   });
 
   it('makes hardware policy review the verification step and uses the shared alert treatment', () => {
-    expect(policyReview).toContain('class="hardware-inline-error" role="alert" aria-live="polite"');
+    expect(policyReview).toContain('<WarningNotice');
+    expect(policyReview).toContain('ariaLive="polite"');
     expect(policyReview).toContain("translate($locale, 'Device needs attention')");
     expect(policyReview).not.toContain('<p class="form-error" role="alert">{error}</p>');
     expect(policyReview).not.toContain('bind:checked={acknowledged}');

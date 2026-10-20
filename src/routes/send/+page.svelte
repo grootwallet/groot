@@ -1664,13 +1664,15 @@
               class="full"
               >{translate($locale, 'Continue to amount')}<ArrowRight size={17} /></Button
             >
-            {#if draftError}<div class="hardware-inline-error send-form-error" role="alert">
-                <AlertTriangle size={18} /><span
-                  ><strong>{translate($locale, 'Could not save payment draft')}</strong><small
-                    >{draftError}</small
-                  ></span
-                >
-              </div>{/if}
+            {#if draftError}<WarningNotice
+                tone="danger"
+                icon
+                role="alert"
+                ariaLive="polite"
+                class="send-form-error"
+                title={translate($locale, 'Could not save payment draft')}
+                body={draftError}
+              />{/if}
           </form>
         {:else if step === 1}
           <form
@@ -2073,18 +2075,20 @@
                   ><Download size={16} />{translate($locale, 'Save unsigned PSBT')}</Button
                 >
               </div>
-              {#if importError}<div
-                  class="hardware-inline-error signing-transport-error"
+              {#if importError}<WarningNotice
+                  tone="danger"
+                  icon
                   role="alert"
-                >
-                  <AlertTriangle size={18} /><span
-                    ><strong>{translate($locale, 'Signed PSBT rejected')}</strong><small
-                      >{importError}</small
-                    ></span
-                  >
-                </div>{:else if credentialError}<p class="form-error" role="alert">
-                  {credentialError}
-                </p>{/if}
+                  ariaLive="polite"
+                  class="signing-transport-error"
+                  title={translate($locale, 'Signed PSBT rejected')}
+                  body={importError}
+                />{:else if credentialError}<WarningNotice
+                  tone="danger"
+                  icon
+                  role="alert"
+                  body={credentialError}
+                />{/if}
             {/if}
             <Button
               variant="ghost"
@@ -2280,9 +2284,12 @@
             {#if broadcastExplorerUrl}<div class="explorer-panel">
                 <button class="explorer-link" type="button" onclick={openBroadcastExplorer}
                   >{translate($locale, 'View on mempool.space')} <ExternalLink size={14} /></button
-                >{#if broadcastExplorerError}<p class="form-error" role="alert">
-                    {broadcastExplorerError}
-                  </p>{/if}
+                >{#if broadcastExplorerError}<WarningNotice
+                    tone="danger"
+                    icon
+                    role="alert"
+                    body={broadcastExplorerError}
+                  />{/if}
                 <p class="explorer-privacy">
                   {translate(
                     $locale,
@@ -2452,20 +2459,22 @@
           onselect={signHardware}
           onrescan={scanHardware}
           showRescan
-        />{/if}{#if deviceError}<div class="hardware-inline-error" role="alert">
-          <AlertTriangle size={18} /><span
-            ><strong
-              >{translate(
-                $locale,
-                hardwareAction === 'identify'
-                  ? 'Signer identification failed'
-                  : 'Hardware signing failed'
-              )}</strong
-            ><small>{deviceError}</small></span
+        />{/if}{#if deviceError}<WarningNotice
+          tone="danger"
+          icon
+          role="alert"
+          ariaLive="polite"
+          title={translate(
+            $locale,
+            hardwareAction === 'identify'
+              ? 'Signer identification failed'
+              : 'Hardware signing failed'
+          )}
+          body={deviceError}
           ><Button variant="secondary" size="small" onclick={scanHardware}
             >{translate($locale, 'Rescan')}</Button
-          >
-        </div>{/if}
+          ></WarningNotice
+        >{/if}
     </div>
   </div></Modal
 >
@@ -2518,12 +2527,14 @@
         credentialError = '';
       }}
       placeholder={translate($locale, 'cHNidP8…')}></textarea></label
-  >{#if importError}<div class="hardware-inline-error" role="alert">
-      <AlertTriangle size={18} /><span
-        ><strong>{translate($locale, 'Signed PSBT rejected')}</strong><small>{importError}</small
-        ></span
-      >
-    </div>{/if}
+  >{#if importError}<WarningNotice
+      tone="danger"
+      icon
+      role="alert"
+      ariaLive="polite"
+      title={translate($locale, 'Signed PSBT rejected')}
+      body={importError}
+    />{/if}
   <div class="modal-footer">
     <Button variant="secondary" disabled={broadcasting} onclick={closePsbtImport}
       >{translate($locale, 'Cancel')}</Button
@@ -2564,12 +2575,14 @@
   onclose={() => (paymentScanOpen = false)}
 >
   <PaymentRequestQrScanner onscan={receivePaymentRequest} />
-  {#if paymentScanError}<div class="hardware-inline-error" role="alert">
-      <AlertTriangle size={18} /><span
-        ><strong>{translate($locale, 'QR code rejected')}</strong><small>{paymentScanError}</small
-        ></span
-      >
-    </div>{/if}
+  {#if paymentScanError}<WarningNotice
+      tone="danger"
+      icon
+      role="alert"
+      ariaLive="polite"
+      title={translate($locale, 'QR code rejected')}
+      body={paymentScanError}
+    />{/if}
 </Modal>
 
 <Modal
@@ -2597,7 +2610,12 @@
       <dd><PermanentLabelTags labels={submissionLabels} prominent /></dd>
     </div>
   </dl>
-  {#if discardDraftError}<p class="form-error" role="alert">{discardDraftError}</p>{/if}
+  {#if discardDraftError}<WarningNotice
+      tone="danger"
+      icon
+      role="alert"
+      body={discardDraftError}
+    />{/if}
   <div class="modal-footer">
     <Button
       variant="secondary"
@@ -2645,9 +2663,12 @@
         <dd>{externalProposal.signed} {translate($locale, 'of 1 → 0 of 1')}</dd>
       </div>
     </dl>
-    {#if discardSignatureError}<p class="form-error" role="alert">
-        {discardSignatureError}
-      </p>{/if}
+    {#if discardSignatureError}<WarningNotice
+        tone="danger"
+        icon
+        role="alert"
+        body={discardSignatureError}
+      />{/if}
     <div class="modal-footer">
       <Button
         variant="secondary"
@@ -2703,7 +2724,7 @@
         </dd>
       </div>
     </dl>
-    {#if cancelError}<p class="form-error" role="alert">{cancelError}</p>{/if}
+    {#if cancelError}<WarningNotice tone="danger" icon role="alert" body={cancelError} />{/if}
     <div class="modal-footer">
       <Button
         variant="secondary"
@@ -2816,5 +2837,10 @@
     :global(.proposal-review-details) {
     margin-top: 2px;
     border-bottom: 0;
+  }
+  @media (max-width: 760px) {
+    .send-stage-card :global(.split-actions .button) {
+      scroll-margin-block: calc(160px + env(safe-area-inset-bottom));
+    }
   }
 </style>

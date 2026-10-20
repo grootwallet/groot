@@ -459,6 +459,9 @@ export abstract class DummyWalletState {
   protected _delayedWalletSwitch =
     typeof location !== 'undefined' &&
     new URLSearchParams(location.search).has('fixture-delayed-wallet-switch');
+  protected _partialFeeEstimates =
+    typeof location !== 'undefined' &&
+    new URLSearchParams(location.search).has('fixture-partial-fee-estimates');
   protected _feeEstimatesUnavailable =
     typeof location !== 'undefined' &&
     new URLSearchParams(location.search).has('fixture-fee-estimates-unavailable');
