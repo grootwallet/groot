@@ -34,6 +34,7 @@ export type MultisigProposal = Omit<PaymentProposal, 'reviewBinding'> & {
   canFinalize: boolean;
   signedFingerprints: string[];
   spendPath: 'primary' | 'delayed';
+  spendingPathDetails?: SpendingPathDetails | null;
   eligibleSignerFingerprints: string[];
   status: 'collecting' | 'ready' | 'broadcast' | 'cancelled';
   createdAt: string;
@@ -96,4 +97,15 @@ export type MultisigSetupDraft = {
     displayedAddress: string;
   }>;
   updatedAt: number;
+};
+
+export type SpendingPathDetails = {
+  index: number;
+  name: string;
+  required: number;
+  eligibleSignerFingerprints: string[];
+  availableAfterBlocks: number;
+  remainingBlocks: number | null;
+  available: boolean;
+  reason: string | null;
 };

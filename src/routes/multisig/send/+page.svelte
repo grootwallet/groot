@@ -66,7 +66,9 @@
     addressPrefixForNetwork,
     hasAddressPrefixForNetwork,
     normalizePermanentLabel,
-    validPolicyMaturity
+    isContinuityPolicyType,
+    validPolicyMaturity,
+    walletPolicyPresentation
   } from '$lib/wallet/policy';
   import { compactAddress, compactIdentifier } from '$lib/address-display';
   import {
@@ -330,11 +332,20 @@
   const renewalKeyName = $derived(
     renewalMaturity?.policyType === 'inheritance' ? 'Heir key' : 'Recovery key'
   );
+  let namedPaths = $state<import('$lib/wallet/contracts').SpendingPathDetails[]>([]);
+  let namedPathIndex = $state(1);
+  const selectedNamedPath = $derived(
+    namedPaths.find((path) => path.index === Number(namedPathIndex))
+  );
   const delayedSpendMaturity = $derived(
     delayedSpendCoin ? validPolicyMaturity(delayedSpendCoin) : null
   );
   const delayedSpendKeyName = $derived(
-    delayedSpendMaturity?.policyType === 'inheritance' ? 'heir key' : 'recovery key'
+    isContinuityPolicyType(wallet?.policyType)
+      ? 'selected signers'
+      : delayedSpendMaturity?.policyType === 'inheritance'
+        ? 'heir key'
+        : 'recovery key'
   );
   const renewalValid = $derived(
     renewalMode && renewalCoin !== null && submissionLabels.length > 0 && customFeeValid
@@ -342,6 +353,7 @@
   const delayedSpendValid = $derived(
     delayedSpendMode &&
       delayedSpendCoin !== null &&
+      (namedPaths.length === 0 || selectedNamedPath?.available === true) &&
       addressValid &&
       submissionLabels.length > 0 &&
       customFeeValid
@@ -350,13 +362,23 @@
     proposal ? Math.max(0, proposal.required - proposal.signed) : 0
   );
   const signatureRequirementLabel = $derived(
-    translate(
-      $locale,
-      signaturesRemaining === 1
-        ? '{count} more signature required'
-        : '{count} more signatures required',
-      { count: signaturesRemaining }
-    )
+    proposal?.spendingPathDetails?.available === false
+      ? translate(
+          $locale,
+          proposal.spendingPathDetails.reason ?? 'The selected spending path is unavailable.'
+        )
+      : proposal && !proposal.canFinalize && signaturesRemaining === 0
+        ? translate(
+            $locale,
+            'Required signer roles are still missing. Review the selected spending path.'
+          )
+        : translate(
+            $locale,
+            signaturesRemaining === 1
+              ? '{count} more signature required'
+              : '{count} more signatures required',
+            { count: signaturesRemaining }
+          )
   );
   const eligibleSignerSet = $derived.by(() => {
     if (proposal)
@@ -553,7 +575,12 @@
       if (renewalRequested && proposals.length === 0 && selectedCoins.length === 1) {
         const candidate = coins.find((coin) => coin.outpoint === selectedCoins[0]) ?? null;
         const maturity = candidate ? validPolicyMaturity(candidate) : null;
-        if (candidate && maturity?.state === 'mature' && snapshotCurrent) {
+        if (
+          candidate &&
+          (maturity?.state === 'mature' ||
+            (isContinuityPolicyType(maturity?.policyType) && candidate.confirmations > 0)) &&
+          snapshotCurrent
+        ) {
           renewalMode = true;
           renewalCoin = candidate;
         } else {
@@ -585,6 +612,8 @@
         ) {
           delayedSpendMode = true;
           delayedSpendCoin = candidate;
+          namedPaths = await walletService.multisigSpendingPaths(candidate.outpoint);
+          namedPathIndex = namedPaths.find((path) => path.index > 0 && path.available)?.index ?? 1;
         } else {
           toast({
             title: translate($locale, 'Recovery key unavailable'),
@@ -863,7 +892,8 @@
         delayedSpendCoin.outpoint,
         address,
         submissionLabels,
-        feeRate(selectedRateNumber)
+        feeRate(selectedRateNumber),
+        Number(namedPathIndex)
       );
     } catch (cause) {
       error = localizedError(cause, $locale, 'Could not prepare recovery-key payment.');
@@ -1372,10 +1402,14 @@
       deviceOpen = false;
       toast({
         title: 'Signature added',
-        description: translate($locale, '{signed} of {required} signatures', {
-          signed: proposal.signed,
-          required: proposal.required
-        }),
+        description:
+          proposal.spendingPathDetails?.available === false ||
+          (!proposal.canFinalize && proposal.signed >= proposal.required)
+            ? signatureRequirementLabel
+            : translate($locale, '{signed} of {required} signatures', {
+                signed: proposal.signed,
+                required: proposal.required
+              }),
         tone: 'success'
       });
     } catch (cause) {
@@ -1827,7 +1861,9 @@
               ><small
                 >{translate(
                   $locale,
-                  'Use the one-key recovery flow, or continue here with your normal 2-of-3 keys.'
+                  isContinuityPolicyType(wallet?.policyType)
+                    ? 'Choose a named delayed path, or continue with the primary signers.'
+                    : 'Use the one-key recovery flow, or continue here with your normal 2-of-3 keys.'
                 )}</small
               >
             </div>
@@ -1856,12 +1892,20 @@
             <span><LockKeyhole size={18} /></span>
             <div>
               <strong
-                >{translate($locale, 'The {key} is ready', { key: delayedSpendKeyName })}</strong
+                >{translate(
+                  $locale,
+                  isContinuityPolicyType(wallet?.policyType)
+                    ? 'Delayed spending is available'
+                    : 'The {key} is ready',
+                  { key: delayedSpendKeyName }
+                )}</strong
               >
               <p>
                 {translate(
                   $locale,
-                  'It can now move this coin by itself. Your usual 2-of-3 keys still work too.'
+                  isContinuityPolicyType(wallet?.policyType)
+                    ? 'A delayed path is available. Review its required signers before spending. Primary signers remain available.'
+                    : 'It can now move this coin by itself. Your usual 2-of-3 keys still work too.'
                 )}
               </p>
               <details>
@@ -1879,7 +1923,14 @@
                       'The network fee is deducted from that coin, so the recipient gets the remainder.'
                     )}
                   </li>
-                  <li>{translate($locale, 'Only the extra key signs this payment.')}</li>
+                  <li>
+                    {translate(
+                      $locale,
+                      isContinuityPolicyType(wallet?.policyType)
+                        ? 'Only the signers in the selected spending path can approve this payment.'
+                        : 'Only the extra key signs this payment.'
+                    )}
+                  </li>
                 </ul>
               </details>
             </div>
@@ -1903,7 +1954,7 @@
                   <li>
                     {translate(
                       $locale,
-                      'Your usual 2-of-3 keys approve the move. The {key} is not used.',
+                      'The primary signers approve the renewal. Delayed signers are not used.',
                       { key: translate($locale, renewalKeyName) }
                     )}
                   </li>
@@ -2161,11 +2212,39 @@
               <span>{translate($locale, 'RECOVERY PAYMENT')}</span>
               <h2>{translate($locale, 'Where should this coin go?')}</h2>
               <p>
-                {translate($locale, 'The {key} signs alone. The fee is deducted from this coin.', {
-                  key: delayedSpendKeyName
-                })}
+                {translate(
+                  $locale,
+                  isContinuityPolicyType(wallet?.policyType)
+                    ? 'The selected path determines the required signers. The fee is deducted from this coin.'
+                    : 'The {key} signs alone. The fee is deducted from this coin.',
+                  { key: delayedSpendKeyName }
+                )}
               </p>
             </div>
+            {#if namedPaths.length}
+              <label class="field"
+                ><span>{translate($locale, 'Spending path')}</span>
+                <select
+                  aria-label={translate($locale, 'Spending path')}
+                  bind:value={namedPathIndex}
+                >
+                  {#each namedPaths.filter((path) => path.index > 0) as path (path.index)}
+                    <option value={path.index} disabled={!path.available}
+                      >{translate($locale, path.name)} · {path.availableAfterBlocks}
+                      {translate($locale, 'blocks')}{path.available
+                        ? ''
+                        : ` · ${path.remainingBlocks ?? '—'} ${translate($locale, 'blocks remaining')}`}</option
+                    >
+                  {/each}
+                </select>
+              </label>
+              {#if selectedNamedPath}<WarningNotice
+                  title={translate($locale, selectedNamedPath.name)}
+                  body={translate($locale, 'Required signatures: {count}', {
+                    count: selectedNamedPath.required
+                  })}
+                />{/if}
+            {/if}
             <div class="renewal-coin-summary">
               <span>{translate($locale, 'Coin available')}</span>
               <strong><Amount value={delayedSpendCoin.amount} hidden={$discreetMode} /></strong>
@@ -2654,6 +2733,10 @@
                   <dd><Amount value={Number(proposal.total)} interactive /></dd>
                 </div>
               </dl>
+              {#if proposal.spendingPathDetails}<WarningNotice
+                  title={translate($locale, 'Spending path')}
+                  body={`${translate($locale, proposal.spendingPathDetails.name)} · ${proposal.spendingPathDetails.availableAfterBlocks} ${translate($locale, 'blocks')}`}
+                />{/if}
               {#if delayedSpendMode}<div class="selection-review renewal-review">
                   <strong
                     >{translate($locale, 'Signed by the {key}', {
@@ -2699,10 +2782,14 @@
                 {proposal}
                 interactiveAmounts
                 policy={proposal.spendPath === 'delayed'
-                  ? `${delayedSpendKeyName} only`
+                  ? isContinuityPolicyType(wallet?.policyType)
+                    ? (proposal.spendingPathDetails?.name ?? '')
+                    : `${delayedSpendKeyName} only`
                   : wallet?.recoveryTemplate?.type === 'recovery'
                     ? '2 of 3 primary keys'
-                    : `${wallet?.threshold} of ${wallet?.cosigners.length}`}
+                    : wallet
+                      ? walletPolicyPresentation(wallet).summary
+                      : ''}
                 onChangeAddress={() => (changeAddressOpen = true)}
               />
               {#if accelerationConfirmed}<div class="hardware-inline-error" role="status">
@@ -2802,7 +2889,17 @@
                       onclick={saveProposalPsbt}
                       ><Download size={16} />{translate($locale, 'Save signed PSBT')}</Button
                     >
-                  </details>{:else}<Button
+                  </details>{:else if proposal.spendingPathDetails?.available === false || signaturesRemaining === 0}<WarningNotice
+                    role="status"
+                    ariaLive="polite"
+                    title={translate(
+                      $locale,
+                      proposal.spendingPathDetails?.available === false
+                        ? 'Spending path'
+                        : 'Signatures required'
+                    )}
+                    body={signatureRequirementLabel}
+                  />{:else}<Button
                     size="large"
                     class="full signature-requirement-action"
                     disabled
@@ -2930,10 +3027,14 @@
             compact
             interactiveAmounts
             policy={proposal.spendPath === 'delayed'
-              ? `${delayedSpendKeyName} only`
+              ? isContinuityPolicyType(wallet?.policyType)
+                ? (proposal.spendingPathDetails?.name ?? '')
+                : `${delayedSpendKeyName} only`
               : wallet?.recoveryTemplate?.type === 'recovery'
                 ? '2 of 3 primary keys'
-                : `${wallet?.threshold} of ${wallet?.cosigners.length}`}
+                : wallet
+                  ? walletPolicyPresentation(wallet).summary
+                  : ''}
             changeAddressOverride={hardwareChangeAddress}
             onChangeAddress={() => (hardwareChangeAddressOpen = true)}
           />

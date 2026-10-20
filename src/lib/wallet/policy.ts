@@ -22,8 +22,22 @@ export function hasMiniscriptPolicy(
   return wallet?.recoveryTemplate != null;
 }
 
+export function isContinuityPolicyType(type: string | undefined): boolean {
+  return type === 'partner_continuity_v1' || type === 'family_continuity_v1';
+}
+
 export function walletPolicyPresentation(wallet: MultisigWallet): WalletPolicyPresentation {
   const template = wallet.recoveryTemplate;
+  if (template?.type === 'partner_continuity_v1' || template?.type === 'family_continuity_v1') {
+    const primary = template.type === 'partner_continuity_v1' ? template.owner : template.parents;
+    return {
+      delayed: true,
+      primaryThreshold: primary.threshold,
+      primarySignerCount: primary.signerIds.length,
+      delayedKeyLabel: null,
+      summary: `${primary.threshold} of ${primary.signerIds.length} primary signers + delayed paths`
+    };
+  }
   if (template?.type !== 'recovery') {
     return {
       delayed: false,
@@ -169,7 +183,7 @@ export function addressReuseInsights(
 }
 
 export type PolicyMaturitySummary = {
-  policyType: 'recovery' | 'inheritance';
+  policyType: NonNullable<Utxo['policyMaturity']>['policyType'];
   total: number;
   unconfirmed: number;
   immature: number;
@@ -193,7 +207,9 @@ export function validPolicyMaturity(coin: Utxo): NonNullable<Utxo['policyMaturit
   if (
     !integers.every((item) => Number.isSafeInteger(item) && item >= 0) ||
     typeof value.delayedSpendSupported !== 'boolean' ||
-    !(['recovery', 'inheritance'] as string[]).includes(value.policyType) ||
+    !(
+      ['recovery', 'inheritance', 'partner_continuity_v1', 'family_continuity_v1'] as string[]
+    ).includes(value.policyType) ||
     value.approachingAtBlocks > value.delayBlocks ||
     (value.state === 'unconfirmed' && value.remainingBlocks !== null) ||
     (value.state === 'mature' && value.remainingBlocks !== 0) ||

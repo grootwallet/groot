@@ -2465,7 +2465,10 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     const coin = this._coins.find((candidate) => candidate.outpoint === outpoint);
     if (!coin || coin.frozen)
       throw new WalletError('coin_unavailable', 'The selected coin is not available.');
-    if (coin.policyMaturity?.state !== 'mature')
+    if (
+      coin.policyMaturity?.state !== 'mature' &&
+      !(this._multisig?.policyType?.includes('continuity') && coin.confirmations > 0)
+    )
       throw new WalletError(
         'coin_unavailable',
         'The extra recovery or heir key cannot spend this coin yet.'
@@ -2487,19 +2490,63 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     this._multisigProposals.set(proposal.proposalId, proposal);
     return structuredClone(proposal);
   }
+  async multisigSpendingPaths(
+    outpoint: string
+  ): Promise<import('./contracts').SpendingPathDetails[]> {
+    const coin = this._coins.find((coin) => coin.outpoint === outpoint);
+    const wallet = await this.multisigWallet();
+    if (!coin || !wallet?.recoveryTemplate)
+      throw new WalletError('unknown_spending_path', 'This wallet has no delayed spending paths.');
+    const analysis = await this.analyzeRecoveryPolicy(wallet.recoveryTemplate, wallet.cosigners);
+    const names =
+      wallet.recoveryTemplate.type === 'partner_continuity_v1'
+        ? [
+            'Owner: 2 of 3',
+            'Both partner signers',
+            'Either partner signer',
+            'Estate guardians: 2 of 3'
+          ]
+        : wallet.recoveryTemplate.type === 'family_continuity_v1'
+          ? ['Both parents', 'One parent and one child assistance signer', 'Inheritance: 2 of 3']
+          : ['Primary signers', 'Recovery signers'];
+    return analysis.paths.map((path, index) => {
+      const remaining = Math.max(0, path.availableAfterBlocks - coin.confirmations);
+      const reason = coin.frozen
+        ? 'Unfreeze this coin before spending it.'
+        : remaining > 0
+          ? 'This spending path is still waiting for blocks.'
+          : null;
+      return {
+        index,
+        name: names[index] ?? 'Recovery signers',
+        required: path.threshold,
+        eligibleSignerFingerprints: wallet.cosigners
+          .filter((key) => path.signerIds.includes(key.id))
+          .map((key) => key.fingerprint),
+        availableAfterBlocks: path.availableAfterBlocks,
+        remainingBlocks: remaining,
+        available: reason === null,
+        reason
+      };
+    });
+  }
   async prepareMultisigDelayedSpend(
     outpoint: string,
     recipient: string,
     rawLabels: string[],
-    selectedRate: ReturnType<typeof feeRate>
+    selectedRate: ReturnType<typeof feeRate>,
+    pathIndex = 1
   ) {
     const coin = this._coins.find((candidate) => candidate.outpoint === outpoint);
     const multisig = this._multisig;
     const template = multisig?.recoveryTemplate;
     if (!coin || coin.frozen || coin.policyMaturity?.state !== 'mature')
       throw new WalletError('coin_unavailable', 'This coin is not ready for the extra key.');
-    if (!multisig || !template || template.type !== 'recovery')
-      throw new WalletError('internal_error', 'This wallet has no delayed spending key.');
+    if (!multisig || !template || ['decaying', 'expanding'].includes(template.type))
+      throw new WalletError(
+        'unknown_spending_path',
+        'This wallet has no supported delayed spending path.'
+      );
     const fee = Math.ceil(Number(selectedRate) * 220);
     const proposal = await this.prepareMultisigPayment(
       recipient,
@@ -2508,12 +2555,17 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
       selectedRate,
       { mode: 'manual', outpoints: [outpoint] }
     );
-    const eligible = multisig.cosigners
-      .filter((key) => template.recovery.signerIds.includes(key.id))
-      .map((key) => key.fingerprint);
+    const paths = await this.multisigSpendingPaths(outpoint);
+    const path = paths.find((path) => path.index === pathIndex);
+    if (!path?.available || pathIndex === 0)
+      throw new WalletError(
+        'immature_spending_path',
+        path?.reason ?? 'Choose an available delayed path.'
+      );
     proposal.spendPath = 'delayed';
-    proposal.eligibleSignerFingerprints = eligible;
-    proposal.required = template.recovery.threshold;
+    proposal.eligibleSignerFingerprints = path.eligibleSignerFingerprints;
+    proposal.required = path.required;
+    proposal.spendingPathDetails = path;
     this._multisigProposals.set(proposal.proposalId, proposal);
     return structuredClone(proposal);
   }
@@ -2628,7 +2680,7 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
       );
     proposal.signedFingerprints.splice(index, 1);
     proposal.signed = proposal.signedFingerprints.length;
-    proposal.canFinalize = proposal.signed >= proposal.required;
+    proposal.canFinalize = this.#dummyMultisigQuorum(proposal);
     proposal.status = proposal.canFinalize ? 'ready' : 'collecting';
     proposal.psbt = `${proposal.psbt}:discarded-${signerFingerprint.toLowerCase()}`;
     return structuredClone(proposal);
@@ -2779,6 +2831,22 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
   }
   async revealSavedFile(_revealToken: string) {}
 
+  #dummyMultisigQuorum(proposal: MultisigProposal): boolean {
+    if (proposal.signed < proposal.required) return false;
+    const template = this._multisig?.recoveryTemplate;
+    if (template?.type !== 'family_continuity_v1' || proposal.spendingPathDetails?.index !== 1)
+      return true;
+    const signedIds = new Set(
+      this._multisig?.cosigners
+        .filter((key) => proposal.signedFingerprints.includes(key.fingerprint))
+        .map((key) => key.id)
+    );
+    return (
+      template.parents.signerIds.some((id) => signedIds.has(id)) &&
+      template.childAssistance.signerIds.some((id) => signedIds.has(id))
+    );
+  }
+
   #addDummySignature(proposalId: string, fingerprint?: string) {
     const proposal = this._multisigProposals.get(proposalId);
     if (!proposal || !this._multisig)
@@ -2806,7 +2874,7 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
       );
     proposal.signedFingerprints.push(next.fingerprint);
     proposal.signed = proposal.signedFingerprints.length;
-    proposal.canFinalize = proposal.signed >= proposal.required;
+    proposal.canFinalize = this.#dummyMultisigQuorum(proposal);
     proposal.status = proposal.canFinalize ? 'ready' : 'collecting';
     return structuredClone(proposal);
   }

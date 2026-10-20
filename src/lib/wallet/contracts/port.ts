@@ -316,11 +316,13 @@ export interface WalletMultisigPort {
     labels: string[],
     feeRate: FeeRate
   ): Promise<MultisigProposal>;
+  multisigSpendingPaths(outpoint: string): Promise<import('./multisig').SpendingPathDetails[]>;
   prepareMultisigDelayedSpend(
     outpoint: string,
     recipient: string,
     labels: string[],
-    feeRate: FeeRate
+    feeRate: FeeRate,
+    pathIndex?: number
   ): Promise<MultisigProposal>;
   prepareMultisigAcceleration(
     txid: string,

@@ -106,3 +106,7 @@ DESCRIPTOR_REGTEST_DIR="$(mktemp -d "${TEST_TMP_ROOT%/}/groot-regtest-test.XXXXX
 export GROOT_REGTEST_DIR="${DESCRIPTOR_REGTEST_DIR}"
 bash "${PROJECT_DIR}/scripts/regtest/start.sh"
 GROOT_RUN_REGTEST=1 run_regtest_multisig
+
+GROOT_RUN_REGTEST=1 run_lib_test funded_continuity_all_named_paths_renew_reorg_and_restore
+
+GROOT_RUN_REGTEST=1 run_lib_test funded_continuity_descriptors_restore_history_in_core

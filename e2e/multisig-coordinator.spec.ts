@@ -1369,10 +1369,10 @@ test('offers safe recipes and advanced M-of-N control', async ({ page }, testInf
   }
   await expect(page.getByText('Miniscript signer compatibility', { exact: true })).toBeVisible();
   await expect(page.getByText(/no direct USB Miniscript workflow is certified/)).toBeVisible();
-  await expect(page.getByRole('button', { name: /^Partner continuity/ })).toBeDisabled();
+  await expect(page.getByRole('button', { name: /^Partner continuity/ })).toBeEnabled();
   const assistedRecovery = page.getByRole('button', { name: /^Family continuity/ });
-  await expect(assistedRecovery).toBeDisabled();
-  await expect(assistedRecovery).toContainText('Coming soon');
+  await expect(assistedRecovery).toBeEnabled();
+  await expect(assistedRecovery).toContainText('Test networks only');
   await page.getByRole('button', { name: /^Standard/ }).click();
   await revealInsight(page, 'How Standard multisig works', testInfo.project.name === 'mobile');
   await expect(
@@ -2249,18 +2249,16 @@ test('gates and simulates guided Miniscript recovery policies', async ({ page })
   await expect(page.getByText(/intentionally reduce theft resistance/)).toBeVisible();
 });
 
-test('keeps untested timelocked creation disabled and defaults to standard 2-of-3', async ({
-  page
-}) => {
+test('offers fixed test-network continuity and defaults to standard 2-of-3', async ({ page }) => {
   await page.goto('/multisig/new');
-  await expect(page.getByRole('button', { name: /^Partner continuity/ })).toBeDisabled();
+  await expect(page.getByRole('button', { name: /^Partner continuity/ })).toBeEnabled();
   await expect(page.getByRole('button', { name: /^Partner continuity/ })).toContainText(
-    'Coming soon'
+    'Test networks only'
   );
   await expect(
     page.getByText('Your 2 of 3 now, guided access for your partner later.')
   ).toBeVisible();
-  await expect(page.getByRole('button', { name: /^Family continuity/ })).toBeDisabled();
+  await expect(page.getByRole('button', { name: /^Family continuity/ })).toBeEnabled();
   await page.getByRole('button', { name: /^Standard/ }).click();
   await page.getByRole('button', { name: 'Continue', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Standard multisig' })).toBeVisible();

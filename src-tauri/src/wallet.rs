@@ -90,6 +90,9 @@ use crate::ur_transport;
 #[path = "wallet/error_translation.rs"]
 mod error_translation;
 use error_translation::*;
+#[path = "wallet/continuity.rs"]
+mod continuity;
+use continuity::*;
 #[path = "wallet/recovery_scan.rs"]
 mod recovery_scan;
 use recovery_scan::*;
@@ -1600,6 +1603,7 @@ pub struct MultisigProposalDto {
     signed_fingerprints: Vec<String>,
     spend_path: String,
     eligible_signer_fingerprints: Vec<String>,
+    spending_path_details: Option<SpendingPathDetailsDto>,
     status: String,
     created_at: String,
     selection_impact: SelectionImpactDto,
@@ -5288,41 +5292,37 @@ fn reject_usb_cosigners_for_delayed_policy(cosigners: &[CosignerInput]) -> ApiRe
 }
 
 fn delayed_policy_context(wallet: &MultisigWalletDto) -> ApiResult<Option<DelayedPolicyContext>> {
-    let Some(template @ RecoveryTemplate::Recovery { .. }) = wallet.recovery_template.as_ref()
-    else {
+    let Some(template) = wallet.recovery_template.as_ref() else {
         return Ok(None);
     };
-    let analysis = analyze_template(template, &wallet.cosigners).map_err(recovery_api_error)?;
-    if analysis.external_descriptor != wallet.external_descriptor
-        || analysis.internal_descriptor != wallet.internal_descriptor
-        || analysis.paths != wallet.spending_paths
-        || analysis.paths.len() != 2
-        || analysis.paths[0].available_after_blocks != 0
-        || analysis.paths[1].available_after_blocks == 0
-    {
-        return Err(api_error(
-            "wallet_corrupt",
-            "The delayed-policy metadata does not match the wallet descriptors.",
-        ));
-    }
-    let delay_blocks = analysis.paths[1].available_after_blocks;
-    let policy_type = match wallet.policy_type.as_str() {
-        "inheritance" if delay_blocks == 52_560 => "inheritance",
-        "inheritance" => {
-            return Err(api_error(
-                "wallet_corrupt",
-                "The legacy inheritance policy does not match its verified block delay.",
-            ))
+    let analysis = verified_analysis(wallet)?;
+    let delay_blocks = analysis
+        .paths
+        .iter()
+        .find(|path| path.available_after_blocks > 0)
+        .map(|path| path.available_after_blocks)
+        .ok_or_else(|| internal("Missing delayed policy stage"))?;
+    let policy_type = if matches!(template, RecoveryTemplate::Recovery { .. }) {
+        match wallet.policy_type.as_str() {
+            "inheritance" if delay_blocks == 52_560 => "inheritance",
+            "inheritance" => {
+                return Err(api_error(
+                    "wallet_corrupt",
+                    "The legacy inheritance policy does not match its verified block delay.",
+                ))
+            }
+            "recovery" => "recovery",
+            "" if delay_blocks == 52_560 => "inheritance",
+            "" => "recovery",
+            _ => {
+                return Err(api_error(
+                    "wallet_corrupt",
+                    "The delayed-policy type is not supported.",
+                ))
+            }
         }
-        "recovery" => "recovery",
-        "" if delay_blocks == 52_560 => "inheritance",
-        "" => "recovery",
-        _ => {
-            return Err(api_error(
-                "wallet_corrupt",
-                "The delayed-policy type is not supported.",
-            ))
-        }
+    } else {
+        recovery_policy_type(template)
     };
     Ok(Some(DelayedPolicyContext {
         policy_type: policy_type.to_owned(),
@@ -5468,6 +5468,7 @@ struct ProposalSigningContext {
     fingerprints: Vec<Fingerprint>,
     fingerprint_strings: Vec<String>,
     required: usize,
+    path_index: Option<usize>,
 }
 
 fn signer_fingerprints_for_ids(
@@ -5531,9 +5532,19 @@ fn proposal_signing_context(
             fingerprint_strings: fingerprints.iter().map(ToString::to_string).collect(),
             fingerprints,
             required: metadata.threshold,
+            path_index: None,
         });
     };
 
+    if matches!(
+        template,
+        RecoveryTemplate::Decaying { .. } | RecoveryTemplate::Expanding { .. }
+    ) {
+        return Err(api_error(
+            "hardware_policy_unsupported",
+            "This advanced policy is not available in the transaction coordinator.",
+        ));
+    }
     let analysis = analyze_template(template, &metadata.cosigners).map_err(recovery_api_error)?;
     if analysis.external_descriptor != metadata.external_descriptor
         || analysis.internal_descriptor != metadata.internal_descriptor
@@ -5544,49 +5555,27 @@ fn proposal_signing_context(
             "The spending paths do not match the wallet descriptors.",
         ));
     }
-    let (required, signer_ids) = match template {
-        RecoveryTemplate::Recovery {
-            immediate,
-            recovery,
-        } => {
-            delayed_policy_context(metadata)?.ok_or_else(|| {
-                api_error(
-                    "wallet_corrupt",
-                    "The delayed wallet policy could not be verified.",
-                )
-            })?;
-            match spend_path {
-                ProposalSpendPath::Primary => {
-                    (immediate.threshold, immediate.signer_ids.as_slice())
-                }
-                ProposalSpendPath::Delayed => (recovery.threshold, recovery.signer_ids.as_slice()),
-            }
-        }
-        RecoveryTemplate::PartnerContinuityV1 { owner, .. } => match spend_path {
-            ProposalSpendPath::Primary => (owner.threshold, owner.signer_ids.as_slice()),
-            ProposalSpendPath::Delayed => {
-                return Err(api_error(
-                    "spending_path_unavailable",
-                    "Choose a named Continuity recovery path before creating this proposal.",
-                ));
-            }
-        },
-        RecoveryTemplate::FamilyContinuityV1 { parents, .. } => match spend_path {
-            ProposalSpendPath::Primary => (parents.threshold, parents.signer_ids.as_slice()),
-            ProposalSpendPath::Delayed => {
-                return Err(api_error(
-                    "spending_path_unavailable",
-                    "Choose a named Continuity recovery path before creating this proposal.",
-                ));
-            }
-        },
-        RecoveryTemplate::Decaying { .. } | RecoveryTemplate::Expanding { .. } => {
-            return Err(api_error(
-                "hardware_policy_unsupported",
-                "This advanced policy is not available in the transaction coordinator.",
-            ));
-        }
+    let path_index = if spend_path == ProposalSpendPath::Delayed && analysis.paths.len() == 2 {
+        1
+    } else if spend_path == ProposalSpendPath::Delayed {
+        let encoded: String = db
+            .query_row(
+                "SELECT psbt FROM groot_proposals WHERE proposal_id=?1",
+                [proposal_id],
+                |row| row.get(0),
+            )
+            .map_err(internal)?;
+        let psbt = decode_psbt(&encoded).map_err(proposal_api_error)?;
+        selected_delayed_index(&analysis, &psbt)?
+    } else {
+        0
     };
+    let path = analysis
+        .paths
+        .get(path_index)
+        .ok_or_else(|| internal("Missing spending path"))?;
+    let required = path.threshold;
+    let signer_ids = &path.signer_ids;
     let (fingerprints, fingerprint_strings) = signer_fingerprints_for_ids(metadata, signer_ids)?;
     if required == 0 || required > fingerprints.len() {
         return Err(api_error(
@@ -5599,6 +5588,7 @@ fn proposal_signing_context(
         fingerprints,
         fingerprint_strings,
         required,
+        path_index: Some(path_index),
     })
 }
 
@@ -5709,8 +5699,44 @@ fn proposal_dto(
     let psbt = decode_psbt(&encoded).map_err(proposal_api_error)?;
     validate_proposal_fee(&psbt, fee)?;
     let signing = proposal_signing_context(db, metadata, &proposal_id)?;
-    let progress = signature_progress(&psbt, &signing.fingerprints, signing.required)
+    let mut progress = signature_progress(&psbt, &signing.fingerprints, signing.required)
         .map_err(proposal_api_error)?;
+    let spending_path_details = if let Some(index) = signing.path_index {
+        let analysis = verified_analysis(metadata)?;
+        let snapshot = snapshot_from(wallet, db, None, true, None)?;
+        let selected_coins: Vec<_> = snapshot
+            .utxos
+            .iter()
+            .filter(|coin| {
+                psbt.unsigned_tx
+                    .input
+                    .iter()
+                    .any(|input| input.previous_output.to_string() == coin.outpoint)
+            })
+            .collect();
+        let age = selected_coins
+            .iter()
+            .map(|coin| coin.confirmations)
+            .min()
+            .filter(|age| *age > 0);
+        let detail = path_details(
+            metadata,
+            &analysis,
+            index,
+            age,
+            snapshot.chain_tip.status == "recent",
+            selected_coins.iter().any(|coin| coin.frozen),
+        )?;
+        progress.can_finalize &=
+            path_signature_quorum(metadata, index, &progress.signed_fingerprints);
+        if index > 0 {
+            progress.can_finalize &=
+                validate_named_path_current(wallet, db, metadata, &psbt, index).is_ok();
+        }
+        Some(detail)
+    } else {
+        None
+    };
     let (change, change_addresses) = proposal_change_details(wallet, &psbt, &recipient, amount)?;
     let (recipient_is_wallet_owned, recipient_derivation_paths) =
         proposal_recipient_wallet_details(wallet, &psbt, &recipient, amount)?;
@@ -5765,6 +5791,7 @@ fn proposal_dto(
         signed_fingerprints: progress.signed_fingerprints,
         spend_path: signing.spend_path.as_str().to_owned(),
         eligible_signer_fingerprints: signing.fingerprint_strings,
+        spending_path_details,
         status,
         created_at: created_at.to_string(),
         selection_impact,
@@ -7865,19 +7892,24 @@ fn enqueue_snapshot_notifications(db: &Connection, snapshot: &WalletSnapshotDto)
         .utxos
         .iter()
         .filter_map(|coin| {
-            coin.policy_maturity.as_ref().map(|maturity| {
-                let rank = match maturity.state {
-                    MaturityState::Unconfirmed | MaturityState::Immature => 0,
-                    MaturityState::Approaching => 1,
-                    MaturityState::Mature => 2,
-                };
-                notifications::PolicyMaturityObservation {
-                    outpoint: coin.outpoint.clone(),
-                    rank,
-                    remaining_blocks: maturity.remaining_blocks,
-                    policy_type: maturity.policy_type.clone(),
-                }
-            })
+            coin.policy_maturity
+                .as_ref()
+                .filter(|maturity| {
+                    matches!(maturity.policy_type.as_str(), "recovery" | "inheritance")
+                })
+                .map(|maturity| {
+                    let rank = match maturity.state {
+                        MaturityState::Unconfirmed | MaturityState::Immature => 0,
+                        MaturityState::Approaching => 1,
+                        MaturityState::Mature => 2,
+                    };
+                    notifications::PolicyMaturityObservation {
+                        outpoint: coin.outpoint.clone(),
+                        rank,
+                        remaining_blocks: maturity.remaining_blocks,
+                        policy_type: maturity.policy_type.clone(),
+                    }
+                })
         })
         .collect::<Vec<_>>();
     notifications::reconcile_policy_maturity(db, &maturity_observations, now())

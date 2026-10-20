@@ -25,6 +25,7 @@
     approximateBlockDuration,
     policyMaturitySummary,
     selectedCoinTotal,
+    isContinuityPolicyType,
     validPolicyMaturity
   } from '$lib/wallet/policy';
   import { walletService, WalletError } from '$lib/wallet';
@@ -92,7 +93,10 @@
       ? (utxos.find((coin) => {
           const maturity = validPolicyMaturity(coin);
           return (
-            coin.outpoint === selected[0] && !coin.frozen && maturity?.state === MATURITY_MATURE
+            coin.outpoint === selected[0] &&
+            !coin.frozen &&
+            (maturity?.state === MATURITY_MATURE ||
+              (isContinuityPolicyType(maturity?.policyType) && coin.confirmations > 0))
           );
         }) ?? null)
       : null
@@ -144,7 +148,11 @@
       : ''
   );
   const extraKeyName = (maturity: NonNullable<Utxo['policyMaturity']>) =>
-    maturity.policyType === 'inheritance' ? 'Heir key' : 'Recovery key';
+    isContinuityPolicyType(maturity.policyType)
+      ? 'Delayed signers'
+      : maturity.policyType === 'inheritance'
+        ? 'Heir key'
+        : 'Recovery key';
 
   $effect(() => {
     if ($discreetMode) labelFilter = '';
@@ -419,16 +427,18 @@
               expanded={selectionMenuOpen}
               onclick={() => (selectionMenuOpen = !selectionMenuOpen)}
             />{#if selectionMenuOpen}<div class="wallet-more-menu coin-selection-menu" role="menu">
-                {#if renewalCoin && chainTipCurrent && multisig}{#if renewalCoin.policyMaturity?.delayedSpendSupported}<a
+                {#if renewalCoin && chainTipCurrent && multisig}{#if renewalCoin.policyMaturity?.delayedSpendSupported && renewalCoin.policyMaturity.state === MATURITY_MATURE}<a
                       role="menuitem"
                       href={delayedSpendHref}
                       ><Unlock size={15} /><span
                         ><strong
                           >{translate(
                             $locale,
-                            renewalCoin.policyMaturity?.policyType === 'inheritance'
-                              ? 'Use heir key'
-                              : 'Use recovery key'
+                            isContinuityPolicyType(renewalCoin.policyMaturity?.policyType)
+                              ? 'Choose spending path'
+                              : renewalCoin.policyMaturity?.policyType === 'inheritance'
+                                ? 'Use heir key'
+                                : 'Use recovery key'
                           )}</strong
                         ><small>{translate($locale, 'Spend this coin with its backup key')}</small
                         ></span
@@ -695,18 +705,22 @@
                         {maturityIs(maturity, MATURITY_MATURE)
                           ? translate(
                               $locale,
-                              '{key} can now spend this coin alone. Your normal 2-of-3 keys still work.',
+                              isContinuityPolicyType(maturity.policyType)
+                                ? 'A delayed path is available. Review its required signers before spending. Primary signers remain available.'
+                                : '{key} can now spend this coin alone. Your normal 2-of-3 keys still work.',
                               { key: translate($locale, extraKeyName(maturity)) }
                             )
                           : translate(
                               $locale,
-                              '{key} cannot spend this coin yet. Your normal 2-of-3 keys work now and remain available later.',
+                              isContinuityPolicyType(maturity.policyType)
+                                ? 'Delayed paths are still waiting. Primary signers can spend now and remain available later.'
+                                : '{key} cannot spend this coin yet. Your normal 2-of-3 keys work now and remain available later.',
                               { key: translate($locale, extraKeyName(maturity)) }
                             )}
                       </dd>
                     </div>
                   </dl>
-                  {#if multisig && chainTipCurrent && maturityIs(maturity, MATURITY_MATURE)}<div
+                  {#if multisig && chainTipCurrent && (maturityIs(maturity, MATURITY_MATURE) || (isContinuityPolicyType(maturity.policyType) && utxo.confirmations > 0))}<div
                       class="coin-policy-renewal"
                     >
                       <RefreshCw size={15} />
@@ -730,7 +744,7 @@
                               ? 'Postpone heir access'
                               : 'Restart recovery wait'
                           )}</Button
-                        >{#if maturity.delayedSpendSupported}<Button
+                        >{#if maturity.delayedSpendSupported && maturityIs(maturity, MATURITY_MATURE)}<Button
                             variant="secondary"
                             size="small"
                             href={`/multisig/send?coins=${encodeURIComponent(utxo.outpoint)}&delayedSpend=1${maturityFixtureSuffix}`}

@@ -1,6 +1,13 @@
 import type { CatalogSection } from './types';
 
 // Exact native policy messages take precedence over the broad invalid_amount category.
+export const signerRoleCopy = {
+  'Collect the required signer roles for this spending path before broadcasting.': {
+    fr: 'Collectez les signatures des rôles requis pour ce chemin de dépense avant la diffusion.',
+    es: 'Recoge las firmas de los roles obligatorios para esta ruta de gasto antes de transmitir.'
+  }
+} as const satisfies CatalogSection;
+
 export const spendPolicyCopy = {
   'Mainnet payments are unavailable in this build. Use a mainnet-enabled Groot release.': {
     fr: 'Les paiements Mainnet sont indisponibles dans cette version. Utilisez une version de Groot compatible avec Mainnet.',
@@ -47,6 +54,73 @@ export const spendPolicyCopy = {
 } as const satisfies CatalogSection;
 
 export const sendCopy = {
+  'Choose spending path': { fr: 'Choisir le chemin de dépense', es: 'Elegir ruta de gasto' },
+  'Delayed signers': { fr: 'Signataires différés', es: 'Firmantes con plazo' },
+  'A delayed path is available. Review its required signers before spending. Primary signers remain available.':
+    {
+      fr: 'Un chemin différé est disponible. Vérifiez ses signataires requis avant de dépenser. Les signataires principaux restent disponibles.',
+      es: 'Hay una ruta con plazo disponible. Revisa sus firmantes necesarios antes de gastar. Los firmantes principales siguen disponibles.'
+    },
+  'Delayed paths are still waiting. Primary signers can spend now and remain available later.': {
+    fr: 'Les chemins différés sont encore en attente. Les signataires principaux peuvent dépenser maintenant et restent disponibles ensuite.',
+    es: 'Las rutas con plazo siguen esperando. Los firmantes principales pueden gastar ahora y seguirán disponibles después.'
+  },
+  'Primary signers remain available. Review each delayed path and its required signers before spending.':
+    {
+      fr: 'Les signataires principaux restent disponibles. Vérifiez chaque chemin différé et ses signataires requis avant de dépenser.',
+      es: 'Los firmantes principales siguen disponibles. Revisa cada ruta con plazo y sus firmantes necesarios antes de gastar.'
+    },
+  'A delayed path is available for every confirmed coin shown.': {
+    fr: 'Un chemin différé est disponible pour chaque pièce confirmée affichée.',
+    es: 'Hay una ruta con plazo disponible para cada moneda confirmada mostrada.'
+  },
+  'The primary signers approve the renewal. Delayed signers are not used.': {
+    fr: 'Les signataires principaux approuvent le renouvellement. Les signataires différés ne sont pas utilisés.',
+    es: 'Los firmantes principales aprueban la renovación. No se usan firmantes con plazo.'
+  },
+  'Choose a named delayed path, or continue with the primary signers.': {
+    fr: 'Choisissez un chemin différé nommé ou continuez avec les signataires principaux.',
+    es: 'Elige una ruta con plazo por nombre o continúa con los firmantes principales.'
+  },
+
+  'Spending path': { fr: 'Chemin de dépense', es: 'Ruta de gasto' },
+  'Owner: 2 of 3': { fr: 'Propriétaire : 2 sur 3', es: 'Propietario: 2 de 3' },
+  'Both partner signers': {
+    fr: 'Les deux signataires du partenaire',
+    es: 'Ambos firmantes de la pareja'
+  },
+  'Either partner signer': { fr: 'Un signataire du partenaire', es: 'Un firmante de la pareja' },
+  'Estate guardians: 2 of 3': {
+    fr: 'Succession : 2 gardiens sur 3',
+    es: 'Herencia: 2 de 3 guardianes'
+  },
+  'Both parents': { fr: 'Les deux parents', es: 'Ambos padres' },
+  'One parent and one child assistance signer': {
+    fr: 'Un parent et un signataire d’assistance enfant',
+    es: 'Un padre y un firmante de asistencia del hijo'
+  },
+  'Inheritance: 2 of 3': { fr: 'Héritage : 2 sur 3', es: 'Herencia: 2 de 3' },
+  'Primary signers': { fr: 'Signataires principaux', es: 'Firmantes principales' },
+  'Recovery signers': { fr: 'Signataires de récupération', es: 'Firmantes de recuperación' },
+  'Required signatures: {count}': {
+    fr: 'Signatures requises : {count}',
+    es: 'Firmas necesarias: {count}'
+  },
+  'Test networks only': { fr: 'Réseaux de test uniquement', es: 'Solo redes de prueba' },
+  'blocks remaining': { fr: 'blocs restants', es: 'bloques restantes' },
+  'The primary signers can spend now; delayed paths follow the reviewed block schedule.': {
+    fr: 'Les signataires principaux peuvent dépenser maintenant ; les autres chemins suivent les délais en blocs vérifiés.',
+    es: 'Los firmantes principales pueden gastar ahora; las otras rutas siguen los plazos en bloques revisados.'
+  },
+  'Only the signers in the selected spending path can approve this payment.': {
+    fr: 'Seuls les signataires du chemin choisi peuvent approuver ce paiement.',
+    es: 'Solo los firmantes de la ruta elegida pueden aprobar este pago.'
+  },
+  'The selected path determines the required signers. The fee is deducted from this coin.': {
+    fr: 'Le chemin choisi détermine les signataires requis. Les frais sont déduits de cette pièce.',
+    es: 'La ruta elegida determina los firmantes necesarios. La comisión se deduce de esta moneda.'
+  },
+
   'Local recording pending': {
     fr: 'Enregistrement local en attente',
     es: 'Registro local pendiente'
@@ -58,6 +132,7 @@ export const sendCopy = {
     },
 
   ...spendPolicyCopy,
+  ...signerRoleCopy,
   Intent: { fr: 'Intention', es: 'Intención' },
   'Amount & fee': { fr: 'Montant et frais', es: 'Importe y comisión' },
   'Review & sign': { fr: 'Vérifier et signer', es: 'Revisar y firmar' },
@@ -772,5 +847,34 @@ export const sendCopy = {
   'QR code rejected': {
     fr: 'Code QR refusé',
     es: 'Código QR rechazado'
+  },
+  'selected signers': { fr: 'signataires sélectionnés', es: 'firmantes seleccionados' },
+  'Required signer roles are still missing. Review the selected spending path.': {
+    fr: 'Des rôles de signature requis manquent encore. Vérifiez le chemin de dépense sélectionné.',
+    es: 'Aún faltan roles de firma obligatorios. Revisa la ruta de gasto seleccionada.'
+  },
+  'Delayed spending is available': {
+    fr: 'La dépense différée est disponible',
+    es: 'El gasto diferido está disponible'
+  },
+  'The selected spending path is unavailable.': {
+    fr: 'Le chemin de dépense sélectionné est indisponible.',
+    es: 'La ruta de gasto seleccionada no está disponible.'
+  },
+  'Unfreeze this coin before spending it.': {
+    fr: 'Dégelez cette pièce avant de la dépenser.',
+    es: 'Descongela esta moneda antes de gastarla.'
+  },
+  'Sync this wallet before checking spending paths.': {
+    fr: 'Synchronisez ce portefeuille avant de vérifier les chemins de dépense.',
+    es: 'Sincroniza esta cartera antes de comprobar las rutas de gasto.'
+  },
+  'This coin must confirm before its waiting period starts.': {
+    fr: 'Cette pièce doit être confirmée avant le début de son délai.',
+    es: 'Esta moneda debe confirmarse antes de que comience su plazo de espera.'
+  },
+  'This spending path is still waiting for blocks.': {
+    fr: 'Ce chemin de dépense attend encore des blocs.',
+    es: 'Esta ruta de gasto aún está esperando bloques.'
   }
 } as const satisfies CatalogSection;

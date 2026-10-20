@@ -25,6 +25,6 @@ ADRs 0094–0096 restore the retained coordination implementation with device-pr
 
 ## Boundaries
 
-No wholesale branch merge, new cloud service, proprietary recovery, dependency update, source-pin refresh or public authorization is implied. Do not port the separate continuity/Miniscript branch as part of this work. Android needs its own native secret UI, platform protection and device evidence; public Mainnet mobile support remains gated.
+The release owner subsequently requested one unified 5.3 candidate combining mobile and the separate continuity/Miniscript implementation (ADR 0100). This consolidates source for review without merging main or expanding phone signing beyond standard multisig. No new cloud service, proprietary recovery, dependency update, source-pin refresh or public authorization is implied. Android needs its own native secret UI, platform protection and device evidence; public Mainnet mobile support remains gated.
 
 The candidate adds the device envelope for new iOS secrets and restores the retained test-network BIP129/174 implementation. Existing desktop and retained testnet data remain untouched. Future storage changes require a compatibility assessment and fixtures; breaking changes require ADR 0035 approval. Native safety guards stay until the relevant capability has implementation, tests and review; UI options alone do not establish support.

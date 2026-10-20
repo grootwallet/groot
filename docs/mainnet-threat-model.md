@@ -174,3 +174,7 @@ wallet policies require fresh evidence and an exact authorization record.
 ## Change-control rule
 
 Every change that introduces an asset, trust boundary, parser, signer, backend, network protocol, recovery path, persistence format, platform permission, build/update path, or transaction type must update this document and the relevant ADR/checklist in the same change. A security control without a named failure test and release evidence is a design claim, not a completed mitigation.
+
+## Unified continuity rehearsal boundary
+
+ADR 0100 enables fixed-template coordination on test networks only. Hostile PSBT sequences cannot select a different delay; proposal identity, verified descriptors, eligible roles and fresh input maturity are native authorization inputs. Family assistance requires both role groups. Reorgs invalidate premature saved proposals. Existing primary/delayed storage and descriptor backups remain unchanged. Direct USB Miniscript and phone enrollment into continuity are blocked; standard phone signing and Coldcard rehearsal retain their existing controls. Independent review and physical acceptance remain pending; this is not Mainnet continuity authorization.

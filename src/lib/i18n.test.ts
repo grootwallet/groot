@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { spendPolicyCopy } from './locales/send';
+import { spendPolicyCopy, signerRoleCopy } from './locales/send';
 import { readFileSync } from 'node:fs';
 import {
   formatConfirmationCount,
@@ -208,4 +208,19 @@ describe('native spend policy errors', () => {
     expect(localizedError(error, 'fr')).not.toContain('untrusted details');
     expect(localizedError(error, 'es')).not.toContain('untrusted details');
   });
+});
+
+it('preserves only allowlisted native signer-role guidance', () => {
+  const native = readFileSync('src-tauri/src/wallet/multisig_proposal_commands.rs', 'utf8');
+  for (const [message, translations] of Object.entries(signerRoleCopy)) {
+    expect(native).toContain(JSON.stringify(message));
+    const error = Object.assign(new Error(message), { code: 'insufficient_signatures' });
+    expect(localizedError(error, 'en')).toBe(message);
+    expect(localizedError(error, 'fr')).toBe(translations.fr);
+    expect(localizedError(error, 'es')).toBe(translations.es);
+  }
+  const unknown = Object.assign(new Error('untrusted role text'), {
+    code: 'insufficient_signatures'
+  });
+  expect(localizedError(unknown, 'fr')).not.toContain('untrusted role text');
 });

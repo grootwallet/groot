@@ -332,7 +332,7 @@ pub async fn multisig_policy_renewal_prepare(
     if !matches!(
         coin.policy_maturity.as_ref().map(|value| value.state),
         Some(MaturityState::Mature)
-    ) {
+    ) && !(metadata.policy_type.contains("continuity") && coin.confirmations > 0) {
         return Err(api_error(
             "coin_unavailable",
             "The extra recovery or heir key cannot spend this coin yet.",
@@ -386,12 +386,67 @@ pub async fn multisig_policy_renewal_prepare(
 }
 
 #[tauri::command]
+pub async fn multisig_spending_paths(
+    app: AppHandle,
+    outpoint: String,
+) -> ApiResult<Vec<SpendingPathDetailsDto>> {
+    if outpoint.len() > 80 || OutPoint::from_str(&outpoint).is_err() {
+        return Err(api_error(
+            "coin_unavailable",
+            "Choose a valid coin from this wallet.",
+        ));
+    }
+    let expected_wallet_id = load_registry(&app)?.selected_wallet_id;
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let _operation = operation_guard(&state)?;
+        if load_registry(&app)?.selected_wallet_id != expected_wallet_id {
+            return Err(api_error(
+                "wallet_selection_changed",
+                "The selected wallet changed. Retry in the current wallet.",
+            ));
+        }
+        require_unlocked(&app, &state)?;
+        let metadata = read_multisig_metadata(&app)?;
+        let analysis = verified_analysis(&metadata)?;
+        let mut db = open_multisig_db(&app)?;
+        let wallet = load_wallet(&mut db)?;
+        let snapshot = snapshot_from(&wallet, &db, None, true, None)?;
+        let coin = snapshot
+            .utxos
+            .iter()
+            .find(|coin| coin.outpoint == outpoint)
+            .ok_or_else(|| {
+                api_error(
+                    "coin_unavailable",
+                    "The selected coin is not available in this wallet.",
+                )
+            })?;
+        (0..analysis.paths.len())
+            .map(|index| {
+                path_details(
+                    &metadata,
+                    &analysis,
+                    index,
+                    (coin.confirmations > 0).then_some(coin.confirmations),
+                    snapshot.chain_tip.status == "recent",
+                    coin.frozen,
+                )
+            })
+            .collect()
+    })
+    .await
+    .map_err(internal)?
+}
+
+#[tauri::command]
 pub async fn multisig_delayed_spend_prepare(
     app: AppHandle,
     outpoint: String,
     recipient: String,
     labels: Vec<String>,
     fee_rate: String,
+    path_index: Option<usize>,
 ) -> ApiResult<MultisigProposalDto> {
     let expected_wallet_id = load_registry(&app)?.selected_wallet_id;
     tauri::async_runtime::spawn_blocking(move || {
@@ -464,17 +519,18 @@ pub async fn multisig_delayed_spend_prepare(
                 "The selected coin is not available in this wallet.",
             )
         })?;
-    if !matches!(
-        coin.policy_maturity.as_ref().map(|value| value.state),
-        Some(MaturityState::Mature)
-    ) {
-        return Err(api_error(
-            "coin_unavailable",
-            "The recovery key cannot spend this coin yet.",
-        ));
-    }
-
-    let psbt = build_delayed_policy_sweep(&mut wallet, selected, &destination, rate)?;
+        let index = path_index.unwrap_or(1);
+        if index == 0 { return Err(api_error("unknown_spending_path", "Choose a delayed path for this payment.")); }
+        let analysis = verified_analysis(&metadata)?;
+        let details = path_details(&metadata, &analysis, index, (coin.confirmations > 0).then_some(coin.confirmations), true, false)?;
+        if !details.available { return Err(api_error("immature_spending_path", details.reason.unwrap_or("The selected path is unavailable."))); }
+        let psbt = if matches!(metadata.recovery_template, Some(RecoveryTemplate::Recovery { .. })) {
+            build_delayed_policy_sweep(&mut wallet, selected, &destination, rate)?
+        } else {
+            build_named_policy_sweep(&mut wallet, &metadata, index, selected, &destination, rate)?
+        };
+        if selected_delayed_index(&analysis, &psbt)? != index { return Err(api_error("proposal_mismatch", "The transaction selected a different spending path.")); }
+        validate_named_path_current(&wallet, &transaction, &metadata, &psbt, index)?;
     if psbt.unsigned_tx.input.len() != 1 || psbt.unsigned_tx.output.len() != 1 {
         return Err(api_error(
             "proposal_mismatch",
@@ -692,13 +748,21 @@ pub(crate) fn import_multisig_proposal_in_db(
     let mut original = decode_psbt(&original_encoded).map_err(proposal_api_error)?;
     let imported = decode_psbt(signed_psbt).map_err(proposal_api_error)?;
     let signing = proposal_signing_context(db, metadata, proposal_id)?;
-    let progress = merge_signed_psbt(
+    if let Some(index) = signing.path_index.filter(|index| *index > 0) {
+        let wallet = load_wallet(db)?;
+        validate_named_path_current(&wallet, db, metadata, &original, index)?;
+    }
+    let mut progress = merge_signed_psbt(
         &mut original,
         imported,
         &signing.fingerprints,
         signing.required,
     )
     .map_err(proposal_api_error)?;
+    if let Some(index) = signing.path_index {
+        progress.can_finalize &=
+            path_signature_quorum(metadata, index, &progress.signed_fingerprints);
+    }
     if progress.can_finalize {
         let wallet = load_wallet(db)?;
         let mut validation = original.clone();
@@ -744,14 +808,22 @@ pub(crate) fn finalized_multisig_proposal_transaction(
         reviewed_psbt,
         "The signed proposal changed after review. Reload it before broadcast.",
     )?;
+    let mut psbt = decode_psbt(&proposal.psbt).map_err(proposal_api_error)?;
+    let wallet = load_wallet(db)?;
+    let signing = proposal_signing_context(db, metadata, proposal_id)?;
+    if let Some(index) = signing.path_index.filter(|index| *index > 0) {
+        validate_named_path_current(&wallet, db, metadata, &psbt, index)?;
+    }
     if !proposal.can_finalize {
         return Err(api_error(
             "insufficient_signatures",
-            "Collect the required signatures before broadcasting.",
+            if proposal.signed >= proposal.required {
+                "Collect the required signer roles for this spending path before broadcasting."
+            } else {
+                "Collect the required signatures before broadcasting."
+            },
         ));
     }
-    let mut psbt = decode_psbt(&proposal.psbt).map_err(proposal_api_error)?;
-    let wallet = load_wallet(db)?;
     bind_psbt_inputs_to_wallet(&wallet, &mut psbt)?;
     let acceleration = proposal_acceleration_method(db, proposal_id)?;
     if matches!(acceleration, Some(AccelerationMethod::Rbf)) {
@@ -771,37 +843,6 @@ pub(crate) fn finalized_multisig_proposal_transaction(
         acceleration,
     )?;
     validate_psbt_excludes_frozen(&psbt, &frozen_outpoints(db)?)?;
-    let signing = proposal_signing_context(db, metadata, proposal_id)?;
-    if signing.spend_path == ProposalSpendPath::Delayed {
-        let delayed_policy = delayed_policy_context(metadata)?.ok_or_else(|| {
-            api_error(
-                "wallet_corrupt",
-                "The delayed wallet policy could not be verified.",
-            )
-        })?;
-        let snapshot = snapshot_from(&wallet, db, None, true, Some(&delayed_policy))?;
-        if snapshot.chain_tip.status != "recent" {
-            return Err(api_error(
-                "network_unavailable",
-                "Sync this wallet again before broadcasting the recovery-key spend.",
-            ));
-        }
-        let all_mature = psbt.unsigned_tx.input.iter().all(|input| {
-            snapshot.utxos.iter().any(|coin| {
-                coin.outpoint == input.previous_output.to_string()
-                    && matches!(
-                        coin.policy_maturity.as_ref().map(|value| value.state),
-                        Some(MaturityState::Mature)
-                    )
-            })
-        });
-        if !all_mature {
-            return Err(api_error(
-                "coin_unavailable",
-                "A reorg or wallet update moved this coin before recovery-key availability. Sync and prepare the spend again.",
-            ));
-        }
-    }
     if !wallet
         .finalize_psbt(&mut psbt, SignOptions::default())
         .map_err(internal)?
@@ -900,6 +941,11 @@ pub async fn multisig_proposal_discard_signature(
     let progress =
         discard_signer_signature(&mut psbt, signer, &signing.fingerprints, signing.required)
             .map_err(proposal_api_error)?;
+    let mut progress = progress;
+    if let Some(index) = signing.path_index {
+        progress.can_finalize &=
+            path_signature_quorum(&metadata, index, &progress.signed_fingerprints);
+    }
     let status = if progress.can_finalize {
         "ready"
     } else {

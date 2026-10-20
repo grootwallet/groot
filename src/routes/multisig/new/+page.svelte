@@ -459,7 +459,7 @@
     stage = draft.stage;
     policyStep = draft.stage === 'policy' ? 'configure' : 'choose';
     templateKind = draft.templateKind;
-    if (draft.templateKind !== 'standard') {
+    if (draft.templateKind !== 'standard' && defaultConfig.network === 'mainnet') {
       stage = 'policy';
       policyStep = 'choose';
       error =
@@ -787,7 +787,7 @@
   }
 
   function continueToPolicyConfiguration() {
-    if (templateKind !== 'standard') return;
+    if (templateKind !== 'standard' && defaultConfig.network === 'mainnet') return;
     error = '';
     policyStep = 'configure';
   }
@@ -1306,7 +1306,7 @@
   }
 
   async function create() {
-    if (templateKind !== 'standard') return;
+    if (templateKind !== 'standard' && defaultConfig.network === 'mainnet') return;
     if (
       !preview ||
       !saved ||
@@ -1333,7 +1333,7 @@
         description:
           templateKind === 'standard'
             ? `${threshold} signatures are required to spend.`
-            : '2 of 3 primary keys work now. The recovery key becomes available after the chosen wait.',
+            : 'The primary signers can spend now; delayed paths follow the reviewed block schedule.',
         tone: 'success'
       });
       if (mobileSessionId) {
@@ -1479,7 +1479,12 @@
                   ><Check size={16} strokeWidth={3} /></span
                 >{/if}</button
             >
-            <button class="policy-kind-card recovery" type="button" disabled
+            <button
+              class="policy-kind-card recovery"
+              class:active={templateKind === 'partner_continuity_v1'}
+              type="button"
+              disabled={defaultConfig.network === 'mainnet'}
+              onclick={() => chooseTemplate('partner_continuity_v1')}
               ><span class="policy-kind-icon"><ShieldCheck size={21} /></span><span
                 class="policy-kind-copy"
                 ><strong>{translate($locale, 'Partner continuity')}</strong><small
@@ -1488,13 +1493,22 @@
                     'Your 2 of 3 now, guided access for your partner later.'
                   )}</small
                 ></span
-              ><span class="policy-kind-meta">{translate($locale, 'Coming soon')}</span
+              ><span class="policy-kind-meta"
+                >{translate(
+                  $locale,
+                  defaultConfig.network === 'mainnet' ? 'Coming soon' : 'Test networks only'
+                )}</span
               >{#if templateKind === 'partner_continuity_v1'}<span
                   class="policy-kind-check"
                   aria-hidden="true"><Check size={16} strokeWidth={3} /></span
                 >{/if}</button
             >
-            <button class="policy-kind-card inheritance" type="button" disabled
+            <button
+              class="policy-kind-card inheritance"
+              class:active={templateKind === 'family_continuity_v1'}
+              type="button"
+              disabled={defaultConfig.network === 'mainnet'}
+              onclick={() => chooseTemplate('family_continuity_v1')}
               ><span class="policy-kind-icon"><Clock3 size={21} /></span><span
                 class="policy-kind-copy"
                 ><strong>{translate($locale, 'Family continuity')}</strong><small
@@ -1503,7 +1517,11 @@
                     'Parents stay in control; children can assist or inherit later.'
                   )}</small
                 ></span
-              ><span class="policy-kind-meta">{translate($locale, 'Coming soon')}</span
+              ><span class="policy-kind-meta"
+                >{translate(
+                  $locale,
+                  defaultConfig.network === 'mainnet' ? 'Coming soon' : 'Test networks only'
+                )}</span
               >{#if templateKind === 'family_continuity_v1'}<span
                   class="policy-kind-check"
                   aria-hidden="true"><Check size={16} strokeWidth={3} /></span
@@ -1822,7 +1840,11 @@
                 $locale,
                 templateKind === 'standard'
                   ? `${threshold} of ${requiredKeys}`
-                  : '2 of 3 + recovery'
+                  : templateKind === 'partner_continuity_v1'
+                    ? '2 of 3 + continuity'
+                    : templateKind === 'family_continuity_v1'
+                      ? 'Parents + family'
+                      : '2 of 3 + recovery'
               )}
             </p>
           </div>
@@ -1939,7 +1961,11 @@
             $locale,
             templateKind === 'standard'
               ? '{threshold} of {total} signatures'
-              : '2 of 3 primary keys + recovery key later',
+              : templateKind === 'partner_continuity_v1'
+                ? '2 of 3 + continuity'
+                : templateKind === 'family_continuity_v1'
+                  ? 'Parents + family'
+                  : '2 of 3 primary keys + recovery key later',
             { threshold, total: cosigners.length }
           )}</strong
         ><span
@@ -1973,7 +1999,11 @@
             $locale,
             templateKind === 'standard'
               ? '{threshold} of {total} signatures'
-              : '2 of 3 primary keys + recovery key later',
+              : templateKind === 'partner_continuity_v1'
+                ? '2 of 3 + continuity'
+                : templateKind === 'family_continuity_v1'
+                  ? 'Parents + family'
+                  : '2 of 3 primary keys + recovery key later',
             { threshold, total: cosigners.length }
           )}</strong
         ><span

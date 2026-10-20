@@ -109,3 +109,9 @@ Coldcard receive and policy-address checks report a missing device policy with i
 Recipient fields disable OS capitalization, autocorrection and spellcheck so the system does not alter Bitcoin address text. Native network and checksum validation remains authoritative.
 
 Spend policy failures explain the specific reason inline and in the existing toast, including the 100,000-sat Mainnet fee limit and how to retry. Mainnet payment amounts have no rollout ceiling; standard PSBT review and authorization remain required (ADR 0099).
+
+## Fixed continuity rehearsal
+
+On test networks, choose Partner or Family → assign the fixed public signer roles → verify descriptor/first address → preserve the public backup → open the wallet. Mainnet creation is blocked. Phone pairing and direct USB Miniscript are not offered for these policies.
+
+Coins → choose a confirmed policy coin → choose an available named delayed path → recipient, labels and fee → review the actual PSBT and required roles → export/import partial signatures → finalize and broadcast after fresh native checks. Unavailable paths show the remaining blocks; a reorg, frozen input, stale chain state or missing role blocks progress with an inline error. Restart preserves the selected path through the transaction's exact CSV sequence. Renewal uses primary signatures and a fresh owned output; it is available before the delayed paths mature.

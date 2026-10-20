@@ -64,7 +64,7 @@
     sortTransactionsNewestFirst,
     transactionForSelection
   } from '$lib/wallet/presentation';
-  import { policyMaturitySummary } from '$lib/wallet/policy';
+  import { isContinuityPolicyType, policyMaturitySummary } from '$lib/wallet/policy';
   import { onDestroy, onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
@@ -1074,7 +1074,11 @@
                 maturitySummary.mature > 0 ? maturitySummary.mature : maturitySummary.approaching,
               key: translate(
                 $locale,
-                maturitySummary.policyType === 'inheritance' ? 'Heir key' : 'Recovery key'
+                isContinuityPolicyType(maturitySummary.policyType)
+                  ? 'Delayed signers'
+                  : maturitySummary.policyType === 'inheritance'
+                    ? 'Heir key'
+                    : 'Recovery key'
               )
             }
           )}</strong
@@ -1084,12 +1088,24 @@
               ? translate($locale, 'Next key change in {count} blocks · times are approximate', {
                   count: formatInteger(maturitySummary.nextRemainingBlocks, $locale)
                 })
-              : translate($locale, 'The extra key can spend every confirmed coin shown.')
+              : translate(
+                  $locale,
+                  isContinuityPolicyType(maturitySummary.policyType)
+                    ? 'A delayed path is available for every confirmed coin shown.'
+                    : 'The extra key can spend every confirmed coin shown.'
+                )
             : translate(
                 $locale,
                 'Countdown paused until Groot verifies a recent chain tip. Saved coin states are shown as of the last sync.'
               )}</small
-        ><small>{translate($locale, 'Your normal 2-of-3 keys still work for every coin.')}</small>
+        ><small
+          >{translate(
+            $locale,
+            isContinuityPolicyType(maturitySummary.policyType)
+              ? 'Primary signers remain available. Review each delayed path and its required signers before spending.'
+              : 'Your normal 2-of-3 keys still work for every coin.'
+          )}</small
+        >
       </div>
       <Button size="small" variant="secondary" href="/coins"
         >{translate($locale, 'Review coins')}</Button

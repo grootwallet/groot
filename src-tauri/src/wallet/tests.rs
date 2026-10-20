@@ -6864,3 +6864,160 @@ fn release_spend_errors_explain_each_policy_rejection() {
         assert_eq!(error.message, message);
     }
 }
+
+fn continuity_test_metadata(family: bool) -> MultisigWalletDto {
+    let template = if family {
+        RecoveryTemplate::FamilyContinuityV1 {
+            parents: SpendingPath::new(2, ["key-1", "key-2"]),
+            child_assistance: SpendingPath::new(1, ["key-3", "key-4"]),
+            child_inheritance: SpendingPath::new(2, ["key-5", "key-6"]),
+            executor_signer_id: "key-7".to_owned(),
+        }
+    } else {
+        RecoveryTemplate::PartnerContinuityV1 {
+            owner: SpendingPath::new(2, ["key-1", "key-2", "key-3"]),
+            partner: SpendingPath::new(2, ["key-4", "key-5"]),
+            estate: SpendingPath::new(2, ["key-6", "key-7", "key-8"]),
+        }
+    };
+    let mut metadata = descriptor_backup_with_signers(if family { 7 } else { 8 }).wallet;
+    let analysis = analyze_template(&template, &metadata.cosigners).unwrap();
+    metadata.external_descriptor = analysis.external_descriptor;
+    metadata.internal_descriptor = analysis.internal_descriptor;
+    metadata.spending_paths = analysis.paths;
+    metadata.policy_type = recovery_policy_type(&template).to_owned();
+    metadata.recovery_template = Some(template);
+    metadata
+}
+
+#[test]
+fn every_named_continuity_path_selects_its_exact_csv_and_preserves_roles() {
+    for family in [false, true] {
+        let metadata = continuity_test_metadata(family);
+        let wallet = Wallet::create(
+            metadata.external_descriptor.clone(),
+            metadata.internal_descriptor.clone(),
+        )
+        .network(network())
+        .create_wallet_no_persist()
+        .unwrap();
+        let analysis = verified_analysis(&metadata).unwrap();
+        for (index, path) in analysis.paths.iter().enumerate() {
+            for (keychain, selected) in named_policy_paths(&wallet, &metadata, index).unwrap() {
+                let policy = wallet.policies(keychain).unwrap().unwrap();
+                let condition = policy.get_condition(&selected).unwrap();
+                assert_eq!(
+                    condition
+                        .csv
+                        .map(|value| value.to_consensus_u32())
+                        .unwrap_or(0),
+                    path.available_after_blocks
+                );
+            }
+            if index == 0 {
+                continue;
+            }
+            for (age, available) in [
+                (path.available_after_blocks - 1, false),
+                (path.available_after_blocks, true),
+                (path.available_after_blocks + 1, true),
+            ] {
+                let details =
+                    path_details(&metadata, &analysis, index, Some(age), true, false).unwrap();
+                assert_eq!(details.available, available);
+                assert_eq!(details.required, path.threshold);
+            }
+            assert!(
+                !path_details(
+                    &metadata,
+                    &analysis,
+                    index,
+                    Some(path.available_after_blocks),
+                    false,
+                    false
+                )
+                .unwrap()
+                .available
+            );
+            assert!(
+                !path_details(
+                    &metadata,
+                    &analysis,
+                    index,
+                    Some(path.available_after_blocks),
+                    true,
+                    true
+                )
+                .unwrap()
+                .available
+            );
+            assert!(
+                !path_details(&metadata, &analysis, index, None, true, false)
+                    .unwrap()
+                    .available
+            );
+        }
+    }
+}
+
+#[test]
+fn named_continuity_paths_resume_from_existing_psbt_and_reject_sequence_substitution() {
+    for family in [false, true] {
+        let metadata = continuity_test_metadata(family);
+        let analysis = verified_analysis(&metadata).unwrap();
+        for (index, path) in analysis.paths.iter().enumerate().skip(1) {
+            let transaction = Transaction {
+                version: Version::TWO,
+                lock_time: LockTime::ZERO,
+                input: vec![TxIn {
+                    previous_output: OutPoint::null(),
+                    script_sig: ScriptBuf::new(),
+                    sequence: Sequence(path.available_after_blocks),
+                    witness: Witness::new(),
+                }],
+                output: vec![],
+            };
+            let mut psbt = Psbt::from_unsigned_tx(transaction).unwrap();
+            assert_eq!(selected_delayed_index(&analysis, &psbt).unwrap(), index);
+            let reopened = decode_psbt(&encode_psbt(&psbt)).unwrap();
+            assert_eq!(selected_delayed_index(&analysis, &reopened).unwrap(), index);
+            let db = Connection::open_in_memory().unwrap();
+            init_app_schema(&db).unwrap();
+            db.execute("INSERT INTO groot_proposals (proposal_id,recipient,label,amount,fee,fee_rate,psbt,status,created_at) VALUES('named','synthetic','Test',1,1,1,?1,'collecting',1)", [encode_psbt(&psbt)]).unwrap();
+            db.execute("INSERT INTO groot_proposal_spend_paths(proposal_id,spend_path) VALUES('named','delayed')", []).unwrap();
+            let context = proposal_signing_context(&db, &metadata, "named").unwrap();
+            assert_eq!(context.path_index, Some(index));
+            assert_eq!(context.required, path.threshold);
+            assert_eq!(context.fingerprint_strings.len(), path.signer_ids.len());
+            psbt.unsigned_tx.input[0].sequence = Sequence::ENABLE_RBF_NO_LOCKTIME;
+            assert!(selected_delayed_index(&analysis, &psbt).is_err());
+            psbt.unsigned_tx.input[0].sequence = Sequence(path.available_after_blocks | (1 << 22));
+            assert!(selected_delayed_index(&analysis, &psbt).is_err());
+        }
+    }
+}
+
+#[test]
+fn family_assistance_requires_a_parent_and_an_assistance_role() {
+    let metadata = continuity_test_metadata(true);
+    let fp = |index: usize| {
+        metadata
+            .cosigners
+            .iter()
+            .find(|key| key.id == format!("key-{}", index + 1))
+            .unwrap()
+            .fingerprint
+            .clone()
+    };
+    assert!(!path_signature_quorum(&metadata, 1, &[fp(2), fp(3)]));
+    assert!(!path_signature_quorum(&metadata, 1, &[fp(0), fp(1)]));
+    for parent in [0, 1] {
+        for child in [2, 3] {
+            assert!(path_signature_quorum(
+                &metadata,
+                1,
+                &[fp(parent), fp(child)]
+            ));
+        }
+    }
+}

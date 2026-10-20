@@ -935,17 +935,24 @@ export class TauriWalletAdapter implements WalletPort {
       feeRate: String(feeRate)
     });
   }
+  multisigSpendingPaths(outpoint: string) {
+    return command<import('./contracts').SpendingPathDetails[]>('multisig_spending_paths', {
+      outpoint
+    });
+  }
   prepareMultisigDelayedSpend(
     outpoint: string,
     recipient: string,
     labels: string[],
-    feeRate: FeeRate
+    feeRate: FeeRate,
+    pathIndex?: number
   ) {
     return command<MultisigProposal>('multisig_delayed_spend_prepare', {
       outpoint,
       recipient,
       labels,
-      feeRate: String(feeRate)
+      feeRate: String(feeRate),
+      pathIndex: pathIndex ?? null
     });
   }
   prepareMultisigAcceleration(
