@@ -1,5 +1,11 @@
 # Mainnet release checklist
 
+Current policy amendment: [ADR 0099](adr/0099-remove-mainnet-rollout-amount-ceiling.md)
+removes the historical 1,000,000-sat payment/debit ceiling after the owner's
+explicit request. The first-release evidence below remains historical; it does
+not certify the amended source or authorize a replacement GA package. Fee,
+network, backend, PSBT, recipient and signing checks remain mandatory.
+
 Release decision: APPROVED
 
 Owner certification recorded 2026-10-04: every row in this checklist is

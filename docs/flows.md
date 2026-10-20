@@ -87,3 +87,5 @@ Settings exposes Updates beside build identity; the side menu exposes it only af
 `Updates → manual check OR daily opt-in → newer stable offer / no update / offline / rate limit → signed-manifest verification → bounded installer download → digest verification → reveal → explicit user installation`
 
 Closing in-flight work cancels it; failed/cancelled stages are removed. Missing owner trust key disables preparation with an inline reason. Wallet dialogs take precedence; corner actions and release toasts do not overlap them.
+
+Spend policy failures explain the specific reason inline and in the existing toast, including the 100,000-sat Mainnet fee limit and how to retry. Mainnet payment amounts have no rollout ceiling; standard PSBT review and authorization remain required (ADR 0099).

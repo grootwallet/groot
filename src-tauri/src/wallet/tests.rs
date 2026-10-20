@@ -6527,3 +6527,25 @@ fn deletion_requires_keys_and_separate_software_passphrase_backups() {
     );
     assert!(validate_wallet_deletion_backup(WalletKind::SingleKey, true, 1, true, true).is_ok());
 }
+
+#[test]
+fn release_spend_errors_explain_each_policy_rejection() {
+    use crate::release_policy::ReleasePolicyError;
+    let cases = [
+        (ReleasePolicyError::MainnetDisabled, "Mainnet payments are unavailable in this build. Use a mainnet-enabled Groot release."),
+        (ReleasePolicyError::BackendAdmissionRequired, "Connect and verify a Bitcoin Core node before making a mainnet payment."),
+        (ReleasePolicyError::WrongGenesis, "The connected node is on another Bitcoin network. Check the connection in Settings."),
+        (ReleasePolicyError::UnsupportedBackend, "This node connection cannot be used for mainnet payments. Choose a supported Bitcoin Core connection in Settings."),
+        (ReleasePolicyError::InvalidAmount, "Amount must be greater than zero."),
+        (ReleasePolicyError::AmountOutOfRange, "The payment amount plus fee exceeds Bitcoin's maximum supply."),
+        (ReleasePolicyError::InvalidFeeChild, "A fee acceleration child must pay only an address owned by this wallet."),
+        (ReleasePolicyError::FeeCapExceeded, "The network fee exceeds Groot's mainnet limit of 100,000 sats. Lower the fee rate and try again."),
+        (ReleasePolicyError::BatchSpendingDisabled, "Mainnet payments support one recipient at a time."),
+        (ReleasePolicyError::UnsupportedWalletPolicy, "This wallet policy is not supported for mainnet payments."),
+    ];
+    for (reason, message) in cases {
+        let error = release_spend_api_error(reason);
+        assert_eq!(error.code, "invalid_amount");
+        assert_eq!(error.message, message);
+    }
+}

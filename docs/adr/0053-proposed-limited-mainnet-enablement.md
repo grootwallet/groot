@@ -8,6 +8,9 @@
 
 Authorizes: public Mainnet distribution for commit f7b4b9935943f0250353a6f77c3d8fca31906fff
 
+Amount-ceiling provision superseded by [ADR 0099](0099-remove-mainnet-rollout-amount-ceiling.md).
+The original decision and release evidence below are retained as history.
+
 ## Acceptance record
 
 The release owner confirms that every canonical checklist row completed for

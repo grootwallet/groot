@@ -2408,3 +2408,70 @@ test('unknown-source received labels tokenize on Tab and save multiple permanent
   await expect(page.getByText('Recovered payment', { exact: true }).first()).toBeVisible();
   await expect(page.getByText('Family', { exact: true }).first()).toBeVisible();
 });
+
+// Fixture evidence for native error presentation/retry; Rust tests own enforcement.
+for (const language of ['en', 'fr', 'es'] as const) {
+  test(`spend policy failures stay specific and retryable in ${language}`, async ({ page }) => {
+    for (const route of ['/send', '/multisig/send']) {
+      for (const theme of ['light', 'dark']) {
+        await page.addInitScript(() => localStorage.setItem('groot-language', 'en'));
+        await page.goto(route);
+        await page
+          .getByLabel('Bitcoin address')
+          .fill('bcrt1qdummy00085n8k2r7v4cx9s6jlawephgzuqf5t8ul');
+        await page.getByLabel('Payment label').fill('Policy error retry');
+        await page.getByRole('button', { name: 'Continue to amount' }).click();
+        const showSats = page.getByRole('button', { name: 'Show transaction amount in sats' });
+        if (await showSats.isVisible()) await showSats.click();
+        await page.getByLabel('Amount', { exact: true }).fill('1500000');
+        const { message, reviewLabel } = await page.evaluate(
+          async ({ language, theme, route }) => {
+            const modulePath = '/src/lib/wallet/index.ts';
+            const localePath = '/src/lib/i18n.ts';
+            const catalogPath = '/src/lib/i18n-catalog.ts';
+            const { walletService, WalletError } = await import(/* @vite-ignore */ modulePath);
+            const { setLocale } = await import(/* @vite-ignore */ localePath);
+            const { translate } = await import(/* @vite-ignore */ catalogPath);
+            const method = route === '/send' ? 'preparePayment' : 'prepareMultisigPayment';
+            const original = walletService[method].bind(walletService);
+            const source =
+              "The network fee exceeds Groot's mainnet limit of 100,000 sats. Lower the fee rate and try again.";
+            let fail = true;
+            walletService[method] = async (...args: unknown[]) => {
+              if (fail) {
+                fail = false;
+                throw new WalletError('invalid_amount', source);
+              }
+              return original(...args);
+            };
+            document.documentElement.setAttribute('data-theme', theme);
+            setLocale(language);
+            return {
+              message: translate(language, source),
+              reviewLabel: translate(language, 'Review payment')
+            };
+          },
+          { language, theme, route }
+        );
+        const review = page.getByRole('button', { name: reviewLabel, exact: true });
+        await review.click();
+        const reason = page.getByText(message, { exact: true }).first();
+        await expect(reason).toBeVisible();
+        await reason.scrollIntoViewIfNeeded();
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+          true
+        );
+        await page.screenshot({
+          path: test
+            .info()
+            .outputPath(
+              `spend-policy-${route === '/send' ? 'single' : 'multi'}-${language}-${theme}.png`
+            ),
+          fullPage: true
+        });
+        await review.click();
+        await expect(review).toHaveCount(0);
+      }
+    }
+  });
+}

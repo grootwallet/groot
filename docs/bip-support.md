@@ -64,3 +64,5 @@ App release/update preparation (ADR 0086) and 5.2 naming (ADR 0087) have **no BI
 The 5.2.0 GA version promotion and same-machine reproduction decision (ADR 0088) have **no BIP impact**.
 
 The GA remediation keeps BIP329 records and wallet formats unchanged. It adds an atomic application-level recovery-gap bound to restored address-label imports. The first-history disclosure fix has **no BIP impact**.
+
+ADR 0099 removes an application-level mainnet rollout amount ceiling and clarifies policy errors. **No BIP or persisted-format impact**: transaction/PSBT encodings, descriptors, derivation, signing, recovery and interoperability are unchanged. Bitcoin supply bounds and final-PSBT fee protection remain enforced.

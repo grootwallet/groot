@@ -66,7 +66,7 @@ Proposals and collected signatures persist across restart. Leaving signing prese
 
 RBF preserves the intended recipient amount; CPFP spends an eligible wallet output. Failed or stale quotes block signing. Before final submission verify the original is still in the configured mempool. A confirmed original leaves the saved proposal read-only with explicit discard; never erase the confirmed payment. Separate RPC checks and submission are not atomic.
 
-Mainnet final-PSBT caps remain **100,000 sats fee** and **1,000,000 sats recipient plus fee**, including acceleration. Sparse estimates are capped, not extrapolated without bound.
+Mainnet payments have no rollout amount ceiling (ADR 0099). Positive amounts, Bitcoin supply bounds and the single-recipient rule remain enforced. The final-PSBT **100,000-sat fee limit** still applies, including acceleration. Policy errors explain the actual rejection in EN/FR/ES. Sparse estimates are capped, not extrapolated without bound.
 
 Activity paginates committed history and retains it on failed later reads. Reuse counts canonical external outputs, including spent receipts; replaced/evicted transaction versions do not create phantom receipts. Preserve original history and labels. Receipt/first-confirmation notification markers persist atomically and are acknowledged idempotently for the current wallet/session.
 

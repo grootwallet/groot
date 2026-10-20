@@ -112,7 +112,7 @@ fn multisig_tx_prepare_blocking(
     );
     let result = (|| {
         crate::release_policy::validate_spend(network(), 1, amount)
-            .map_err(|_| api_error("invalid_amount", "This spend is blocked by release policy."))?;
+            .map_err(release_spend_api_error)?;
         let labels = normalize_labels(labels)?;
         let label = labels[0].clone();
         if amount == 0 {
@@ -345,8 +345,7 @@ pub fn multisig_policy_renewal_prepare(
                 "The selected coin cannot cover the network fee.",
             )
         })?;
-    crate::release_policy::validate_spend(network(), 1, amount)
-        .map_err(|_| api_error("invalid_amount", "This spend is blocked by release policy."))?;
+    crate::release_policy::validate_spend(network(), 1, amount).map_err(release_spend_api_error)?;
     let fee = psbt
         .fee_amount()
         .ok_or_else(|| internal("Unable to calculate the transaction fee."))?
@@ -460,8 +459,7 @@ pub fn multisig_delayed_spend_prepare(
         ));
     }
     let amount = psbt.unsigned_tx.output[0].value.to_sat();
-    crate::release_policy::validate_spend(network(), 1, amount)
-        .map_err(|_| api_error("invalid_amount", "This spend is blocked by release policy."))?;
+    crate::release_policy::validate_spend(network(), 1, amount).map_err(release_spend_api_error)?;
     let fee = psbt
         .fee_amount()
         .ok_or_else(|| internal("Unable to calculate the transaction fee."))?

@@ -46,7 +46,7 @@ Every asynchronous result/event binds the immutable wallet identity and current 
 5. Recheck canonical wallet prevouts, wallet-owned change, outputs, policy and acceleration eligibility before finalization/broadcast.
 6. Atomically persist accepted broadcast, labels/lineage and notification markers. A later refresh failure cannot reverse broadcast success.
 
-Mainnet caps and coin/recovery rules are native policy. The UI cannot invent change, balances, maturity, signer readiness or fees. Exact error/event contracts remain stable across code movement.
+Mainnet fee protection, Bitcoin supply bounds, the single-recipient rule and coin/recovery rules are native policy. ADR 0099 removes the rollout payment/debit ceiling at preparation and shared final-PSBT authorization; exact native spend errors remain specific through EN/FR/ES localization. The UI cannot invent change, balances, maturity, signer readiness or fees. Exact error/event contracts remain stable across code movement.
 
 ## Network boundary
 
