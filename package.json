@@ -1,7 +1,7 @@
 {
   "name": "groot-wallet",
   "private": true,
-  "version": "5.3.0-rc8",
+  "version": "5.3.0-rc9",
   "license": "Apache-2.0",
   "author": "Rochal Holdings",
   "repository": {
@@ -81,7 +81,7 @@
     "release:verify:macos": "bash scripts/release/verify-macos-package.sh",
     "release:test:macos-lifecycle": "bash scripts/release/test-macos-packaged-lifecycle.sh",
     "release:test:update": "node scripts/release/test-update-bundle.mjs && node --test scripts/release/verify-release-evidence.test.mjs",
-    "release:test:hwi": "node scripts/release/test-hwi-artifact.mjs && node --test scripts/release/verify-packaged-hwi.test.mjs scripts/release/build-mainnet-internal-rc.test.mjs",
+    "release:test:hwi": "node scripts/release/test-hwi-artifact.mjs && node --test scripts/release/verify-packaged-hwi.test.mjs scripts/release/build-mainnet-internal-rc.test.mjs scripts/release/prepare-hwi-runtime.test.mjs",
     "release:verify:packaged-hwi": "node scripts/release/verify-packaged-hwi.mjs",
     "release:test:compare": "bash scripts/release/test-compare-unsigned.sh && bash scripts/release/test-reproducible-rust-env.sh",
     "tauri": "tauri"

@@ -39,6 +39,8 @@ const USER_REVIEW_TIMEOUT: Duration = Duration::from_secs(5 * 60);
 const SIGNING_REVIEW_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 const HWI_DIGEST_HEX_BYTES: usize = 64;
 const HWI_FIXED_ARGV: &[&str] = &["--stdin"];
+#[cfg(target_os = "macos")]
+mod runtime;
 static HWI_COORDINATOR: OnceLock<HardwareCoordinator> = OnceLock::new();
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1190,11 +1192,17 @@ fn run_program_in_operation(
     if let Some(home) = home {
         command.env("HOME", trusted_home(home)?);
     }
+    #[cfg(target_os = "macos")]
+    if let Some(runtime) = runtime::for_operation(source, arguments)? {
+        // Only the compiled, app-sealed runtime may bypass PyInstaller extraction.
+        command.env("_MEIPASS2", runtime);
+    }
     #[cfg(unix)]
     {
         use std::os::unix::process::CommandExt as _;
         command.process_group(0);
     }
+    operation.remaining()?;
     let mut child = command
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -1655,6 +1663,61 @@ mod tests {
                 candidate.device_type == "trezor" && candidate.model == "trezor_1"
             }));
         }
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    #[ignore = "explicit packaged --version benchmark; never opens a device"]
+    fn packaged_coldcard_runtime_startup_probe() {
+        assert!(option_env!("GROOT_HWI_RUNTIME_SHA256").is_some());
+        let app = PathBuf::from(std::env::var("GROOT_TEST_HWI_APP").unwrap());
+        let output = PathBuf::from(std::env::var("GROOT_TEST_HWI_TIMINGS").unwrap());
+        let hwi = HwiCli::for_bundled_resource(
+            HwiChain::Testnet4,
+            &app.join("Contents/Resources"),
+            "hwi",
+        )
+        .unwrap()
+        .with_home(PathBuf::from(std::env::var("HOME").unwrap()))
+        .unwrap();
+        let mut stock_ms = Vec::new();
+        let mut sealed_ms = Vec::new();
+        for _ in 0..20 {
+            for (device_type, timings) in [("ledger", &mut stock_ms), ("coldcard", &mut sealed_ms)]
+            {
+                // argparse exits for --version before get_client. These are
+                // transport selectors only: neither family is opened/probed.
+                let arguments = [
+                    "--chain",
+                    "testnet4",
+                    "--device-type",
+                    device_type,
+                    "--device-path",
+                    "host-version-probe-only",
+                    "--version",
+                ]
+                .map(str::to_owned);
+                let operation = hwi.begin_interactive_operation().unwrap();
+                let started = Instant::now();
+                let bytes = run_program_in_operation(
+                    &hwi.program,
+                    &hwi.source,
+                    &arguments,
+                    &operation,
+                    hwi.home.as_deref(),
+                    None,
+                )
+                .unwrap();
+                assert_eq!(std::str::from_utf8(&bytes).unwrap().trim(), "hwi 3.2.0");
+                timings.push(started.elapsed().as_secs_f64() * 1000.0);
+            }
+        }
+        let report = serde_json::json!({
+            "scope":"packaged --version through Rust signature/digest/runtime checks; no device API calls",
+            "source":env!("GROOT_BUILD_COMMIT"),
+            "stockMs":stock_ms,"sealedMs":sealed_ms
+        });
+        std::fs::write(output, serde_json::to_vec_pretty(&report).unwrap()).unwrap();
     }
 
     #[cfg(unix)]

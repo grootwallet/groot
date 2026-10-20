@@ -3,6 +3,7 @@ fn main() {
     println!("cargo:rerun-if-env-changed=GROOT_BUILD_COMMIT");
     println!("cargo:rerun-if-env-changed=GROOT_BUNDLED_HWI_RESOURCE");
     println!("cargo:rerun-if-env-changed=GROOT_HWI_SHA256");
+    println!("cargo:rerun-if-env-changed=GROOT_HWI_RUNTIME_SHA256");
     println!("cargo:rerun-if-env-changed=GROOT_MACOS_SIGNING_TEAM_ID");
     watch_git_identity();
     println!(
@@ -18,6 +19,11 @@ fn main() {
     println!("cargo:rustc-cfg=groot_network=\"{network}\"");
     let compiled_team_id = std::env::var("GROOT_MACOS_SIGNING_TEAM_ID")
         .unwrap_or_else(|_| "REHEARSAL_ONLY".to_owned());
+    if std::env::var_os("GROOT_HWI_RUNTIME_SHA256").is_some()
+        && (network != "multi" || compiled_team_id != "REHEARSAL_ONLY")
+    {
+        panic!("The extracted HWI runtime is restricted to internal multi-network rehearsals");
+    }
     println!("cargo:rustc-env=GROOT_COMPILED_MACOS_SIGNING_TEAM_ID={compiled_team_id}");
     let commit = build_commit();
     println!("cargo:rustc-env=GROOT_BUILD_COMMIT={commit}");

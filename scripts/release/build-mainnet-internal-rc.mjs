@@ -17,6 +17,7 @@ import {
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { validateCompiledTeamId, verifyPackagedHwi } from './verify-packaged-hwi.mjs';
+import { copyHwiRuntime, prepareHwiRuntime, verifyHwiRuntime } from './prepare-hwi-runtime.mjs';
 
 const repoRoot = resolve(fileURLToPath(new URL('../../', import.meta.url)));
 const tauriRoot = join(repoRoot, 'src-tauri');
@@ -99,6 +100,14 @@ try {
   chmodSync(stagedHwi, 0o755);
   if (digest(stagedHwi) !== manifest.artifact.sha256) fail('staged HWI changed during copy');
 
+  // Internal multi-network RCs only. The native selector additionally limits
+  // this payload to Coldcard Testnet4; production and other signers keep HWI.
+  const runtime =
+    buildTarget === 'multi'
+      ? prepareHwiRuntime(stagedHwi, join(stageDirectory, 'hwi-runtime'), manifest.artifact.sha256)
+      : null;
+  const baseConfig = JSON.parse(readFileSync(join(repoRoot, buildIdentity.config), 'utf8'));
+
   execFileSync(
     'pnpm',
     [
@@ -107,7 +116,7 @@ try {
       'build',
       '--config',
       JSON.stringify({
-        ...JSON.parse(readFileSync(join(repoRoot, buildIdentity.config), 'utf8')),
+        ...baseConfig,
         productName: buildIdentity.productName,
         identifier: buildIdentity.identifier
       }),
@@ -122,11 +131,23 @@ try {
         GROOT_BUILD_NETWORK: buildTarget,
         GROOT_BUNDLED_HWI_RESOURCE: 'hwi',
         GROOT_HWI_SHA256: manifest.artifact.sha256,
+        ...(runtime ? { GROOT_HWI_RUNTIME_SHA256: runtime.sha256 } : {}),
         GROOT_MACOS_SIGNING_TEAM_ID: 'REHEARSAL_ONLY'
       },
       stdio: 'inherit'
     }
   );
+
+  if (runtime) {
+    // Tauri's resource-file copier dereferences symlinks. Preserve the exact
+    // framework layout explicitly, then seal it with the outer app below.
+    copyHwiRuntime(
+      join(stageDirectory, 'hwi-runtime'),
+      join(builtApp, 'Contents', 'Resources', 'hwi-runtime'),
+      runtime.sha256,
+      manifest.artifact.sha256
+    );
+  }
 
   // This private QR rehearsal can request camera access only after a user gesture.
   // Do not inherit HWI entitlements or broaden the production signing workflow.
@@ -157,9 +178,23 @@ try {
     readFileSync(join(builtApp, 'Contents', 'MacOS', 'Groot')),
     'REHEARSAL_ONLY'
   );
+  if (runtime) {
+    verifyHwiRuntime(
+      join(builtApp, 'Contents', 'Resources', 'hwi-runtime'),
+      runtime.sha256,
+      manifest.artifact.sha256
+    );
+  }
 
   mkdirSync(outputRoot, { recursive: true, mode: 0o755 });
-  cpSync(builtApp, outputApp, { recursive: true });
+  cpSync(builtApp, outputApp, { recursive: true, verbatimSymlinks: true });
+  if (runtime) {
+    verifyHwiRuntime(
+      join(outputApp, 'Contents', 'Resources', 'hwi-runtime'),
+      runtime.sha256,
+      manifest.artifact.sha256
+    );
+  }
   execFileSync('codesign', ['--verify', '--deep', '--strict', '--verbose=2', outputApp], {
     stdio: 'pipe'
   });
@@ -175,6 +210,7 @@ try {
     'compiled_signing_requirement=REHEARSAL_ONLY',
     `hwi_version=${result.version}`,
     `hwi_sha256=${result.sha256}`,
+    ...(runtime ? [`coldcard_testnet4_runtime_sha256=${runtime.sha256}`] : []),
     `executable_sha256=${digest(executable)}`,
     ''
   ].join('\n');
