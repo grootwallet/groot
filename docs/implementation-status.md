@@ -41,3 +41,5 @@ Keep one row per capability. Update it when scope or evidence changes; do not ap
 Documentation cleanup has **no BIP, API, schema, dependency or runtime impact**. It corrects stale descriptions without extending support.
 
 RC6 replaces repeated iOS key-access prompts with Groot credential authorization while retaining device-bound v6 files and original legacy Keychain items (ADR 0097). Mobile safe scroll bounds, compact setup copy, phone QR connection labels and completed-camera cleanup have dedicated browser regressions. Physical verification remains candidate-specific.
+
+Internal RC9 Coldcard Testnet4 uses an app-sealed extracted HWI runtime to avoid repeated one-file extraction (ADR 0098). Fresh identification, trusted display and per-command process isolation remain. Other signers/networks keep the existing helper path. Physical Mk4 performance and regression acceptance remain pending; host startup evidence does not certify device operations.

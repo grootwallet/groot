@@ -84,3 +84,5 @@ RC6: no BIP or wire-format impact from mobile layout/copy, completed-camera clea
 Unlocked mobile screens omit the brand header and start below the system safe area. Sync and backup reminders use compact inline actions with 44px touch targets; recovery verification remains available. This presentation change has no BIP or persisted-format impact.
 
 The Coldcard missing-policy address-error correction changes no BIP support, descriptor, key derivation, PSBT or persisted format. Physical Testnet4 discovery and public-account reads are not a completed signing certification.
+
+RC9 Coldcard Testnet4 runtime packaging (ADR 0098) has **no BIP or persisted-format impact**. The HWI 3.2.0 executable and vendor code, derivation paths, descriptors, policy requirements, PSBT encodings and signature validation are unchanged. Device-free startup measurements add no physical interoperability evidence.

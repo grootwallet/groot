@@ -69,3 +69,5 @@ Trezor Model One uses the bounded host PIN flow; Trezor Safe 3 unlocks on-device
 ## Handoff
 
 Review the final diff. Update only documents owning changed behavior/evidence. State compatibility, BIP impact, actual verification, unverified physical/release work and commit identity. Do not append test transcripts or historical totals to current guides.
+
+Internal RC9 Coldcard Testnet4 packaging follows ADR 0098: verify the original HWI digest, complete extracted-runtime manifest and app seal, then compare device-free startup separately from physical identity/display/signing time. Use a disposable profile for physical acceptance; RC8 remains the compatible rollback. Never refresh reviewed-source pins to package this rehearsal.

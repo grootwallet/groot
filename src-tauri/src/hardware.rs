@@ -39,6 +39,8 @@ const USER_REVIEW_TIMEOUT: Duration = Duration::from_secs(5 * 60);
 const SIGNING_REVIEW_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 const HWI_DIGEST_HEX_BYTES: usize = 64;
 const HWI_FIXED_ARGV: &[&str] = &["--stdin"];
+#[cfg(target_os = "macos")]
+mod runtime;
 static HWI_COORDINATOR: OnceLock<HardwareCoordinator> = OnceLock::new();
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1190,11 +1192,17 @@ fn run_program_in_operation(
     if let Some(home) = home {
         command.env("HOME", trusted_home(home)?);
     }
+    #[cfg(target_os = "macos")]
+    if let Some(runtime) = runtime::for_operation(source, arguments)? {
+        // Only the compiled, app-sealed runtime may bypass PyInstaller extraction.
+        command.env("_MEIPASS2", runtime);
+    }
     #[cfg(unix)]
     {
         use std::os::unix::process::CommandExt as _;
         command.process_group(0);
     }
+    operation.remaining()?;
     let mut child = command
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())

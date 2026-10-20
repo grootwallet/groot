@@ -17,6 +17,7 @@ import {
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { validateCompiledTeamId, verifyPackagedHwi } from './verify-packaged-hwi.mjs';
+import { prepareHwiRuntime, verifyHwiRuntime } from './prepare-hwi-runtime.mjs';
 
 const repoRoot = resolve(fileURLToPath(new URL('../../', import.meta.url)));
 const tauriRoot = join(repoRoot, 'src-tauri');
@@ -99,6 +100,14 @@ try {
   chmodSync(stagedHwi, 0o755);
   if (digest(stagedHwi) !== manifest.artifact.sha256) fail('staged HWI changed during copy');
 
+  // Internal multi-network RCs only. The native selector additionally limits
+  // this payload to Coldcard Testnet4; production and other signers keep HWI.
+  const runtime =
+    buildTarget === 'multi'
+      ? prepareHwiRuntime(stagedHwi, join(stageDirectory, 'hwi-runtime'), manifest.artifact.sha256)
+      : null;
+  const baseConfig = JSON.parse(readFileSync(join(repoRoot, buildIdentity.config), 'utf8'));
+
   execFileSync(
     'pnpm',
     [
@@ -107,9 +116,20 @@ try {
       'build',
       '--config',
       JSON.stringify({
-        ...JSON.parse(readFileSync(join(repoRoot, buildIdentity.config), 'utf8')),
+        ...baseConfig,
         productName: buildIdentity.productName,
-        identifier: buildIdentity.identifier
+        identifier: buildIdentity.identifier,
+        ...(runtime
+          ? {
+              bundle: {
+                ...baseConfig.bundle,
+                resources: {
+                  ...baseConfig.bundle.resources,
+                  '.release-stage/hwi-runtime/': 'hwi-runtime/'
+                }
+              }
+            }
+          : {})
       }),
       '--bundles',
       'app'
@@ -122,6 +142,7 @@ try {
         GROOT_BUILD_NETWORK: buildTarget,
         GROOT_BUNDLED_HWI_RESOURCE: 'hwi',
         GROOT_HWI_SHA256: manifest.artifact.sha256,
+        ...(runtime ? { GROOT_HWI_RUNTIME_SHA256: runtime.sha256 } : {}),
         GROOT_MACOS_SIGNING_TEAM_ID: 'REHEARSAL_ONLY'
       },
       stdio: 'inherit'
@@ -157,6 +178,13 @@ try {
     readFileSync(join(builtApp, 'Contents', 'MacOS', 'Groot')),
     'REHEARSAL_ONLY'
   );
+  if (runtime) {
+    verifyHwiRuntime(
+      join(builtApp, 'Contents', 'Resources', 'hwi-runtime'),
+      runtime.sha256,
+      manifest.artifact.sha256
+    );
+  }
 
   mkdirSync(outputRoot, { recursive: true, mode: 0o755 });
   cpSync(builtApp, outputApp, { recursive: true });
@@ -175,6 +203,7 @@ try {
     'compiled_signing_requirement=REHEARSAL_ONLY',
     `hwi_version=${result.version}`,
     `hwi_sha256=${result.sha256}`,
+    ...(runtime ? [`coldcard_testnet4_runtime_sha256=${runtime.sha256}`] : []),
     `executable_sha256=${digest(executable)}`,
     ''
   ].join('\n');
