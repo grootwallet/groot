@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { inflateSync } from 'node:zlib';
 import {
+  cpSync,
   chmodSync,
   existsSync,
   lstatSync,
@@ -199,4 +200,16 @@ export function verifyHwiRuntime(root, expectedDigest, sourceDigest) {
   )
     fail();
   return { fileCount: inventory.files.length, linkCount: inventory.links.length };
+}
+
+export function copyHwiRuntime(source, output, expectedDigest, sourceDigest) {
+  verifyHwiRuntime(source, expectedDigest, sourceDigest);
+  if (existsSync(output)) fail();
+  cpSync(source, output, {
+    recursive: true,
+    verbatimSymlinks: true,
+    force: false,
+    errorOnExist: true
+  });
+  return verifyHwiRuntime(output, expectedDigest, sourceDigest);
 }

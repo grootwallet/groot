@@ -17,7 +17,7 @@ import {
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { validateCompiledTeamId, verifyPackagedHwi } from './verify-packaged-hwi.mjs';
-import { prepareHwiRuntime, verifyHwiRuntime } from './prepare-hwi-runtime.mjs';
+import { copyHwiRuntime, prepareHwiRuntime, verifyHwiRuntime } from './prepare-hwi-runtime.mjs';
 
 const repoRoot = resolve(fileURLToPath(new URL('../../', import.meta.url)));
 const tauriRoot = join(repoRoot, 'src-tauri');
@@ -118,18 +118,7 @@ try {
       JSON.stringify({
         ...baseConfig,
         productName: buildIdentity.productName,
-        identifier: buildIdentity.identifier,
-        ...(runtime
-          ? {
-              bundle: {
-                ...baseConfig.bundle,
-                resources: {
-                  ...baseConfig.bundle.resources,
-                  '.release-stage/hwi-runtime/': 'hwi-runtime/'
-                }
-              }
-            }
-          : {})
+        identifier: buildIdentity.identifier
       }),
       '--bundles',
       'app'
@@ -148,6 +137,17 @@ try {
       stdio: 'inherit'
     }
   );
+
+  if (runtime) {
+    // Tauri's resource-file copier dereferences symlinks. Preserve the exact
+    // framework layout explicitly, then seal it with the outer app below.
+    copyHwiRuntime(
+      join(stageDirectory, 'hwi-runtime'),
+      join(builtApp, 'Contents', 'Resources', 'hwi-runtime'),
+      runtime.sha256,
+      manifest.artifact.sha256
+    );
+  }
 
   // This private QR rehearsal can request camera access only after a user gesture.
   // Do not inherit HWI entitlements or broaden the production signing workflow.
@@ -187,7 +187,14 @@ try {
   }
 
   mkdirSync(outputRoot, { recursive: true, mode: 0o755 });
-  cpSync(builtApp, outputApp, { recursive: true });
+  cpSync(builtApp, outputApp, { recursive: true, verbatimSymlinks: true });
+  if (runtime) {
+    verifyHwiRuntime(
+      join(outputApp, 'Contents', 'Resources', 'hwi-runtime'),
+      runtime.sha256,
+      manifest.artifact.sha256
+    );
+  }
   execFileSync('codesign', ['--verify', '--deep', '--strict', '--verbose=2', outputApp], {
     stdio: 'pipe'
   });
