@@ -17,3 +17,5 @@ Refs #17. ADR 0100 combines the retained continuity and mobile work in an intern
 | Direct USB or phone Miniscript enrollment                      | Explicit unsupported boundary; no certification claim.                                     |
 
 Physical hardware, trusted-display review, offline PSBT interchange and independent review remain required. Long fixed delays are automated on isolated Regtest; do not claim they can be waited out during a short Testnet4 session. The [RC10 record](testing/5.3.0-rc10-unified.md) owns exact-candidate results and the physical sequence.
+
+Late-stage regression: leave the 13,140-block both-partner proposal pending until the 39,420-block path also matures. Two partner signatures must finalize the original encoded sequence and pass Core script validation. One signature cannot satisfy the earlier proposal. A mismatched witness script must be rejected.

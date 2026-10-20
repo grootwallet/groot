@@ -20,3 +20,9 @@ No wallet, registry, backup, credential, draft, notification or proposal schema 
 Use existing UI components and WalletPort; no new dependency. No hardware-state cache. Mainnet Continuity creation, direct USB Miniscript and phone enrollment into these templates remain blocked. Mobile key signing retains the existing internal Testnet4/standard-multisig boundary. The pre-extracted Coldcard HWI runtime retains ADR 0098's complete verification and rehearsal-only activation.
 
 Unit, browser and isolated real-Core evidence must cover every role/path, before/at/after maturity, reorg/reconfirmation, persisted partial signatures, wrong-role quorum, clean descriptor recovery and renewal. They do not certify a physical model or firmware. Public GA still requires independent review, reviewed-source authorization and exact-candidate physical acceptance. See the RC10 record for actual results and remaining steps.
+
+## Transaction-bound finalization correction
+
+The funded late-stage test exposed BDK 3.1.0's combined satisfier accepting a later CSV branch from chain age even when the transaction encodes an earlier sequence. Fixed continuity policies therefore finalize through the existing pinned Miniscript PSBT satisfier, which checks actual transaction version, sequence and locktime. Canonical previous transactions and witness-script hashes are bound first; the resulting witness also passes the Miniscript interpreter. Fresh native maturity, frozen-input, role-quorum, fee, ownership and reviewed-PSBT checks remain required. Standard and legacy single-stage policies retain their existing finalizer. Descriptors, addresses and persisted formats are unchanged.
+
+Immutable public policy analysis is owned by the current signing operation and reused for DTO/path validation. Device state and chain availability are still read fresh; no global policy or hardware-state cache is introduced.

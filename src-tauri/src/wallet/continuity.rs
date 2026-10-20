@@ -239,7 +239,27 @@ pub(super) fn validate_named_path_current(
     index: usize,
 ) -> ApiResult<()> {
     let analysis = verified_analysis(metadata)?;
-    if index == 0 || selected_delayed_index(&analysis, psbt)? != index {
+    validate_named_path_with_analysis(wallet, db, metadata, &analysis, psbt, index)
+}
+
+pub(super) fn validate_named_path_with_analysis(
+    wallet: &Wallet,
+    db: &Connection,
+    metadata: &MultisigWalletDto,
+    analysis: &PolicyAnalysis,
+    psbt: &Psbt,
+    index: usize,
+) -> ApiResult<()> {
+    if analysis.external_descriptor != metadata.external_descriptor
+        || analysis.internal_descriptor != metadata.internal_descriptor
+        || analysis.paths != metadata.spending_paths
+    {
+        return Err(api_error(
+            "wallet_corrupt",
+            "The spending paths do not match the wallet descriptors.",
+        ));
+    }
+    if index == 0 || selected_delayed_index(analysis, psbt)? != index {
         return Err(api_error(
             "proposal_mismatch",
             "The transaction does not match the selected spending path.",
@@ -260,7 +280,7 @@ pub(super) fn validate_named_path_current(
             })?;
         let detail = path_details(
             metadata,
-            &analysis,
+            analysis,
             index,
             (coin.confirmations > 0).then_some(coin.confirmations),
             snapshot.chain_tip.status == "recent",
@@ -276,7 +296,7 @@ pub(super) fn validate_named_path_current(
         }
         ages.push(coin.confirmations);
     }
-    crate::recovery::select_spending_path(&analysis, Some(index), &ages)
+    crate::recovery::select_spending_path(analysis, Some(index), &ages)
         .map_err(recovery_api_error)?;
     Ok(())
 }
@@ -333,4 +353,64 @@ pub(super) fn build_named_policy_sweep(
         builder.policy_path(path, keychain);
     }
     builder.finish().map_err(create_tx_api_error)
+}
+
+/// Fixed policies must satisfy the transaction's actual CSV/CLTV fields. BDK's
+/// chain-age satisfier can otherwise select a cheaper, later branch despite a
+/// smaller sequence in a previously prepared proposal.
+pub(super) fn finalize_multisig_policy_psbt(
+    wallet: &Wallet,
+    metadata: &MultisigWalletDto,
+    psbt: &mut Psbt,
+) -> ApiResult<bool> {
+    use bdk_wallet::miniscript::psbt::PsbtExt;
+    if !matches!(
+        metadata.recovery_template,
+        Some(
+            RecoveryTemplate::PartnerContinuityV1 { .. }
+                | RecoveryTemplate::FamilyContinuityV1 { .. }
+        )
+    ) {
+        return wallet
+            .finalize_psbt(psbt, SignOptions::default())
+            .map_err(internal);
+    }
+    let mut candidate = psbt.clone();
+    bind_psbt_inputs_to_wallet(wallet, &mut candidate)?;
+    for (index, input) in candidate.inputs.iter().enumerate() {
+        let script = input
+            .witness_script
+            .clone()
+            .or_else(|| {
+                input
+                    .final_script_witness
+                    .as_ref()
+                    .and_then(|witness| witness.last())
+                    .map(|bytes| bdk_wallet::bitcoin::ScriptBuf::from_bytes(bytes.to_vec()))
+            })
+            .ok_or_else(|| {
+                api_error(
+                    "proposal_mismatch",
+                    "The proposal is missing its wallet witness script.",
+                )
+            })?;
+        let output = candidate.get_utxo_for(index).ok_or_else(|| {
+            api_error(
+                "proposal_mismatch",
+                "The proposal is missing a canonical wallet input.",
+            )
+        })?;
+        if !output.script_pubkey.is_p2wsh() || script.to_p2wsh() != output.script_pubkey {
+            return Err(api_error(
+                "proposal_mismatch",
+                "The witness script does not match the canonical wallet input.",
+            ));
+        }
+    }
+    let secp = Secp256k1::verification_only();
+    if candidate.finalize_mut(&secp).is_err() || candidate.extract(&secp).is_err() {
+        return Ok(false);
+    }
+    *psbt = candidate;
+    Ok(true)
 }

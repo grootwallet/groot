@@ -1277,6 +1277,24 @@ fn continuity_metadata(keys: &[TestKey], family: bool) -> MultisigWalletDto {
     metadata
 }
 
+fn continuity_signing_wallet(metadata: &MultisigWalletDto, key: &TestKey) -> Wallet {
+    // Replacing the public account changes the test descriptor checksum.
+    // Drop only that obsolete fixture checksum; public backup checks remain intact.
+    let private_descriptor = |descriptor: &str| {
+        descriptor.split('#').next().unwrap().replace(
+            &key.account_public.to_string(),
+            &key.account_private.to_string(),
+        )
+    };
+    Wallet::create(
+        private_descriptor(&metadata.external_descriptor),
+        private_descriptor(&metadata.internal_descriptor),
+    )
+    .network(Network::Regtest)
+    .create_wallet_no_persist()
+    .unwrap()
+}
+
 // Exact fixed-delay policies are exercised against real Core using sparse,
 // Core-observed checkpoints. This avoids 52,560 per-block SQLite commits.
 #[test]
@@ -1329,6 +1347,23 @@ fn funded_continuity_all_named_paths_renew_reorg_and_restore() {
     for family in [false, true] {
         let keys = test_keys_with_count(if family { 7 } else { 8 });
         let metadata = continuity_metadata(&keys, family);
+        let public_wallet = Wallet::create(
+            metadata.external_descriptor.clone(),
+            metadata.internal_descriptor.clone(),
+        )
+        .network(Network::Regtest)
+        .create_wallet_no_persist()
+        .unwrap();
+        // Validate every synthetic signer before the long fixed-delay mining run.
+        for key in &keys {
+            let signing_wallet = continuity_signing_wallet(&metadata, key);
+            for keychain in [KeychainKind::External, KeychainKind::Internal] {
+                assert_eq!(
+                    signing_wallet.peek_address(keychain, 0).address,
+                    public_wallet.peek_address(keychain, 0).address
+                );
+            }
+        }
         for case_index in 0..=metadata.spending_paths.len() {
             let renewal = case_index == metadata.spending_paths.len();
             let index = if renewal { 0 } else { case_index };
@@ -1616,18 +1651,7 @@ fn funded_continuity_all_named_paths_renew_reorg_and_restore() {
             case.db.execute("INSERT INTO groot_proposal_spend_paths(proposal_id,spend_path) VALUES(?1,'delayed')", [&proposal_id]).unwrap();
         }
         for (position, signer) in signers.into_iter().enumerate() {
-            let external = case.metadata.external_descriptor.replace(
-                &case.keys[signer].account_public.to_string(),
-                &case.keys[signer].account_private.to_string(),
-            );
-            let internal = case.metadata.internal_descriptor.replace(
-                &case.keys[signer].account_public.to_string(),
-                &case.keys[signer].account_private.to_string(),
-            );
-            let signing_wallet = Wallet::create(external, internal)
-                .network(Network::Regtest)
-                .create_wallet_no_persist()
-                .unwrap();
+            let signing_wallet = continuity_signing_wallet(&case.metadata, &case.keys[signer]);
             let mut returned = psbt.clone();
             signing_wallet
                 .sign(
@@ -1683,11 +1707,13 @@ fn funded_continuity_all_named_paths_renew_reorg_and_restore() {
             validate_named_path_current(&case.wallet, &case.db, &case.metadata, &psbt, case.index)
                 .unwrap();
         }
-        assert!(case
-            .wallet
-            .finalize_psbt(&mut psbt, SignOptions::default())
-            .unwrap());
-        let transaction = psbt.extract_tx().unwrap();
+        let transaction = finalized_multisig_proposal_transaction(
+            &mut case.db,
+            &case.metadata,
+            &proposal_id,
+            &encode_psbt(&psbt),
+        )
+        .unwrap();
         rpc.send_raw_transaction(&transaction).unwrap();
         let block = rpc.generate_to_address(1, &mining).unwrap()[0];
         assert!(rpc
@@ -1821,4 +1847,102 @@ fn funded_continuity_descriptors_restore_history_in_core() {
             .call("unloadwallet", &[serde_json::json!(name)])
             .unwrap();
     }
+}
+
+#[test]
+fn fixed_policy_finalization_honors_sequence_when_later_partner_path_is_mature() {
+    use bdk_wallet::chain::TxUpdate;
+    use bdk_wallet::miniscript::psbt::PsbtExt;
+    let keys = test_keys_with_count(8);
+    let metadata = continuity_metadata(&keys, false);
+    let mut wallet = Wallet::create(
+        metadata.external_descriptor.clone(),
+        metadata.internal_descriptor.clone(),
+    )
+    .network(Network::Regtest)
+    .create_wallet_no_persist()
+    .unwrap();
+    let receive = wallet.reveal_next_address(KeychainKind::External).address;
+    let funding = Transaction {
+        version: bdk_wallet::bitcoin::transaction::Version::TWO,
+        lock_time: bdk_wallet::bitcoin::absolute::LockTime::ZERO,
+        input: vec![bdk_wallet::bitcoin::TxIn::default()],
+        output: vec![bdk_wallet::bitcoin::TxOut {
+            value: bdk_wallet::bitcoin::Amount::from_sat(100_000),
+            script_pubkey: receive.script_pubkey(),
+        }],
+    };
+    let outpoint = OutPoint::new(funding.compute_txid(), 0);
+    let anchor = BlockId {
+        height: 1,
+        hash: BlockHash::from_byte_array([1; 32]),
+    };
+    let chain = wallet
+        .latest_checkpoint()
+        .push(anchor)
+        .unwrap()
+        .push(BlockId {
+            height: 60_000,
+            hash: BlockHash::from_byte_array([2; 32]),
+        })
+        .unwrap();
+    let mut tx_update = TxUpdate::default();
+    tx_update.txs.push(Arc::new(funding));
+    tx_update.anchors.insert((
+        ConfirmationBlockTime {
+            block_id: anchor,
+            confirmation_time: 1,
+        },
+        outpoint.txid,
+    ));
+    wallet
+        .apply_update(Update {
+            chain: Some(chain),
+            tx_update,
+            ..Default::default()
+        })
+        .unwrap();
+    let destination = wallet.next_unused_address(KeychainKind::Internal).address;
+    let mut psbt = build_named_policy_sweep(
+        &mut wallet,
+        &metadata,
+        1,
+        outpoint,
+        &destination,
+        FeeRate::from_sat_per_vb(2).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        psbt.unsigned_tx.input[0].sequence.to_consensus_u32(),
+        13_140
+    );
+    for (position, signer) in [3, 4].into_iter().enumerate() {
+        continuity_signing_wallet(&metadata, &keys[signer])
+            .sign(
+                &mut psbt,
+                SignOptions {
+                    trust_witness_utxo: true,
+                    try_finalize: false,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        if position == 0 {
+            assert!(!finalize_multisig_policy_psbt(&wallet, &metadata, &mut psbt.clone()).unwrap());
+        }
+    }
+    let mut tampered = psbt.clone();
+    tampered.inputs[0].witness_script = Some(bdk_wallet::bitcoin::ScriptBuf::new());
+    assert_eq!(
+        finalize_multisig_policy_psbt(&wallet, &metadata, &mut tampered)
+            .unwrap_err()
+            .code,
+        "proposal_mismatch"
+    );
+    assert!(finalize_multisig_policy_psbt(&wallet, &metadata, &mut psbt).unwrap());
+    assert!(psbt.extract(&Secp256k1::verification_only()).is_ok());
+    assert_eq!(
+        psbt.unsigned_tx.input[0].sequence.to_consensus_u32(),
+        13_140
+    );
 }

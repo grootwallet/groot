@@ -750,7 +750,11 @@ pub(crate) fn import_multisig_proposal_in_db(
     let signing = proposal_signing_context(db, metadata, proposal_id)?;
     if let Some(index) = signing.path_index.filter(|index| *index > 0) {
         let wallet = load_wallet(db)?;
-        validate_named_path_current(&wallet, db, metadata, &original, index)?;
+        let analysis = signing
+            .policy_analysis
+            .as_ref()
+            .ok_or_else(|| internal("Missing verified policy analysis"))?;
+        validate_named_path_with_analysis(&wallet, db, metadata, analysis, &original, index)?;
     }
     let mut progress = merge_signed_psbt(
         &mut original,
@@ -767,10 +771,7 @@ pub(crate) fn import_multisig_proposal_in_db(
         let wallet = load_wallet(db)?;
         let mut validation = original.clone();
         bind_psbt_inputs_to_wallet(&wallet, &mut validation)?;
-        if !wallet
-            .finalize_psbt(&mut validation, SignOptions::default())
-            .map_err(internal)?
-        {
+        if !finalize_multisig_policy_psbt(&wallet, metadata, &mut validation)? {
             return Err(api_error(
                 "finalization_failed",
                 "The collected signatures do not validly satisfy this wallet policy.",
@@ -812,7 +813,11 @@ pub(crate) fn finalized_multisig_proposal_transaction(
     let wallet = load_wallet(db)?;
     let signing = proposal_signing_context(db, metadata, proposal_id)?;
     if let Some(index) = signing.path_index.filter(|index| *index > 0) {
-        validate_named_path_current(&wallet, db, metadata, &psbt, index)?;
+        let analysis = signing
+            .policy_analysis
+            .as_ref()
+            .ok_or_else(|| internal("Missing verified policy analysis"))?;
+        validate_named_path_with_analysis(&wallet, db, metadata, analysis, &psbt, index)?;
     }
     if !proposal.can_finalize {
         return Err(api_error(
@@ -843,10 +848,7 @@ pub(crate) fn finalized_multisig_proposal_transaction(
         acceleration,
     )?;
     validate_psbt_excludes_frozen(&psbt, &frozen_outpoints(db)?)?;
-    if !wallet
-        .finalize_psbt(&mut psbt, SignOptions::default())
-        .map_err(internal)?
-    {
+    if !finalize_multisig_policy_psbt(&wallet, metadata, &mut psbt)? {
         return Err(api_error(
             "finalization_failed",
             "The signed transaction does not satisfy the wallet policy.",

@@ -5469,6 +5469,8 @@ struct ProposalSigningContext {
     fingerprint_strings: Vec<String>,
     required: usize,
     path_index: Option<usize>,
+    // Public, immutable analysis owned only by this operation; no device state.
+    policy_analysis: Option<PolicyAnalysis>,
 }
 
 fn signer_fingerprints_for_ids(
@@ -5533,6 +5535,7 @@ fn proposal_signing_context(
             fingerprints,
             required: metadata.threshold,
             path_index: None,
+            policy_analysis: None,
         });
     };
 
@@ -5545,16 +5548,7 @@ fn proposal_signing_context(
             "This advanced policy is not available in the transaction coordinator.",
         ));
     }
-    let analysis = analyze_template(template, &metadata.cosigners).map_err(recovery_api_error)?;
-    if analysis.external_descriptor != metadata.external_descriptor
-        || analysis.internal_descriptor != metadata.internal_descriptor
-        || analysis.paths != metadata.spending_paths
-    {
-        return Err(api_error(
-            "wallet_corrupt",
-            "The spending paths do not match the wallet descriptors.",
-        ));
-    }
+    let analysis = verified_analysis(metadata)?;
     let path_index = if spend_path == ProposalSpendPath::Delayed && analysis.paths.len() == 2 {
         1
     } else if spend_path == ProposalSpendPath::Delayed {
@@ -5589,6 +5583,7 @@ fn proposal_signing_context(
         fingerprint_strings,
         required,
         path_index: Some(path_index),
+        policy_analysis: Some(analysis),
     })
 }
 
@@ -5702,7 +5697,10 @@ fn proposal_dto(
     let mut progress = signature_progress(&psbt, &signing.fingerprints, signing.required)
         .map_err(proposal_api_error)?;
     let spending_path_details = if let Some(index) = signing.path_index {
-        let analysis = verified_analysis(metadata)?;
+        let analysis = signing
+            .policy_analysis
+            .as_ref()
+            .ok_or_else(|| internal("Missing verified policy analysis"))?;
         let snapshot = snapshot_from(wallet, db, None, true, None)?;
         let selected_coins: Vec<_> = snapshot
             .utxos
@@ -5721,7 +5719,7 @@ fn proposal_dto(
             .filter(|age| *age > 0);
         let detail = path_details(
             metadata,
-            &analysis,
+            analysis,
             index,
             age,
             snapshot.chain_tip.status == "recent",
@@ -5731,7 +5729,8 @@ fn proposal_dto(
             path_signature_quorum(metadata, index, &progress.signed_fingerprints);
         if index > 0 {
             progress.can_finalize &=
-                validate_named_path_current(wallet, db, metadata, &psbt, index).is_ok();
+                validate_named_path_with_analysis(wallet, db, metadata, analysis, &psbt, index)
+                    .is_ok();
         }
         Some(detail)
     } else {
