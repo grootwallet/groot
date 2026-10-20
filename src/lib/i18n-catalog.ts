@@ -4,7 +4,7 @@ import { settingsCopy } from './locales/settings';
 import { onboardingCopy } from './locales/onboarding';
 import { componentCopy } from './locales/components';
 import { walletCopy } from './locales/wallet';
-import { sendCopy } from './locales/send';
+import { sendCopy, spendPolicyCopy } from './locales/send';
 import { hardwareCopy } from './locales/hardware';
 import { multisigCopy } from './locales/multisig';
 import { accessibilityCopy } from './locales/accessibility';
@@ -1095,6 +1095,15 @@ export function localizedError(
     return cause instanceof Error ? cause.message : fallback;
   }
   if (cause && typeof cause === 'object' && 'code' in cause) {
+    // Translate only allowlisted native spend-policy messages; unknown text
+    // continues through the stable category fallback.
+    if (
+      cause.code === 'invalid_amount' &&
+      cause instanceof Error &&
+      Object.hasOwn(spendPolicyCopy, cause.message)
+    ) {
+      return translate(current, cause.message);
+    }
     const category = errorCategoryCopy[String(cause.code) as keyof typeof errorCategoryCopy];
     if (category) return category[current];
   }

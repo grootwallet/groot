@@ -107,3 +107,5 @@ Watch-only QR import retains an explicit Back to wallet action when mobile brand
 Coldcard receive and policy-address checks report a missing device policy with instructions to save and import the existing policy file. They do not record address verification on this error. Other device, cancellation and transport errors retain their existing classification.
 
 Recipient fields disable OS capitalization, autocorrection and spellcheck so the system does not alter Bitcoin address text. Native network and checksum validation remains authoritative.
+
+Spend policy failures explain the specific reason inline and in the existing toast, including the 100,000-sat Mainnet fee limit and how to retry. Mainnet payment amounts have no rollout ceiling; standard PSBT review and authorization remain required (ADR 0099).

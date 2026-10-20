@@ -1,5 +1,51 @@
 import type { CatalogSection } from './types';
 
+// Exact native policy messages take precedence over the broad invalid_amount category.
+export const spendPolicyCopy = {
+  'Mainnet payments are unavailable in this build. Use a mainnet-enabled Groot release.': {
+    fr: 'Les paiements Mainnet sont indisponibles dans cette version. Utilisez une version de Groot compatible avec Mainnet.',
+    es: 'Los pagos Mainnet no están disponibles en esta versión. Usa una versión de Groot compatible con Mainnet.'
+  },
+  'Connect and verify a Bitcoin Core node before making a mainnet payment.': {
+    fr: 'Connectez et vérifiez un nœud Bitcoin Core avant de payer sur Mainnet.',
+    es: 'Conecta y verifica un nodo Bitcoin Core antes de realizar un pago en Mainnet.'
+  },
+  'The connected node is on another Bitcoin network. Check the connection in Settings.': {
+    fr: 'Le nœud connecté utilise un autre réseau Bitcoin. Vérifiez la connexion dans les Réglages.',
+    es: 'El nodo conectado usa otra red Bitcoin. Comprueba la conexión en Ajustes.'
+  },
+  'This node connection cannot be used for mainnet payments. Choose a supported Bitcoin Core connection in Settings.':
+    {
+      fr: 'Cette connexion ne permet pas les paiements Mainnet. Choisissez une connexion Bitcoin Core compatible dans les Réglages.',
+      es: 'Esta conexión no permite pagos Mainnet. Elige una conexión Bitcoin Core compatible en Ajustes.'
+    },
+  'Amount must be greater than zero.': {
+    fr: 'Le montant doit être supérieur à zéro.',
+    es: 'El importe debe ser mayor que cero.'
+  },
+  "The payment amount plus fee exceeds Bitcoin's maximum supply.": {
+    fr: 'Le montant du paiement et les frais dépassent la quantité maximale de bitcoin.',
+    es: 'El importe del pago más la comisión supera la cantidad máxima de bitcoin.'
+  },
+  'A fee acceleration child must pay only an address owned by this wallet.': {
+    fr: 'Une transaction enfant d’accélération doit payer uniquement une adresse de ce portefeuille.',
+    es: 'Una transacción hija de aceleración solo puede pagar a una dirección de esta cartera.'
+  },
+  "The network fee exceeds Groot's mainnet limit of 100,000 sats. Lower the fee rate and try again.":
+    {
+      fr: 'Les frais de réseau dépassent la limite Mainnet de Groot de 100 000 sats. Réduisez le taux de frais et réessayez.',
+      es: 'La comisión de red supera el límite Mainnet de Groot de 100 000 sats. Reduce la tarifa y reintenta.'
+    },
+  'Mainnet payments support one recipient at a time.': {
+    fr: 'Les paiements Mainnet acceptent un seul destinataire à la fois.',
+    es: 'Los pagos Mainnet admiten un solo destinatario a la vez.'
+  },
+  'This wallet policy is not supported for mainnet payments.': {
+    fr: 'Cette politique de portefeuille ne permet pas les paiements Mainnet.',
+    es: 'Esta política de cartera no permite pagos Mainnet.'
+  }
+} as const satisfies CatalogSection;
+
 export const sendCopy = {
   'Local recording pending': {
     fr: 'Enregistrement local en attente',
@@ -10,6 +56,8 @@ export const sendCopy = {
       fr: 'La transaction a été acceptée, mais son enregistrement local a échoué. Synchronisez ce portefeuille avant un autre paiement. Ne la renvoyez pas.',
       es: 'La transacción se aceptó, pero no se pudo guardar su registro local. Sincroniza este monedero antes de otro pago. No la vuelvas a enviar.'
     },
+
+  ...spendPolicyCopy,
   Intent: { fr: 'Intention', es: 'Intención' },
   'Amount & fee': { fr: 'Montant et frais', es: 'Importe y comisión' },
   'Review & sign': { fr: 'Vérifier et signer', es: 'Revisar y firmar' },

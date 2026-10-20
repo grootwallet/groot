@@ -48,7 +48,7 @@ Every asynchronous result/event binds the immutable wallet identity and current 
 
 After Core acceptance, a failed local commit returns `persistencePending` with the accepted txid and no snapshot. Native sync repairs existing active proposals only by their exact unsigned SegWit transaction ID in the canonical wallet graph, atomically with labels, replacement lineage and notifications (ADR 0090). No new persistent receipt format is introduced.
 
-Mainnet caps and coin/recovery rules are native policy. The UI cannot invent change, balances, maturity, signer readiness or fees. Exact error/event contracts remain stable across code movement.
+Mainnet fee protection, Bitcoin supply bounds, the single-recipient rule and coin/recovery rules are native policy. ADR 0099 removes the rollout payment/debit ceiling at preparation and shared final-PSBT authorization; exact native spend errors remain specific through EN/FR/ES localization. The UI cannot invent change, balances, maturity, signer readiness or fees. Exact error/event contracts remain stable across code movement.
 
 ## Network boundary
 

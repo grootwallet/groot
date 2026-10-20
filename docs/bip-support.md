@@ -90,3 +90,5 @@ Unlocked mobile screens omit the brand header and start below the system safe ar
 The Coldcard missing-policy address-error correction changes no BIP support, descriptor, key derivation, PSBT or persisted format. Physical Testnet4 discovery and public-account reads are not a completed signing certification.
 
 RC9 Coldcard Testnet4 runtime packaging (ADR 0098) has **no BIP or persisted-format impact**. The HWI 3.2.0 executable and vendor code, derivation paths, descriptors, policy requirements, PSBT encodings and signature validation are unchanged. Device-free startup measurements add no physical interoperability evidence.
+
+ADR 0099 removes an application-level mainnet rollout amount ceiling and clarifies policy errors. **No BIP or persisted-format impact**: transaction/PSBT encodings, descriptors, derivation, signing, recovery and interoperability are unchanged. Bitcoin supply bounds and final-PSBT fee protection remain enforced.

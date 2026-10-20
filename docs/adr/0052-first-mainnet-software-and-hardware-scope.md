@@ -4,6 +4,9 @@
 - Date: 2026-09-02
 - Extends: ADR 0012, ADR 0026, ADR 0037
 
+Amount-ceiling provision superseded by [ADR 0099](0099-remove-mainnet-rollout-amount-ceiling.md).
+The original decision and release evidence below are retained as history.
+
 ## Context
 
 ADR 0012 described the first mainnet build as hardware-focused but did not say

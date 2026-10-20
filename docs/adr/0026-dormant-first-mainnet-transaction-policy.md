@@ -2,6 +2,9 @@
 
 Status: Accepted as a disabled safety constraint
 
+Amount-ceiling provision superseded by [ADR 0099](0099-remove-mainnet-rollout-amount-ceiling.md).
+The original decision and release evidence below are retained as history.
+
 ## Context
 
 ADR 0012 blocks mainnet. A later enabling change must not introduce network, backend, and spend constraints for the first time in the same release candidate. Those constraints can be implemented and tested now while remaining unreachable.

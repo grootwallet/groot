@@ -99,7 +99,7 @@ fn tx_prepare_blocking(
     );
     let result = (|| {
         crate::release_policy::validate_spend(network(), 1, amount)
-            .map_err(|_| api_error("invalid_amount", "This spend is blocked by release policy."))?;
+            .map_err(release_spend_api_error)?;
         let labels = normalize_labels(labels)?;
         let label = labels[0].clone();
         if amount == 0 {
