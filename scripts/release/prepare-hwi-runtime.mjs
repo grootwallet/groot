@@ -16,6 +16,7 @@ import {
   writeFileSync
 } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const MAGIC = Buffer.from('4d45490c0b0a0b0e', 'hex');
 const MAX_BYTES = 64 * 1024 * 1024;
@@ -33,7 +34,7 @@ const safePath = (name) =>
   name.split('/').every((part) => part && part !== '.' && part !== '..');
 
 // Reads data only. Never imports or executes any Python from the archive.
-export function readHwiRuntimeArchive(bytes, expectedDigest) {
+export function readHwiRuntimeArchive(bytes, expectedDigest, session = false) {
   if (
     bytes.length > MAX_BYTES ||
     !/^[a-f0-9]{64}$/.test(expectedDigest) ||
@@ -88,7 +89,12 @@ export function readHwiRuntimeArchive(bytes, expectedDigest) {
     }
     if (!safePath(name) || names.has(name)) fail();
     names.add(name);
-    if (!'bxn'.includes(kind)) continue;
+    const bootstrap =
+      session &&
+      ((kind === 'm' &&
+        ['struct', 'pyimod01_archive', 'pyimod02_importers', 'pyimod03_ctypes'].includes(name)) ||
+        (kind === 'z' && name === 'PYZ-00.pyz'));
+    if (!'bxn'.includes(kind) && !bootstrap) continue;
     const compressed = bytes.subarray(start + position, start + position + compressedLength);
     const data = compression ? inflateSync(compressed, { maxOutputLength: MAX_BYTES }) : compressed;
     expanded += data.length;
@@ -141,7 +147,7 @@ export function runtimeInventory(root) {
   };
 }
 
-export function prepareHwiRuntime(source, output, expectedDigest) {
+export function prepareHwiRuntime(source, output, expectedDigest, session = false) {
   if (
     process.platform !== 'darwin' ||
     process.arch !== 'arm64' ||
@@ -150,7 +156,7 @@ export function prepareHwiRuntime(source, output, expectedDigest) {
     lstatSync(source).isSymbolicLink()
   )
     fail();
-  const entries = readHwiRuntimeArchive(readFileSync(source), expectedDigest);
+  const entries = readHwiRuntimeArchive(readFileSync(source), expectedDigest, session);
   mkdirSync(output, { recursive: true, mode: 0o755 });
   for (const entry of entries.filter((entry) => entry.kind !== 'n')) {
     const path = join(output, entry.name);
@@ -175,6 +181,49 @@ export function prepareHwiRuntime(source, output, expectedDigest) {
   execFileSync('/usr/bin/codesign', ['--verify', '--strict', join(output, 'Python.framework')], {
     stdio: 'pipe'
   });
+  if (session) {
+    for (const name of [
+      'struct',
+      'pyimod01_archive',
+      'pyimod02_importers',
+      'pyimod03_ctypes',
+      'PYZ-00.pyz'
+    ]) {
+      if (!entries.some((entry) => entry.name === name)) fail();
+    }
+    const helperSource = fileURLToPath(new URL('../hardware/', import.meta.url));
+    for (const [sourceName, targetName] of [
+      ['session-bootstrap.py', 'groot-session.py'],
+      ['session-worker.py', 'groot-session-worker.py']
+    ]) {
+      writeFileSync(join(output, targetName), readFileSync(join(helperSource, sourceName)), {
+        flag: 'wx',
+        mode: 0o644
+      });
+    }
+    execFileSync(
+      '/usr/bin/clang',
+      [
+        '-O2',
+        '-Wall',
+        '-Wextra',
+        '-Werror',
+        '-o',
+        join(output, 'groot-hwi-session'),
+        join(helperSource, 'session-launcher.c')
+      ],
+      { stdio: 'pipe' }
+    );
+    chmodSync(join(output, 'groot-hwi-session'), 0o755);
+    execFileSync(
+      '/usr/bin/codesign',
+      ['--force', '--sign', '-', '--timestamp=none', join(output, 'groot-hwi-session')],
+      { stdio: 'pipe' }
+    );
+    execFileSync('/usr/bin/codesign', ['--verify', '--strict', join(output, 'groot-hwi-session')], {
+      stdio: 'pipe'
+    });
+  }
   const manifest = { schemaVersion: 1, sourceSha256: expectedDigest, ...runtimeInventory(output) };
   const bytes = Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`);
   writeFileSync(join(output, 'runtime-manifest.json'), bytes, { flag: 'wx', mode: 0o644 });

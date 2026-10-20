@@ -1029,12 +1029,32 @@ pub async fn hardware_sign_multisig(
         hardware_commands::saved_cosigner_candidates_for_device(&eligible_cosigners, &device)?;
     let (signed, signing_identity) = tauri::async_runtime::spawn_blocking(move || {
         let operation = hwi.begin_signing_operation().map_err(hardware_api_error)?;
-        let identity = hardware_commands::prove_live_cosigner_identity_for_candidates(
+        let session = hardware_commands::scoped_cosigner_action(
             &hwi,
             &operation,
             &device,
             &expected_signers,
+            crate::hardware::HwiSessionAction::Sign,
+            Some(&encoded),
+            |signer| {
+                let identity = VerifiedHardwareIdentity {
+                    device_type: device.device_type.clone(),
+                    fingerprint: signer.fingerprint.to_ascii_lowercase(),
+                };
+                (!records_interactive_policy_verification(&identity.device_type)
+                    || has_signer_policy_verification(&policy_verifications, &identity))
+                    && (!identity.device_type.eq_ignore_ascii_case("coldcard")
+                        || has_coldcard_policy_acknowledgement(&policy_verifications, &identity))
+            },
         )?;
+        let (session_output, identity) = if let Some((output, identity)) = session {
+            (Some(output), identity)
+        } else {
+            let identity = hardware_commands::prove_live_cosigner_identity_for_candidates(
+                &hwi, &operation, &device, &expected_signers,
+            )?;
+            (None, identity)
+        };
         if records_interactive_policy_verification(&identity.device_type)
             && !has_signer_policy_verification(&policy_verifications, &identity)
         {
@@ -1051,9 +1071,12 @@ pub async fn hardware_sign_multisig(
                 "Import and verify this wallet's policy file on Coldcard before signing.",
             ));
         }
-        let output = hwi
-            .sign_psbt_in_operation(&operation, &identity.device_type, &device.path, &encoded)
-            .map_err(|error| hardware_signing_api_error(error, &identity.device_type, true))?;
+        let output = match session_output {
+            Some(output) => output,
+            None => hwi
+                .sign_psbt_in_operation(&operation, &identity.device_type, &device.path, &encoded)
+                .map_err(|error| hardware_signing_api_error(error, &identity.device_type, true))?,
+        };
         let response: HwiPsbt = serde_json::from_slice(&output).map_err(internal)?;
         let signed = response.psbt.ok_or_else(|| {
             drop(response.error);

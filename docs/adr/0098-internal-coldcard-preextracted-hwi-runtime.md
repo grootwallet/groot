@@ -74,3 +74,5 @@ profile, registry, credential, backup, policy-evidence or proposal format and
 requires no migration. BIP support and encodings are unchanged. A production
 rollout or extension to another signer/network requires separate review and
 exact-package certification; RC9 grants no public release authorization.
+
+ADR 0101 extends this internal experiment to Ledger/BitBox02 Testnet4 and one fresh client per operation; the original RC9 scope and acceptance record above remain historical.

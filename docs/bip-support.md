@@ -96,3 +96,5 @@ ADR 0099 removes an application-level mainnet rollout amount ceiling and clarifi
 The fixed-continuity finalizer verifies BIP68/112 constraints against the actual transaction as well as current input age, preventing a later-maturing branch from changing the witness for an earlier selected sequence. This corrects validation with the existing pinned Miniscript library; it changes no descriptor, backup, PSBT encoding or dependency.
 
 The RC10 test-feedback corrections have **no BIP or persisted-format impact**: independent policy/health presentation, shared error notices and per-target nullable fee responses change no derivation, descriptor, PSBT or backup format. The owner's Mk4 Testnet4 one-input timing trial is limited candidate evidence, not full model/firmware, recovery, threshold or broadcast certification.
+
+RC11 operation-scoped Testnet4 transport (ADR 0101) has **no BIP or persisted-format impact**. Full fingerprint/account-xpub proof, vendor signing/display, policy gates, descriptors, PSBT encodings and native signature validation remain required. Host timing and protocol fixtures add no physical model certification.

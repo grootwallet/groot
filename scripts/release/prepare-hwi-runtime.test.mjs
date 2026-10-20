@@ -15,6 +15,9 @@ const digest = (bytes) => createHash('sha256').update(bytes).digest('hex');
 function archive(name = 'Python', kind = 'n', contents = 'Python.framework/Versions/3.9/Python\0') {
   const entries = [
     [kind, name, Buffer.from(contents)],
+    ...(name === 'Python'
+      ? []
+      : [['n', 'Python', Buffer.from('Python.framework/Versions/3.9/Python\0')]]),
     ['o', 'pyi-contents-directory _internal', Buffer.alloc(0)]
   ];
   let position = 0;
@@ -87,5 +90,30 @@ test('runtime inventory detects modified, extra and writable files and escaping 
   } finally {
     rmSync(root, { recursive: true, force: true });
     rmSync(copied, { recursive: true, force: true });
+  }
+});
+
+test('session extraction adds only the fixed original bootstrap modules and PYZ', () => {
+  for (const [name, kind] of [
+    ['struct', 'm'],
+    ['pyimod01_archive', 'm'],
+    ['pyimod02_importers', 'm'],
+    ['pyimod03_ctypes', 'm'],
+    ['PYZ-00.pyz', 'z']
+  ]) {
+    const bytes = archive(name, kind, 'original-code');
+    assert.equal(readHwiRuntimeArchive(bytes, digest(bytes)).length, 1);
+    const result = readHwiRuntimeArchive(bytes, digest(bytes), true);
+    assert.equal(result.length, 2);
+    assert.equal(result[0].name, name);
+    assert.equal(result[0].data.toString(), 'original-code');
+  }
+  for (const [name, kind] of [
+    ['unreviewed-module', 'm'],
+    ['hwi', 's'],
+    ['unexpected.pyz', 'z']
+  ]) {
+    const bytes = archive(name, kind, 'original-code');
+    assert.equal(readHwiRuntimeArchive(bytes, digest(bytes), true).length, 1);
   }
 });

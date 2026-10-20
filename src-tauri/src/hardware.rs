@@ -41,6 +41,8 @@ const HWI_DIGEST_HEX_BYTES: usize = 64;
 const HWI_FIXED_ARGV: &[&str] = &["--stdin"];
 #[cfg(target_os = "macos")]
 mod runtime;
+mod session;
+pub(crate) use session::{HwiSessionAction, HwiSessionExpected, HwiSessionInput};
 static HWI_COORDINATOR: OnceLock<HardwareCoordinator> = OnceLock::new();
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1197,6 +1199,14 @@ fn run_program_in_operation(
         // Only the compiled, app-sealed runtime may bypass PyInstaller extraction.
         command.env("_MEIPASS2", runtime);
     }
+    run_verified_process(command, &input, operation)
+}
+
+fn run_verified_process(
+    mut command: Command,
+    input: &[u8],
+    operation: &HardwareOperation,
+) -> Result<Vec<u8>, HardwareError> {
     #[cfg(unix)]
     {
         use std::os::unix::process::CommandExt as _;
@@ -1224,7 +1234,7 @@ fn run_program_in_operation(
         let _ = collect_pipes(&stdout_rx, &stderr_rx);
         return Err(HardwareError::Io);
     };
-    if let Err(error) = stdin.write_all(&input) {
+    if let Err(error) = stdin.write_all(input) {
         // A command can reject the request and close stdin before this
         // writer is scheduled. BrokenPipe is therefore part of the
         // command-exit path, not an HWI transport failure; the bounded
@@ -1683,7 +1693,7 @@ mod tests {
         let mut stock_ms = Vec::new();
         let mut sealed_ms = Vec::new();
         for _ in 0..20 {
-            for (device_type, timings) in [("ledger", &mut stock_ms), ("coldcard", &mut sealed_ms)]
+            for (device_type, timings) in [("trezor", &mut stock_ms), ("coldcard", &mut sealed_ms)]
             {
                 // argparse exits for --version before get_client. These are
                 // transport selectors only: neither family is opened/probed.

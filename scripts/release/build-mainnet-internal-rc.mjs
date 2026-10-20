@@ -101,10 +101,15 @@ try {
   if (digest(stagedHwi) !== manifest.artifact.sha256) fail('staged HWI changed during copy');
 
   // Internal multi-network RCs only. The native selector additionally limits
-  // this payload to Coldcard Testnet4; production and other signers keep HWI.
+  // this payload to Coldcard/Ledger/BitBox02 Testnet4; production keeps HWI.
   const runtime =
     buildTarget === 'multi'
-      ? prepareHwiRuntime(stagedHwi, join(stageDirectory, 'hwi-runtime'), manifest.artifact.sha256)
+      ? prepareHwiRuntime(
+          stagedHwi,
+          join(stageDirectory, 'hwi-runtime'),
+          manifest.artifact.sha256,
+          true
+        )
       : null;
   const baseConfig = JSON.parse(readFileSync(join(repoRoot, buildIdentity.config), 'utf8'));
 
@@ -131,7 +136,9 @@ try {
         GROOT_BUILD_NETWORK: buildTarget,
         GROOT_BUNDLED_HWI_RESOURCE: 'hwi',
         GROOT_HWI_SHA256: manifest.artifact.sha256,
-        ...(runtime ? { GROOT_HWI_RUNTIME_SHA256: runtime.sha256 } : {}),
+        ...(runtime
+          ? { GROOT_HWI_RUNTIME_SHA256: runtime.sha256, GROOT_HWI_SESSION_PROTOCOL: '1' }
+          : {}),
         GROOT_MACOS_SIGNING_TEAM_ID: 'REHEARSAL_ONLY'
       },
       stdio: 'inherit'
@@ -210,7 +217,13 @@ try {
     'compiled_signing_requirement=REHEARSAL_ONLY',
     `hwi_version=${result.version}`,
     `hwi_sha256=${result.sha256}`,
-    ...(runtime ? [`coldcard_testnet4_runtime_sha256=${runtime.sha256}`] : []),
+    ...(runtime
+      ? [
+          `coldcard_testnet4_runtime_sha256=${runtime.sha256}`,
+          `testnet4_runtime_sha256=${runtime.sha256}`,
+          'hwi_session_protocol=1'
+        ]
+      : []),
     `executable_sha256=${digest(executable)}`,
     ''
   ].join('\n');

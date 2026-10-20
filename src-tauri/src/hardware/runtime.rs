@@ -206,11 +206,14 @@ fn verify_runtime(
     Ok(root.to_path_buf())
 }
 
-fn selected_coldcard_testnet4(arguments: &[String]) -> bool {
+fn selected_fast_testnet4(arguments: &[String]) -> bool {
     arguments.first().map(String::as_str) == Some("--chain")
         && arguments.get(1).map(String::as_str) == Some("testnet4")
         && arguments.get(2).map(String::as_str) == Some("--device-type")
-        && arguments.get(3).map(String::as_str) == Some("coldcard")
+        && matches!(
+            arguments.get(3).map(String::as_str),
+            Some("coldcard" | "ledger" | "bitbox02")
+        )
 }
 
 // Called only after the existing full app/helper signature and HWI digest checks.
@@ -222,7 +225,7 @@ pub(super) fn for_operation(
     let Some(expected) = option_env!("GROOT_HWI_RUNTIME_SHA256") else {
         return Ok(None);
     };
-    if !selected_coldcard_testnet4(arguments) {
+    if !selected_fast_testnet4(arguments) {
         return Ok(None);
     }
     if !cfg!(groot_network = "multi")
@@ -270,12 +273,12 @@ mod tests {
             for device in ["coldcard", "trezor", "bitbox02", "ledger", "jade"] {
                 let args = ["--chain", chain, "--device-type", device].map(str::to_owned);
                 assert_eq!(
-                    selected_coldcard_testnet4(&args),
-                    chain == "testnet4" && device == "coldcard"
+                    selected_fast_testnet4(&args),
+                    chain == "testnet4" && matches!(device, "coldcard" | "ledger" | "bitbox02")
                 );
             }
         }
-        assert!(!selected_coldcard_testnet4(&[]));
+        assert!(!selected_fast_testnet4(&[]));
     }
 
     #[test]

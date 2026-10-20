@@ -2113,6 +2113,115 @@ fn parse_hwi_account_keypool(
     Ok((fingerprint.to_ascii_lowercase(), xpub.to_owned()))
 }
 
+// A session is scoped to this exact native lease and closes before returning.
+// It never reuses a previous UI identification or an unlocked-state observation.
+fn scoped_hardware_result(
+    result: Result<Option<(String, Vec<u8>)>, crate::hardware::HardwareError>,
+    device: &HwiDevice,
+) -> ApiResult<Option<(Vec<u8>, VerifiedHardwareIdentity)>> {
+    result
+        .map_err(|error| {
+            if matches!(
+                error,
+                crate::hardware::HardwareError::CommandFailed(Some(-100))
+            ) {
+                unknown_hardware_signer()
+            } else {
+                hardware_device_api_error(error, &device.device_type)
+            }
+        })
+        .map(|value| {
+            value.map(|(fingerprint, output)| {
+                (
+                    output,
+                    VerifiedHardwareIdentity {
+                        device_type: device.device_type.clone(),
+                        fingerprint,
+                    },
+                )
+            })
+        })
+}
+
+pub(super) fn scoped_cosigner_action(
+    hwi: &HwiCli,
+    operation: &crate::hardware::HardwareOperation,
+    device: &HwiDevice,
+    expected: &[CosignerInput],
+    action: crate::hardware::HwiSessionAction,
+    value: Option<&str>,
+    allow: impl Fn(&CosignerInput) -> bool,
+) -> ApiResult<Option<(Vec<u8>, VerifiedHardwareIdentity)>> {
+    if !hwi.supports_operation_session(&device.device_type) {
+        return Ok(None);
+    }
+    let first = expected.first().ok_or_else(unknown_hardware_signer)?;
+    for signer in expected {
+        require_matching_policy_device_type(signer.device_type.as_deref(), &device.device_type)?;
+        if signer.derivation_path != first.derivation_path {
+            return Err(api_error(
+                "invalid_hardware_request",
+                "The saved signer candidates do not share one hardware account boundary.",
+            ));
+        }
+    }
+    let identities = expected
+        .iter()
+        .map(|signer| crate::hardware::HwiSessionExpected {
+            fingerprint: signer.fingerprint.to_ascii_lowercase(),
+            xpub: signer.xpub.clone(),
+            allow_action: allow(signer),
+        })
+        .collect::<Vec<_>>();
+    scoped_hardware_result(
+        hwi.session_action_in_operation(
+            operation,
+            crate::hardware::HwiSessionInput {
+                device_type: &device.device_type,
+                device_path: &device.path,
+                account_path: &first.derivation_path,
+                expected: &identities,
+                action,
+                value,
+            },
+        ),
+        device,
+    )
+}
+
+fn scoped_external_action(
+    hwi: &HwiCli,
+    operation: &crate::hardware::HardwareOperation,
+    device: &HwiDevice,
+    expected: &ExternalSignerInput,
+    action: crate::hardware::HwiSessionAction,
+    value: Option<&str>,
+) -> ApiResult<Option<(Vec<u8>, VerifiedHardwareIdentity)>> {
+    if !hwi.supports_operation_session(&device.device_type) {
+        return Ok(None);
+    }
+    require_matching_policy_device_type(expected.device_type.as_deref(), &device.device_type)?;
+    let identities = [crate::hardware::HwiSessionExpected {
+        fingerprint: expected.fingerprint.to_ascii_lowercase(),
+        xpub: expected.xpub.clone(),
+        allow_action: true,
+    }];
+    scoped_hardware_result(
+        hwi.session_action_in_operation(
+            operation,
+            crate::hardware::HwiSessionInput {
+                device_type: &device.device_type,
+                device_path: &device.path,
+                account_path: &expected.derivation_path,
+                expected: &identities,
+                action,
+                value,
+            },
+        ),
+        device,
+    )
+}
+
 pub(super) fn prove_live_cosigner_identity(
     hwi: &HwiCli,
     operation: &crate::hardware::HardwareOperation,
@@ -2146,6 +2255,18 @@ pub(super) fn prove_live_cosigner_identity_for_candidates(
             "invalid_hardware_request",
             "The saved signer candidates do not share one hardware account boundary.",
         ));
+    }
+
+    if let Some((_, identity)) = scoped_cosigner_action(
+        hwi,
+        operation,
+        device,
+        expected,
+        crate::hardware::HwiSessionAction::Identity,
+        None,
+        |_| true,
+    )? {
+        return Ok(identity);
     }
 
     // HWI's Jade login is initiated while opening an exact-path public-key
@@ -2216,6 +2337,16 @@ fn prove_live_external_signer_identity(
         )
     })?;
     require_matching_policy_device_type(Some(expected_device_type), &device.device_type)?;
+    if let Some((_, identity)) = scoped_external_action(
+        hwi,
+        operation,
+        device,
+        expected,
+        crate::hardware::HwiSessionAction::Identity,
+        None,
+    )? {
+        return Ok(identity);
+    }
     if device.fingerprint.is_none() && supports_locked_interactive_identity(&device.device_type) {
         let output = hwi
             .account_xpub_in_operation(
@@ -3142,11 +3273,34 @@ pub async fn hardware_sign_external(
         let device = recently_scanned_hardware_device(&state, &device_id)?;
         let signed = tauri::async_runtime::spawn_blocking(move || {
             let operation = hwi.begin_signing_operation().map_err(hardware_api_error)?;
-            let identity =
-                prove_live_external_signer_identity(&hwi, &operation, &device, &expected_signer)?;
-            let output = hwi
-                .sign_psbt_in_operation(&operation, &identity.device_type, &device.path, &encoded)
-                .map_err(|error| hardware_signing_api_error(error, &identity.device_type, false))?;
+            let (output, identity) = if let Some((output, identity)) = scoped_external_action(
+                &hwi,
+                &operation,
+                &device,
+                &expected_signer,
+                crate::hardware::HwiSessionAction::Sign,
+                Some(&encoded),
+            )? {
+                (output, identity)
+            } else {
+                let identity = prove_live_external_signer_identity(
+                    &hwi,
+                    &operation,
+                    &device,
+                    &expected_signer,
+                )?;
+                let output = hwi
+                    .sign_psbt_in_operation(
+                        &operation,
+                        &identity.device_type,
+                        &device.path,
+                        &encoded,
+                    )
+                    .map_err(|error| {
+                        hardware_signing_api_error(error, &identity.device_type, false)
+                    })?;
+                (output, identity)
+            };
             let response: HwiPsbt = serde_json::from_slice(&output).map_err(internal)?;
             response.psbt.ok_or_else(|| {
                 drop(response.error);
@@ -3388,6 +3542,17 @@ pub async fn hardware_verify_multisig_address(
             let operation = hwi
                 .begin_interactive_operation()
                 .map_err(hardware_api_error)?;
+            if let Some((displayed, identity)) = scoped_cosigner_action(
+                &hwi,
+                &operation,
+                &device,
+                &expected_signers,
+                crate::hardware::HwiSessionAction::Display,
+                Some(&descriptor),
+                |_| true,
+            )? {
+                return Ok::<_, ApiError>((displayed, identity, operation));
+            }
             let identity = prove_live_cosigner_identity_for_candidates(
                 &hwi,
                 &operation,
@@ -3584,6 +3749,29 @@ fn display_multisig_policy_address(
     let operation = hwi
         .begin_interactive_operation()
         .map_err(hardware_api_error)?;
+    if !records_interactive_policy_verification(&device.device_type) {
+        return Err(api_error(
+            "invalid_hardware_request",
+            "This signer does not require interactive policy verification.",
+        ));
+    }
+    if let Some((displayed, identity)) = scoped_cosigner_action(
+        hwi,
+        &operation,
+        &device,
+        std::slice::from_ref(expected_signer),
+        crate::hardware::HwiSessionAction::Display,
+        Some(descriptor),
+        |_| true,
+    )? {
+        if !records_interactive_policy_verification(&identity.device_type) {
+            return Err(api_error(
+                "invalid_hardware_request",
+                "This signer does not require interactive policy verification.",
+            ));
+        }
+        return Ok((displayed, identity, device, operation));
+    }
     let identity = prove_live_cosigner_identity(hwi, &operation, &device, expected_signer)?;
     if !records_interactive_policy_verification(&identity.device_type) {
         return Err(api_error(
@@ -3852,6 +4040,16 @@ pub async fn hardware_verify_external_address(
             let operation = hwi
                 .begin_interactive_operation()
                 .map_err(hardware_api_error)?;
+            if let Some((displayed, identity)) = scoped_external_action(
+                &hwi,
+                &operation,
+                &device,
+                &expected_signer,
+                crate::hardware::HwiSessionAction::Display,
+                Some(&descriptor),
+            )? {
+                return Ok::<_, ApiError>((displayed, identity, operation));
+            }
             let identity =
                 prove_live_external_signer_identity(&hwi, &operation, &device, &expected_signer)?;
             let displayed = hwi

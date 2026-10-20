@@ -36,3 +36,9 @@ test('internal RC creates the same branded drag-to-Applications DMG used by prod
   assert.match(source, /outputDmg/);
   assert.match(source, /outputDmg,[\s\S]*'Groot'/);
 });
+
+test('one-operation worker is enabled only with the sealed internal multi runtime', () => {
+  assert.match(source, /buildTarget === 'multi'[\s\S]*prepareHwiRuntime/);
+  assert.match(source, /GROOT_HWI_SESSION_PROTOCOL: '1'/);
+  assert.match(source, /hwi_session_protocol=1/);
+});
