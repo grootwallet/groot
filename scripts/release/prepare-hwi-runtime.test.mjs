@@ -5,6 +5,7 @@ import { mkdtempSync, writeFileSync, symlinkSync, rmSync, chmodSync, realpathSyn
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
+  copyHwiRuntime,
   readHwiRuntimeArchive,
   runtimeInventory,
   verifyHwiRuntime
@@ -57,6 +58,7 @@ test('archive extraction requires exact pinned bytes and bounded paths', () => {
 
 test('runtime inventory detects modified, extra and writable files and escaping links', () => {
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'groot-runtime-test-')));
+  const copied = `${root}-copy`;
   try {
     writeFileSync(join(root, 'Python'), 'fixture', { mode: 0o644 });
     symlinkSync('Python', join(root, 'alias'));
@@ -67,6 +69,9 @@ test('runtime inventory detects modified, extra and writable files and escaping 
     writeFileSync(join(root, 'runtime-manifest.json'), manifest);
     const check = () => verifyHwiRuntime(root, digest(manifest), 'source');
     assert.equal(check().fileCount, 1);
+    assert.equal(copyHwiRuntime(root, copied, digest(manifest), 'source').linkCount, 1);
+    assert.throws(() => copyHwiRuntime(root, copied, digest(manifest), 'source'));
+    assert.throws(() => copyHwiRuntime(root, `${copied}-invalid`, '0'.repeat(64), 'source'));
     writeFileSync(join(root, 'Python'), 'changed');
     assert.throws(check);
     writeFileSync(join(root, 'Python'), 'fixture');
@@ -81,5 +86,6 @@ test('runtime inventory detects modified, extra and writable files and escaping 
     assert.throws(check);
   } finally {
     rmSync(root, { recursive: true, force: true });
+    rmSync(copied, { recursive: true, force: true });
   }
 });
