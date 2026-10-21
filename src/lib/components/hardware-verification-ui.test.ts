@@ -334,6 +334,8 @@ describe('hardware receive verification UI', () => {
     expect(multisigPolicy).toContain('lockedDeviceForHealthCheck');
     expect(multisigPolicy).toContain('<TrezorPinModal');
     expect(multisigPolicy).toContain('Resuming the signer health check.');
+    expect(multisigPolicy).toContain("if (device.action === 'prompt_pin' && !unlockedDevice)");
+    expect(multisigPolicy).toContain('await startHealthPin(device)');
   });
 
   it('keeps the Trezor standard-wallet decision concise in both onboarding flows', () => {

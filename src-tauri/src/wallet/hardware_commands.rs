@@ -942,7 +942,7 @@ mod targeted_scan_tests {
         assert!(connected[0].observed_unlocked);
         let ready = hardware_device_dto(connected[0].clone());
         assert_eq!(ready.status, "ready");
-        assert_eq!(ready.action, "prompt_pin");
+        assert_eq!(ready.action, "import");
 
         let request_epoch = forget_hardware_scan(&state).unwrap();
         let mut disconnected = [];

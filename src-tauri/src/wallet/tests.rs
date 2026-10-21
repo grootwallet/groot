@@ -3924,6 +3924,22 @@ fn not_ready_hardware_remains_visible_with_safe_device_specific_actions() {
     assert_eq!(passive_model_one.status, "needs_pin");
     assert_eq!(passive_model_one.action, "prompt_pin");
 
+    // A successful PIN exchange is only a short-lived routing hint. The next
+    // action must still prove the full account identity, but must not issue a
+    // redundant HWI promptpin request against an already-unlocked Model One.
+    let recently_unlocked_model_one = hardware_device_dto(HwiDevice {
+        passive: true,
+        observed_unlocked: true,
+        model: "trezor_1".to_owned(),
+        capability: "opaque-passive-model-one".to_owned(),
+        fingerprint: None,
+        device_type: "trezor".to_owned(),
+        path: "hid:model-one".to_owned(),
+        ..HwiDevice::default()
+    });
+    assert_eq!(recently_unlocked_model_one.status, "ready");
+    assert_eq!(recently_unlocked_model_one.action, "import");
+
     let passive_coldcard = hardware_device_dto(HwiDevice {
         passive: true,
         observed_unlocked: false,

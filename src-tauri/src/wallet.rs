@@ -1843,10 +1843,13 @@ fn hardware_device_dto(device: HwiDevice) -> HardwareDeviceDto {
             "retry",
         )
     } else if pin_required && device.observed_unlocked {
+        // A recent successful PIN exchange is a routing hint only. Reopen the
+        // device and prove its full account identity for every actual action;
+        // prompting again here needlessly restarts Model One's PIN transport.
         (
             "ready",
-            "Unlocked. Select this signer to continue.",
-            "prompt_pin",
+            "Recently unlocked. Select this signer to verify it again.",
+            "import",
         )
     } else if pin_required {
         (

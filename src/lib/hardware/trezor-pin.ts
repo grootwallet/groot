@@ -48,6 +48,7 @@ export function trezorPinError(
     return {
       title: 'Trezor unavailable',
       detail:
+        fallback ||
         'Close other wallet apps and scan again. Reconnect Trezor if it still cannot be found.'
     };
   }

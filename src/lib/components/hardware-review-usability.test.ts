@@ -201,4 +201,10 @@ describe('hardware signing review usability', () => {
     expect(singleSend).toContain('walletService.sendHardwarePin(pinChallenge, positions)');
     expect(singleSend).toContain('<TrezorPinModal');
   });
+
+  it('does not repeat Model One PIN entry after the signer was identified', () => {
+    expect(multisigSend).toContain(
+      "if (device.action === 'prompt_pin' && !pinResolved && !identifiedDevices[device.id])"
+    );
+  });
 });

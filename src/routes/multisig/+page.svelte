@@ -370,7 +370,7 @@
     });
   }
   async function runHealthCheck(unlockedDevice?: HardwareDevice) {
-    if (!selectedSigner || checking) return;
+    if (!selectedSigner || checking || (healthPinBusy && !unlockedDevice)) return;
     const signer = selectedSigner;
     checking = true;
     try {
@@ -380,6 +380,11 @@
           'This signer has no interactive USB device type.'
         );
       const device = unlockedDevice ?? (await walletService.findSavedHardwareDevice(signer));
+      if (device.action === 'prompt_pin' && !unlockedDevice) {
+        checking = false;
+        await startHealthPin(device);
+        return;
+      }
       const result = await walletService.checkHardwareCosigner(signer, device.id);
       await saveHardwareHealthCheck(signer.fingerprint, result);
       toast({
@@ -452,6 +457,12 @@
     } catch (cause) {
       healthPinErrorCode = cause instanceof WalletError ? cause.code : 'internal_error';
       healthPinError = localizedError(cause, $locale, 'Could not start the Trezor PIN matrix.');
+      if (selectedSigner)
+        await saveHardwareHealthCheck(selectedSigner.fingerprint, {
+          checkedAt: new Date().toISOString(),
+          summary: healthPinError,
+          status: 'attention'
+        });
       if (!retrying)
         toast({ title: 'Trezor unlock unavailable', description: healthPinError, tone: 'danger' });
     } finally {

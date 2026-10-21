@@ -53,10 +53,11 @@ describe('Trezor PIN presentation', () => {
         'Check the attempts remaining on Trezor. Ask it for a fresh layout, then tap each blank Groot cell by location, not by the digit printed on Trezor.'
     });
     expect(trezorPinError('hardware_challenge_expired', 'raw').title).toBe('PIN matrix expired');
-    expect(trezorPinError('hardware_unavailable', 'raw')).toEqual({
+    expect(
+      trezorPinError('hardware_unavailable', 'Groot could not start bundled hardware support.')
+    ).toEqual({
       title: 'Trezor unavailable',
-      detail:
-        'Close other wallet apps and scan again. Reconnect Trezor if it still cannot be found.'
+      detail: 'Groot could not start bundled hardware support.'
     });
     expect(trezorPinError('hardware_busy', 'Close Sparrow.')).toEqual({
       title: 'Trezor is busy',

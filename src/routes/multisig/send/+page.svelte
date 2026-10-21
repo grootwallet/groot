@@ -1208,7 +1208,7 @@
     )
       return;
     if (deviceHasSigned(device)) return;
-    if (device.action === 'prompt_pin' && !pinResolved) {
+    if (device.action === 'prompt_pin' && !pinResolved && !identifiedDevices[device.id]) {
       await startHardwarePin(device);
       return;
     }
