@@ -106,3 +106,5 @@ persisted-format impact**. The pinned HWI driver, derivation paths, descriptors,
 PSBT encodings, and native identity/policy/address/signature checks stay the same.
 Jade keeps its existing HWI shared test-network mapping for Testnet4. Owner
 performance reports are not physical interoperability certification.
+
+The Model One follow-up changes only HWI PIN result handling and fresh-scan retry presentation. It has **no BIP or persisted-format impact**: a typed already-unlocked result still proceeds through the existing live full-account identity check, and derivation, descriptors, PSBTs, signing validation and backup formats are unchanged. Physical repeated-action acceptance remains pending.

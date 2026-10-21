@@ -1116,7 +1116,10 @@
   ondelete={() => (healthPinPositions = healthPinPositions.slice(0, -1))}
   onclear={() => (healthPinPositions = '')}
   onsubmit={submitHealthPin}
-  onretry={() => healthPinDevice && startHealthPin(healthPinDevice)}
+  onretry={() => {
+    closeHealthPin();
+    void runHealthCheck();
+  }}
   onclose={closeHealthPin}
 />
 <MultisigDescriptorsModal

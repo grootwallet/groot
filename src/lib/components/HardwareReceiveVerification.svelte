@@ -524,7 +524,8 @@
   onclear={() => (pinPositions = '')}
   onsubmit={submitPin}
   onretry={() => {
-    if (pinDevice) startPin(pinDevice);
+    closePin();
+    void scan();
   }}
   onclose={closePin}
 />

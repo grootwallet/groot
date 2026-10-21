@@ -839,7 +839,13 @@
   onclear={() => (pinPositions = '')}
   onsubmit={submitHardwarePin}
   onretry={() => {
-    if (pinDevice) startHardwarePin(pinDevice);
+    pinOpen = false;
+    pinPositions = '';
+    pinChallenge = '';
+    pinDevice = null;
+    pinError = '';
+    pinErrorCode = '';
+    void scan();
   }}
   onclose={() => {
     pinOpen = false;

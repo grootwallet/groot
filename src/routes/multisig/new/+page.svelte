@@ -2738,7 +2738,14 @@
   onclear={() => (pinPositions = '')}
   onsubmit={submitHardwarePin}
   onretry={() => {
-    if (pinDevice) startHardwarePin(pinDevice);
+    pinOpen = false;
+    pinPurpose = 'import';
+    pinPositions = '';
+    pinChallenge = '';
+    pinDevice = null;
+    pinError = '';
+    pinErrorCode = '';
+    void scanHardware();
   }}
   onclose={() => {
     pinOpen = false;

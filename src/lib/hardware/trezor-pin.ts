@@ -47,7 +47,8 @@ export function trezorPinError(
   if (code === 'hardware_unavailable' || code === 'hardware_io_error') {
     return {
       title: 'Trezor unavailable',
-      detail: 'Close other wallet apps, reconnect Trezor, and try again.'
+      detail:
+        'Close other wallet apps and scan again. Reconnect Trezor if it still cannot be found.'
     };
   }
   if (code === 'hardware_busy') {

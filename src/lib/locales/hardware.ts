@@ -272,9 +272,9 @@ export const hardwareCopy = {
     fr: 'Trezor indisponible',
     es: 'Trezor no disponible'
   },
-  'Close other wallet apps, reconnect Trezor, and try again.': {
-    fr: 'Fermez les autres applications de portefeuille, reconnectez Trezor et réessayez.',
-    es: 'Cierra las demás aplicaciones de cartera, vuelve a conectar Trezor e inténtalo de nuevo.'
+  'Close other wallet apps and scan again. Reconnect Trezor if it still cannot be found.': {
+    fr: 'Fermez les autres applications de portefeuille et relancez la recherche. Reconnectez Trezor si Groot ne le trouve toujours pas.',
+    es: 'Cierra las demás aplicaciones de cartera y vuelve a buscar. Reconecta Trezor si Groot aún no lo encuentra.'
   },
   'Close other wallet apps and try again.': {
     fr: 'Fermez les autres applications de portefeuille et réessayez.',

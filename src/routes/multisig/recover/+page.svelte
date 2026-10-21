@@ -424,10 +424,12 @@
   onclear={() => (pinPositions = '')}
   onsubmit={submitPin}
   onretry={() => {
-    const device = pinDevice;
     pinDevice = null;
     pinChallenge = '';
-    if (device) void identifyDevice(device);
+    pinPositions = '';
+    pinError = '';
+    pinErrorCode = '';
+    void scanDevices();
   }}
   onclose={() => {
     pinDevice = null;

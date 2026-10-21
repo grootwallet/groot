@@ -899,6 +899,32 @@ mod targeted_scan_tests {
     }
 
     #[test]
+    fn trezor_pin_submission_accepts_only_success_or_typed_already_unlocked() {
+        for (success, code) in [(Some(true), None), (None, Some(-11))] {
+            assert!(hardware_pin_submission_result(HwiSuccess {
+                success,
+                error: None,
+                code,
+            })
+            .is_ok());
+        }
+        let rejected = hardware_pin_submission_result(HwiSuccess {
+            success: None,
+            error: Some("Failure_PinInvalid".into()),
+            code: Some(-13),
+        })
+        .unwrap_err();
+        assert_eq!(rejected.code, "hardware_pin_rejected");
+        let lost = hardware_pin_submission_result(HwiSuccess {
+            success: None,
+            error: None,
+            code: Some(-3),
+        })
+        .unwrap_err();
+        assert_eq!(lost.code, "hardware_unavailable");
+    }
+
+    #[test]
     fn successful_trezor_pin_observation_survives_rescan_only_for_the_connected_path() {
         let state = AppState::default();
         let path = "webusb:007:4";
@@ -1608,18 +1634,29 @@ pub async fn hardware_send_pin(
     let unlocked_path = pending.device_path.clone();
     let hwi = hwi_cli(&app)?;
     tauri::async_runtime::spawn_blocking(move || {
-        let output = hwi
-            .send_pin(&pending.device_type, &pending.device_path, pin.as_slice())
-            .map_err(hardware_api_error)?;
-        let response: HwiSuccess = serde_json::from_slice(&output).map_err(internal)?;
-        if response.success != Some(true) {
-            return Err(hardware_pin_response_error(response));
-        }
-        Ok(())
+        let output = match hwi.send_pin(&pending.device_type, &pending.device_path, pin.as_slice())
+        {
+            Ok(output) => output,
+            // HWI reports this when the device became unlocked between the
+            // prompt and submission. The following wallet action still proves
+            // the complete signer identity on a fresh connection.
+            Err(HardwareError::CommandFailed(Some(-11))) => return Ok(()),
+            Err(error) => return Err(hardware_api_error(error)),
+        };
+        hardware_pin_submission_result(serde_json::from_slice(&output).map_err(internal)?)
     })
     .await
     .map_err(internal)??;
     remember_unlocked_hardware_path(&state, &unlocked_path)
+}
+
+fn hardware_pin_submission_result(response: HwiSuccess) -> ApiResult<()> {
+    if response.success == Some(true) || response.code == Some(-11) {
+        // HWI's -11 means "already unlocked"; it is not an accepted PIN.
+        // Callers must still run the normal fresh account-identity proof.
+        return Ok(());
+    }
+    Err(hardware_pin_response_error(response))
 }
 
 fn hardware_pin_response_error(response: HwiSuccess) -> ApiError {

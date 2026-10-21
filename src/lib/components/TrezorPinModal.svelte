@@ -130,7 +130,7 @@
         body={errorPresentation.detail}
       />
       <Button class="full" variant="secondary" onclick={onretry}
-        >{translate($locale, 'Try again')}</Button
+        >{translate($locale, 'Scan again')}</Button
       >
     {:else if busy}
       <HardwareActionPrompt

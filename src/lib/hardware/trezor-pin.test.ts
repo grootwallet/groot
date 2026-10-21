@@ -55,7 +55,8 @@ describe('Trezor PIN presentation', () => {
     expect(trezorPinError('hardware_challenge_expired', 'raw').title).toBe('PIN matrix expired');
     expect(trezorPinError('hardware_unavailable', 'raw')).toEqual({
       title: 'Trezor unavailable',
-      detail: 'Close other wallet apps, reconnect Trezor, and try again.'
+      detail:
+        'Close other wallet apps and scan again. Reconnect Trezor if it still cannot be found.'
     });
     expect(trezorPinError('hardware_busy', 'Close Sparrow.')).toEqual({
       title: 'Trezor is busy',
