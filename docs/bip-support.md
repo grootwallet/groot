@@ -108,3 +108,5 @@ Jade keeps its existing HWI shared test-network mapping for Testnet4. Owner
 performance reports are not physical interoperability certification.
 
 The Model One follow-up changes only HWI PIN result handling and fresh-scan retry presentation. It has **no BIP or persisted-format impact**: a typed already-unlocked result still proceeds through the existing live full-account identity check, and derivation, descriptors, PSBTs, signing validation and backup formats are unchanged. Physical repeated-action acceptance remains pending.
+
+RC14 corrects the internal DMG app copy so relative runtime symlinks and the app signature remain intact. It changes no BIP support, transaction or signer protocol, persisted format, derivation, descriptor, PSBT or key material. The mounted DMG must pass the same app-seal verification as the build artifact before handoff.

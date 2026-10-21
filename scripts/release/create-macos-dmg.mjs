@@ -51,7 +51,15 @@ const writableDmg = join(temporaryRoot, 'Groot-layout.dmg');
 try {
   mkdirSync(staging, { mode: 0o700 });
   mkdirSync(join(staging, '.background'), { mode: 0o755 });
-  cpSync(app, join(staging, 'Groot.app'), { recursive: true, preserveTimestamps: true });
+  const stagedApp = join(staging, 'Groot.app');
+  // Node otherwise rewrites relative framework links to absolute paths into
+  // the build folder, invalidating the app seal inside the DMG.
+  cpSync(app, stagedApp, {
+    recursive: true,
+    preserveTimestamps: true,
+    verbatimSymlinks: true
+  });
+  run('codesign', ['--verify', '--deep', '--strict', stagedApp]);
   symlinkSync('/Applications', join(staging, 'Applications'));
   writeFileSync(join(staging, '.background/groot-dmg-background.png'), backgroundBytes);
   writeFileSync(
@@ -79,7 +87,19 @@ try {
     '-o',
     output
   ]);
+  const mounted = join(temporaryRoot, 'mounted');
+  mkdirSync(mounted, { mode: 0o700 });
+  run('hdiutil', ['attach', '-readonly', '-nobrowse', '-mountpoint', mounted, output]);
+  try {
+    run('codesign', ['--verify', '--deep', '--strict', join(mounted, 'Groot.app')]);
+  } finally {
+    run('hdiutil', ['detach', mounted]);
+  }
   console.log(`Styled DMG created: ${basename(output)}`);
+} catch (error) {
+  // A failed seal check must never leave a distributable-looking image.
+  rmSync(output, { force: true });
+  throw error;
 } finally {
   rmSync(temporaryRoot, { recursive: true, force: true });
 }
