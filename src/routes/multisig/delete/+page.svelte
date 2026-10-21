@@ -172,7 +172,13 @@
           onclick={verifyBackup}>{translate($locale, 'Test recovery')}</Button
         >
       {/if}
-      {#if drillError}<p class="form-error" aria-live="polite">{drillError}</p>{/if}
+      {#if drillError}<WarningNotice
+          tone="danger"
+          icon
+          role="alert"
+          ariaLive="polite"
+          body={drillError}
+        />{/if}
     </section>
 
     <section class="form-card danger-card">
@@ -218,7 +224,13 @@
         onclick={() => (deleteConfirmOpen = true)}
         >{translate($locale, 'Delete wallet from this device')}</Button
       >
-      {#if deleteError}<p class="form-error" aria-live="polite">{deleteError}</p>{/if}
+      {#if deleteError}<WarningNotice
+          tone="danger"
+          icon
+          role="alert"
+          ariaLive="polite"
+          body={deleteError}
+        />{/if}
     </section>
   {:else}
     <section class="empty-state">

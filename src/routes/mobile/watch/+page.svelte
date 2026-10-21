@@ -1,4 +1,5 @@
 <script lang="ts">
+  import WarningNotice from '$lib/components/WarningNotice.svelte';
   import { goto } from '$app/navigation';
   import { onDestroy } from 'svelte';
   import { ArrowLeft, Eye, ScanLine, ShieldCheck } from '@lucide/svelte';
@@ -102,7 +103,13 @@
       >
       <PasswordField bind:value={pin} label={translate($locale, 'Local app PIN')} />
       <PasswordField bind:value={confirmation} label={translate($locale, 'Confirm PIN')} />
-      {#if error}<p class="inline-error" role="alert">{error}</p>{/if}
+      {#if error}<WarningNotice
+          tone="danger"
+          icon
+          role="alert"
+          ariaLive="polite"
+          body={error}
+        />{/if}
       <Button
         class="full"
         loading={busy}
@@ -119,7 +126,13 @@
           )}</small
         >
       </div>
-      {#if error}<p class="inline-error" role="alert">{error}</p>{/if}
+      {#if error}<WarningNotice
+          tone="danger"
+          icon
+          role="alert"
+          ariaLive="polite"
+          body={error}
+        />{/if}
       <UrQrScanner
         acceptedTypes={['groot-wallet']}
         prompt={translate($locale, 'Point the camera at the Groot watch-only wallet QR')}
@@ -169,9 +182,5 @@
   .security-note span {
     display: grid;
     gap: 0.2rem;
-  }
-  .inline-error {
-    color: var(--danger);
-    margin: 0;
   }
 </style>

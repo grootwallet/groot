@@ -65,6 +65,7 @@
 
 <style>
   .warning-notice {
+    text-align: left;
     border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
     border-radius: var(--radius-control);
     padding: 12px 14px;

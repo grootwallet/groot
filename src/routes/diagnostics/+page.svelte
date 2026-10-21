@@ -1,4 +1,5 @@
 <script lang="ts">
+  import WarningNotice from '$lib/components/WarningNotice.svelte';
   import {
     ArrowLeft,
     Check,
@@ -240,12 +241,11 @@
   {/if}
 
   {#if !loading && error}
-    <div class="diagnostics-state form-error" role="alert">
-      <span>{error}</span>
+    <WarningNotice tone="danger" icon role="alert" body={error} class="inline-action">
       <Button variant="secondary" size="small" onclick={load}
         ><RefreshCw size={15} />{translate($locale, 'Try again')}</Button
       >
-    </div>
+    </WarningNotice>
   {:else if !loading && records.length === 0}
     <div class="diagnostics-state">
       {translate($locale, 'No diagnostic events have been recorded yet.')}

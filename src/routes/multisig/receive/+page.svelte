@@ -311,13 +311,18 @@
       />
     </div>
   {/if}
-  {#if loadError}<section class="empty-state" role="alert">
-      <h2>{translate($locale, 'Could not load wallet')}</h2>
-      <p>{loadError}</p>
+  {#if loadError}<WarningNotice
+      tone="danger"
+      icon
+      role="alert"
+      class="inline-action"
+      title={translate($locale, 'Could not load wallet')}
+      body={loadError}
+    >
       <Button variant="secondary" onclick={() => window.location.reload()}
         >{translate($locale, 'Try again')}</Button
       >
-    </section>
+    </WarningNotice>
   {:else if receiveOnDesktop}<WarningNotice
       role="note"
       icon

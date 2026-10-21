@@ -1,4 +1,5 @@
 <script lang="ts">
+  import WarningNotice from '$lib/components/WarningNotice.svelte';
   import { locale } from '$lib/i18n';
   import { translate, localizedError } from '$lib/i18n-catalog';
   import {
@@ -314,7 +315,13 @@
             onclick={exportBackup}>{translate($locale, 'Authorize & prepare backup')}</Button
           >
         </div>
-        {#if exportError}<p class="form-error" aria-live="polite">{exportError}</p>{/if}
+        {#if exportError}<WarningNotice
+            tone="danger"
+            icon
+            role="alert"
+            ariaLive="polite"
+            body={exportError}
+          />{/if}
       {:else}
         <div class="backup-ready">
           <span><Check size={17} /></span>
@@ -355,7 +362,13 @@
               ><Printer size={15} />{translate($locale, 'Save PDF')}</Button
             >{/if}
         </div>
-        {#if exportError}<p class="form-error" aria-live="polite">{exportError}</p>{/if}
+        {#if exportError}<WarningNotice
+            tone="danger"
+            icon
+            role="alert"
+            ariaLive="polite"
+            body={exportError}
+          />{/if}
         <div class="descriptor-qr-preview">
           <div>
             <span
@@ -445,7 +458,13 @@
         loadingLabel={translate($locale, 'Testing recovery…')}
         onclick={verifyBackup}>{translate($locale, 'Test recovery')}</Button
       >
-      {#if drillError}<p class="form-error" aria-live="polite">{drillError}</p>{/if}
+      {#if drillError}<WarningNotice
+          tone="danger"
+          icon
+          role="alert"
+          ariaLive="polite"
+          body={drillError}
+        />{/if}
     </section>
     {#if drill?.matchesCurrentWallet}<section class="form-card">
         <div class="section-heading compact">

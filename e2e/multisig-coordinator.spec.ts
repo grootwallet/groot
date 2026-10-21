@@ -2204,7 +2204,7 @@ test('reveals draft errors only after review and keeps signer identity readable'
   await expect(page.getByText('Device fingerprint', { exact: true })).toBeVisible();
   await expect(page.getByText('Manual entry', { exact: true })).toBeVisible();
   await expect(page.getByText(keys[0].xpub, { exact: true })).toBeVisible();
-  await expect(page.locator('.policy-errors')).toHaveCount(0);
+  await expect(page.getByRole('alert')).toHaveCount(0);
 
   await page.getByRole('button', { name: 'View Coldcard details' }).click();
   const details = page.getByRole('dialog', { name: 'Coldcard' });

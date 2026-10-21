@@ -313,11 +313,16 @@
     </div>
   {/if}
   {#if loadError}
-    <section class="empty-state" role="alert">
-      <h2>{translate($locale, 'Could not load addresses')}</h2>
-      <p>{loadError}</p>
+    <WarningNotice
+      tone="danger"
+      icon
+      role="alert"
+      class="inline-action"
+      title={translate($locale, 'Could not load addresses')}
+      body={loadError}
+    >
       <Button variant="secondary" onclick={load}>{translate($locale, 'Try again')}</Button>
-    </section>
+    </WarningNotice>
   {:else if loading}
     <WalletSkeleton variant="balance" />
   {:else if receiveOnDesktop}

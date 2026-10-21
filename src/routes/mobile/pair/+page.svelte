@@ -307,7 +307,13 @@
           >
         {/if}
         <PasswordField bind:value={resumePin} label={translate($locale, 'Local app PIN')} />
-        {#if resumeError}<p class="inline-error" role="alert">{resumeError}</p>{/if}
+        {#if resumeError}<WarningNotice
+            tone="danger"
+            icon
+            role="alert"
+            ariaLive="polite"
+            body={resumeError}
+          />{/if}
         <div class="pending-actions">
           <Button
             class="full"
@@ -327,7 +333,7 @@
     {#if resumeNotice}<p class="inline-success" role="status">{resumeNotice}</p>{/if}
     {#if pendingPairingsLoaded && resumeError && pendingPairings.length === 0}
       <InstructionCard>
-        <p class="inline-error">{resumeError}</p>
+        <WarningNotice tone="danger" icon role="alert" ariaLive="polite" body={resumeError} />
         <Button variant="secondary" class="full" onclick={loadPendingPairings}
           >{translate($locale, 'Try again')}</Button
         >
@@ -384,7 +390,13 @@
       >
       <PasswordField bind:value={pin} label={translate($locale, 'Local app PIN')} />
       <PasswordField bind:value={confirmation} label={translate($locale, 'Confirm PIN')} />
-      {#if error}<p class="inline-error" role="alert">{error}</p>{/if}
+      {#if error}<WarningNotice
+          tone="danger"
+          icon
+          role="alert"
+          ariaLive="polite"
+          body={error}
+        />{/if}
       <Button
         class="full"
         loading={busy}
@@ -426,7 +438,13 @@
         >
       </div>
       <PasswordField bind:value={pin} label={translate($locale, 'Local app PIN')} />
-      {#if error}<p class="inline-error" role="alert">{error}</p>{/if}
+      {#if error}<WarningNotice
+          tone="danger"
+          icon
+          role="alert"
+          ariaLive="polite"
+          body={error}
+        />{/if}
       <Button class="full" loading={busy} disabled={!pin} onclick={awaitFinalPolicy}
         >{translate($locale, 'Desktop scanned this phone key')}</Button
       >
@@ -439,7 +457,13 @@
           >{translate($locale, 'Scan the final wallet QR shown on desktop.')}</small
         >
       </div>
-      {#if error}<p class="inline-error" role="alert">{error}</p>{/if}
+      {#if error}<WarningNotice
+          tone="danger"
+          icon
+          role="alert"
+          ariaLive="polite"
+          body={error}
+        />{/if}
       <UrQrScanner
         acceptedTypes={['groot-wallet']}
         prompt={translate($locale, 'Point the camera at the final Groot wallet QR')}
@@ -545,10 +569,6 @@
     font-size: 0.82rem;
     line-height: 1.45;
     text-align: center;
-  }
-  .inline-error {
-    color: var(--danger);
-    margin: 0;
   }
   .inline-success {
     color: var(--success);

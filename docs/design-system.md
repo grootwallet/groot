@@ -82,3 +82,7 @@ Unlocked mobile screens omit the brand header and start below the system safe ar
 Native mobile navigation uses a 49px tab row plus the system bottom safe area, 20px icons and 12px labels. Keep the home indicator clear; do not add a second bottom spacer.
 
 The selected native tab uses a square background extending through the bottom safe-area strip. Icons and labels stay in the safe 49px row; the selection does not create a blank band below the active tab.
+
+Active operation and validation errors use WarningNotice with danger tone and alert semantics, including hardware enrollment, recovery, credential fields, settings and QR permission failures. LoadFailure composes the same notice and keeps its retry action. Do not introduce plain red paragraphs or route-local error cards. Invalid-field borders, historical diagnostic codes, status badges and toasts retain their own existing semantics.
+
+Reusable buttons reserve mobile scroll clearance above navigation and error toasts so retry and recovery actions remain reachable. Notices align text left even inside centered review panels; routes own any additional spacing around them.

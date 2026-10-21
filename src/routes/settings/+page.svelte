@@ -22,7 +22,6 @@
     ScrollText,
     ShieldCheck,
     Sun,
-    TriangleAlert,
     Trash2,
     Upload,
     WalletCards
@@ -1923,7 +1922,13 @@
         >
       </div>
     </div>{/if}
-  {#if labelInterchangeError}<p class="form-error" role="alert">{labelInterchangeError}</p>{/if}
+  {#if labelInterchangeError}<WarningNotice
+      tone="danger"
+      icon
+      role="alert"
+      ariaLive="polite"
+      body={labelInterchangeError}
+    />{/if}
   <div class="modal-footer">
     <Button variant="secondary" disabled={labelInterchangeBusy} onclick={importLabels}
       ><Upload size={15} />{translate($locale, 'Import JSONL')}</Button
@@ -1960,7 +1965,13 @@
       )}
     /></label
   >
-  {#if renameError}<p class="form-error" role="alert">{renameError}</p>{/if}
+  {#if renameError}<WarningNotice
+      tone="danger"
+      icon
+      role="alert"
+      ariaLive="polite"
+      body={renameError}
+    />{/if}
   <div class="modal-footer">
     <Button
       variant="secondary"
@@ -2013,7 +2024,13 @@
       )}
     /></label
   >
-  {#if signerRenameError}<p class="form-error" role="alert">{signerRenameError}</p>{/if}
+  {#if signerRenameError}<WarningNotice
+      tone="danger"
+      icon
+      role="alert"
+      ariaLive="polite"
+      body={signerRenameError}
+    />{/if}
   <div class="modal-footer">
     <Button
       variant="secondary"
@@ -2139,9 +2156,13 @@
       'Required to decrypt the recovery words only inside trusted Rust code.'
     )}
   />
-  {#if verifyError}<p class="form-error" role="alert">
-      {verifyError.replace('passphrase / PIN', 'wallet passphrase')}
-    </p>{/if}
+  {#if verifyError}<WarningNotice
+      tone="danger"
+      icon
+      role="alert"
+      ariaLive="polite"
+      body={verifyError.replace('passphrase / PIN', 'wallet passphrase')}
+    />{/if}
   <div class="modal-footer verify-backup-actions">
     <Button
       class="show-words-action"
@@ -2199,7 +2220,13 @@
         hint={translate($locale, 'Re-authenticate before exposing wallet metadata.')}
       />
     </div>
-    {#if hardwareBackupError}<p class="form-error" role="alert">{hardwareBackupError}</p>{/if}
+    {#if hardwareBackupError}<WarningNotice
+        tone="danger"
+        icon
+        role="alert"
+        ariaLive="polite"
+        body={hardwareBackupError}
+      />{/if}
     <div class="modal-footer">
       <Button
         variant="secondary"
@@ -2238,7 +2265,13 @@
         )}
       </p>
     {/if}
-    {#if hardwareBackupError}<p class="form-error" role="alert">{hardwareBackupError}</p>{/if}
+    {#if hardwareBackupError}<WarningNotice
+        tone="danger"
+        icon
+        role="alert"
+        ariaLive="polite"
+        body={hardwareBackupError}
+      />{/if}
     <div class="modal-footer">
       <Button
         variant="secondary"
@@ -2380,7 +2413,13 @@
     autocomplete="current-password"
     hint={translate($locale, 'Required to change this wallet’s network privacy boundary.')}
   />
-  {#if syncError}<p class="form-error" role="alert">{syncError}</p>{/if}
+  {#if syncError}<WarningNotice
+      tone="danger"
+      icon
+      role="alert"
+      ariaLive="polite"
+      body={syncError}
+    />{/if}
   <div class="modal-footer">
     <Button
       variant="secondary"
@@ -2459,9 +2498,13 @@
             $locale,
             'Retained block range unavailable. Check the node connection and reopen this dialog.'
           )}</small
-        >{/if}{#if scanBirthdayAboveTip}<small class="form-error"
-          >{translate($locale, 'Birthday block must be at or below the current chain tip.')}</small
-        >{/if}</label
+        >{/if}{#if scanBirthdayAboveTip}<WarningNotice
+          tone="danger"
+          icon
+          role="alert"
+          ariaLive="polite"
+          body={translate($locale, 'Birthday block must be at or below the current chain tip.')}
+        />{/if}</label
     >
     <details class="scan-optional-control" bind:open={scanOptionsOpen}>
       <summary
@@ -2534,54 +2577,54 @@
       </div>
     {/if}
   </div>
-  {#if scanError}<div class="hardware-inline-error scan-error-card" role="alert" aria-live="polite">
-      <TriangleAlert size={18} />
-      <span>
-        <strong
-          >{translate(
-            $locale,
-            scanErrorCode === 'node_history_unavailable'
-              ? 'Required block history is unavailable'
-              : 'Full rescan failed'
-          )}</strong
-        >
-        <small>{scanError}</small>
-        {#if scanErrorDetails}<dl class="scan-error-details">
-            {#if scanErrorDetails.requestedBirthdayBlock !== undefined}<div>
-                <dt>{translate($locale, 'Requested birthday')}</dt>
-                <dd>
-                  {translate($locale, 'Block {height}', {
-                    height: formatInteger(scanErrorDetails.requestedBirthdayBlock, $locale)
-                  })}
-                </dd>
-              </div>{/if}
-            {#if scanErrorDetails.requiredBlock !== undefined}<div>
-                <dt>{translate($locale, 'Required anchor')}</dt>
-                <dd>
-                  {translate($locale, 'Block {height}', {
-                    height: formatInteger(scanErrorDetails.requiredBlock, $locale)
-                  })}
-                </dd>
-              </div>{/if}
-            {#if scanErrorDetails.earliestRetainedBlock !== undefined}<div>
-                <dt>{translate($locale, 'Bitcoin Core retains full blocks from')}</dt>
-                <dd>
-                  {translate($locale, 'Block {height}', {
-                    height: formatInteger(scanErrorDetails.earliestRetainedBlock, $locale)
-                  })}
-                </dd>
-              </div>{/if}
-            {#if scanErrorDetails.minimumBirthdayBlock !== undefined}<div>
-                <dt>{translate($locale, 'Earliest usable birthday')}</dt>
-                <dd>
-                  {translate($locale, 'Block {height}', {
-                    height: formatInteger(scanErrorDetails.minimumBirthdayBlock, $locale)
-                  })}
-                </dd>
-              </div>{/if}
-          </dl>{/if}
-      </span>
-    </div>{/if}
+  {#if scanError}<WarningNotice
+      tone="danger"
+      icon
+      role="alert"
+      ariaLive="polite"
+      title={translate(
+        $locale,
+        scanErrorCode === 'node_history_unavailable'
+          ? 'Required block history is unavailable'
+          : 'Full rescan failed'
+      )}
+      body={scanError}
+    >
+      {#if scanErrorDetails}<dl class="scan-error-details">
+          {#if scanErrorDetails.requestedBirthdayBlock !== undefined}<div>
+              <dt>{translate($locale, 'Requested birthday')}</dt>
+              <dd>
+                {translate($locale, 'Block {height}', {
+                  height: formatInteger(scanErrorDetails.requestedBirthdayBlock, $locale)
+                })}
+              </dd>
+            </div>{/if}
+          {#if scanErrorDetails.requiredBlock !== undefined}<div>
+              <dt>{translate($locale, 'Required anchor')}</dt>
+              <dd>
+                {translate($locale, 'Block {height}', {
+                  height: formatInteger(scanErrorDetails.requiredBlock, $locale)
+                })}
+              </dd>
+            </div>{/if}
+          {#if scanErrorDetails.earliestRetainedBlock !== undefined}<div>
+              <dt>{translate($locale, 'Bitcoin Core retains full blocks from')}</dt>
+              <dd>
+                {translate($locale, 'Block {height}', {
+                  height: formatInteger(scanErrorDetails.earliestRetainedBlock, $locale)
+                })}
+              </dd>
+            </div>{/if}
+          {#if scanErrorDetails.minimumBirthdayBlock !== undefined}<div>
+              <dt>{translate($locale, 'Earliest usable birthday')}</dt>
+              <dd>
+                {translate($locale, 'Block {height}', {
+                  height: formatInteger(scanErrorDetails.minimumBirthdayBlock, $locale)
+                })}
+              </dd>
+            </div>{/if}
+        </dl>{/if}
+    </WarningNotice>{/if}
   <div class="modal-footer">
     {#if scanning}<Button
         variant="secondary"
@@ -2649,7 +2692,13 @@
     disabled={!selectedNetworkReuseSource?.ready}
     hint={translate($locale, 'Protects the copied connection for this wallet.')}
   />
-  {#if networkReuseError}<p class="form-error" role="alert">{networkReuseError}</p>{/if}
+  {#if networkReuseError}<WarningNotice
+      tone="danger"
+      icon
+      role="alert"
+      ariaLive="polite"
+      body={networkReuseError}
+    />{/if}
   <div class="modal-footer">
     <Button
       variant="secondary"
@@ -2794,7 +2843,13 @@
         )}</small
       >
     </div>{/if}
-  {#if nodeError}<p class="form-error">{nodeError}</p>{/if}
+  {#if nodeError}<WarningNotice
+      tone="danger"
+      icon
+      role="alert"
+      ariaLive="polite"
+      body={nodeError}
+    />{/if}
   <div class="modal-footer">
     <Button variant="secondary" onclick={closeNodeSettings}>{translate($locale, 'Cancel')}</Button
     >{#if nodeMode === 'managed' && managedNodeConfigured && !managedRenewalAvailable}<Button
@@ -2887,9 +2942,6 @@
   :global(.scan-form):where(.scan-form) :global(.scan-tip) {
     color: var(--text-soft);
     font-variant-numeric: tabular-nums;
-  }
-  :global(.scan-form):where(.scan-form) :global(.field > .form-error) {
-    color: var(--danger);
   }
   :global(.scan-optional-control):where(.scan-optional-control) {
     border-bottom: 1px solid var(--border);
@@ -3312,9 +3364,6 @@
     color: var(--muted);
     font-size: var(--font-size-meta);
     line-height: 1.45;
-  }
-  .scan-error-card {
-    grid-template-columns: 22px minmax(0, 1fr);
   }
   :global(.scan-error-details):where(.scan-error-details) {
     margin: 6px 0 0;

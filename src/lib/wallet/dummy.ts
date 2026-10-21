@@ -1612,6 +1612,15 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     allowEmptyPassphrase = false
   ): Promise<ExternalSigner> {
     await new Promise((resolve) => setTimeout(resolve, 200));
+    if (
+      typeof sessionStorage !== 'undefined' &&
+      sessionStorage.getItem('fixture-hardware-external-import-failure') === '1'
+    ) {
+      throw new WalletError(
+        'hardware_unavailable',
+        'Unlock the signer and quit other wallet apps, then try again.'
+      );
+    }
     const trezor = deviceId === 'virtual-trezor-standard' || deviceId === 'virtual-trezor';
     if (trezor && !allowEmptyPassphrase)
       throw new WalletError(

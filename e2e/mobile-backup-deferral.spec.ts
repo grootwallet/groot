@@ -136,7 +136,7 @@ for (const theme of ['light', 'dark']) {
     await capture('final-qr-verified-before-pin');
     await page.getByLabel('Local app PIN', { exact: true }).fill('synthetic-wrong-pin');
     await page.getByRole('button', { name: 'Accept wallet policy', exact: true }).click();
-    await expect(page.locator('.inline-error')).toHaveText('Incorrect app PIN.');
+    await expect(page.getByRole('alert')).toHaveText('Incorrect app PIN.');
     await expect(page.getByLabel('Local app PIN', { exact: true })).toHaveValue('');
     await expect(page.getByLabel('Animated QR camera preview')).toHaveCount(0);
     await page.getByLabel('Local app PIN', { exact: true }).fill('synthetic-correct-pin');

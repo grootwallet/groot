@@ -122,7 +122,7 @@ describe('hardware receive verification UI', () => {
     expect(hardwareSetup).toContain(
       "import WarningNotice from '$lib/components/WarningNotice.svelte'"
     );
-    expect(hardwareSetup.match(/<WarningNotice/g)).toHaveLength(2);
+    expect(hardwareSetup).not.toMatch(/<(?:p|small)[^>]*class="form-error"/);
     expect(hardwareSetup).not.toContain('class="hardware-inline-error"');
   });
 

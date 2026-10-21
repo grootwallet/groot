@@ -1,4 +1,5 @@
 <script lang="ts">
+  import WarningNotice from '$lib/components/WarningNotice.svelte';
   import { locale } from '$lib/i18n';
   import { translate, localizedError } from '$lib/i18n-catalog';
   import {
@@ -584,7 +585,13 @@
           </div>
         {/if}
       </details>
-      {#if error}<p class="form-error" role="alert">{error}</p>{/if}
+      {#if error}<WarningNotice
+          tone="danger"
+          icon
+          role="alert"
+          ariaLive="polite"
+          body={error}
+        />{/if}
       <Button
         size="large"
         class="full"
@@ -711,7 +718,13 @@
           'Tap a placed word to return it. You can also drag words between the pool and sequence.'
         )}
       </p>
-      {#if verificationError}<p class="form-error" role="alert">{verificationError}</p>{/if}
+      {#if verificationError}<WarningNotice
+          tone="danger"
+          icon
+          role="alert"
+          ariaLive="polite"
+          body={verificationError}
+        />{/if}
       <Button
         size="large"
         class="full"
@@ -780,9 +793,13 @@
         </p></label
       >
 
-      {#if error}<p class="form-error" role="alert">
-          {error.replace('passphrase / PIN', 'wallet passphrase')}
-        </p>{/if}
+      {#if error}<WarningNotice
+          tone="danger"
+          icon
+          role="alert"
+          ariaLive="polite"
+          body={error.replace('passphrase / PIN', 'wallet passphrase')}
+        />{/if}
       <Button
         size="large"
         class="full"
@@ -898,9 +915,13 @@
           'This exact BIP39 passphrase is required with the recovery words and also unlocks Groot.'
         )}
         error={passphraseError}
-      />{#if error}<p class="form-error" role="alert">
-          {error.replace('passphrase / PIN', 'wallet passphrase')}
-        </p>{/if}<Button
+      />{#if error}<WarningNotice
+          tone="danger"
+          icon
+          role="alert"
+          ariaLive="polite"
+          body={error.replace('passphrase / PIN', 'wallet passphrase')}
+        />{/if}<Button
         size="large"
         class="full"
         disabled={!walletName.trim() || !passphrase || !!passphraseError}

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import WarningNotice from '$lib/components/WarningNotice.svelte';
   import { onDestroy } from 'svelte';
   import { ArrowLeft, Check, QrCode, ShieldCheck } from '@lucide/svelte';
   import AnimatedUrQr from '$lib/components/AnimatedUrQr.svelte';
@@ -174,7 +175,13 @@
         </div>
       </dl>
       <PasswordField bind:value={pin} label={translate($locale, 'Local app PIN')} />
-      {#if error}<p class="inline-error" role="alert">{error}</p>{/if}
+      {#if error}<WarningNotice
+          tone="danger"
+          icon
+          role="alert"
+          ariaLive="polite"
+          body={error}
+        />{/if}
       <Button class="full" loading={busy} disabled={!pin} onclick={sign}
         >{translate($locale, 'Sign this exact PSBT')}</Button
       >
@@ -190,7 +197,13 @@
           )}</small
         >
       </div>
-      {#if error}<p class="inline-error" role="alert">{error}</p>{/if}
+      {#if error}<WarningNotice
+          tone="danger"
+          icon
+          role="alert"
+          ariaLive="polite"
+          body={error}
+        />{/if}
       <UrQrScanner
         onframe={receivePsbtFrame}
         onreset={() => {
@@ -256,10 +269,6 @@
   }
   .security-copy {
     color: var(--muted);
-    margin: 0;
-  }
-  .inline-error {
-    color: var(--danger);
     margin: 0;
   }
 </style>

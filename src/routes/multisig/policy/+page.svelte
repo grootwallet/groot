@@ -199,14 +199,18 @@
               'Expanding multisig needs an additional key that\n            is not eligible in the immediate path.'
             )}
           />{/if}
-        {#if error}<p class="form-error" aria-live="polite">
-            {translate(
+        {#if error}<WarningNotice
+            tone="danger"
+            icon
+            role="alert"
+            ariaLive="polite"
+            body={translate(
               $locale,
               error === 'recovery_signer_reused'
                 ? 'The recovery signer must be independent from every immediate-path signer.'
                 : error
             )}
-          </p>{/if}<Button
+          />{/if}<Button
           class="full"
           disabled={(kind === 'recovery' && !canUseSeparateRecoveryKey) ||
             (kind === 'expanding' && wallet.cosigners.length < 4)}

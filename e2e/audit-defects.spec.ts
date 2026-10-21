@@ -60,8 +60,10 @@ for (const [locale, button, error] of [
     );
     await page.goto('/send');
     await page.getByRole('button', { name: button, exact: true }).click();
-    await expect(page.locator('.scan-status')).toContainText(error);
-    await expect(page.locator('.scan-status')).not.toContainText('Camera access was denied');
+    await expect(page.locator('.scanner').getByRole('alert')).toContainText(error);
+    await expect(page.locator('.scanner').getByRole('alert')).not.toContainText(
+      'Camera access was denied'
+    );
   });
 }
 
@@ -151,9 +153,11 @@ test('UR scanner translates live counts and its bounded frame-limit failure', as
     const emit = (window as Window & { emitUrFrame: (frame: string) => void }).emitUrFrame;
     for (let frame = 3; frame <= 1025; frame++) emit(`ur:crypto-psbt/${frame}of1024/synthetic`);
   });
-  await expect(page.locator('.scan-status')).toContainText('Trop d’images QR. Relancez l’analyse.');
+  await expect(page.locator('.scanner').getByRole('alert')).toContainText(
+    'Trop d’images QR. Relancez l’analyse.'
+  );
   await page.locator('.scanner-retry').click();
-  await expect(page.locator('.scan-status')).not.toContainText('Trop d’images QR');
+  await expect(page.locator('.scanner').getByRole('alert')).toHaveCount(0);
   await page.evaluate(() =>
     (window as Window & { emitUrFrame: (frame: string) => void }).emitUrFrame(
       'ur:crypto-psbt/1of1024/synthetic'

@@ -540,10 +540,6 @@
     display: flex;
     gap: 7px;
   }
-  :global(.signer-name-editor):where(.signer-name-editor) :global(.form-error) {
-    grid-column: 1 / -1;
-    margin: 0;
-  }
   :global(.device-policy-status):where(.device-policy-status) {
     display: grid;
     grid-template-columns: 32px minmax(0, 1fr) auto;

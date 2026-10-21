@@ -1,4 +1,5 @@
 <script lang="ts">
+  import WarningNotice from '$lib/components/WarningNotice.svelte';
   import { formatInteger, locale } from '$lib/i18n';
   import { translate } from '$lib/i18n-catalog';
   import { ArrowRight, ArrowUp, Check, Copy, ExternalLink, Layers } from '@lucide/svelte';
@@ -355,7 +356,13 @@
         <div class="explorer-panel">
           <button class="explorer-link" type="button" onclick={openExplorer}
             >{translate($locale, 'View on mempool.space')} <ExternalLink size={14} /></button
-          >{#if explorerError}<p class="form-error" role="alert">{explorerError}</p>{/if}
+          >{#if explorerError}<WarningNotice
+              tone="danger"
+              icon
+              role="alert"
+              ariaLive="polite"
+              body={explorerError}
+            />{/if}
           <p class="explorer-privacy">
             {translate($locale, 'Opening this shares the transaction lookup with mempool.space.')}
           </p>

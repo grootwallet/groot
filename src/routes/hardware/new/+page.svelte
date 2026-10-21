@@ -443,7 +443,13 @@
         <span>{translate($locale, 'Device setup guides')}</span>
         <ArrowRight size={14} />
       </button>
-      {#if error}<p class="form-error">{error}</p>{/if}
+      {#if error && !scanOpen}<WarningNotice
+          tone="danger"
+          icon
+          role="alert"
+          ariaLive="polite"
+          body={error}
+        />{/if}
     </section>
   {:else if step === 2 && signer}
     <section class="form-card hardware-review-card">

@@ -980,13 +980,18 @@
       </div>
     </section>
   {:else if walletLoadError}
-    <section class="empty-state vault-empty" role="alert">
-      <h2>{translate($locale, 'Wallet policy unavailable')}</h2>
-      <p>{walletLoadError}</p>
+    <WarningNotice
+      tone="danger"
+      icon
+      role="alert"
+      class="inline-action"
+      title={translate($locale, 'Wallet policy unavailable')}
+      body={walletLoadError}
+    >
       <Button variant="secondary" onclick={loadPolicyWallet}
         >{translate($locale, 'Try again')}</Button
       >
-    </section>
+    </WarningNotice>
   {:else}
     <section class="empty-state vault-empty">
       <span class="empty-icon"><Usb size={24} /></span>
@@ -1150,7 +1155,13 @@
         >
       </p>
     </div>
-    {#if phoneRecoveryError}<p class="inline-error" role="alert">{phoneRecoveryError}</p>{/if}
+    {#if phoneRecoveryError}<WarningNotice
+        tone="danger"
+        icon
+        role="alert"
+        ariaLive="polite"
+        body={phoneRecoveryError}
+      />{/if}
   </div>
 </Modal>
 <Modal
@@ -1624,10 +1635,6 @@
   .phone-recovery-note span {
     color: var(--muted);
     font-size: 0.875rem;
-  }
-  .inline-error {
-    margin: 0;
-    color: var(--danger);
   }
   .coordinator-page > :global(.warning-notice) {
     margin-bottom: 1rem;

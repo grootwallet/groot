@@ -1,7 +1,6 @@
 <script lang="ts">
   import { translate, localizedError } from '$lib/i18n-catalog';
   import {
-    AlertTriangle,
     ArrowLeft,
     Check,
     ChevronDown,
@@ -1813,7 +1812,13 @@
                 ></span
               >
             </div>{/if}
-          {#if error}<p class="form-error">{error}</p>{/if}
+          {#if error}<WarningNotice
+              tone="danger"
+              icon
+              role="alert"
+              ariaLive="polite"
+              body={error}
+            />{/if}
           <div class="coordinator-actions">
             <Button variant="secondary" onclick={returnToPolicyChoice}
               ><ArrowLeft size={16} />{translate($locale, 'Back')}</Button
@@ -1916,10 +1921,21 @@
             {cosigners.length} of {requiredKeys}
             {translate($locale, 'signers added')}
           </p>{/if}
-        {#if reviewAttempted && visibleErrors.length}<div class="policy-errors" aria-live="polite">
+        {#if reviewAttempted && visibleErrors.length}<WarningNotice
+            tone="danger"
+            icon
+            role="alert"
+            ariaLive="polite"
+          >
             {#each visibleErrors as item}<p>{translate($locale, item)}</p>{/each}
-          </div>{/if}
-        {#if error}<p class="form-error">{error}</p>{/if}
+          </WarningNotice>{/if}
+        {#if error}<WarningNotice
+            tone="danger"
+            icon
+            role="alert"
+            ariaLive="polite"
+            body={error}
+          />{/if}
         <div class="coordinator-actions">
           <Button
             variant="secondary"
@@ -2076,12 +2092,16 @@
                   </div>
                   <code>{combinedDescriptor}</code>
                 </section>
-              {:else}<p class="form-error" role="alert">
-                  {translate(
+              {:else}<WarningNotice
+                  tone="danger"
+                  icon
+                  role="alert"
+                  ariaLive="polite"
+                  body={translate(
                     $locale,
                     'The wallet descriptor could not be combined. Your saved backup is unchanged.'
                   )}
-                </p>{/if}
+                />{/if}
               {#if recoveryTemplate?.type === 'recovery'}<span
                   >{translate($locale, 'Spend paths')}</span
                 ><code
@@ -2096,7 +2116,13 @@
                 )}
               </p>
             </div>{/if}
-          {#if backupError}<p class="form-error" role="alert">{backupError}</p>{/if}
+          {#if backupError}<WarningNotice
+              tone="danger"
+              icon
+              role="alert"
+              ariaLive="polite"
+              body={backupError}
+            />{/if}
         </SetupTask>
         {#if coldcardRegistrationRequired}<SetupTask
             step={coldcardStep}
@@ -2257,9 +2283,13 @@
               disabled={!pinAvailable}
             />
           </div>
-          {#if credential && confirmation && credential !== confirmation}<p class="form-error">
-              {translate($locale, 'PINs do not match.')}
-            </p>{/if}
+          {#if credential && confirmation && credential !== confirmation}<WarningNotice
+              tone="danger"
+              icon
+              role="alert"
+              ariaLive="polite"
+              body={translate($locale, 'PINs do not match.')}
+            />{/if}
         </SetupTask>
       </div>
       {#if error}<WarningNotice
@@ -2398,13 +2428,16 @@
       ><ChevronRight size={15} /></button
     >
   </div>
-  {#if pickerError}<div class="import-error" role="alert" aria-live="polite">
-      <AlertTriangle size={18} /><span
-        ><strong>{translate($locale, pickerErrorTitle)}</strong><b>{pickerError}</b><small
-          >{translate($locale, pickerErrorGuidance)}</small
-        ></span
-      >
-    </div>{/if}
+  {#if pickerError}<WarningNotice
+      tone="danger"
+      icon
+      role="alert"
+      ariaLive="polite"
+      title={translate($locale, pickerErrorTitle)}
+      body={pickerError}
+    >
+      <small>{translate($locale, pickerErrorGuidance)}</small>
+    </WarningNotice>{/if}
 </Modal>
 <Modal
   open={mobilePairOpen}
@@ -2455,7 +2488,13 @@
         >{translate($locale, 'Scan phone QR code')}</Button
       >
     {:else if mobileInvitation && mobilePairScan && !mobileCandidate}
-      {#if mobilePairError}<p class="form-error" role="alert">{mobilePairError}</p>{/if}
+      {#if mobilePairError}<WarningNotice
+          tone="danger"
+          icon
+          role="alert"
+          ariaLive="polite"
+          body={mobilePairError}
+        />{/if}
       <UrQrScanner
         acceptedTypes={['groot-bsms']}
         prompt={translate($locale, 'Point the camera at the encrypted phone response')}
@@ -2476,11 +2515,23 @@
           >{mobileInvitation.comparisonCode}</strong
         >
       </div>
-      {#if mobilePairError}<p class="form-error" role="alert">{mobilePairError}</p>{/if}
+      {#if mobilePairError}<WarningNotice
+          tone="danger"
+          icon
+          role="alert"
+          ariaLive="polite"
+          body={mobilePairError}
+        />{/if}
       <Button class="full" onclick={confirmMobileSigner}
         >{translate($locale, 'Six digits match — add signer')}</Button
       >
-    {:else if mobilePairError}<p class="form-error" role="alert">{mobilePairError}</p>{/if}
+    {:else if mobilePairError}<WarningNotice
+        tone="danger"
+        icon
+        role="alert"
+        ariaLive="polite"
+        body={mobilePairError}
+      />{/if}
     {#if !mobilePairAccepted}<Button
         variant="secondary"
         class="full"
@@ -2615,15 +2666,18 @@
           ? 'Already added'
           : hardwareDeviceStateLabel(device, membership)}
     />{/if}
-  {#if error && hardware.length > 0}<div class="hardware-inline-error" role="alert">
-      <AlertTriangle size={18} /><span
-        ><strong>{translate($locale, 'Could not read the account key')}</strong><small
-          >{error}</small
-        ></span
-      ><Button variant="secondary" size="small" onclick={scanHardware}
+  {#if error && hardware.length > 0}<WarningNotice
+      tone="danger"
+      icon
+      role="alert"
+      class="inline-action"
+      title={translate($locale, 'Could not read the account key')}
+      body={error}
+    >
+      <Button variant="secondary" size="small" onclick={scanHardware}
         >{translate($locale, 'Try again')}</Button
       >
-    </div>{/if}
+    </WarningNotice>{/if}
 </Modal>
 
 <Modal
@@ -2776,7 +2830,13 @@
         placeholder={translate($locale, defaultConfig.network === 'mainnet' ? 'xpub…' : 'tpub…')}
       ></textarea><small>{translate($locale, 'Derivation:')} {MULTISIG_ACCOUNT_PATH}</small></label
     >
-    {#if keyError}<p class="form-error" role="alert">{keyError}</p>{/if}
+    {#if keyError}<WarningNotice
+        tone="danger"
+        icon
+        role="alert"
+        ariaLive="polite"
+        body={keyError}
+      />{/if}
     <div class="modal-footer">
       <Button variant="secondary" onclick={() => (keyOpen = false)}
         >{translate($locale, 'Cancel')}</Button
@@ -3183,18 +3243,6 @@
   :global(.keys-empty):where(.keys-empty) :global(span) {
     font-size: var(--font-size-meta);
   }
-  :global(.policy-errors):where(.policy-errors) {
-    margin-top: 12px;
-    padding: 10px 12px;
-    border: 1px solid rgba(239, 100, 100, 0.2);
-    background: rgba(239, 100, 100, 0.05);
-    border-radius: var(--radius-control);
-  }
-  :global(.policy-errors):where(.policy-errors) :global(p) {
-    color: var(--danger);
-    font-size: var(--font-size-meta);
-    margin: 3px 0;
-  }
   :global(.cosigner-progress):where(.cosigner-progress) {
     margin: 9px 2px 0;
     color: var(--muted);
@@ -3239,41 +3287,6 @@
   :global(.hardware-help-card:hover):where(.hardware-help-card) {
     border-color: var(--border-strong);
     background: var(--surface-hover);
-  }
-  :global(.import-error):where(.import-error) {
-    display: grid;
-    grid-template-columns: 22px minmax(0, 1fr);
-    align-items: start;
-    gap: 10px;
-    margin-top: 12px;
-    padding: 13px 14px;
-    border: 1px solid color-mix(in srgb, var(--danger) 30%, var(--border));
-    border-radius: var(--radius-control);
-    color: var(--danger);
-    background: color-mix(in srgb, var(--danger) 6%, transparent);
-  }
-  :global(.import-error):where(.import-error) > :global(svg) {
-    margin-top: 1px;
-  }
-  :global(.import-error):where(.import-error) > :global(span) {
-    min-width: 0;
-    display: grid;
-    gap: 4px;
-  }
-  :global(.import-error):where(.import-error) :global(strong) {
-    color: var(--danger);
-    font-size: var(--font-size-meta);
-  }
-  :global(.import-error):where(.import-error) :global(b) {
-    color: var(--text);
-    font-size: var(--font-size-meta);
-    font-weight: 650;
-    line-height: 1.45;
-  }
-  :global(.import-error):where(.import-error) :global(small) {
-    color: var(--muted);
-    font-size: var(--font-size-meta);
-    line-height: 1.55;
   }
   :global(.signer-readiness-list):where(.signer-readiness-list) {
     display: grid;

@@ -1012,7 +1012,13 @@
       bind:labels={claimLabels}
       bind:value={claimLabel}
     />
-    {#if claimError}<p class="form-error" role="alert">{claimError}</p>{/if}
+    {#if claimError}<WarningNotice
+        tone="danger"
+        icon
+        role="alert"
+        ariaLive="polite"
+        body={claimError}
+      />{/if}
     <div class="modal-footer">
       <Button
         type="button"

@@ -1,7 +1,8 @@
 <script lang="ts">
+  import WarningNotice from '$lib/components/WarningNotice.svelte';
   import { locale } from '$lib/i18n';
   import { translate } from '$lib/i18n-catalog';
-  import { Camera, CameraOff } from '@lucide/svelte';
+  import { Camera } from '@lucide/svelte';
   import { onMount } from 'svelte';
   import type QrScanner from 'qr-scanner';
 
@@ -74,16 +75,21 @@
     ></video>
     <div class="scan-guide" aria-hidden="true"></div>
   </div>
-  <div class="scan-status" role="status">
-    {#if error}<CameraOff size={16} /><span>{translate($locale, errors[error])}</span>{:else}<Camera
-        size={16}
-      /><span
+  {#if error}<WarningNotice
+      tone="danger"
+      icon
+      role="alert"
+      body={translate($locale, errors[error])}
+    />{:else}
+    <div class="scan-status" role="status">
+      <Camera size={16} /><span
         >{translate(
           $locale,
           processing ? 'Reading payment request…' : 'Point the camera at a Bitcoin payment QR'
         )}</span
-      >{/if}
-  </div>
+      >
+    </div>
+  {/if}
 </div>
 
 <style>

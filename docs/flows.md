@@ -119,3 +119,5 @@ Coins → choose a confirmed policy coin → choose an available named delayed p
 ## RC10 test-feedback corrections
 
 Saved signer → Check signer → connection/identity result leaves saved policy import/address evidence independent. Coldcard file import is an explicit acknowledgement performed outside Groot; its timestamp says Import recorded. Payment and policy setup/review errors use the existing WarningNotice, including fee-estimator failures. Partial Core fee responses enable only available target buttons; missing targets stay disabled, with explicit custom-rate entry. No rate is fabricated and an unset/invalid custom rate blocks preparation. Mobile payment actions retain scroll clearance above fixed navigation when longer localized errors appear.
+
+Hardware account-read failure remains visible as a shared error notice after closing the scan dialog; reconnecting or retrying clears the stale error before a new attempt. Creation/recovery/settings/mobile and credential validation use the same notice, preserving their existing actions and error classification.

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import WarningNotice from '$lib/components/WarningNotice.svelte';
   import { locale } from '$lib/i18n';
   import { translate, localizedError } from '$lib/i18n-catalog';
   import { Camera, CameraOff, Check } from '@lucide/svelte';
@@ -189,27 +190,33 @@
       <div class="scan-guide" aria-hidden="true"></div>
     </div>
   {/if}
-  <div class="scan-status" role="status">
-    {#if scanComplete}<Check size={16} /><span>{translate($locale, 'QR verified')}</span>
-    {:else}
-      {#if error}<CameraOff size={16} /><span>{translate($locale, error)}</span
-        >{:else if cameraActive}<Camera size={16} /><span
-          >{translate(
-            $locale,
-            starting
-              ? 'Requesting camera permission…'
-              : scanned
-                ? scanned === 1
-                  ? '{count} unique frame scanned'
-                  : '{count} unique frames scanned'
-                : prompt,
-            { count: scanned }
-          )}</span
-        >{:else}<CameraOff size={16} /><span
-          >{translate($locale, 'Allow camera access to scan this QR.')}</span
-        >{/if}
-    {/if}
-  </div>
+  {#if error && !scanComplete}<WarningNotice
+      tone="danger"
+      icon
+      role="alert"
+      body={translate($locale, error)}
+    />{:else}
+    <div class="scan-status" role="status">
+      {#if scanComplete}<Check size={16} /><span>{translate($locale, 'QR verified')}</span>
+      {:else}
+        {#if cameraActive}<Camera size={16} /><span
+            >{translate(
+              $locale,
+              starting
+                ? 'Requesting camera permission…'
+                : scanned
+                  ? scanned === 1
+                    ? '{count} unique frame scanned'
+                    : '{count} unique frames scanned'
+                  : prompt,
+              { count: scanned }
+            )}</span
+          >{:else}<CameraOff size={16} /><span
+            >{translate($locale, 'Allow camera access to scan this QR.')}</span
+          >{/if}
+      {/if}
+    </div>
+  {/if}
   {#if cameraActive && expectedParts > 0}
     <div class="scan-progress" aria-live="polite">
       <progress max="100" value={progress} aria-label={translate($locale, 'QR scan progress')}

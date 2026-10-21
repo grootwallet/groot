@@ -3581,6 +3581,10 @@
 />
 
 <style>
+  .send-page :global(.signing-transport-error) {
+    margin-top: 14px;
+  }
+
   /* Keep the original cascade weight while constraining these rules to this owner. */
 
   :global(.policy-renewal-banner):where(.policy-renewal-banner) {

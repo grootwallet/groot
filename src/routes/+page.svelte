@@ -1411,7 +1411,13 @@
         <dd><PermanentLabelTags labels={activeDraft.labels} hidden={$discreetMode} prominent /></dd>
       </div>
     </dl>
-    {#if discardDraftError}<p class="form-error" role="alert">{discardDraftError}</p>{/if}
+    {#if discardDraftError}<WarningNotice
+        tone="danger"
+        icon
+        role="alert"
+        ariaLive="polite"
+        body={discardDraftError}
+      />{/if}
     <div class="modal-footer">
       <Button
         variant="secondary"
@@ -1462,9 +1468,13 @@
       'Required to decrypt the recovery words only inside trusted Rust code.'
     )}
   />
-  {#if verifyError}<p class="form-error" role="alert">
-      {verifyError.replace('passphrase / PIN', 'wallet passphrase')}
-    </p>{/if}
+  {#if verifyError}<WarningNotice
+      tone="danger"
+      icon
+      role="alert"
+      ariaLive="polite"
+      body={verifyError.replace('passphrase / PIN', 'wallet passphrase')}
+    />{/if}
   <div class="modal-footer verify-backup-actions">
     <Button
       class="show-words-action"

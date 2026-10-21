@@ -68,6 +68,12 @@
 {/if}
 
 <style>
+  @media (max-width: 760px) {
+    .button {
+      scroll-margin-block: 80px calc(280px + env(safe-area-inset-bottom));
+    }
+  }
+
   /* Keep the original cascade weight while constraining these rules to this owner. */
 
   :global(.button-loading-indicator):where(.button-loading-indicator) {
