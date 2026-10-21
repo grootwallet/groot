@@ -891,6 +891,7 @@ impl HwiCli {
         run_program_in_operation(
             &self.program,
             &self.source,
+            self.chain,
             &[
                 "--chain".into(),
                 self.chain.as_hwi_argument_for_device(device_type).into(),
@@ -920,6 +921,7 @@ impl HwiCli {
         run_program_in_operation(
             &self.program,
             &self.source,
+            self.chain,
             &self.device_command(device_type, device_path, "getxpub", derivation_path)?,
             operation,
             self.home.as_deref(),
@@ -937,6 +939,7 @@ impl HwiCli {
         run_program_in_operation(
             &self.program,
             &self.source,
+            self.chain,
             &self.device_command(device_type, device_path, "signtx", psbt)?,
             operation,
             self.home.as_deref(),
@@ -957,6 +960,7 @@ impl HwiCli {
         run_program_in_operation(
             &self.program,
             &self.source,
+            self.chain,
             &arguments,
             operation,
             self.home.as_deref(),
@@ -972,6 +976,7 @@ impl HardwareTransport for HwiCli {
         run_program_in_operation(
             &self.program,
             &self.source,
+            self.chain,
             &[
                 "--chain".into(),
                 self.chain.as_hwi_argument().into(),
@@ -1040,6 +1045,7 @@ impl HardwareTransport for HwiCli {
         run_program_in_operation(
             &self.program,
             &self.source,
+            self.chain,
             &self.device_command_without_value(device_type, device_path, "promptpin")?,
             &operation,
             self.home.as_deref(),
@@ -1062,6 +1068,7 @@ impl HardwareTransport for HwiCli {
         run_program_in_operation(
             &self.program,
             &self.source,
+            self.chain,
             &arguments,
             &operation,
             self.home.as_deref(),
@@ -1132,7 +1139,15 @@ fn run_program(
     }
     let _ = trusted_executable(program, source)?;
     let operation = HardwareOperation::acquire(HardwareOperationKind::Interactive, timeout)?;
-    run_program_in_operation(program, source, arguments, &operation, home, None)
+    run_program_in_operation(
+        program,
+        source,
+        HwiChain::Test,
+        arguments,
+        &operation,
+        home,
+        None,
+    )
 }
 
 fn quote_hwi_stdin_argument(argument: &str) -> String {
@@ -1172,6 +1187,7 @@ fn hwi_stdin_command(
 fn run_program_in_operation(
     program: &Path,
     source: &HwiSource,
+    active_chain: HwiChain,
     arguments: &[String],
     operation: &HardwareOperation,
     home: Option<&Path>,
@@ -1195,7 +1211,7 @@ fn run_program_in_operation(
         command.env("HOME", trusted_home(home)?);
     }
     #[cfg(target_os = "macos")]
-    if let Some(runtime) = runtime::for_operation(source, arguments)? {
+    if let Some(runtime) = runtime::for_operation(source, arguments, active_chain)? {
         // Only the compiled, app-sealed runtime may bypass PyInstaller extraction.
         command.env("_MEIPASS2", runtime);
     }
@@ -1712,6 +1728,7 @@ mod tests {
                 let bytes = run_program_in_operation(
                     &hwi.program,
                     &hwi.source,
+                    hwi.chain,
                     &arguments,
                     &operation,
                     hwi.home.as_deref(),
@@ -2080,6 +2097,7 @@ mod tests {
             run_program_in_operation(
                 &script,
                 &HwiSource::External,
+                HwiChain::Test,
                 &["enumerate".into()],
                 &operation,
                 None,
@@ -2126,6 +2144,7 @@ mod tests {
             run_program_in_operation(
                 &script,
                 &HwiSource::External,
+                HwiChain::Test,
                 &["enumerate".into()],
                 &operation,
                 None,
@@ -2212,6 +2231,7 @@ mod tests {
             run_program_in_operation(
                 &script,
                 &HwiSource::External,
+                HwiChain::Test,
                 &["enumerate".into()],
                 &operation,
                 None,

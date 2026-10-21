@@ -100,3 +100,9 @@ The RC10 test-feedback corrections have **no BIP or persisted-format impact**: i
 RC11 operation-scoped Testnet4 transport (ADR 0101) has **no BIP or persisted-format impact**. Full fingerprint/account-xpub proof, vendor signing/display, policy gates, descriptors, PSBT encodings and native signature validation remain required. Host timing and protocol fixtures add no physical model certification.
 
 Shared error-notice consistency after the Jade RC11 trial has **no BIP or persisted-format impact**. Only presentation and browser fixtures change; hardware transport, key reads, policy gates, signing, credentials, descriptors and backups are unchanged. Owner timing samples establish a performance baseline, not full device certification.
+
+Internal RC12 Trezor/Jade Testnet4 runtime acceleration (ADR 0102) has **no BIP or
+persisted-format impact**. The pinned HWI driver, derivation paths, descriptors,
+PSBT encodings, and native identity/policy/address/signature checks stay the same.
+Jade keeps its existing HWI shared test-network mapping for Testnet4. Owner
+performance reports are not physical interoperability certification.

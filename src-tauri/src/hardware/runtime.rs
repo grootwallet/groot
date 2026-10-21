@@ -1,5 +1,5 @@
-//! ADR 0098: immutable, app-sealed Python payload for internal Testnet4 Coldcard.
-use super::{HardwareError, HwiSource};
+//! ADRs 0098/0102: immutable, app-sealed Python payload for internal Testnet4 signers.
+use super::{HardwareError, HwiChain, HwiSource};
 use bdk_wallet::bitcoin::hashes::{sha256, Hash};
 use serde::Deserialize;
 use std::{
@@ -206,14 +206,23 @@ fn verify_runtime(
     Ok(root.to_path_buf())
 }
 
-fn selected_fast_testnet4(arguments: &[String]) -> bool {
-    arguments.first().map(String::as_str) == Some("--chain")
-        && arguments.get(1).map(String::as_str) == Some("testnet4")
-        && arguments.get(2).map(String::as_str) == Some("--device-type")
-        && matches!(
-            arguments.get(3).map(String::as_str),
-            Some("coldcard" | "ledger" | "bitbox02")
-        )
+fn selected_fast_testnet4(arguments: &[String], active_chain: HwiChain) -> bool {
+    if active_chain != HwiChain::Testnet4
+        || arguments.first().map(String::as_str) != Some("--chain")
+        || arguments.get(2).map(String::as_str) != Some("--device-type")
+    {
+        return false;
+    }
+    match (
+        arguments.get(1).map(String::as_str),
+        arguments.get(3).map(String::as_str),
+    ) {
+        (Some("testnet4"), Some("coldcard" | "ledger" | "bitbox02" | "trezor" | "jade")) => true,
+        // HWI 3.2.0's Jade driver requires its shared test-network selector.
+        // The explicit native chain prevents this from admitting Testnet3.
+        (Some("test"), Some("jade")) => true,
+        _ => false,
+    }
 }
 
 // Called only after the existing full app/helper signature and HWI digest checks.
@@ -221,11 +230,12 @@ fn selected_fast_testnet4(arguments: &[String]) -> bool {
 pub(super) fn for_operation(
     source: &HwiSource,
     arguments: &[String],
+    active_chain: HwiChain,
 ) -> Result<Option<PathBuf>, HardwareError> {
     let Some(expected) = option_env!("GROOT_HWI_RUNTIME_SHA256") else {
         return Ok(None);
     };
-    if !selected_fast_testnet4(arguments) {
+    if !selected_fast_testnet4(arguments, active_chain) {
         return Ok(None);
     }
     if !cfg!(groot_network = "multi")
@@ -269,16 +279,28 @@ mod tests {
 
     #[test]
     fn runtime_selection_excludes_every_other_network_and_device() {
-        for chain in ["main", "test", "signet", "regtest", "testnet4"] {
-            for device in ["coldcard", "trezor", "bitbox02", "ledger", "jade"] {
-                let args = ["--chain", chain, "--device-type", device].map(str::to_owned);
-                assert_eq!(
-                    selected_fast_testnet4(&args),
-                    chain == "testnet4" && matches!(device, "coldcard" | "ledger" | "bitbox02")
-                );
+        for active_chain in [
+            HwiChain::Main,
+            HwiChain::Test,
+            HwiChain::Signet,
+            HwiChain::Regtest,
+            HwiChain::Testnet4,
+        ] {
+            for selector in ["main", "test", "signet", "regtest", "testnet4"] {
+                for device in ["coldcard", "trezor", "bitbox02", "ledger", "jade"] {
+                    let args = ["--chain", selector, "--device-type", device].map(str::to_owned);
+                    let accepted = active_chain == HwiChain::Testnet4
+                        && ((selector == "testnet4"
+                            && matches!(
+                                device,
+                                "coldcard" | "ledger" | "bitbox02" | "trezor" | "jade"
+                            ))
+                            || (selector == "test" && device == "jade"));
+                    assert_eq!(selected_fast_testnet4(&args, active_chain), accepted);
+                }
             }
         }
-        assert!(!selected_fast_testnet4(&[]));
+        assert!(!selected_fast_testnet4(&[], HwiChain::Testnet4));
     }
 
     #[test]

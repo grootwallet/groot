@@ -1,4 +1,4 @@
-//! ADR 0101: one fresh full identity and one action on one isolated client.
+//! ADRs 0101/0102: one fresh full identity and one action on one isolated client.
 use super::*;
 #[cfg(target_os = "macos")]
 use bdk_wallet::bitcoin::bip32::{Fingerprint, Xpub};
@@ -64,6 +64,9 @@ fn validated_response(
     expected: &[HwiSessionExpected],
 ) -> Result<(String, Vec<u8>), HardwareError> {
     let parsed: serde_json::Value = serde_json::from_slice(bytes).map_err(|_| HardwareError::Io)?;
+    if parsed.get("error").and_then(serde_json::Value::as_str) == Some("wrong_network") {
+        return Err(HardwareError::WrongNetwork);
+    }
     if parsed.get("error").is_some() {
         return Err(HardwareError::CommandFailed(
             parsed.get("code").and_then(serde_json::Value::as_i64),
@@ -90,7 +93,10 @@ impl HwiCli {
         {
             option_env!("GROOT_HWI_SESSION_PROTOCOL") == Some("1")
                 && self.chain == HwiChain::Testnet4
-                && matches!(device_type, "coldcard" | "ledger" | "bitbox02")
+                && matches!(
+                    device_type,
+                    "coldcard" | "ledger" | "bitbox02" | "trezor" | "jade"
+                )
                 && matches!(self.source, HwiSource::Bundled { .. })
         }
         #[cfg(not(target_os = "macos"))]
@@ -152,7 +158,7 @@ impl HwiCli {
             let _original = trusted_executable(&self.program, &self.source)?;
             let arguments =
                 ["--chain", "testnet4", "--device-type", device_type].map(str::to_owned);
-            let root = runtime::for_operation(&self.source, &arguments)?
+            let root = runtime::for_operation(&self.source, &arguments, self.chain)?
                 .ok_or(HardwareError::Unavailable)?;
             let helper = root.join("groot-hwi-session");
             if !helper.is_file() {
@@ -211,12 +217,12 @@ mod tests {
         .unwrap();
         let mut timings = Vec::new();
         for _ in 0..20 {
-            for family in ["coldcard", "ledger", "bitbox02"] {
+            for family in ["coldcard", "ledger", "bitbox02", "trezor", "jade"] {
                 let operation = hwi.begin_interactive_operation().unwrap();
                 let started = Instant::now();
                 trusted_executable(&hwi.program, &hwi.source).unwrap();
                 let arguments = ["--chain", "testnet4", "--device-type", family].map(str::to_owned);
-                let root = runtime::for_operation(&hwi.source, &arguments)
+                let root = runtime::for_operation(&hwi.source, &arguments, hwi.chain)
                     .unwrap()
                     .unwrap();
                 let input = serde_json::to_vec(&Request {
@@ -274,6 +280,10 @@ mod tests {
         assert!(matches!(
             validated_response(br#"{"error":"session_failed","code":-14}"#, &[expected()]),
             Err(HardwareError::CommandFailed(Some(-14)))
+        ));
+        assert!(matches!(
+            validated_response(br#"{"error":"wrong_network","code":-3}"#, &[expected()]),
+            Err(HardwareError::WrongNetwork)
         ));
         assert_eq!(
             serde_json::to_string(&HwiSessionAction::Probe).unwrap(),

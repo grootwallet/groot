@@ -101,7 +101,7 @@ try {
   if (digest(stagedHwi) !== manifest.artifact.sha256) fail('staged HWI changed during copy');
 
   // Internal multi-network RCs only. The native selector additionally limits
-  // this payload to Coldcard/Ledger/BitBox02 Testnet4; production keeps HWI.
+  // this payload to reviewed Testnet4 families; production keeps HWI.
   const runtime =
     buildTarget === 'multi'
       ? prepareHwiRuntime(
@@ -219,7 +219,7 @@ try {
     `hwi_sha256=${result.sha256}`,
     ...(runtime
       ? [
-          `coldcard_testnet4_runtime_sha256=${runtime.sha256}`,
+          `testnet4_hwi_runtime_sha256=${runtime.sha256}`,
           `testnet4_runtime_sha256=${runtime.sha256}`,
           'hwi_session_protocol=1'
         ]

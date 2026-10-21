@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import unittest
 from unittest.mock import Mock
+from types import SimpleNamespace
 
 spec = importlib.util.spec_from_file_location("worker", Path(__file__).with_name("session-worker.py"))
 worker = importlib.util.module_from_spec(spec)
@@ -23,8 +24,14 @@ class SessionTests(unittest.TestCase):
         self.sign = Mock(return_value=dict(psbt="signed-psbt"))
     def run_request(self, request=None):
         return worker.execute(self.request if request is None else request, self.open, "explicit-testnet4", self.display, self.sign)
-    def test_one_connection_full_proof_then_one_action_on_all_three_families(self):
-        for family in ("coldcard", "ledger", "bitbox02"):
+    def test_only_jade_uses_hwi_shared_test_network(self):
+        chains = SimpleNamespace(TEST="hwi-test", TESTNET4="hwi-testnet4")
+        for family in ("coldcard", "ledger", "bitbox02", "trezor", "jade"):
+            self.request["deviceType"] = family
+            self.assertEqual(worker.vendor_chain(self.request, chains), "hwi-test" if family == "jade" else "hwi-testnet4")
+
+    def test_one_connection_full_proof_then_one_action_on_all_five_families(self):
+        for family in ("coldcard", "ledger", "bitbox02", "trezor", "jade"):
             with self.subTest(family=family):
                 self.setUp()
                 self.request["deviceType"] = family
@@ -88,7 +95,7 @@ class SessionTests(unittest.TestCase):
         self.client.close.assert_called_once_with()
         self.sign.assert_not_called()
     def test_bad_scope_shape_bounds_rejected_before_open(self):
-        changes = [dict(version=True), dict(chain="main"), dict(deviceType="trezor"), dict(devicePath=""), dict(devicePath="bad\npath"), dict(accountPath="m/0'"), dict(action="wipe"), dict(expected=[]), dict(expected=self.request["expected"] * 17), dict(value="x" * (worker.MAX_VALUE + 1))]
+        changes = [dict(version=True), dict(chain="main"), dict(deviceType="unsupported"), dict(devicePath=""), dict(devicePath="bad\npath"), dict(accountPath="m/0'"), dict(action="wipe"), dict(expected=[]), dict(expected=self.request["expected"] * 17), dict(value="x" * (worker.MAX_VALUE + 1))]
         for change in changes:
             request = copy.deepcopy(self.request)
             request.update(change)
@@ -101,6 +108,8 @@ class SessionTests(unittest.TestCase):
         self.assertEqual(worker.safe_error(error), dict(error="session_failed", code=-14))
         error.code = "secret"
         self.assertEqual(worker.safe_error(error)["code"], -13)
+        network_error = RuntimeError("Network type inconsistent with prior usage")
+        self.assertEqual(worker.safe_error(network_error), dict(error="wrong_network", code=-3))
         with self.assertRaises(ValueError):
             json.loads('{"action":1,"action":2}', object_pairs_hook=worker.strict_object)
         with self.assertRaises(ValueError):

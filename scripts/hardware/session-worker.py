@@ -10,7 +10,7 @@ import sys
 
 MAX_INPUT = 402432
 MAX_VALUE = 393216
-SUPPORTED = {"coldcard", "ledger", "bitbox02"}
+SUPPORTED = {"coldcard", "ledger", "bitbox02", "trezor", "jade"}
 KEYS = {"version", "chain", "deviceType", "devicePath", "accountPath", "expected", "action", "value"}
 
 def validate(request):
@@ -53,6 +53,8 @@ def safe_error(error):
         code = -13
     detail = str(error).lower()
     message = "session_failed"
+    if "network type inconsistent with prior usage" in detail:
+        return {"error": "wrong_network", "code": -3}
     for allowed in (
         "multisig account configuration with this name already exists",
         "multisig wallet with those fingerprints not found",
@@ -62,6 +64,10 @@ def safe_error(error):
             message = allowed
             break
     return {"error": message, "code": code}
+
+def vendor_chain(request, chain_enum):
+    # HWI's Jade adapter has no TESTNET4 entry; its `testnet` network is shared.
+    return chain_enum.TEST if request["deviceType"] == "jade" else chain_enum.TESTNET4
 
 def execute(request, get_client, chain, display, sign):
     validate(request)
@@ -121,7 +127,7 @@ def main():
             getattr(module, request["deviceType"].capitalize() + "Client")
         # Vendor progress belongs on the already bounded private stderr pipe.
         with contextlib.redirect_stdout(sys.stderr):
-            response = execute(request, get_client, Chain.TESTNET4, displayaddress, signtx)
+            response = execute(request, get_client, vendor_chain(request, Chain), displayaddress, signtx)
     except Exception as error:
         # Never return arbitrary vendor errors, selectors, PSBTs or credentials.
         response = safe_error(error)
