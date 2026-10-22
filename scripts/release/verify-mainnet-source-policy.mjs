@@ -375,7 +375,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'scripts/release/prepare-hwi-runtime.mjs',
-    '3c6dc4fb3d0ed19135cd663256f1c77f5febc4213dbc814dfa682f5c1c171512'
+    '69a70e38f490c9476172fc277cefc07e3fec18c70dafe0627a8b691db7e1eff0'
   ]
 ]);
 

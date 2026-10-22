@@ -125,7 +125,9 @@ export function runtimeInventory(root) {
       const rel = relative(root, path).split('\\').join('/');
       if (!safePath(rel)) fail();
       const stat = lstatSync(path);
-      if (stat.mode & 0o022) fail();
+      // POSIX symlink mode bits are not enforced (Linux reports 0777). Verify
+      // the link target below; permissions matter for files and directories.
+      if (!stat.isSymbolicLink() && stat.mode & 0o022) fail();
       if (stat.isSymbolicLink()) {
         const target = readlinkSync(path);
         if (!safePath(target) || !realpathSync(path).startsWith(`${realpathSync(root)}/`)) fail();
