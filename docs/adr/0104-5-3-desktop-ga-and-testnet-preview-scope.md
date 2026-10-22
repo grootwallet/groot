@@ -1,6 +1,6 @@
 # ADR 0104: 5.3 desktop GA scope and test-network previews
 
-- Status: release scope accepted by the owner; GA authorization pending
+- Status: release scope accepted by the owner; release authorization followed in ADR 0105
 - Date: 2026-10-22
 - Extends: ADRs 0069, 0099, 0100 and 0103
 
@@ -80,3 +80,6 @@ This authorizes the Mainnet signing-path implementation, not publication of an
 unverified artifact. The exact 5.3.0 source, reproducible executable, signed
 runtime, notarized app/DMG, owner smoke test of that signed package, and final
 version/tag release authorization remain separate gates.
+
+ADR 0105 subsequently authorized the exact 5.3.0 version/tag release campaign.
+The signed-package evidence and owner test remain outstanding until completed.

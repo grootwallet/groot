@@ -6,6 +6,16 @@ explicit request. The first-release evidence below remains historical; it does
 not certify the amended source or authorize a replacement GA package. Fee,
 network, backend, PSBT, recipient and signing checks remain mandatory.
 
+The owner authorized the exact 5.3.0 release campaign in
+[ADR 0105](adr/0105-authorize-5-3-0-release-campaign.md), including the
+Developer ID-signed sealed fast HWI runtime approved in ADR 0104. For this
+version only, the owner authorized two clean, isolated builds on the same Mac
+in place of the standing two-machine rule. Compare their unsigned executables, then sign,
+notarize, staple and verify the exact app. The owner will test that signed
+package before public GitHub publication. The completed checklist below is
+historical first-release evidence; the 5.3.0 package has no transferred
+physical or reproducibility certification.
+
 Release decision: APPROVED
 
 Owner certification recorded 2026-10-04: every row in this checklist is

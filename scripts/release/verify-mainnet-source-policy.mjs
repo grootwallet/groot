@@ -15,15 +15,15 @@ const pinnedPolicySources = new Map([
   ['src-tauri/src/session.rs', '61cf28ce44dd7262c0c3567d1d9bc456f1861520effaf00cbda501657ad1193e'],
   ['.env.mainnet', '1623f3f97de588daea2bbeae1f9c56ebc896b6bc2c22ac238563b46b688ced85'],
   ['.env.multi', '33fc3d5022968d9eaa25bfe749c0b01691c0570611a65255100718d2c50df723'],
-  ['package.json', '141180699703095cbb316435d7f5919e6e576eea7a7f21285b3579f74931ce82'],
-  ['src-tauri/Cargo.toml', '0e7b770b8a5cba5cc8d0b9ef3e40461db8d03f2c927e80675828d406f86d3fc7'],
-  ['src-tauri/tauri.conf.json', 'b83ed0d2833991dacb235c04fa05c3aa2c395df253b636f3b3755977607b94a7'],
+  ['package.json', '837e85b2b85bc8c3e9faf7d9ed9229275ce4a4723fb1df117db5bbe22df518af'],
+  ['src-tauri/Cargo.toml', 'e544546df23d38cc082cf57e136c57320c9e036f350ccc6281ffb64ff1e3a97c'],
+  ['src-tauri/tauri.conf.json', '5ee857573251044721ec42c33bd5442116d5f6ccf8685cecdbb6029a5df28559'],
   ['LICENSE', 'c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4'],
   ['NOTICE', '4689769c203e1aa8bbc76f0864388cb5f406e4b05b26888df20576c57fa9c3ab'],
   ['THIRD_PARTY_NOTICES.md', 'a181753f36eb3e475cddf31a69d2e75f01a86a79c70de252abb1e73a059407db'],
   [
     'docs/mainnet-release-authorization.json',
-    'ba0fe28278fe99401c06324c977d0a5bf79785272c0720ed190da7839ef07d40'
+    '56b843d1e1fc388223152a90b831d812fa07a7123f641f84d414fd34e538cd91'
   ],
   [
     'docs/release-update-key.hex',
@@ -48,7 +48,7 @@ const pinnedPolicySources = new Map([
     'scripts/network/check-native-builds.sh',
     '3a984ab7ef5f0d7c29d689d2ab39e114d61f1db0efd29a632cea980d7284bef4'
   ],
-  ['src/lib/config.ts', '8106bf8b09151d1d3740600d7857c40af0e5002568dd0dce00fdbcb1bf5a012f'],
+  ['src/lib/config.ts', '2c17e33ee703f037d483c4bfdba88be5ae1424753648f02d70d63333164eac36'],
   ['src-tauri/build.rs', '56ca931ade8a14d585b02fe942a514923d876b3d27ccb6815ee2fd0f6d1523fd'],
   [
     'src-tauri/src/release_policy.rs',
@@ -187,7 +187,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'scripts/release/check-mainnet-gate.sh',
-    'c30b786d9fae73d4942465aa313682e2334da303580c3c75be9d2e58ceabe5bf'
+    'e92c1012c9a4c6961519adeb9c3bbad4551dec3297240e7d8d890938fcaf0c92'
   ],
   [
     'scripts/release/generate-sbom.mjs',
@@ -195,7 +195,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'scripts/release/generate-release-notes.mjs',
-    '2b5d0f764d1b9c9a810a17b101e65a014d9b6b33fccbd4b3c4295242aba8a465'
+    '80cb382e86d9a5091d02a139deb27f8705d68d670fda151058f2716b0f89b144'
   ],
   [
     'scripts/release/verify-update-bundle.mjs',
@@ -206,8 +206,16 @@ const pinnedPolicySources = new Map([
     '2730c57cbb527e5037d1bcd55bd05da5ed33679b0a85ed4fe7705430f51c27f1'
   ],
   [
+    'docs/release-notes-5.3.0.md',
+    '30d3e650f14909a07f81f5e2e318010c3081849ac01b41c3b0f898fbf1b15e1e'
+  ],
+  [
+    'docs/adr/0105-authorize-5-3-0-release-campaign.md',
+    'f90fd65aa72f320743ad1ac66c5b52fe86fda96ad8065f2179cd460efb9fd407'
+  ],
+  [
     'scripts/release/release-version.mjs',
-    'dd9ceea81f4380e9cacd134e1600eb9f0f895b92fb279453490527e610868c38'
+    '2be6b0bbb1413d28df2270776661105b4532095ab9062c3472833bce8d50b7a4'
   ],
   [
     'scripts/release/create-macos-dmg.mjs',
@@ -242,7 +250,7 @@ const pinnedPolicySources = new Map([
     '366fd1d3069c8609e0860dde4465aa496c25bbdfa66678b1ee31c8b6bc68b4e0'
   ],
   ['src/lib/app-updates.ts', 'f274f7614fb278b403acbc61f849912fea20437c0614b999898b2f85e0500c70'],
-  ['src/lib/release-notes.ts', '8bec2b43be592b654b1d6837b0b871028bf88d66e340425269c0ca22bf3434dc'],
+  ['src/lib/release-notes.ts', 'cc4e90b8c78b7241e41ae01558616e5e612222da60799177580b09fa96e7d55c'],
   [
     'src/lib/wallet/live-sync.ts',
     '978773bb0b99dcdb15ebbd1146ea0852cacb761ae756ebf00734ac4d85e22814'

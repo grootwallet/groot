@@ -35,15 +35,15 @@ contains_fixed '"regtest" | "signet" | "testnet4" | "mainnet" | "multi" => {}' s
   || fail "the native compile-time network allowlist changed"
 node scripts/release/verify-mainnet-source-policy.mjs
 contains_fixed '"status": "approved"' docs/mainnet-release-authorization.json \
-  || fail "the v5.2.0 public-release authorization is not approved"
+  || fail "the v5.3.0 public-release authorization is not approved"
 contains_fixed '"schemaVersion": 2' docs/mainnet-release-authorization.json \
   || fail "the authorization record does not use the version/tag schema"
-contains_fixed '"authorizedVersion": "5.2.0"' docs/mainnet-release-authorization.json \
-  || fail "the authorization record does not name v5.2.0"
-contains_fixed '"authorizedTag": "v5.2.0"' docs/mainnet-release-authorization.json \
-  || fail "the authorization record does not name the v5.2.0 tag"
-contains_fixed '"decisionAdr": "0088"' docs/mainnet-release-authorization.json \
-  || fail "the authorization record does not name ADR 0088"
+contains_fixed '"authorizedVersion": "5.3.0"' docs/mainnet-release-authorization.json \
+  || fail "the authorization record does not name v5.3.0"
+contains_fixed '"authorizedTag": "v5.3.0"' docs/mainnet-release-authorization.json \
+  || fail "the authorization record does not name the v5.3.0 tag"
+contains_fixed '"decisionAdr": "0105"' docs/mainnet-release-authorization.json \
+  || fail "the authorization record does not name ADR 0105"
 release_version="$(node -p "require('./package.json').version")"
 if [[ "$release_version" =~ ^5\.3\.0-rc[1-9][0-9]*$ ]]; then
   if node scripts/release/assert-public-release-authorized.mjs "$(git rev-parse HEAD)" >/dev/null 2>&1; then

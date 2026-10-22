@@ -8,7 +8,4 @@ export const releaseNotes = [
 ] as const;
 export const experimentalPlatformWarning =
   'Windows and Linux are experimental and untested on physical machines. They are riskier than macOS: native seed creation/recovery and USB device discovery are unavailable. Test public-wallet and file-signing flows and report feedback.';
-export const publicReleaseDetails = [
-  ...releaseNotes,
-  'Internal release candidate for regression testing. Independent source review, release gates and hardware-signer certification remain required before public release.'
-] as const;
+export const publicReleaseDetails = releaseNotes;
