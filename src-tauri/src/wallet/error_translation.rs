@@ -25,6 +25,26 @@ pub(super) const RPC_REMOTE_CAPABILITY_MESSAGE: &str = "The trusted remote serve
 pub(super) const RPC_BUSY_MESSAGE: &str =
     "The trusted remote server is completing another wallet scan. Wait briefly, then refresh again.";
 
+// Keep the existing spend-error code; expose the precise trusted policy reason.
+pub(super) fn release_spend_api_error(
+    error: crate::release_policy::ReleasePolicyError,
+) -> ApiError {
+    use crate::release_policy::ReleasePolicyError;
+    let message = match error {
+        ReleasePolicyError::MainnetDisabled => "Mainnet payments are unavailable in this build. Use a mainnet-enabled Groot release.",
+        ReleasePolicyError::BackendAdmissionRequired => "Connect and verify a Bitcoin Core node before making a mainnet payment.",
+        ReleasePolicyError::WrongGenesis => "The connected node is on another Bitcoin network. Check the connection in Settings.",
+        ReleasePolicyError::UnsupportedBackend => "This node connection cannot be used for mainnet payments. Choose a supported Bitcoin Core connection in Settings.",
+        ReleasePolicyError::InvalidAmount => "Amount must be greater than zero.",
+        ReleasePolicyError::AmountOutOfRange => "The payment amount plus fee exceeds Bitcoin's maximum supply.",
+        ReleasePolicyError::InvalidFeeChild => "A fee acceleration child must pay only an address owned by this wallet.",
+        ReleasePolicyError::FeeCapExceeded => "The network fee exceeds Groot's mainnet limit of 100,000 sats. Lower the fee rate and try again.",
+        ReleasePolicyError::BatchSpendingDisabled => "Mainnet payments support one recipient at a time.",
+        ReleasePolicyError::UnsupportedWalletPolicy => "This wallet policy is not supported for mainnet payments.",
+    };
+    api_error("invalid_amount", message)
+}
+
 pub(super) fn rejected_http_api_error(status: u16) -> Option<ApiError> {
     match status {
         403 => Some(api_error(
@@ -302,6 +322,12 @@ pub(super) fn secure_store_error(error: SecureStoreError) -> ApiError {
         SecureStoreError::Unavailable => api_error(
             "secure_storage_unavailable",
             "Groot could not read or confirm a durable encrypted-wallet update. Check application data access and try again. The wallet remains locked; no plaintext wallet secret was written.",
+        ),
+        SecureStoreError::DeviceAuthorizationCancelled => api_error(
+            "device_authorization_cancelled", "Device authorization was cancelled. No key was released. Try again when ready.",
+        ),
+        SecureStoreError::DeviceKeyUnavailable => api_error(
+            "device_key_unavailable", "This phone could not release the device-bound wallet key. Check the device passcode or restore from the written backup.",
         ),
     }
 }

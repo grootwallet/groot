@@ -30,13 +30,13 @@ import type {
   CoreNodeConfig,
   MnemonicPresentation,
   WalletProfileCompatibility,
+  RuntimePlatform,
   NodeStatus,
   NetworkSetupSource,
   PublicNetworkStatus,
   PaymentRequestInspection,
   RecoveryScanSettings,
   RecoveryScanStatus,
-  RuntimePlatform,
   SupplementalEntropyInput,
   SoftwareWalletCreation,
   WalletEvent,
@@ -59,6 +59,7 @@ import type {
   WalletSnapshot
 } from './transactions';
 import type { PaymentDraft } from '../payment-draft';
+import type { WalletCoordinationPort } from './coordination';
 
 export interface WalletProfilesPort {
   runtimePlatform(): Promise<RuntimePlatform>;
@@ -83,6 +84,7 @@ export interface WalletProfilesPort {
   recoverWallet(name: string, credential: string): Promise<void>;
   unlock(credential: string): Promise<void>;
   lock(): Promise<void>;
+  lockAll(): Promise<void>;
   changePin(currentPin: string, newPin: string, expectedWalletId: string): Promise<void>;
   deleteWallet(
     credential: string,
@@ -314,11 +316,13 @@ export interface WalletMultisigPort {
     labels: string[],
     feeRate: FeeRate
   ): Promise<MultisigProposal>;
+  multisigSpendingPaths(outpoint: string): Promise<import('./multisig').SpendingPathDetails[]>;
   prepareMultisigDelayedSpend(
     outpoint: string,
     recipient: string,
     labels: string[],
-    feeRate: FeeRate
+    feeRate: FeeRate,
+    pathIndex?: number
   ): Promise<MultisigProposal>;
   prepareMultisigAcceleration(
     txid: string,
@@ -379,6 +383,7 @@ export interface WalletPort
     WalletTransactionsPort,
     WalletHardwarePort,
     WalletMultisigPort,
+    WalletCoordinationPort,
     WalletFileTransportPort,
     WalletDiagnosticsPort,
     WalletEventsPort {}

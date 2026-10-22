@@ -42,3 +42,14 @@
     <ReadableIdentifier {value} {label} {copied} oncopy={copy} />
   </div>
 </Modal>
+
+<style>
+  /* Keep the original cascade weight while constraining these rules to this owner. */
+
+  :global(.identifier-detail-view):where(.identifier-detail-view) {
+    padding: 2px 0;
+  }
+  :global(.identifier-detail-view):where(.identifier-detail-view) :global(.readable-address-block) {
+    width: 100%;
+  }
+</style>

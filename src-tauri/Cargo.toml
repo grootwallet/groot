@@ -1,6 +1,6 @@
 [package]
 name = "groot"
-version = "5.2.0"
+version = "5.3.0"
 description = "Groot, a minimal onchain Bitcoin wallet"
 edition = "2021"
 license = "Apache-2.0"
@@ -16,6 +16,7 @@ name = "Groot"
 path = "src/main.rs"
 
 [build-dependencies]
+cc = "=1.2.67"
 tauri-build = { version = "=2.6.3", features = [] }
 
 [dependencies]

@@ -1,0 +1,23 @@
+{
+  "docs/agent-harness.md": "fb5d5363d08aa761afb0b1fc072d54f2ed89a3746e3132c89ed10f0193bb6391",
+  "docs/architecture.md": "bd3202f4161fe1c2869f6b2fb6915cd5b94f983deebc67104efbdc5df3f77aaf",
+  "docs/bip-support.md": "b270dd2d9597e4fb3dc9e06383e93f79d4c7305b13db21e51aae85da5cd74e14",
+  "docs/flows.md": "2a73764ee35103dd4f2d6c19ccc4198e66aab65ecdbb3b5fe63361b428c4be34",
+  "docs/implementation-status.md": "8609d4d53bbfa71eda2681cfe3255ffd7b95ea938624c4fcbba8362cf478576c",
+  "docs/product-spec.md": "231fc8e3e5649535233ef37621a3bad81ff35a7b67a74628f1e93ba338ce13a2",
+  "docs/roadmap.md": "019592170ff4faa4cab5f39884f46c14d4a65fb6bc646f425f9e1679af910659",
+  "docs/testing.md": "5dff82c7ff731cc408a2304be907f6bc72a7d6c6801bcb699f7360f0deb0976d",
+  "src-tauri/src/wallet.rs": "3075564b67a80ae5ef9d62d640edbfda72dc2bc15d6d62a6a3fd0f1c0969f36b",
+  "src-tauri/src/wallet/export_commands.rs": "739db5a67e292297a269d3e3fee39d942172918a14c20d7308939c14bec97635",
+  "src-tauri/src/wallet/hardware_commands.rs": "140ef185da0db2d1cdfa29241f98b284a9effdbb049413ce1709a02d28952b2b",
+  "src-tauri/src/wallet/multisig_proposal_commands.rs": "86d354930139f9123295dc590eaeba8f25b8423d0084e8d9f74d18e6dd4118fb",
+  "src-tauri/src/wallet/profile_commands.rs": "bdefd599c69afc75015f3ab7f20baf6dcd99977554160665835d7b019b210f99",
+  "src-tauri/src/wallet/tests.rs": "8da1bed58fe2c1d4343e60d550d937bb879cd058729b86d68543b7f8b0cff343",
+  "src-tauri/src/wallet/transaction_commands.rs": "db4bf9c8d4ea61cdf9431a19d4693f5a9bcf2062214f792f90c50b908cbee6ca",
+  "src/lib/locales/wallet.ts": "275c29cdd28aeacec7059c1fc22d5ada4e9b8a37913174ba20712eea76364480",
+  "src/lib/wallet/contracts/errors.ts": "6dc3668d0d30eca72ccf589b92e8ba64bfcaf6e3e12cec923884a62b0b3e7717",
+  "docs/adr/0089-mobile-observation-first.md": "74e6d69c2c343dd43efba0c6787df206c2270c8cf8854d1691bbf5dc0f0d7be2",
+  "docs/mobile-5.3-plan.md": "6a9f72d1dea36318e273f7cc223901d12427a2d468d09e940084825003bc2e7f",
+  "scripts/dev/tauri-ios-foundation.sh": "dd941a2dde4fbf5c93c98e3ba1d29d02ed4fac49f7c375abf087cd5693b670e0",
+  "src-tauri/tauri.ios.conf.json": "110062ce3c41b21b00f096a0baa87d40a9cb59061e0c04698783d63406098cfc"
+}

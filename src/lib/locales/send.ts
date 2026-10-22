@@ -1,6 +1,138 @@
 import type { CatalogSection } from './types';
 
+// Exact native policy messages take precedence over the broad invalid_amount category.
+export const signerRoleCopy = {
+  'Collect the required signer roles for this spending path before broadcasting.': {
+    fr: 'Collectez les signatures des rôles requis pour ce chemin de dépense avant la diffusion.',
+    es: 'Recoge las firmas de los roles obligatorios para esta ruta de gasto antes de transmitir.'
+  }
+} as const satisfies CatalogSection;
+
+export const spendPolicyCopy = {
+  'Mainnet payments are unavailable in this build. Use a mainnet-enabled Groot release.': {
+    fr: 'Les paiements Mainnet sont indisponibles dans cette version. Utilisez une version de Groot compatible avec Mainnet.',
+    es: 'Los pagos Mainnet no están disponibles en esta versión. Usa una versión de Groot compatible con Mainnet.'
+  },
+  'Connect and verify a Bitcoin Core node before making a mainnet payment.': {
+    fr: 'Connectez et vérifiez un nœud Bitcoin Core avant de payer sur Mainnet.',
+    es: 'Conecta y verifica un nodo Bitcoin Core antes de realizar un pago en Mainnet.'
+  },
+  'The connected node is on another Bitcoin network. Check the connection in Settings.': {
+    fr: 'Le nœud connecté utilise un autre réseau Bitcoin. Vérifiez la connexion dans les Réglages.',
+    es: 'El nodo conectado usa otra red Bitcoin. Comprueba la conexión en Ajustes.'
+  },
+  'This node connection cannot be used for mainnet payments. Choose a supported Bitcoin Core connection in Settings.':
+    {
+      fr: 'Cette connexion ne permet pas les paiements Mainnet. Choisissez une connexion Bitcoin Core compatible dans les Réglages.',
+      es: 'Esta conexión no permite pagos Mainnet. Elige una conexión Bitcoin Core compatible en Ajustes.'
+    },
+  'Amount must be greater than zero.': {
+    fr: 'Le montant doit être supérieur à zéro.',
+    es: 'El importe debe ser mayor que cero.'
+  },
+  "The payment amount plus fee exceeds Bitcoin's maximum supply.": {
+    fr: 'Le montant du paiement et les frais dépassent la quantité maximale de bitcoin.',
+    es: 'El importe del pago más la comisión supera la cantidad máxima de bitcoin.'
+  },
+  'A fee acceleration child must pay only an address owned by this wallet.': {
+    fr: 'Une transaction enfant d’accélération doit payer uniquement une adresse de ce portefeuille.',
+    es: 'Una transacción hija de aceleración solo puede pagar a una dirección de esta cartera.'
+  },
+  "The network fee exceeds Groot's mainnet limit of 100,000 sats. Lower the fee rate and try again.":
+    {
+      fr: 'Les frais de réseau dépassent la limite Mainnet de Groot de 100 000 sats. Réduisez le taux de frais et réessayez.',
+      es: 'La comisión de red supera el límite Mainnet de Groot de 100 000 sats. Reduce la tarifa y reintenta.'
+    },
+  'Mainnet payments support one recipient at a time.': {
+    fr: 'Les paiements Mainnet acceptent un seul destinataire à la fois.',
+    es: 'Los pagos Mainnet admiten un solo destinatario a la vez.'
+  },
+  'This wallet policy is not supported for mainnet payments.': {
+    fr: 'Cette politique de portefeuille ne permet pas les paiements Mainnet.',
+    es: 'Esta política de cartera no permite pagos Mainnet.'
+  }
+} as const satisfies CatalogSection;
+
 export const sendCopy = {
+  'Choose spending path': { fr: 'Choisir le chemin de dépense', es: 'Elegir ruta de gasto' },
+  'Delayed signers': { fr: 'Signataires différés', es: 'Firmantes con plazo' },
+  'A delayed path is available. Review its required signers before spending. Primary signers remain available.':
+    {
+      fr: 'Un chemin différé est disponible. Vérifiez ses signataires requis avant de dépenser. Les signataires principaux restent disponibles.',
+      es: 'Hay una ruta con plazo disponible. Revisa sus firmantes necesarios antes de gastar. Los firmantes principales siguen disponibles.'
+    },
+  'Delayed paths are still waiting. Primary signers can spend now and remain available later.': {
+    fr: 'Les chemins différés sont encore en attente. Les signataires principaux peuvent dépenser maintenant et restent disponibles ensuite.',
+    es: 'Las rutas con plazo siguen esperando. Los firmantes principales pueden gastar ahora y seguirán disponibles después.'
+  },
+  'Primary signers remain available. Review each delayed path and its required signers before spending.':
+    {
+      fr: 'Les signataires principaux restent disponibles. Vérifiez chaque chemin différé et ses signataires requis avant de dépenser.',
+      es: 'Los firmantes principales siguen disponibles. Revisa cada ruta con plazo y sus firmantes necesarios antes de gastar.'
+    },
+  'A delayed path is available for every confirmed coin shown.': {
+    fr: 'Un chemin différé est disponible pour chaque pièce confirmée affichée.',
+    es: 'Hay una ruta con plazo disponible para cada moneda confirmada mostrada.'
+  },
+  'The primary signers approve the renewal. Delayed signers are not used.': {
+    fr: 'Les signataires principaux approuvent le renouvellement. Les signataires différés ne sont pas utilisés.',
+    es: 'Los firmantes principales aprueban la renovación. No se usan firmantes con plazo.'
+  },
+  'Choose a named delayed path, or continue with the primary signers.': {
+    fr: 'Choisissez un chemin différé nommé ou continuez avec les signataires principaux.',
+    es: 'Elige una ruta con plazo por nombre o continúa con los firmantes principales.'
+  },
+
+  'Spending path': { fr: 'Chemin de dépense', es: 'Ruta de gasto' },
+  'Owner: 2 of 3': { fr: 'Propriétaire : 2 sur 3', es: 'Propietario: 2 de 3' },
+  'Both partner signers': {
+    fr: 'Les deux signataires du partenaire',
+    es: 'Ambos firmantes de la pareja'
+  },
+  'Either partner signer': { fr: 'Un signataire du partenaire', es: 'Un firmante de la pareja' },
+  'Estate guardians: 2 of 3': {
+    fr: 'Succession : 2 gardiens sur 3',
+    es: 'Herencia: 2 de 3 guardianes'
+  },
+  'Both parents': { fr: 'Les deux parents', es: 'Ambos padres' },
+  'One parent and one child assistance signer': {
+    fr: 'Un parent et un signataire d’assistance enfant',
+    es: 'Un padre y un firmante de asistencia del hijo'
+  },
+  'Inheritance: 2 of 3': { fr: 'Héritage : 2 sur 3', es: 'Herencia: 2 de 3' },
+  'Primary signers': { fr: 'Signataires principaux', es: 'Firmantes principales' },
+  'Recovery signers': { fr: 'Signataires de récupération', es: 'Firmantes de recuperación' },
+  'Required signatures: {count}': {
+    fr: 'Signatures requises : {count}',
+    es: 'Firmas necesarias: {count}'
+  },
+  'Test networks only': { fr: 'Réseaux de test uniquement', es: 'Solo redes de prueba' },
+  'blocks remaining': { fr: 'blocs restants', es: 'bloques restantes' },
+  'The primary signers can spend now; delayed paths follow the reviewed block schedule.': {
+    fr: 'Les signataires principaux peuvent dépenser maintenant ; les autres chemins suivent les délais en blocs vérifiés.',
+    es: 'Los firmantes principales pueden gastar ahora; las otras rutas siguen los plazos en bloques revisados.'
+  },
+  'Only the signers in the selected spending path can approve this payment.': {
+    fr: 'Seuls les signataires du chemin choisi peuvent approuver ce paiement.',
+    es: 'Solo los firmantes de la ruta elegida pueden aprobar este pago.'
+  },
+  'The selected path determines the required signers. The fee is deducted from this coin.': {
+    fr: 'Le chemin choisi détermine les signataires requis. Les frais sont déduits de cette pièce.',
+    es: 'La ruta elegida determina los firmantes necesarios. La comisión se deduce de esta moneda.'
+  },
+
+  'Local recording pending': {
+    fr: 'Enregistrement local en attente',
+    es: 'Registro local pendiente'
+  },
+  'The transaction was accepted, but its local record could not be saved. Sync this wallet before making another payment. Do not resend it.':
+    {
+      fr: 'La transaction a été acceptée, mais son enregistrement local a échoué. Synchronisez ce portefeuille avant un autre paiement. Ne la renvoyez pas.',
+      es: 'La transacción se aceptó, pero no se pudo guardar su registro local. Sincroniza este monedero antes de otro pago. No la vuelvas a enviar.'
+    },
+
+  ...spendPolicyCopy,
+  ...signerRoleCopy,
   Intent: { fr: 'Intention', es: 'Intención' },
   'Amount & fee': { fr: 'Montant et frais', es: 'Importe y comisión' },
   'Review & sign': { fr: 'Vérifier et signer', es: 'Revisar y firmar' },
@@ -715,5 +847,34 @@ export const sendCopy = {
   'QR code rejected': {
     fr: 'Code QR refusé',
     es: 'Código QR rechazado'
+  },
+  'selected signers': { fr: 'signataires sélectionnés', es: 'firmantes seleccionados' },
+  'Required signer roles are still missing. Review the selected spending path.': {
+    fr: 'Des rôles de signature requis manquent encore. Vérifiez le chemin de dépense sélectionné.',
+    es: 'Aún faltan roles de firma obligatorios. Revisa la ruta de gasto seleccionada.'
+  },
+  'Delayed spending is available': {
+    fr: 'La dépense différée est disponible',
+    es: 'El gasto diferido está disponible'
+  },
+  'The selected spending path is unavailable.': {
+    fr: 'Le chemin de dépense sélectionné est indisponible.',
+    es: 'La ruta de gasto seleccionada no está disponible.'
+  },
+  'Unfreeze this coin before spending it.': {
+    fr: 'Dégelez cette pièce avant de la dépenser.',
+    es: 'Descongela esta moneda antes de gastarla.'
+  },
+  'Sync this wallet before checking spending paths.': {
+    fr: 'Synchronisez ce portefeuille avant de vérifier les chemins de dépense.',
+    es: 'Sincroniza esta cartera antes de comprobar las rutas de gasto.'
+  },
+  'This coin must confirm before its waiting period starts.': {
+    fr: 'Cette pièce doit être confirmée avant le début de son délai.',
+    es: 'Esta moneda debe confirmarse antes de que comience su plazo de espera.'
+  },
+  'This spending path is still waiting for blocks.': {
+    fr: 'Ce chemin de dépense attend encore des blocs.',
+    es: 'Esta ruta de gasto aún está esperando bloques.'
   }
 } as const satisfies CatalogSection;

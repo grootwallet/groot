@@ -9,14 +9,18 @@
     FileKey,
     FlaskConical,
     Plus,
+    RotateCcw,
     ShieldCheck,
+    Smartphone,
     Usb
   } from '@lucide/svelte';
   import { onDestroy, onMount } from 'svelte';
   import Button from '$lib/components/Button.svelte';
+  import AnimatedUrQr from '$lib/components/AnimatedUrQr.svelte';
   import DeviceDetailsModal from '$lib/components/DeviceDetailsModal.svelte';
   import LocalTimestamp from '$lib/components/LocalTimestamp.svelte';
   import Modal from '$lib/components/Modal.svelte';
+  import PasswordField from '$lib/components/PasswordField.svelte';
   import HardwareActionPrompt from '$lib/components/HardwareActionPrompt.svelte';
   import InsightTip from '$lib/components/InsightTip.svelte';
   import SignerPolicyReview from '$lib/components/SignerPolicyReview.svelte';
@@ -30,6 +34,7 @@
     walletService,
     WalletError,
     type CosignerHealthCheck,
+    type CoordinationStatus,
     type HardwareDevice,
     type MultisigWallet,
     type PolicyVerificationAddress,
@@ -38,6 +43,10 @@
     type WalletSnapshot
   } from '$lib/wallet';
   import type { CosignerDraft, CosignerSource } from '$lib/multisig/policy';
+  import {
+    DESKTOP_MANAGED_SIGNER_CONTEXT,
+    LOCAL_MOBILE_SIGNER_CONTEXT
+  } from '$lib/wallet/contracts/coordination';
   import { defaultConfig, networkName } from '$lib/config';
   import { shortSats } from '$lib/data';
   import Amount from '$lib/components/Amount.svelte';
@@ -75,9 +84,14 @@
   let walletLoading = $state(true);
   let walletLoadError = $state('');
   let snapshot = $state<WalletSnapshot | null>(null);
+  let coordination = $state<CoordinationStatus | null>(null);
   let statusError = $state('');
   let selectedSigner = $state<CosignerDraft | null>(null);
   let showDescriptors = $state(false);
+  let showPhoneRecovery = $state(false);
+  let phoneRecoveryFrames = $state<string[]>([]);
+  let phoneRecoveryBusy = $state(false);
+  let phoneRecoveryError = $state('');
   let moreOpen = $state(false);
   let moreRoot = $state<HTMLDivElement | null>(null);
   let moreTrigger = $state<HTMLButtonElement | null>(null);
@@ -96,6 +110,16 @@
   let healthPinDevice = $state<HardwareDevice | null>(null);
   let healthPinError = $state('');
   let healthPinErrorCode = $state<WalletErrorCode | ''>('');
+  let phoneBackupVerified = $state(true);
+  let phoneBackupOpen = $state(false);
+  let phoneBackupCredential = $state('');
+  let phoneBackupError = $state('');
+  let phoneBackupBusy = $state(false);
+  let phoneBackupNotice = $state('');
+  let phoneCheckOpen = $state(false);
+  let phoneCheckCredential = $state('');
+  let phoneCheckError = $state('');
+  let phoneCheckBusy = $state(false);
   const maturitySummary = $derived(
     snapshot ? policyMaturitySummary(snapshot.utxos, snapshot.chainTip) : null
   );
@@ -106,9 +130,35 @@
   const policyPresentation = $derived(wallet ? walletPolicyPresentation(wallet) : null);
   const recoveryPolicyLabAvailable = $derived(hasMiniscriptPolicy(wallet));
   onDestroy(() => {
+    phoneBackupCredential = '';
     healthPinChallenge = '';
     healthPinPositions = '';
+    phoneCheckCredential = '';
   });
+  async function verifyPhoneBackup(reveal = false) {
+    if (!phoneBackupCredential || phoneBackupBusy) return;
+    phoneBackupBusy = true;
+    phoneBackupError = '';
+    phoneBackupNotice = '';
+    try {
+      const verified = reveal
+        ? await walletService.revealAndVerifyBackup(phoneBackupCredential)
+        : await walletService.verifyBackup(phoneBackupCredential);
+      phoneBackupVerified = verified;
+      phoneBackupNotice = translate(
+        $locale,
+        verified ? 'Recovery backup verified' : 'Backup still unverified'
+      );
+      if (verified) phoneBackupOpen = false;
+      toast({ title: phoneBackupNotice, tone: verified ? 'success' : 'default' });
+    } catch (cause) {
+      phoneBackupError = localizedError(cause, $locale, 'Could not verify this recovery backup.');
+      toast({ title: 'Backup verification failed', description: phoneBackupError, tone: 'danger' });
+    } finally {
+      phoneBackupCredential = '';
+      phoneBackupBusy = false;
+    }
+  }
   async function loadPolicyWallet() {
     walletLoading = true;
     walletLoadError = '';
@@ -121,6 +171,21 @@
       walletLoading = false;
     }
     if (!wallet) return;
+    try {
+      coordination = await walletService.coordinationStatus();
+      if (coordination.role === 'mobile_cosigner') {
+        const registry = await walletService.profiles();
+        phoneBackupVerified =
+          registry.wallets.find((profile) => profile.id === registry.selectedWalletId)
+            ?.backupVerified ?? false;
+      }
+    } catch (cause) {
+      toast({
+        title: 'Device role unavailable',
+        description: localizedError(cause, $locale),
+        tone: 'danger'
+      });
+    }
     const [verifications, address, health, walletSnapshot] = await Promise.allSettled([
       walletService.multisigSignerPolicyVerifications(),
       walletService.multisigPolicyVerificationAddress(),
@@ -149,6 +214,29 @@
   onMount(() => {
     void loadPolicyWallet();
   });
+
+  async function openPhoneRecovery() {
+    phoneRecoveryBusy = true;
+    phoneRecoveryError = '';
+    try {
+      phoneRecoveryFrames = await walletService.mobileRecoveryRecord();
+      showPhoneRecovery = true;
+      moreOpen = false;
+    } catch (cause) {
+      phoneRecoveryError = localizedError(
+        cause,
+        $locale,
+        'Groot could not prepare the replacement-phone QR.'
+      );
+      toast({
+        title: translate($locale, 'Recovery QR unavailable'),
+        description: phoneRecoveryError,
+        tone: 'danger'
+      });
+    } finally {
+      phoneRecoveryBusy = false;
+    }
+  }
   onMount(() =>
     walletService.subscribe((event) => {
       if (
@@ -176,6 +264,14 @@
       document.removeEventListener('keydown', closeEscape);
     };
   });
+  function policyEvidenceLabel(verification: SignerPolicyVerification) {
+    return verification.scope === 'policy_file_acknowledgement'
+      ? 'Policy imported'
+      : 'Policy verified';
+  }
+  function signerSourceName(signer: CosignerDraft) {
+    return signer.deviceType === 'groot-mobile' ? 'QR connection' : sourceName(signer.source);
+  }
   function sourceName(source: CosignerSource) {
     return {
       usb: 'USB hardware',
@@ -188,7 +284,41 @@
   function openSigner(signer: CosignerDraft) {
     selectedSigner = signer;
   }
+  function signerDeviceContext(signer: CosignerDraft) {
+    if (coordination?.role !== 'mobile_cosigner') return null;
+    return signer.fingerprint.toLowerCase() === coordination.mobileSignerFingerprint?.toLowerCase()
+      ? LOCAL_MOBILE_SIGNER_CONTEXT
+      : DESKTOP_MANAGED_SIGNER_CONTEXT;
+  }
+  function signerAvailabilityLabel(
+    signer: CosignerDraft,
+    verification: SignerPolicyVerification | null
+  ) {
+    const context = signerDeviceContext(signer);
+    if (context === LOCAL_MOBILE_SIGNER_CONTEXT) return 'Available on this phone';
+    if (context === DESKTOP_MANAGED_SIGNER_CONTEXT) return 'Managed on desktop';
+    return policyReadinessLabel(signer, verification);
+  }
   function signerPolicyStatus(signer: CosignerDraft) {
+    const context = signerDeviceContext(signer);
+    if (context === LOCAL_MOBILE_SIGNER_CONTEXT)
+      return {
+        label: translate($locale, 'Available on this phone'),
+        description: translate(
+          $locale,
+          'This phone holds this key. Its fingerprint and public account key match the wallet policy.'
+        ),
+        attention: false
+      };
+    if (context === DESKTOP_MANAGED_SIGNER_CONTEXT)
+      return {
+        label: translate($locale, 'Managed on desktop'),
+        description: translate(
+          $locale,
+          'Identity and device details came from the authenticated desktop wallet policy. Connect and verify this signer on desktop.'
+        ),
+        attention: false
+      };
     const profile = policyRegistrationProfile(signer);
     const verification = matchingPolicyVerification(signer, policyVerifications);
     const label = translate($locale, policyReadinessLabel(signer, verification));
@@ -208,6 +338,7 @@
         description: translate($locale, description),
         attention: false,
         verifiedAt: verification.verifiedAt,
+        acknowledgement: verification.scope === 'policy_file_acknowledgement',
         actionLabel: profile.registration === 'file_once' ? 'Review setup' : 'Verify again'
       };
     }
@@ -239,7 +370,7 @@
     });
   }
   async function runHealthCheck(unlockedDevice?: HardwareDevice) {
-    if (!selectedSigner || checking) return;
+    if (!selectedSigner || checking || (healthPinBusy && !unlockedDevice)) return;
     const signer = selectedSigner;
     checking = true;
     try {
@@ -249,6 +380,11 @@
           'This signer has no interactive USB device type.'
         );
       const device = unlockedDevice ?? (await walletService.findSavedHardwareDevice(signer));
+      if (device.action === 'prompt_pin' && !unlockedDevice) {
+        checking = false;
+        await startHealthPin(device);
+        return;
+      }
       const result = await walletService.checkHardwareCosigner(signer, device.id);
       await saveHardwareHealthCheck(signer.fingerprint, result);
       toast({
@@ -268,6 +404,36 @@
       toast({ title: 'Health check needs attention', description: summary, tone: 'danger' });
     } finally {
       checking = false;
+    }
+  }
+  function openPhoneHealthCheck() {
+    phoneCheckCredential = '';
+    phoneCheckError = '';
+    phoneCheckOpen = true;
+  }
+  async function runPhoneHealthCheck() {
+    if (!selectedSigner || !phoneCheckCredential || phoneCheckBusy) return;
+    const signer = selectedSigner;
+    phoneCheckBusy = true;
+    phoneCheckError = '';
+    try {
+      const result = await walletService.checkMobileSigner(phoneCheckCredential);
+      await saveHardwareHealthCheck(signer.fingerprint, result);
+      phoneCheckCredential = '';
+      phoneCheckOpen = false;
+      toast({
+        title: translate($locale, 'Phone key verified'),
+        description: translate(
+          $locale,
+          'The encrypted key on this phone matches the wallet policy.'
+        ),
+        tone: 'success'
+      });
+    } catch (cause) {
+      phoneCheckError = localizedError(cause, $locale, 'The phone key could not be verified.');
+      phoneCheckCredential = '';
+    } finally {
+      phoneCheckBusy = false;
     }
   }
   async function startHealthPin(device: HardwareDevice) {
@@ -291,6 +457,12 @@
     } catch (cause) {
       healthPinErrorCode = cause instanceof WalletError ? cause.code : 'internal_error';
       healthPinError = localizedError(cause, $locale, 'Could not start the Trezor PIN matrix.');
+      if (selectedSigner)
+        await saveHardwareHealthCheck(selectedSigner.fingerprint, {
+          checkedAt: new Date().toISOString(),
+          summary: healthPinError,
+          status: 'attention'
+        });
       if (!retrying)
         toast({ title: 'Trezor unlock unavailable', description: healthPinError, tone: 'danger' });
     } finally {
@@ -464,6 +636,16 @@
     <header class="page-header">
       <div>
         <h1>{wallet.name}</h1>
+        <p class="subtitle">
+          {translate(
+            $locale,
+            coordination?.role === 'mobile_cosigner'
+              ? 'Phone signer · QR connection'
+              : coordination?.role === 'desktop_coordinator'
+                ? 'Desktop coordinator'
+                : 'Watch-only wallet'
+          )}
+        </p>
       </div>
     </header>
     {#if statusError}<WarningNotice
@@ -473,6 +655,23 @@
       >
         <a href="/settings">{translate($locale, 'Open network settings')}</a>
       </WarningNotice>{/if}
+    {#if coordination?.role === 'mobile_cosigner' && !phoneBackupVerified}
+      <WarningNotice
+        title={translate($locale, 'Recovery backup not verified')}
+        class="compact-action"
+      >
+        <Button
+          size="small"
+          variant="secondary"
+          onclick={() => {
+            phoneBackupError = '';
+            phoneBackupNotice = '';
+            phoneBackupOpen = true;
+          }}>{translate($locale, 'Verify now')}</Button
+        >
+      </WarningNotice>
+    {/if}
+    {#if phoneBackupNotice}<p role="status">{phoneBackupNotice}</p>{/if}
     <section class="vault-hero">
       <span><ShieldCheck size={22} /></span>
       <div class="vault-summary">
@@ -534,7 +733,16 @@
                     >{translate($locale, 'Save a public wallet backup')}</small
                   ></span
                 ></a
-              >{#if recoveryPolicyLabAvailable}<a role="menuitem" href="/multisig/policy"
+              >{#if coordination?.role === 'desktop_coordinator'}<button
+                  role="menuitem"
+                  disabled={phoneRecoveryBusy}
+                  onclick={openPhoneRecovery}
+                  ><RotateCcw size={15} /><span
+                    ><strong>{translate($locale, 'Restore Groot phone')}</strong><small
+                      >{translate($locale, 'Rebuild the phone signer from its 24 words')}</small
+                    ></span
+                  ></button
+                >{/if}{#if recoveryPolicyLabAvailable}<a role="menuitem" href="/multisig/policy"
                   ><FlaskConical size={15} /><span
                     ><strong>{translate($locale, 'Recovery policy lab')}</strong><small
                       >{translate($locale, 'Explore guided Miniscript paths')}</small
@@ -544,7 +752,9 @@
             </div>{/if}
         </div>
         <Button variant="secondary" href="/multisig/receive">{translate($locale, 'Receive')}</Button
-        ><Button href="/multisig/send">{translate($locale, 'Send')}</Button>
+        >{#if coordination?.canSignOnThisDevice}<Button href="/mobile/sign"
+            ><Smartphone size={16} />{translate($locale, 'Sign desktop PSBT')}</Button
+          >{:else}<Button href="/multisig/send">{translate($locale, 'Send')}</Button>{/if}
       </div>
     </section>
     {#if maturitySummary}
@@ -697,11 +907,7 @@
                 $locale,
                 policyPresentation?.delayed
                   ? 'Payments normally use 2 of 3 primary keys. The separate backup key becomes available per coin after its wait.'
-                  : translate(
-                      $locale,
-                      'Sign with any {count} keys. Open a signer to inspect its identity, health, and wallet-policy status.',
-                      { count: wallet.threshold }
-                    )
+                  : translate($locale, 'Any {count} keys can sign.', { count: wallet.threshold })
               )}
             </p>
           </div>
@@ -719,19 +925,22 @@
                   ><strong>{signer.label}</strong><span
                     ><code>{signer.fingerprint.toLowerCase()}</code><i></i>{translate(
                       $locale,
-                      sourceName(signer.source)
+                      signerSourceName(signer)
                     )}{#if latestHealth(signer)}<i></i>{translate($locale, 'Checked')}
                       <LocalTimestamp
                         value={latestHealth(signer)!.checkedAt}
-                      />{:else if verification}<i></i>{translate($locale, 'Policy verified')}
+                      />{:else if verification}<i></i>{translate(
+                        $locale,
+                        policyEvidenceLabel(verification)
+                      )}
                       <LocalTimestamp value={verification.verifiedAt} />{/if}</span
                   ></span
                 ><span
                   class="ready-badge"
-                  class:attention={(requiresPolicySetup(signer) && !verification) ||
-                    !policyRegistrationProfile(signer).supported ||
-                    latestHealth(signer)?.status === 'attention'}
-                  >{translate($locale, policyReadinessLabel(signer, verification))}</span
+                  class:attention={!signerDeviceContext(signer) &&
+                    ((requiresPolicySetup(signer) && !verification) ||
+                      !policyRegistrationProfile(signer).supported)}
+                  >{translate($locale, signerAvailabilityLabel(signer, verification))}</span
                 ><ChevronRight class="row-chevron" size={16} /></button
               >
             </article>{/each}
@@ -742,15 +951,18 @@
         <div>
           <h2>{translate($locale, 'Backups & recovery')}</h2>
           <p>
-            {translate(
-              $locale,
-              'Save the public policy, then verify it rebuilds the same first address.'
-            )}
+            {translate($locale, 'Back up the policy and verify its first address.')}
           </p>
         </div>
         <Button variant="secondary" class="full" href="/multisig/backup"
           >{translate($locale, 'Export & verify')}</Button
-        >{#if recoveryPolicyLabAvailable}<Button
+        >{#if coordination?.role === 'desktop_coordinator'}<Button
+            variant="secondary"
+            class="full"
+            loading={phoneRecoveryBusy}
+            onclick={openPhoneRecovery}
+            ><RotateCcw size={16} />{translate($locale, 'Restore Groot phone')}</Button
+          >{/if}{#if recoveryPolicyLabAvailable}<Button
             variant="ghost"
             class="full"
             href="/multisig/policy">{translate($locale, 'Recovery policy lab')}</Button
@@ -779,13 +991,18 @@
       </div>
     </section>
   {:else if walletLoadError}
-    <section class="empty-state vault-empty" role="alert">
-      <h2>{translate($locale, 'Wallet policy unavailable')}</h2>
-      <p>{walletLoadError}</p>
+    <WarningNotice
+      tone="danger"
+      icon
+      role="alert"
+      class="inline-action"
+      title={translate($locale, 'Wallet policy unavailable')}
+      body={walletLoadError}
+    >
       <Button variant="secondary" onclick={loadPolicyWallet}
         >{translate($locale, 'Try again')}</Button
       >
-    </section>
+    </WarningNotice>
   {:else}
     <section class="empty-state vault-empty">
       <span class="empty-icon"><Usb size={24} /></span>
@@ -804,15 +1021,100 @@
 </div>
 
 <DeviceDetailsModal
-  signer={healthPinOpen ? null : selectedSigner}
+  signer={healthPinOpen || phoneCheckOpen ? null : selectedSigner}
   health={selectedSigner ? latestHealth(selectedSigner) : null}
   policyStatus={selectedSigner ? signerPolicyStatus(selectedSigner) : null}
+  deviceContext={selectedSigner ? signerDeviceContext(selectedSigner) : null}
   {checking}
   onclose={() => (selectedSigner = null)}
-  oncheck={runHealthCheck}
-  onpolicy={() => selectedSigner && openPolicyVerification(selectedSigner)}
-  onrename={renameSavedSigner}
+  oncheck={selectedSigner && signerDeviceContext(selectedSigner) === LOCAL_MOBILE_SIGNER_CONTEXT
+    ? openPhoneHealthCheck
+    : selectedSigner?.deviceType &&
+        selectedSigner.deviceType !== 'groot-mobile' &&
+        coordination?.role !== 'mobile_cosigner'
+      ? runHealthCheck
+      : undefined}
+  onpolicy={selectedSigner && !signerDeviceContext(selectedSigner)
+    ? () => selectedSigner && openPolicyVerification(selectedSigner)
+    : undefined}
+  onrename={selectedSigner && !signerDeviceContext(selectedSigner) ? renameSavedSigner : undefined}
 />
+<Modal
+  open={phoneCheckOpen}
+  title={translate($locale, 'Check phone key')}
+  description={translate(
+    $locale,
+    'Enter the app PIN to decrypt this phone key and prove it matches the wallet policy.'
+  )}
+  onclose={() => {
+    if (phoneCheckBusy) return;
+    phoneCheckOpen = false;
+    phoneCheckCredential = '';
+    phoneCheckError = '';
+  }}
+>
+  <PasswordField
+    label={translate($locale, 'App PIN')}
+    bind:value={phoneCheckCredential}
+    autocomplete="current-password"
+    error={phoneCheckError}
+    oninput={() => (phoneCheckError = '')}
+  />
+  <div class="modal-footer">
+    <Button
+      variant="secondary"
+      onclick={() => {
+        phoneCheckOpen = false;
+        phoneCheckCredential = '';
+        phoneCheckError = '';
+      }}>{translate($locale, 'Cancel')}</Button
+    ><Button
+      disabled={!phoneCheckCredential}
+      loading={phoneCheckBusy}
+      loadingLabel={translate($locale, 'Checking…')}
+      onclick={runPhoneHealthCheck}>{translate($locale, 'Check phone key')}</Button
+    >
+  </div>
+</Modal>
+<Modal
+  open={phoneBackupOpen}
+  title={translate($locale, 'Verify phone recovery backup')}
+  onclose={() => {
+    if (!phoneBackupBusy) {
+      phoneBackupOpen = false;
+      phoneBackupCredential = '';
+      phoneBackupError = '';
+    }
+  }}
+>
+  <PasswordField
+    label={translate($locale, 'App PIN')}
+    bind:value={phoneBackupCredential}
+    autocomplete="current-password"
+    error={phoneBackupError}
+  />
+  {#if phoneBackupNotice}<p role="status">{phoneBackupNotice}</p>{/if}
+  <div class="modal-footer">
+    <Button
+      variant="secondary"
+      disabled={phoneBackupBusy}
+      onclick={() => {
+        phoneBackupOpen = false;
+        phoneBackupCredential = '';
+      }}>{translate($locale, 'Verify later')}</Button
+    >
+    <Button
+      variant="secondary"
+      disabled={!phoneBackupCredential || phoneBackupBusy}
+      onclick={() => verifyPhoneBackup(true)}>{translate($locale, 'Show recovery words')}</Button
+    >
+    <Button
+      disabled={!phoneBackupCredential}
+      loading={phoneBackupBusy}
+      onclick={() => verifyPhoneBackup()}>{translate($locale, 'Verify now')}</Button
+    >
+  </div>
+</Modal>
 <TrezorPinModal
   open={healthPinOpen}
   busy={healthPinBusy}
@@ -825,7 +1127,10 @@
   ondelete={() => (healthPinPositions = healthPinPositions.slice(0, -1))}
   onclear={() => (healthPinPositions = '')}
   onsubmit={submitHealthPin}
-  onretry={() => healthPinDevice && startHealthPin(healthPinDevice)}
+  onretry={() => {
+    closeHealthPin();
+    void runHealthCheck();
+  }}
   onclose={closeHealthPin}
 />
 <MultisigDescriptorsModal
@@ -833,6 +1138,46 @@
   {wallet}
   onclose={() => (showDescriptors = false)}
 />
+<Modal
+  open={showPhoneRecovery}
+  title={translate($locale, 'Restore a Groot phone')}
+  description={translate(
+    $locale,
+    'Scan this public wallet record on the replacement phone, then enter the original 24 words there.'
+  )}
+  onclose={() => {
+    showPhoneRecovery = false;
+    phoneRecoveryFrames = [];
+    phoneRecoveryError = '';
+  }}
+>
+  <div class="phone-recovery-qr">
+    <AnimatedUrQr
+      frames={phoneRecoveryFrames}
+      label={translate($locale, 'Replacement phone wallet record')}
+      expandable
+    />
+    <div class="phone-recovery-note">
+      <ShieldCheck size={18} />
+      <p>
+        <strong>{translate($locale, 'Words stay on the phone')}</strong>
+        <span
+          >{translate(
+            $locale,
+            'This QR cannot spend, but it reveals wallet addresses. The phone accepts it only when the words reproduce the exact signer and policy.'
+          )}</span
+        >
+      </p>
+    </div>
+    {#if phoneRecoveryError}<WarningNotice
+        tone="danger"
+        icon
+        role="alert"
+        ariaLive="polite"
+        body={phoneRecoveryError}
+      />{/if}
+  </div>
+</Modal>
 <Modal
   open={!!policySigner}
   title={translate(
@@ -894,3 +1239,418 @@
       >
     </div>{/if}
 </Modal>
+
+<style>
+  /* Keep the original cascade weight while constraining these rules to this owner. */
+
+  :global(.policy-loading-skeleton):where(.policy-loading-skeleton) {
+    display: grid;
+    gap: 16px;
+  }
+  :global(.info-banner):where(.info-banner) {
+    border: 1px solid var(--border);
+    background: var(--panel);
+    border-radius: var(--radius-control);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--muted);
+    padding: 11px 13px;
+  }
+  :global(.info-banner):where(.info-banner) :global(p) {
+    font-size: var(--font-size-meta);
+    margin: 0;
+  }
+  :global(.vault-hero):where(.vault-hero) {
+    border: 1px solid var(--border);
+    background: var(--panel);
+    border-radius: var(--radius-panel);
+    padding: 22px;
+    display: grid;
+    grid-template-columns: 45px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 15px;
+    margin-bottom: 30px;
+    overflow: hidden;
+  }
+  :global(.vault-hero):where(.vault-hero) > :global(span) {
+    width: 43px;
+    height: 43px;
+    border-radius: var(--radius-inset);
+    display: grid;
+    place-items: center;
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
+  :global(.vault-summary):where(.vault-summary) {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+  :global(.vault-policy-tags):where(.vault-policy-tags) {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 10px 0 9px;
+  }
+  :global(.vault-policy-tags):where(.vault-policy-tags) :global(.policy-pill) {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 9px;
+    font-size: var(--font-size-meta);
+  }
+  :global(.vault-policy-tags):where(.vault-policy-tags) :global(.policy-pill.delayed) {
+    color: var(--focus);
+    border-color: color-mix(in srgb, var(--focus) 25%, var(--border));
+    background: color-mix(in srgb, var(--focus) 7%, var(--panel));
+  }
+  :global(.vault-policy-tags):where(.vault-policy-tags) :global(svg) {
+    flex: 0 0 auto;
+  }
+  :global(.vault-hero):where(.vault-hero) :global(small),
+  :global(.vault-hero):where(.vault-hero) :global(p) {
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+    margin: 0;
+  }
+  :global(.vault-balance):where(.vault-balance) {
+    display: block;
+    color: var(--text);
+    font-size: 21px;
+    line-height: 1.1;
+  }
+
+  :global(.policy-maturity-panel):where(.policy-maturity-panel) {
+    display: grid;
+    gap: 12px;
+    margin-bottom: 24px;
+    padding: 16px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-inset);
+    background: var(--panel);
+  }
+
+  :global(.policy-maturity-panel-heading):where(.policy-maturity-panel-heading) {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: start;
+    gap: 12px;
+  }
+
+  :global(.policy-maturity-panel-heading):where(.policy-maturity-panel-heading)
+    > :global(span:first-child) {
+    display: grid;
+    width: 32px;
+    height: 32px;
+    place-items: center;
+    border-radius: var(--radius-control);
+    color: var(--focus);
+    background: var(--surface-icon);
+  }
+
+  :global(.policy-maturity-panel-heading):where(.policy-maturity-panel-heading) :global(h2),
+  :global(.policy-maturity-panel-heading):where(.policy-maturity-panel-heading) :global(p) {
+    margin: 0;
+  }
+
+  :global(.policy-maturity-panel-heading):where(.policy-maturity-panel-heading)
+    :global(p:not(.eyebrow)) {
+    margin-top: 2px;
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+    line-height: 1.4;
+  }
+
+  :global(.policy-maturity-panel-heading):where(.policy-maturity-panel-heading) :global(h2) {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 14px;
+    font-weight: 650;
+  }
+
+  :global(.policy-maturity-facts):where(.policy-maturity-facts) {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 8px;
+  }
+
+  :global(.policy-maturity-facts):where(.policy-maturity-facts) :global(.info-banner) {
+    min-height: 40px;
+    padding: 9px 11px;
+    background: var(--surface-inset);
+  }
+
+  :global(.policy-maturity-facts):where(.policy-maturity-facts) :global(svg) {
+    flex: 0 0 auto;
+    color: var(--focus);
+  }
+
+  :global(.policy-maturity-details):where(.policy-maturity-details) {
+    padding: 0 2px;
+  }
+
+  :global(.policy-maturity-details):where(.policy-maturity-details) :global(summary) {
+    cursor: pointer;
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+    font-weight: 600;
+  }
+
+  :global(.policy-maturity-details):where(.policy-maturity-details) :global(p) {
+    max-width: 720px;
+    margin: 8px 0 0;
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+    line-height: 1.5;
+  }
+
+  :global(.policy-access-coins):where(.policy-access-coins) {
+    margin-top: 14px;
+  }
+
+  :global(.policy-access-coins):where(.policy-access-coins) :global(h3) {
+    margin: 0 0 7px;
+    color: var(--text);
+    font-size: var(--font-size-meta);
+  }
+
+  :global(.policy-access-coins):where(.policy-access-coins) > :global(div) {
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+  }
+
+  :global(.policy-access-coins):where(.policy-access-coins) :global(article) {
+    min-height: 48px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface-inset);
+  }
+
+  :global(.policy-access-coins):where(.policy-access-coins) :global(article:last-child) {
+    border-bottom: 0;
+  }
+
+  :global(.policy-access-coins):where(.policy-access-coins) :global(article > span) {
+    min-width: 0;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+  }
+
+  :global(.policy-access-coins):where(.policy-access-coins) :global(article strong),
+  :global(.policy-access-coins):where(.policy-access-coins) :global(article .formatted-amount) {
+    font-size: var(--font-size-meta);
+  }
+  :global(.vault-actions):where(.vault-actions) {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+  :global(.vault-empty):where(.vault-empty) {
+    margin-top: 80px;
+  }
+  :global(.vault-grid):where(.vault-grid) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 260px;
+    align-items: start;
+    gap: 20px;
+  }
+  :global(.vault-cosigners):where(.vault-cosigners),
+  :global(.vault-backup-card):where(.vault-backup-card) {
+    min-width: 0;
+  }
+  :global(.vault-cosigners):where(.vault-cosigners) :global(.section-heading.compact) {
+    margin: 10px 0 14px;
+  }
+  :global(.saved-cosigner-list):where(.saved-cosigner-list) {
+    display: grid;
+    gap: 8px;
+  }
+  :global(.saved-cosigner-list):where(.saved-cosigner-list) :global(article) {
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-inset);
+    background: var(--panel);
+  }
+  :global(.saved-cosigner-list):where(.saved-cosigner-list) :global(button) {
+    width: 100%;
+    min-height: 76px;
+    display: grid;
+    grid-template-columns: 34px minmax(0, 1fr) auto 16px;
+    align-items: center;
+    gap: 12px;
+    padding: 13px 14px;
+    border: 0;
+    color: var(--text);
+    background: transparent;
+    text-align: left;
+    cursor: pointer;
+    transition:
+      background 0.15s ease,
+      box-shadow 0.15s ease;
+  }
+  :global(.saved-cosigner-list):where(.saved-cosigner-list) :global(button:hover) {
+    background: var(--surface-hover);
+    box-shadow: inset 3px 0 0 var(--fr-blue);
+  }
+  :global(.saved-cosigner-list):where(.saved-cosigner-list) :global(button:focus-visible) {
+    outline: 2px solid var(--focus);
+    outline-offset: -2px;
+  }
+  :global(.saved-cosigner-copy):where(.saved-cosigner-copy) {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  :global(.saved-cosigner-copy):where(.saved-cosigner-copy) :global(strong) {
+    overflow: hidden;
+    font-size: 14px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  :global(.saved-cosigner-copy):where(.saved-cosigner-copy) > :global(span) {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 7px;
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+  }
+  :global(.saved-cosigner-copy):where(.saved-cosigner-copy) :global(code) {
+    color: var(--text-soft);
+    font-size: var(--font-size-meta);
+  }
+  :global(.saved-cosigner-copy):where(.saved-cosigner-copy) :global(i) {
+    width: 3px;
+    height: 3px;
+    border-radius: 50%;
+    background: var(--muted-2);
+  }
+  :global(.vault-backup-card):where(.vault-backup-card) {
+    display: grid;
+    gap: 12px;
+    padding: 18px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-inset);
+    background: var(--surface-control);
+  }
+  :global(.vault-backup-icon):where(.vault-backup-icon) {
+    width: 38px;
+    height: 38px;
+    display: grid;
+    place-items: center;
+    border-radius: var(--radius-inset);
+    color: var(--accent);
+    background: var(--accent-soft);
+  }
+  :global(.vault-backup-card):where(.vault-backup-card) :global(h2) {
+    margin: 0;
+    font-size: 14px;
+  }
+  :global(.vault-backup-card):where(.vault-backup-card) :global(p) {
+    margin: 6px 0 2px;
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+    line-height: 1.55;
+  }
+  :global(.vault-backup-card):where(.vault-backup-card) :global(.button) {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  @media (max-width: 700px) {
+    :global(.policy-maturity-panel):where(.policy-maturity-panel) {
+      padding: 16px;
+    }
+
+    :global(.policy-maturity-panel-heading):where(.policy-maturity-panel-heading) {
+      grid-template-columns: auto minmax(0, 1fr);
+    }
+
+    :global(.policy-maturity-panel-heading):where(.policy-maturity-panel-heading)
+      > :global(.button) {
+      grid-column: 2;
+      justify-self: start;
+    }
+  }
+
+  @media (max-width: 760px) {
+    :global(.vault-grid):where(.vault-grid) {
+      grid-template-columns: 1fr;
+    }
+    :global(.vault-hero):where(.vault-hero) {
+      grid-template-columns: 42px minmax(0, 1fr);
+    }
+    :global(.vault-actions):where(.vault-actions) {
+      grid-column: 1 / -1;
+      display: grid;
+      grid-template-columns: auto 1fr 1fr;
+    }
+    :global(.vault-backup-card):where(.vault-backup-card) {
+      order: -1;
+    }
+    :global(.saved-cosigner-list):where(.saved-cosigner-list) :global(button) {
+      grid-template-columns: 32px minmax(0, 1fr) auto;
+    }
+    :global(.saved-cosigner-list):where(.saved-cosigner-list) :global(.row-chevron) {
+      display: none;
+    }
+    :global(.vault-actions):where(.vault-actions) :global(.wallet-more-menu) {
+      right: 18px;
+      left: 18px;
+      width: auto;
+    }
+  }
+
+  @media (min-width: 761px) and (max-width: 1050px) {
+    :global(.vault-grid):where(.vault-grid) {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    :global(.saved-cosigner-list):where(.saved-cosigner-list) :global(button) {
+      grid-template-columns: 34px minmax(0, 1fr) auto;
+    }
+    :global(.saved-cosigner-list):where(.saved-cosigner-list) :global(.row-chevron) {
+      display: none;
+    }
+  }
+  :global(.vault-hero):where(.vault-hero) {
+    position: relative;
+    z-index: 2;
+    overflow: visible;
+  }
+
+  .phone-recovery-qr {
+    display: grid;
+    gap: 1rem;
+  }
+  .phone-recovery-note {
+    display: flex;
+    gap: 0.75rem;
+    padding: 0.9rem;
+    border-radius: 0.8rem;
+    background: var(--surface-inset);
+  }
+  .phone-recovery-note > p {
+    display: grid;
+    gap: 0.2rem;
+    margin: 0;
+  }
+  .phone-recovery-note span {
+    color: var(--muted);
+    font-size: 0.875rem;
+  }
+  .coordinator-page > :global(.warning-notice) {
+    margin-bottom: 1rem;
+  }
+</style>

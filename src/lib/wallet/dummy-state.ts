@@ -26,6 +26,10 @@ function fixtureDelayedPolicyType(): FixtureDelayedPolicyType | null {
   return params.has('fixture-policy-maturity') ? 'recovery' : null;
 }
 const fixtureDelayedPolicy = fixtureDelayedPolicyType();
+const fixtureContinuity =
+  typeof location === 'undefined'
+    ? null
+    : new URLSearchParams(location.search).get('fixture-continuity');
 
 export const fixtureCosigners: PolicyDraft['cosigners'] = [
   {
@@ -76,6 +80,30 @@ function fixtureCoins(): Utxo[] {
       addressReused: false
     };
   }
+  if (fixtureContinuity === 'partner' || fixtureContinuity === 'family') {
+    return coins.map((coin, index) =>
+      index === 0
+        ? {
+            ...coin,
+            confirmations: 40_000,
+            policyMaturity: {
+              policyType:
+                fixtureContinuity === 'partner'
+                  ? ('partner_continuity_v1' as const)
+                  : ('family_continuity_v1' as const),
+              state: 'mature' as const,
+              delayBlocks: 13_140,
+              ageBlocks: 40_000,
+              remainingBlocks: 0,
+              approachingAtBlocks: 1_314,
+              maturityHeight: 223_140,
+              approximateSecondsRemaining: 0,
+              delayedSpendSupported: true
+            }
+          }
+        : coin
+    );
+  }
   const maturityFixture = fixtureDelayedPolicy !== null;
 
   if (!maturityFixture) return coins;
@@ -101,6 +129,45 @@ function fixtureCoins(): Utxo[] {
 }
 
 export function fixtureMultisigWallet(): MultisigWallet {
+  if (fixtureContinuity === 'partner' || fixtureContinuity === 'family') {
+    const cosigners = Array.from(
+      { length: fixtureContinuity === 'partner' ? 8 : 7 },
+      (_, index) => ({
+        id: `key-${index}`,
+        label: `Test role ${index}`,
+        fingerprint: (index + 1).toString(16).padStart(8, '0'),
+        xpub: `tpub-continuity-synthetic-${index}`,
+        derivationPath: MULTISIG_ACCOUNT_PATH,
+        source: 'file' as const
+      })
+    );
+    const family = fixtureContinuity === 'family';
+    const recoveryTemplate: NonNullable<MultisigWallet['recoveryTemplate']> = family
+      ? {
+          type: 'family_continuity_v1',
+          parents: { threshold: 2, signerIds: ['key-0', 'key-1'] },
+          childAssistance: { threshold: 1, signerIds: ['key-2', 'key-3'] },
+          childInheritance: { threshold: 2, signerIds: ['key-4', 'key-5'] },
+          executorSignerId: 'key-6'
+        }
+      : {
+          type: 'partner_continuity_v1',
+          owner: { threshold: 2, signerIds: ['key-0', 'key-1', 'key-2'] },
+          partner: { threshold: 2, signerIds: ['key-3', 'key-4'] },
+          estate: { threshold: 2, signerIds: ['key-5', 'key-6', 'key-7'] }
+        };
+    return {
+      kind: 'multisig',
+      name: 'Disposable Continuity fixture',
+      threshold: 2,
+      cosigners,
+      externalDescriptor: 'wsh(continuity-fixture/0/*)#prototype',
+      internalDescriptor: 'wsh(continuity-fixture/1/*)#prototype',
+      createdAt: '2026-01-01',
+      policyType: family ? 'family_continuity_v1' : 'partner_continuity_v1',
+      recoveryTemplate
+    };
+  }
   const policyType = fixtureDelayedPolicy;
   const maturityFixture = policyType !== null;
   const delayBlocks = policyType === 'inheritance' ? 52_560 : 4_320;
@@ -193,6 +260,7 @@ export abstract class DummyWalletState {
     : [];
   protected _selectedWalletId: string | null =
     fixtureDelayedPolicy !== null ||
+    fixtureContinuity !== null ||
     (typeof location !== 'undefined' &&
       new URLSearchParams(location.search).has('fixture-selected-multisig'))
       ? (this._multisigProfileId ?? this._profiles[0]?.id ?? null)
@@ -319,7 +387,7 @@ export abstract class DummyWalletState {
               delayedSpendSupported: true
             };
           })()
-        : null
+        : (coin.policyMaturity ?? null)
   }));
   protected _addresses = structuredClone(receiveAddresses).map((address) => ({
     ...address,
@@ -391,6 +459,9 @@ export abstract class DummyWalletState {
   protected _delayedWalletSwitch =
     typeof location !== 'undefined' &&
     new URLSearchParams(location.search).has('fixture-delayed-wallet-switch');
+  protected _partialFeeEstimates =
+    typeof location !== 'undefined' &&
+    new URLSearchParams(location.search).has('fixture-partial-fee-estimates');
   protected _feeEstimatesUnavailable =
     typeof location !== 'undefined' &&
     new URLSearchParams(location.search).has('fixture-fee-estimates-unavailable');

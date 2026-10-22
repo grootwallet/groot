@@ -67,4 +67,31 @@
   .interactive-amount:focus-visible {
     box-shadow: 0 0 0 2px var(--focus);
   }
+
+  /* Keep the original cascade weight while constraining these rules to this owner. */
+
+  :global(.formatted-amount):where(.formatted-amount) {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0;
+    min-width: 0;
+    max-width: 100%;
+    font-variant-numeric: tabular-nums;
+  }
+  :global(.formatted-amount):where(.formatted-amount) :global(strong) {
+    min-width: 0;
+    color: inherit;
+    font-size: 1em;
+    font-weight: 750;
+    white-space: nowrap;
+  }
+  :global(.formatted-amount):where(.formatted-amount) :global(small) {
+    display: inline-flex;
+    align-items: baseline;
+    margin-inline-start: 0.5rem;
+    color: var(--muted);
+    font-size: max(0.72em, var(--font-size-meta));
+    font-weight: 600;
+    text-transform: none;
+  }
 </style>

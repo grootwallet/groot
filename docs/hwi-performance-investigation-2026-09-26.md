@@ -65,6 +65,12 @@ Groot owners: `hardware.rs`, `wallet/hardware_commands.rs`, ADRs 0041 and 0043.
 
 ## Proposed speed work, in order
 
+The owner-requested RC9 experiment in [ADR 0098](adr/0098-internal-coldcard-preextracted-hwi-runtime.md)
+now packages an immutable extracted payload from the same pinned HWI executable
+for internal Coldcard Testnet4 actions. It is not a persistent worker or a live
+state cache. Its [acceptance record](testing/5.3.0-rc9-coldcard-runtime.md)
+separates device-free startup evidence from still-pending physical timings.
+
 On 2026-10-07, the owner reported that a connected, unlocked Trezor Safe 3
 in an existing Mainnet multisig wallet took 11.89 seconds from selecting
 receive verification to address display; Groot completed immediately after

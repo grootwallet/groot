@@ -1,6 +1,44 @@
 import type { CatalogSection } from './types';
 
 export const componentCopy = {
+  '{count} unique frame scanned': {
+    fr: '{count} image unique analysée',
+    es: '{count} fotograma único escaneado'
+  },
+  'This payment request is too large to scan safely.': {
+    fr: 'Cette demande de paiement est trop volumineuse pour être analysée en sécurité.',
+    es: 'Esta solicitud de pago es demasiado grande para escanearla de forma segura.'
+  },
+  'No usable camera is available. Connect a camera or enter the payment request manually.': {
+    fr: 'Aucune caméra utilisable. Connectez une caméra ou saisissez la demande de paiement manuellement.',
+    es: 'No hay ninguna cámara disponible. Conecta una cámara o introduce la solicitud de pago manualmente.'
+  },
+  'Too many QR frames. Restart the scan.': {
+    fr: 'Trop d’images QR. Relancez l’analyse.',
+    es: 'Demasiados fotogramas QR. Reinicia el escaneo.'
+  },
+  'Camera access was denied. Allow camera access for Groot, then reopen this scanner.': {
+    fr: 'L’accès à la caméra a été refusé. Autorisez Groot à l’utiliser, puis rouvrez ce scanner.',
+    es: 'Se denegó el acceso a la cámara. Permite el acceso a Groot y vuelve a abrir este escáner.'
+  },
+  'No usable camera is available. Connect a camera or import the signed PSBT file instead.': {
+    fr: 'Aucune caméra utilisable. Connectez une caméra ou importez le fichier PSBT signé.',
+    es: 'No hay ninguna cámara disponible. Conecta una cámara o importa el archivo PSBT firmado.'
+  },
+  '{count} unique frames scanned': {
+    fr: '{count} images uniques analysées',
+    es: '{count} fotogramas únicos escaneados'
+  },
+  'Allow camera': { fr: 'Autoriser la caméra', es: 'Permitir cámara' },
+  'Allow camera access to scan this QR.': {
+    fr: 'Autorisez la caméra pour scanner ce QR.',
+    es: 'Permite el acceso a la cámara para escanear este QR.'
+  },
+  'Requesting camera permission…': {
+    fr: 'Demande d’autorisation pour la caméra…',
+    es: 'Solicitando permiso para la cámara…'
+  },
+  'Try camera again': { fr: 'Réessayer la caméra', es: 'Reintentar con la cámara' },
   'Open existing wallet': {
     fr: 'Ouvrir le portefeuille existant',
     es: 'Abrir la cartera existente'
@@ -205,9 +243,25 @@ export const componentCopy = {
     fr: 'Groot n’a pas pu vérifier l’état de verrouillage du portefeuille.',
     es: 'Groot no pudo verificar el estado de bloqueo de la cartera.'
   },
+  'Groot could not verify this app build. Rebuild and reinstall the native app.': {
+    fr: 'Groot n’a pas pu vérifier cette version de l’application. Recompilez et réinstallez l’application native.',
+    es: 'Groot no pudo verificar esta compilación. Vuelve a compilar e instalar la aplicación nativa.'
+  },
+  'This Groot app contains mismatched components. Rebuild and reinstall the native app.': {
+    fr: 'Cette application Groot contient des composants incompatibles. Recompilez et réinstallez l’application native.',
+    es: 'Esta aplicación Groot contiene componentes incompatibles. Vuelve a compilar e instalar la aplicación nativa.'
+  },
   'Groot v{version} · {commit}': {
     fr: 'Groot v{version} · {commit}',
     es: 'Groot v{version} · {commit}'
+  },
+  'Groot v{version} · {commit} · {network}': {
+    fr: 'Groot v{version} · {commit} · {network}',
+    es: 'Groot v{version} · {commit} · {network}'
+  },
+  'Groot v{version} · {commit} · BDK {network}': {
+    fr: 'Groot v{version} · {commit} · BDK {network}',
+    es: 'Groot v{version} · {commit} · BDK {network}'
   },
   'The native and web app builds do not match. Restart Groot with the correct build.': {
     fr: 'Les versions native et web de l’application ne correspondent pas. Redémarrez Groot avec la bonne version.',
@@ -300,9 +354,9 @@ export const componentCopy = {
   },
   Outputs: { fr: 'Sorties', es: 'Salidas' },
   Path: { fr: 'Chemin', es: 'Ruta' },
-  'policy approved — show transaction': {
-    fr: 'politique approuvée — afficher la transaction',
-    es: 'política aprobada — mostrar transacción'
+  'policy approved. Show transaction': {
+    fr: 'politique approuvée. Afficher la transaction',
+    es: 'política aprobada. Mostrar transacción'
   },
   'policy, then compare the first address.': {
     fr: 'la politique, puis comparez la première adresse.',
@@ -312,9 +366,9 @@ export const componentCopy = {
     fr: 'Descripteur portable du portefeuille',
     es: 'Descriptor portátil de la cartera'
   },
-  'prefix. Rust verified that it decodes to the identical Bitcoin output script.': {
-    fr: '. Rust a vérifié qu’il correspond au même script de sortie Bitcoin.',
-    es: '. Rust verificó que corresponde al mismo script de salida de Bitcoin.'
+  'prefix for the same Bitcoin script.': {
+    fr: 'pour le même script Bitcoin.',
+    es: 'para el mismo script de Bitcoin.'
   },
   'Preparing QR…': { fr: 'Préparation du QR…', es: 'Preparando QR…' },
   'Priority fee': { fr: 'Frais prioritaires', es: 'Comisión prioritaria' },
@@ -595,5 +649,9 @@ export const componentCopy = {
   'You will need to add the signers again.': {
     fr: 'Vous devrez ajouter à nouveau les signataires.',
     es: 'Tendrás que volver a añadir los firmantes.'
+  },
+  'prefix. Rust verified that it decodes to the identical Bitcoin output script.': {
+    fr: 'comme préfixe. Rust a vérifié qu’il correspond exactement au même script de sortie Bitcoin.',
+    es: 'como prefijo. Rust verificó que corresponde exactamente al mismo script de salida Bitcoin.'
   }
 } as const satisfies CatalogSection;

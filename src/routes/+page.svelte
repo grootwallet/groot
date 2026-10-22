@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { requiresMobileNodeSetup } from '$lib/wallet/network-readiness';
   import { translate, localizedError } from '$lib/i18n-catalog';
   import { defaultConfig } from '$lib/config';
   import {
@@ -12,8 +13,10 @@
     EyeOff,
     FileKey,
     HeartPulse,
+    Network,
     RefreshCw,
     ShieldCheck,
+    Smartphone,
     TriangleAlert,
     Trash2
   } from '@lucide/svelte';
@@ -33,6 +36,7 @@
     WalletError,
     type WalletErrorDetails,
     type CosignerHealthCheck,
+    type CoreNodeConfig,
     type ExternalSignerWallet,
     type MultisigProposal,
     type MultisigWallet,
@@ -60,10 +64,9 @@
     sortTransactionsNewestFirst,
     transactionForSelection
   } from '$lib/wallet/presentation';
-  import { policyMaturitySummary } from '$lib/wallet/policy';
+  import { isContinuityPolicyType, policyMaturitySummary } from '$lib/wallet/policy';
   import { onDestroy, onMount } from 'svelte';
   import { goto } from '$app/navigation';
-  import { page } from '$app/state';
   import { discreetMode, setDiscreetMode } from '$lib/privacy';
   import MobileWalletSwitcher from '$lib/components/MobileWalletSwitcher.svelte';
   import OverflowMenuButton from '$lib/components/OverflowMenuButton.svelte';
@@ -91,6 +94,7 @@
   let checkingSignerHealth = $state(false);
   let activeProposal = $state<MultisigProposal | PaymentProposal | null>(null);
   let activeDraft = $state<PaymentDraft | null>(null);
+  let pendingMobilePairingCount = $state(0);
   let discardDraftOpen = $state(false);
   let discardingDraft = $state(false);
   let discardDraftError = $state('');
@@ -107,6 +111,7 @@
   let loadErrorCode = $state('');
   let networkSetupRequired = $state(false);
   let selectedProfile = $state<WalletProfile | null>(null);
+  let phoneBackupUnverified = $state(false);
   let verifyOpen = $state(false);
   let verifyCredential = $state('');
   let verifyError = $state('');
@@ -115,6 +120,8 @@
   let initialDataLoading = $state(true);
   let syncSource = $state<WalletSyncSource | null>(null);
   let syncStatus = $state<WalletSyncStatus | null>(null);
+  let mobileRuntime = $state(false);
+  let nodeConfig = $state<CoreNodeConfig | null>(null);
   let syncPollToken = 0;
   let syncStatusReadGeneration = 0;
   let inheritedSyncObserved = false;
@@ -151,19 +158,21 @@
   let initialHistoryRequired = $derived(
     syncSource?.type === 'bitcoin_core' && Boolean(snapshot) && !snapshot?.syncedAt
   );
+  let shellInitialScanRunning = $derived(
+    Boolean(selectedProfile && walletShell.initialHistoryScanRunning(selectedProfile.id))
+  );
   let savedRecoveryCanResume = $derived(
     initialHistoryRequired &&
       recoveryStatus.processedBlocks > 0 &&
       ['interrupted', 'failed'].includes(recoveryStatus.status)
   );
   let walletAwaitingAutomaticScan = $derived(
-    page.url.searchParams.has('initial') &&
-      automaticInitialScanPending &&
-      initialHistoryRequired &&
-      !recoveryScanIsActive(recoveryStatus) &&
-      !savedRecoveryCanResume
+    initialHistoryRequired &&
+      (automaticInitialScanPending || shellInitialScanRunning) &&
+      !recoveryScanIsActive(recoveryStatus)
   );
   let automaticInitialScanActive = $derived(recoveryScanIsActive(recoveryStatus));
+  let initialScanInFlight = $derived(walletAwaitingAutomaticScan || automaticInitialScanActive);
   let scanCredentialLabel = $derived(
     selectedProfile?.kind === 'single_key'
       ? translate($locale, 'Wallet passphrase')
@@ -252,6 +261,11 @@
       (snapshot?.syncedAt
         ? presentLocalTimestamp(snapshot.syncedAt).detail
         : translate($locale, 'This wallet has not completed a sync yet.'))
+  );
+  const mobileSyncSetupRequired = $derived(
+    mobileRuntime &&
+      (syncSource?.type === 'compact_filters' ||
+        (syncSource?.type === 'bitcoin_core' && requiresMobileNodeSetup(nodeConfig)))
   );
   let hardwareSignerDetails = $derived.by<CosignerDraft | null>(() =>
     hardwareSignerWallet
@@ -350,6 +364,19 @@
   );
   onMount(loadSnapshot);
 
+  let scanPollingForWalletId: string | null = null;
+  $effect(() => {
+    const walletId = selectedProfile?.id;
+    if (!walletId || !initialHistoryRequired || !walletShell.initialHistoryScanRunning(walletId)) {
+      scanPollingForWalletId = null;
+      return;
+    }
+    if (scanPollingForWalletId === walletId) return;
+    scanPollingForWalletId = walletId;
+    automaticInitialScanPending = true;
+    startRecoveryStatusPolling(true);
+  });
+
   onDestroy(() => {
     verifyCredential = '';
     ++loadGeneration;
@@ -379,6 +406,7 @@
     networkSetupRequired = false;
     initialDataLoading = true;
     try {
+      const pendingPairingsPromise = walletService.pendingMobilePairings().catch(() => []);
       // Profile-mutating routes refresh the shell after navigation. Read the
       // authoritative registry here so this route cannot race that refresh and
       // query the newly selected wallet using the previous wallet's kind.
@@ -390,18 +418,27 @@
           return;
         }
       }
-      const [nextSyncSource, networkSetupSources] = await Promise.all([
+      const [nextSyncSource, runtime, networkSetupSources] = await Promise.all([
         walletService.syncSource(),
+        walletService.runtimePlatform(),
         walletService.networkSetupSources()
       ]);
       if (generation !== loadGeneration) return;
+      pendingMobilePairingCount = (await pendingPairingsPromise).length;
       syncSource = nextSyncSource;
+      mobileRuntime = runtime.mobile && runtime.platform !== 'browser';
+      nodeConfig = null;
       selectedProfile =
         registry.wallets.find((wallet) => wallet.id === registry.selectedWalletId) ?? null;
       // Set the command family before any network preflight can fail. Otherwise
       // a retry after an offline preflight uses the single-key command for a
       // selected multisig wallet and returns `wrong_wallet_kind`.
       multisig = selectedProfile?.kind === 'multisig';
+      phoneBackupUnverified = Boolean(
+        multisig &&
+        !selectedProfile?.backupVerified &&
+        (await walletService.coordinationStatus()).role === 'mobile_cosigner'
+      );
       unlockSyncRequested = Boolean(
         selectedProfile && walletShell.consumeUnlockSync(selectedProfile.id)
       );
@@ -491,6 +528,11 @@
     const current = () =>
       generation === loadGeneration && profile.id === walletShell.selectedWalletId();
     const results = await Promise.allSettled([
+      // Connection hints must not block cached wallet data or the separate
+      // fail-closed wallet-history privacy disclosure.
+      (mobileRuntime ? walletService.nodeConfig() : Promise.resolve(null)).then((config) => {
+        if (current()) nodeConfig = config;
+      }),
       Promise.all([
         walletService.paymentDraft(),
         profile.kind === 'multisig'
@@ -620,6 +662,9 @@
       if (recoveryScanIsActive(status)) {
         automaticInitialScanPending = false;
         startRecoveryStatusPolling();
+      } else if (selectedProfile && walletShell.initialHistoryScanRunning(selectedProfile.id)) {
+        automaticInitialScanPending = true;
+        startRecoveryStatusPolling(true);
       } else if (!snapshot?.syncedAt && nodeReady) {
         automaticInitialScanPending = false;
         walletShell.requestInitialHistoryApproval();
@@ -680,6 +725,10 @@
     void pollSyncStatus(token);
   }
   const sync = async (manual = true) => {
+    if (mobileSyncSetupRequired) {
+      if (manual) await goto('/settings#network-services');
+      return;
+    }
     if (manual && networkSetupRequired) {
       await openNetworkSetup();
       return;
@@ -846,7 +895,9 @@
         walletAwaitingAutomaticScan ||
         syncInProgress ||
         recoveryScanIsActive(recoveryStatus)}
-      title={syncButtonTitle}
+      title={mobileSyncSetupRequired
+        ? translate($locale, 'Connect a trusted node to sync this wallet.')
+        : syncButtonTitle}
       onclick={() => sync(true)}
       ><RefreshCw
         size={15}
@@ -856,45 +907,59 @@
         recoveryScanIsActive(recoveryStatus)
           ? 'spin'
           : ''}
-      />{syncButtonLabel}</button
+      />{mobileSyncSetupRequired ? translate($locale, 'Set up sync') : syncButtonLabel}</button
     >
   </header>
-  {#if initialHistoryRequired && !walletAwaitingAutomaticScan && !automaticInitialScanActive}
+  {#if mobileSyncSetupRequired}<div class="mobile-sync-notice">
+      <WarningNotice
+        class="compact-action"
+        title={translate($locale, 'Set up wallet sync')}
+        body={translate($locale, 'Connect a trusted node to sync this wallet.')}
+        ><Button size="small" variant="secondary" href="/settings#network-services"
+          >{translate($locale, 'Configure sync')}</Button
+        ></WarningNotice
+      >
+    </div>{/if}
+  {#if initialHistoryRequired && !mobileSyncSetupRequired}
     <section class="initial-history-scan" aria-live="polite">
       <div>
         <strong
           >{translate(
             $locale,
-            recoveryScanIsActive(recoveryStatus)
+            automaticInitialScanActive
               ? 'Syncing · {percent}%'
-              : savedRecoveryCanResume
-                ? 'Wallet-history scan paused'
-                : nodeReady
-                  ? 'Approve wallet-history scan'
-                  : 'Connect Bitcoin Core',
+              : walletAwaitingAutomaticScan
+                ? 'Starting wallet-history scan…'
+                : savedRecoveryCanResume
+                  ? 'Wallet-history scan paused'
+                  : nodeReady
+                    ? 'Approve wallet-history scan'
+                    : 'Connect Bitcoin Core',
             { percent: recoveryPercent }
           )}</strong
         ><small
-          >{recoveryScanIsActive(recoveryStatus) || savedRecoveryCanResume
+          >{automaticInitialScanActive || savedRecoveryCanResume
             ? translate($locale, '{processed} / {total} blocks', {
                 processed: formatInteger(recoveryStatus.processedBlocks, $locale),
                 total: formatInteger(recoveryStatus.totalBlocks, $locale)
               })
-            : nodeReady
-              ? translate(
-                  $locale,
-                  'Scan the complete wallet history, or choose a private connection in Settings.'
-                )
-              : translate($locale, 'This wallet has not completed a sync yet.')}</small
+            : walletAwaitingAutomaticScan
+              ? translate($locale, 'Balance and activity will appear after the scan completes.')
+              : nodeReady
+                ? translate(
+                    $locale,
+                    'Scan the complete wallet history, or choose a private connection in Settings.'
+                  )
+                : translate($locale, 'This wallet has not completed a sync yet.')}</small
         >
       </div>
-      {#if recoveryScanIsActive(recoveryStatus)}
+      {#if automaticInitialScanActive}
         <progress
           max="100"
           value={recoveryPercent}
           aria-label={translate($locale, 'Recovery scan progress')}
         ></progress>
-      {:else}
+      {:else if !walletAwaitingAutomaticScan}
         <Button
           size="small"
           variant="secondary"
@@ -977,6 +1042,16 @@
       />
     </div>
   {/if}
+  {#if phoneBackupUnverified}
+    <WarningNotice
+      title={translate($locale, 'Recovery backup not verified')}
+      class="compact-action"
+    >
+      <Button size="small" variant="secondary" href="/multisig"
+        >{translate($locale, 'Verify now')}</Button
+      >
+    </WarningNotice>
+  {/if}
   {#if selectedProfile?.kind === 'single_key' && !selectedProfile.backupVerified}
     <section
       class="backup-verification-banner"
@@ -984,10 +1059,7 @@
     >
       <ShieldCheck size={18} /><span
         ><strong>{translate($locale, 'Recovery backup not verified')}</strong><small
-          >{translate(
-            $locale,
-            'Confirm your written words so you know this wallet can be recovered.'
-          )}</small
+          >{translate($locale, 'Verify your written recovery words.')}</small
         ></span
       ><Button
         size="small"
@@ -1023,7 +1095,11 @@
                 maturitySummary.mature > 0 ? maturitySummary.mature : maturitySummary.approaching,
               key: translate(
                 $locale,
-                maturitySummary.policyType === 'inheritance' ? 'Heir key' : 'Recovery key'
+                isContinuityPolicyType(maturitySummary.policyType)
+                  ? 'Delayed signers'
+                  : maturitySummary.policyType === 'inheritance'
+                    ? 'Heir key'
+                    : 'Recovery key'
               )
             }
           )}</strong
@@ -1033,12 +1109,24 @@
               ? translate($locale, 'Next key change in {count} blocks · times are approximate', {
                   count: formatInteger(maturitySummary.nextRemainingBlocks, $locale)
                 })
-              : translate($locale, 'The extra key can spend every confirmed coin shown.')
+              : translate(
+                  $locale,
+                  isContinuityPolicyType(maturitySummary.policyType)
+                    ? 'A delayed path is available for every confirmed coin shown.'
+                    : 'The extra key can spend every confirmed coin shown.'
+                )
             : translate(
                 $locale,
                 'Countdown paused until Groot verifies a recent chain tip. Saved coin states are shown as of the last sync.'
               )}</small
-        ><small>{translate($locale, 'Your normal 2-of-3 keys still work for every coin.')}</small>
+        ><small
+          >{translate(
+            $locale,
+            isContinuityPolicyType(maturitySummary.policyType)
+              ? 'Primary signers remain available. Review each delayed path and its required signers before spending.'
+              : 'Your normal 2-of-3 keys still work for every coin.'
+          )}</small
+        >
       </div>
       <Button size="small" variant="secondary" href="/coins"
         >{translate($locale, 'Review coins')}</Button
@@ -1051,7 +1139,7 @@
       description={loadError}
       onretry={networkSetupRequired ? openNetworkSetup : loadSnapshot}
     />
-  {:else if snapshot && !initialDataLoading && !walletAwaitingAutomaticScan}
+  {:else if snapshot && !initialDataLoading && !initialScanInFlight}
     <section class="balance-card content-reveal">
       <div class="balance-top">
         <span>{translate($locale, 'Total balance')}</span><button
@@ -1106,6 +1194,24 @@
     <WalletSkeleton variant="balance" />
   {/if}
   {#if !loadError}
+    {#if pendingMobilePairingCount > 0}
+      <a
+        class="active-proposal-callout"
+        href="/mobile/pair"
+        aria-label={translate($locale, 'Resume wallet pairing')}
+      >
+        <span class="active-proposal-icon"><Smartphone size={17} /></span>
+        <span class="active-proposal-copy"
+          ><strong>{translate($locale, 'Wallet pairing in progress')}</strong><span
+            class="active-proposal-meta"
+            ><small>{translate($locale, 'Phone signer setup is waiting to finish')}</small></span
+          ></span
+        >
+        <span class="active-proposal-action"
+          >{translate($locale, 'Resume')} <ChevronRight size={15} /></span
+        >
+      </a>
+    {/if}
     {#if secondaryError}
       <LoadFailure
         title={translate($locale, 'Wallet details are unavailable')}
@@ -1266,7 +1372,7 @@
         <div><h2>{translate($locale, 'Recent activity')}</h2></div>
         <a href="/activity">{translate($locale, 'View all')}</a>
       </div>
-      {#if initialDataLoading}
+      {#if initialDataLoading || initialScanInFlight}
         <TxList items={[]} loading />
       {:else if initialHistoryRequired}
         <EmptyState
@@ -1326,7 +1432,13 @@
         <dd><PermanentLabelTags labels={activeDraft.labels} hidden={$discreetMode} prominent /></dd>
       </div>
     </dl>
-    {#if discardDraftError}<p class="form-error" role="alert">{discardDraftError}</p>{/if}
+    {#if discardDraftError}<WarningNotice
+        tone="danger"
+        icon
+        role="alert"
+        ariaLive="polite"
+        body={discardDraftError}
+      />{/if}
     <div class="modal-footer">
       <Button
         variant="secondary"
@@ -1377,9 +1489,13 @@
       'Required to decrypt the recovery words only inside trusted Rust code.'
     )}
   />
-  {#if verifyError}<p class="form-error" role="alert">
-      {verifyError.replace('passphrase / PIN', 'wallet passphrase')}
-    </p>{/if}
+  {#if verifyError}<WarningNotice
+      tone="danger"
+      icon
+      role="alert"
+      ariaLive="polite"
+      body={verifyError.replace('passphrase / PIN', 'wallet passphrase')}
+    />{/if}
   <div class="modal-footer verify-backup-actions">
     <Button
       class="show-words-action"
@@ -1405,3 +1521,488 @@
     >
   </div>
 </Modal>
+
+<style>
+  @media (max-width: 760px) {
+    .dashboard-page .page-header {
+      min-height: 46px;
+      margin-bottom: 18px;
+    }
+  }
+  .mobile-sync-notice {
+    margin-bottom: 16px;
+  }
+  /* Keep the original cascade weight while constraining these rules to this owner. */
+
+  :global(.sync-progress):where(.sync-progress) {
+    display: grid;
+    gap: 9px;
+    margin: 0 0 16px;
+    padding: 12px 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+    background: var(--panel);
+  }
+  :global(.sync-progress):where(.sync-progress) > :global(div) {
+    display: grid;
+    gap: 3px;
+  }
+  :global(.sync-progress):where(.sync-progress) :global(strong) {
+    color: var(--text);
+    font-size: 13px;
+  }
+  :global(.sync-progress):where(.sync-progress) :global(small) {
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+    line-height: 1.45;
+  }
+  :global(.sync-progress):where(.sync-progress) :global(progress) {
+    width: 100%;
+    height: 5px;
+    accent-color: var(--progress);
+  }
+  :global(.sync-progress.failed):where(.sync-progress) {
+    border-color: color-mix(in srgb, var(--danger) 38%, var(--border));
+  }
+  :global(.initial-history-scan):where(.initial-history-scan) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 12px 18px;
+    margin: 0 0 16px;
+    padding: 13px 14px;
+    border: 1px solid color-mix(in srgb, var(--accent) 38%, var(--border));
+    border-radius: var(--radius-control);
+    background: var(--accent-soft);
+  }
+  :global(.initial-history-scan):where(.initial-history-scan) > :global(div) {
+    display: grid;
+    gap: 3px;
+  }
+  :global(.initial-history-scan):where(.initial-history-scan) :global(strong) {
+    color: var(--text);
+    font-size: 13px;
+  }
+  :global(.initial-history-scan):where(.initial-history-scan) :global(small) {
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+    line-height: 1.45;
+  }
+  :global(.initial-history-scan):where(.initial-history-scan) :global(progress) {
+    grid-column: 1 / -1;
+    width: 100%;
+    height: 5px;
+    accent-color: var(--progress);
+  }
+  :global(.unverified-balance):where(.unverified-balance) {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    cursor: default;
+  }
+  :global(.unverified-balance):where(.unverified-balance) :global(strong) {
+    font-size: 42px;
+  }
+  :global(.unverified-balance):where(.unverified-balance) :global(small) {
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+    font-weight: 600;
+  }
+  :global(.initial-history-scan):where(.initial-history-scan)
+    + :global(.backup-verification-banner),
+  :global(.sync-progress):where(.sync-progress) + :global(.backup-verification-banner) {
+    margin-top: 0;
+  }
+
+  :global(.balance-card):where(.balance-card) {
+    border: 1px solid var(--border);
+    background: var(--panel);
+    border-radius: var(--radius-panel);
+    padding: 26px 28px 23px;
+    position: relative;
+    overflow: hidden;
+  }
+  :global(.backup-verification-banner):where(.backup-verification-banner) {
+    display: grid;
+    grid-template-columns: 28px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 11px;
+    margin: 0 0 16px;
+    padding: 12px 14px;
+    border: 1px solid color-mix(in srgb, var(--accent) 34%, var(--border));
+    border-radius: var(--radius-control);
+    color: var(--accent);
+    background: var(--accent-soft);
+  }
+  :global(.backup-verification-banner):where(.backup-verification-banner) > :global(span) {
+    min-width: 0;
+    display: grid;
+    gap: 3px;
+  }
+  :global(.backup-verification-banner):where(.backup-verification-banner) :global(strong) {
+    color: var(--text);
+    font-size: var(--font-size-meta);
+  }
+  :global(.backup-verification-banner):where(.backup-verification-banner) :global(small) {
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+    line-height: 1.45;
+  }
+
+  :global(.policy-maturity-banner):where(.policy-maturity-banner) {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 16px;
+    border: 1px solid color-mix(in srgb, var(--focus) 28%, var(--border));
+    border-radius: var(--radius-inset);
+    background: color-mix(in srgb, var(--focus) 7%, var(--panel));
+  }
+
+  :global(.policy-maturity-banner.approaching):where(.policy-maturity-banner) {
+    border-color: color-mix(in srgb, var(--warning-text) 42%, var(--border));
+    background: color-mix(in srgb, var(--warning-text) 8%, var(--panel));
+  }
+
+  :global(.policy-maturity-banner.mature):where(.policy-maturity-banner) {
+    border-color: color-mix(in srgb, var(--danger) 38%, var(--border));
+    background: color-mix(in srgb, var(--danger) 7%, var(--panel));
+  }
+
+  :global(.policy-maturity-banner.compact):where(.policy-maturity-banner) {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  :global(.policy-maturity-icon):where(.policy-maturity-icon) {
+    display: grid;
+    width: 36px;
+    height: 36px;
+    place-items: center;
+    border-radius: var(--radius-inset);
+    color: var(--focus);
+    background: color-mix(in srgb, var(--focus) 12%, var(--surface-icon));
+  }
+
+  :global(.policy-maturity-banner):where(.policy-maturity-banner) > :global(div) {
+    display: grid;
+    gap: 3px;
+  }
+
+  :global(.policy-maturity-banner):where(.policy-maturity-banner) :global(strong),
+  :global(.policy-maturity-banner):where(.policy-maturity-banner) :global(small) {
+    display: block;
+  }
+
+  :global(.policy-maturity-banner):where(.policy-maturity-banner) :global(small) {
+    color: var(--muted);
+    line-height: 1.4;
+  }
+
+  :global(.policy-maturity-banner):where(.policy-maturity-banner) :global(.stale-copy) {
+    color: var(--warning-text);
+  }
+  :global(.policy-maturity-banner:not(.compact)):where(.policy-maturity-banner) {
+    margin-bottom: 14px;
+  }
+  :global(.balance-top):where(.balance-top) {
+    color: var(--muted);
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  :global(.ghost-icon):where(.ghost-icon) {
+    border: 0;
+    background: none;
+    color: var(--muted-2);
+    padding: 2px;
+    display: inline-flex;
+    cursor: pointer;
+  }
+  :global(.balance-value):where(.balance-value) {
+    appearance: none;
+    width: fit-content;
+    border: 0;
+    background: none;
+    color: var(--text);
+    font-size: clamp(34px, 5vw, 47px);
+    font-weight: 600;
+    letter-spacing: -0.035em;
+    margin-top: 14px;
+    padding: 0;
+    font-variant-numeric: tabular-nums;
+    cursor: pointer;
+  }
+  :global(.balance-value:focus-visible):where(.balance-value) {
+    outline: 2px solid var(--focus);
+    outline-offset: 5px;
+    border-radius: 4px;
+  }
+  :global(.balance-value):where(.balance-value) :global(small) {
+    font-size: 16px;
+    letter-spacing: 0;
+    color: var(--muted);
+    font-weight: 500;
+  }
+  :global(.pending-line):where(.pending-line) {
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 24px;
+  }
+  :global(.pending-line):where(.pending-line) :global(i) {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--progress);
+  }
+  :global(.active-proposal-callout):where(.active-proposal-callout) {
+    min-height: 54px;
+    margin-top: 13px;
+    padding: 9px 12px;
+    display: grid;
+    grid-template-columns: 32px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 10px;
+    border: 1px solid color-mix(in srgb, var(--accent) 24%, transparent);
+    border-radius: var(--radius-control);
+    color: var(--text);
+    background: color-mix(in srgb, var(--accent) 8%, var(--panel));
+    transition:
+      border-color 0.15s ease,
+      background-color 0.15s ease;
+  }
+  :global(.active-proposal-callout:hover):where(.active-proposal-callout) {
+    border-color: color-mix(in srgb, var(--accent) 34%, transparent);
+    background: color-mix(in srgb, var(--accent) 12%, var(--panel));
+  }
+  :global(.active-proposal-icon):where(.active-proposal-icon) {
+    width: 32px;
+    height: 32px;
+    display: grid;
+    place-items: center;
+    border-radius: var(--radius-control);
+    color: var(--accent);
+    background: var(--accent-soft);
+  }
+  :global(.active-proposal-callout.ready):where(.active-proposal-callout) {
+    border-color: color-mix(in srgb, var(--success) 38%, var(--border));
+    background: color-mix(in srgb, var(--success) 7%, var(--panel));
+  }
+  :global(.active-proposal-callout.ready):where(.active-proposal-callout)
+    :global(.active-proposal-icon) {
+    color: var(--success);
+    background: color-mix(in srgb, var(--success) 12%, transparent);
+  }
+  :global(.active-proposal-copy):where(.active-proposal-copy) {
+    min-width: 0;
+    display: grid;
+    gap: 3px;
+  }
+  :global(.active-payment-copy):where(.active-payment-copy) {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'title progress'
+      'labels progress';
+    column-gap: 10px;
+  }
+  :global(.active-payment-copy):where(.active-payment-copy) > :global(strong) {
+    grid-area: title;
+  }
+  :global(.active-payment-copy):where(.active-payment-copy) > :global(.active-proposal-meta) {
+    grid-area: labels;
+  }
+  :global(.active-proposal-copy):where(.active-proposal-copy) :global(strong) {
+    font-size: var(--font-size-meta);
+  }
+  :global(.active-proposal-copy):where(.active-proposal-copy) :global(small) {
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+  }
+  :global(.active-proposal-meta):where(.active-proposal-meta) {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding-top: 4px;
+  }
+  :global(.active-proposal-meta):where(.active-proposal-meta)
+    :global(.permanent-label-tags.prominent) {
+    flex: 0 1 auto;
+    justify-content: flex-start;
+  }
+  :global(.active-proposal-meta):where(.active-proposal-meta) > :global(small) {
+    flex: 0 0 auto;
+  }
+  :global(.active-proposal-progress):where(.active-proposal-progress) {
+    grid-area: progress;
+    align-self: center;
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+    white-space: nowrap;
+  }
+  :global(.active-proposal-action):where(.active-proposal-action) {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    color: var(--link);
+    font-size: var(--font-size-meta);
+    font-weight: 650;
+  }
+  :global(.active-draft-actions):where(.active-draft-actions) {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 7px;
+  }
+  :global(.active-draft-actions):where(.active-draft-actions) :global(.button) {
+    min-height: 32px;
+    font-size: var(--font-size-meta);
+    font-weight: 650;
+  }
+  :global(.active-proposal-callout):where(.active-proposal-callout) + :global(.primary-actions) {
+    margin-top: 10px;
+  }
+  :global(.primary-actions):where(.primary-actions) {
+    display: grid;
+    grid-template-columns: 46px repeat(2, minmax(0, 1fr));
+    align-items: stretch;
+    gap: 10px;
+    margin-top: 13px;
+  }
+  :global(.primary-actions):where(.primary-actions) > :global(*) {
+    min-width: 0;
+  }
+  :global(.overview-more):where(.overview-more) {
+    position: relative;
+    width: 46px;
+    align-self: center;
+  }
+  :global(.overview-more-menu):where(.overview-more-menu) {
+    position: absolute;
+    z-index: 90;
+    left: 0;
+    bottom: calc(100% + 8px);
+    width: 238px;
+    padding: 6px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-inset);
+    background: var(--panel-2);
+    box-shadow: 0 16px 42px rgba(0, 0, 0, 0.28);
+  }
+  :global(.overview-more-menu):where(.overview-more-menu) :global(a),
+  :global(.overview-more-menu):where(.overview-more-menu) :global(button) {
+    width: 100%;
+    min-height: 48px;
+    display: grid;
+    grid-template-columns: 24px minmax(0, 1fr);
+    align-items: center;
+    gap: 9px;
+    padding: 7px 9px;
+    border: 0;
+    border-radius: var(--radius-control);
+    color: var(--text-soft);
+    background: transparent;
+    text-align: left;
+    cursor: pointer;
+  }
+  :global(.overview-more-menu):where(.overview-more-menu) :global(a:hover),
+  :global(.overview-more-menu):where(.overview-more-menu) :global(a:focus-visible),
+  :global(.overview-more-menu):where(.overview-more-menu) :global(button:hover),
+  :global(.overview-more-menu):where(.overview-more-menu) :global(button:focus-visible) {
+    color: var(--text);
+    background: var(--surface-hover);
+    outline: 0;
+  }
+  :global(.overview-more-menu):where(.overview-more-menu) :global(a > svg),
+  :global(.overview-more-menu):where(.overview-more-menu) :global(button > svg) {
+    color: var(--muted);
+  }
+  :global(.overview-more-menu):where(.overview-more-menu) :global(a > span),
+  :global(.overview-more-menu):where(.overview-more-menu) :global(button > span) {
+    min-width: 0;
+    display: grid;
+    gap: 2px;
+  }
+  :global(.overview-more-menu):where(.overview-more-menu) :global(strong) {
+    font-size: var(--font-size-meta);
+  }
+  :global(.overview-more-menu):where(.overview-more-menu) :global(small) {
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+  }
+
+  @media (max-width: 700px) {
+    :global(.policy-maturity-banner):where(.policy-maturity-banner) {
+      grid-template-columns: auto minmax(0, 1fr);
+    }
+
+    :global(.policy-maturity-banner):where(.policy-maturity-banner) :global(.button) {
+      grid-column: 1 / -1;
+      width: 100%;
+    }
+  }
+
+  @media (max-width: 760px) {
+    :global(.balance-card):where(.balance-card) {
+      padding: 22px 20px;
+    }
+    :global(.backup-verification-banner):where(.backup-verification-banner) {
+      grid-template-columns: 24px minmax(0, 1fr);
+      margin-top: -12px;
+    }
+    :global(.backup-verification-banner):where(.backup-verification-banner) :global(.button) {
+      grid-column: 2;
+      justify-self: start;
+    }
+    :global(.balance-value):where(.balance-value) {
+      font-size: 35px;
+    }
+    :global(.active-proposal-callout):where(.active-proposal-callout) {
+      grid-template-columns: 32px minmax(0, 1fr);
+    }
+    :global(.active-payment-copy):where(.active-payment-copy) {
+      grid-template-columns: minmax(0, 1fr);
+      grid-template-areas:
+        'title'
+        'labels'
+        'progress';
+    }
+    :global(.active-proposal-progress):where(.active-proposal-progress) {
+      justify-self: start;
+      margin-top: 3px;
+    }
+    :global(.active-proposal-action):where(.active-proposal-action) {
+      display: none;
+    }
+    :global(.active-draft-actions):where(.active-draft-actions) {
+      grid-column: 1 / -1;
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+    }
+    :global(.active-draft-actions):where(.active-draft-actions) :global(a.button) {
+      width: 100%;
+    }
+    :global(.dashboard-page):where(.dashboard-page) :global(.primary-actions) {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 46px;
+    }
+    :global(.overview-more-menu):where(.overview-more-menu) {
+      position: absolute;
+      z-index: 90;
+      top: calc(100% + 8px);
+      right: 0;
+      bottom: auto;
+      left: auto;
+      width: min(238px, calc(100vw - 36px));
+      max-height: calc(100dvh - 180px);
+      overflow-y: auto;
+    }
+  }
+  .page > :global(.warning-notice) {
+    margin-bottom: 1rem;
+  }
+</style>

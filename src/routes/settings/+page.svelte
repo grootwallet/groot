@@ -22,12 +22,12 @@
     ScrollText,
     ShieldCheck,
     Sun,
-    TriangleAlert,
     Trash2,
     Upload,
     WalletCards
   } from '@lucide/svelte';
   import Button from '$lib/components/Button.svelte';
+  import AnimatedUrQr from '$lib/components/AnimatedUrQr.svelte';
   import BuildIdentity from '$lib/components/BuildIdentity.svelte';
   import FieldCounter from '$lib/components/FieldCounter.svelte';
   import Modal from '$lib/components/Modal.svelte';
@@ -98,6 +98,7 @@
       (shortcut) => shortcut.id !== 'lock' || (!isPrototypeWallet && desktopPlatform)
     )
   );
+  let mobileRuntime = $state(false);
   let profiles = $state<WalletProfile[]>([]);
   let selectedWalletId = $state<string | null>(null);
   let walletUnlocked = $state(false);
@@ -326,6 +327,7 @@
     hardwareBackupError = $state(''),
     hardwareBackup = $state(''),
     hardwareBackupContent = $state(''),
+    hardwareBackupFrames = $state<string[]>([]),
     exportingHardwareBackup = $state(false);
   let renameOpen = $state(false),
     renameDraft = $state(''),
@@ -382,6 +384,7 @@
     ]);
     if (generation !== profileReadGeneration) return;
     runtime = nextRuntime;
+    mobileRuntime = nextRuntime.mobile;
     profiles = registry.wallets;
     selectedWalletId = registry.selectedWalletId;
     const session = registry.selectedWalletId ? await walletService.session() : null;
@@ -554,6 +557,7 @@
     hardwareBackupPin = '';
     hardwareBackup = '';
     hardwareBackupContent = '';
+    hardwareBackupFrames = [];
     signerRenameDraft = '';
     if (syncStatusPoll) clearTimeout(syncStatusPoll);
     if (scanPoll) clearTimeout(scanPoll);
@@ -657,6 +661,7 @@
   function openNodeSettings() {
     clearNodeCredentials();
     nodeMode = isManagedNodeConfig(node) ? 'managed' : node.torProxy ? 'tor' : node.backend.type;
+    if (mobileRuntime && nodeMode === 'local_core') setNodeLocation('remote_core');
     nodeOpen = true;
   }
   function closeNodeSettings() {
@@ -771,7 +776,8 @@
     }
   }
   function openSyncSource() {
-    syncSourceType = defaultConfig.network === 'mainnet' ? 'bitcoin_core' : syncSource.type;
+    syncSourceType =
+      mobileRuntime || defaultConfig.network === 'mainnet' ? 'bitcoin_core' : syncSource.type;
     if (syncSource.type === 'compact_filters') {
       syncDiscoverPeers = syncSource.discoverPeers;
       syncPeers = syncSource.peers.join('\n');
@@ -1234,6 +1240,10 @@
       const backup = await walletService.exportExternalSignerDescriptor(hardwareBackupPin);
       hardwareBackup = backup.descriptor;
       hardwareBackupContent = backup.content;
+      hardwareBackupFrames =
+        defaultConfig.network === 'mainnet'
+          ? []
+          : await walletService.encodeWatchOnlyQr(backup.content);
       hardwareBackupPin = '';
       toast({
         title: 'Public descriptor ready',
@@ -1625,26 +1635,26 @@
           >
         </span>
       </div>
-      <div class="setting-row keyboard-shortcut-row">
-        <span class="setting-icon"><Keyboard size={18} /></span><span
-          ><strong>{translate($locale, 'Keyboard shortcuts')}</strong><small
-            >{translate($locale, 'Navigate and lock without leaving the keyboard.')}</small
-          ></span
-        >
-        <dl class="keyboard-shortcut-grid">
-          {#each displayedKeyboardShortcuts as shortcut}
-            <div>
-              <dt>{translate($locale, shortcut.label)}</dt>
-              <dd>
-                {#each shortcutKeys(shortcut, commandModifier) as key}<kbd>{key}</kbd>{/each}
-              </dd>
-            </div>
-          {/each}
-        </dl>
-      </div>
+      {#if !mobileRuntime}<div class="setting-row keyboard-shortcut-row">
+          <span class="setting-icon"><Keyboard size={18} /></span><span
+            ><strong>{translate($locale, 'Keyboard shortcuts')}</strong><small
+              >{translate($locale, 'Navigate and lock without leaving the keyboard.')}</small
+            ></span
+          >
+          <dl class="keyboard-shortcut-grid">
+            {#each displayedKeyboardShortcuts as shortcut}
+              <div>
+                <dt>{translate($locale, shortcut.label)}</dt>
+                <dd>
+                  {#each shortcutKeys(shortcut, commandModifier) as key}<kbd>{key}</kbd>{/each}
+                </dd>
+              </div>
+            {/each}
+          </dl>
+        </div>{/if}
     </div>
   </section>
-  <section class="settings-group">
+  <section class="settings-group" id="network-services">
     <h2>{translate($locale, 'Network services')}</h2>
     <div class="settings-list">
       <div class="setting-row bitcoin-network-row">
@@ -1912,7 +1922,13 @@
         >
       </div>
     </div>{/if}
-  {#if labelInterchangeError}<p class="form-error" role="alert">{labelInterchangeError}</p>{/if}
+  {#if labelInterchangeError}<WarningNotice
+      tone="danger"
+      icon
+      role="alert"
+      ariaLive="polite"
+      body={labelInterchangeError}
+    />{/if}
   <div class="modal-footer">
     <Button variant="secondary" disabled={labelInterchangeBusy} onclick={importLabels}
       ><Upload size={15} />{translate($locale, 'Import JSONL')}</Button
@@ -1949,7 +1965,13 @@
       )}
     /></label
   >
-  {#if renameError}<p class="form-error" role="alert">{renameError}</p>{/if}
+  {#if renameError}<WarningNotice
+      tone="danger"
+      icon
+      role="alert"
+      ariaLive="polite"
+      body={renameError}
+    />{/if}
   <div class="modal-footer">
     <Button
       variant="secondary"
@@ -2002,7 +2024,13 @@
       )}
     /></label
   >
-  {#if signerRenameError}<p class="form-error" role="alert">{signerRenameError}</p>{/if}
+  {#if signerRenameError}<WarningNotice
+      tone="danger"
+      icon
+      role="alert"
+      ariaLive="polite"
+      body={signerRenameError}
+    />{/if}
   <div class="modal-footer">
     <Button
       variant="secondary"
@@ -2128,9 +2156,13 @@
       'Required to decrypt the recovery words only inside trusted Rust code.'
     )}
   />
-  {#if verifyError}<p class="form-error" role="alert">
-      {verifyError.replace('passphrase / PIN', 'wallet passphrase')}
-    </p>{/if}
+  {#if verifyError}<WarningNotice
+      tone="danger"
+      icon
+      role="alert"
+      ariaLive="polite"
+      body={verifyError.replace('passphrase / PIN', 'wallet passphrase')}
+    />{/if}
   <div class="modal-footer verify-backup-actions">
     <Button
       class="show-words-action"
@@ -2169,6 +2201,7 @@
     hardwareBackupError = '';
     hardwareBackup = '';
     hardwareBackupContent = '';
+    hardwareBackupFrames = [];
   }}
 >
   {#if !hardwareBackup}
@@ -2187,7 +2220,13 @@
         hint={translate($locale, 'Re-authenticate before exposing wallet metadata.')}
       />
     </div>
-    {#if hardwareBackupError}<p class="form-error" role="alert">{hardwareBackupError}</p>{/if}
+    {#if hardwareBackupError}<WarningNotice
+        tone="danger"
+        icon
+        role="alert"
+        ariaLive="polite"
+        body={hardwareBackupError}
+      />{/if}
     <div class="modal-footer">
       <Button
         variant="secondary"
@@ -2214,7 +2253,25 @@
         >
       </div>
     </div>
-    {#if hardwareBackupError}<p class="form-error" role="alert">{hardwareBackupError}</p>{/if}
+    {#if hardwareBackupFrames.length}
+      <AnimatedUrQr
+        frames={hardwareBackupFrames}
+        label={translate($locale, 'Watch-only wallet QR')}
+      />
+      <p class="settings-help">
+        {translate(
+          $locale,
+          'On the phone choose “Watch desktop wallet.” This QR contains public descriptors only and cannot sign.'
+        )}
+      </p>
+    {/if}
+    {#if hardwareBackupError}<WarningNotice
+        tone="danger"
+        icon
+        role="alert"
+        ariaLive="polite"
+        body={hardwareBackupError}
+      />{/if}
     <div class="modal-footer">
       <Button
         variant="secondary"
@@ -2245,10 +2302,7 @@
 <Modal
   open={syncOpen}
   title={translate($locale, 'Wallet activity sync')}
-  description={translate(
-    $locale,
-    'Choose how this wallet discovers transactions. Fee estimation and broadcast continue to use the separately configured Bitcoin Core service.'
-  )}
+  description={translate($locale, 'Choose where this wallet gets transaction activity.')}
   onclose={() => {
     if (syncSaving) return;
     syncOpen = false;
@@ -2260,11 +2314,11 @@
       <button
         class:active={syncSourceType === 'bitcoin_core'}
         onclick={() => (syncSourceType = 'bitcoin_core')}>Bitcoin Core</button
-      ><button
-        class:active={syncSourceType === 'compact_filters'}
-        onclick={() => (syncSourceType = 'compact_filters')}
-        >{translate($locale, 'Compact filters')}</button
-      >
+      >{#if !mobileRuntime}<button
+          class:active={syncSourceType === 'compact_filters'}
+          onclick={() => (syncSourceType = 'compact_filters')}
+          >{translate($locale, 'Compact filters · Experimental')}</button
+        >{/if}
     </div>{/if}
   {#if defaultConfig.network === 'mainnet'}
     <WarningNotice
@@ -2276,6 +2330,13 @@
       )}
     />
   {:else if syncSourceType === 'compact_filters'}
+    <WarningNotice
+      title={translate($locale, 'Experimental test-network feature.')}
+      body={translate(
+        $locale,
+        'Confirmed activity only. The initial scan may repeat after interruption; do not rely on this source for recovery.'
+      )}
+    />
     <WarningNotice
       title={translate($locale, 'Confirmed activity only.')}
       body={translate(
@@ -2352,7 +2413,13 @@
     autocomplete="current-password"
     hint={translate($locale, 'Required to change this wallet’s network privacy boundary.')}
   />
-  {#if syncError}<p class="form-error" role="alert">{syncError}</p>{/if}
+  {#if syncError}<WarningNotice
+      tone="danger"
+      icon
+      role="alert"
+      ariaLive="polite"
+      body={syncError}
+    />{/if}
   <div class="modal-footer">
     <Button
       variant="secondary"
@@ -2431,9 +2498,13 @@
             $locale,
             'Retained block range unavailable. Check the node connection and reopen this dialog.'
           )}</small
-        >{/if}{#if scanBirthdayAboveTip}<small class="form-error"
-          >{translate($locale, 'Birthday block must be at or below the current chain tip.')}</small
-        >{/if}</label
+        >{/if}{#if scanBirthdayAboveTip}<WarningNotice
+          tone="danger"
+          icon
+          role="alert"
+          ariaLive="polite"
+          body={translate($locale, 'Birthday block must be at or below the current chain tip.')}
+        />{/if}</label
     >
     <details class="scan-optional-control" bind:open={scanOptionsOpen}>
       <summary
@@ -2506,54 +2577,54 @@
       </div>
     {/if}
   </div>
-  {#if scanError}<div class="hardware-inline-error scan-error-card" role="alert" aria-live="polite">
-      <TriangleAlert size={18} />
-      <span>
-        <strong
-          >{translate(
-            $locale,
-            scanErrorCode === 'node_history_unavailable'
-              ? 'Required block history is unavailable'
-              : 'Full rescan failed'
-          )}</strong
-        >
-        <small>{scanError}</small>
-        {#if scanErrorDetails}<dl class="scan-error-details">
-            {#if scanErrorDetails.requestedBirthdayBlock !== undefined}<div>
-                <dt>{translate($locale, 'Requested birthday')}</dt>
-                <dd>
-                  {translate($locale, 'Block {height}', {
-                    height: formatInteger(scanErrorDetails.requestedBirthdayBlock, $locale)
-                  })}
-                </dd>
-              </div>{/if}
-            {#if scanErrorDetails.requiredBlock !== undefined}<div>
-                <dt>{translate($locale, 'Required anchor')}</dt>
-                <dd>
-                  {translate($locale, 'Block {height}', {
-                    height: formatInteger(scanErrorDetails.requiredBlock, $locale)
-                  })}
-                </dd>
-              </div>{/if}
-            {#if scanErrorDetails.earliestRetainedBlock !== undefined}<div>
-                <dt>{translate($locale, 'Bitcoin Core retains full blocks from')}</dt>
-                <dd>
-                  {translate($locale, 'Block {height}', {
-                    height: formatInteger(scanErrorDetails.earliestRetainedBlock, $locale)
-                  })}
-                </dd>
-              </div>{/if}
-            {#if scanErrorDetails.minimumBirthdayBlock !== undefined}<div>
-                <dt>{translate($locale, 'Earliest usable birthday')}</dt>
-                <dd>
-                  {translate($locale, 'Block {height}', {
-                    height: formatInteger(scanErrorDetails.minimumBirthdayBlock, $locale)
-                  })}
-                </dd>
-              </div>{/if}
-          </dl>{/if}
-      </span>
-    </div>{/if}
+  {#if scanError}<WarningNotice
+      tone="danger"
+      icon
+      role="alert"
+      ariaLive="polite"
+      title={translate(
+        $locale,
+        scanErrorCode === 'node_history_unavailable'
+          ? 'Required block history is unavailable'
+          : 'Full rescan failed'
+      )}
+      body={scanError}
+    >
+      {#if scanErrorDetails}<dl class="scan-error-details">
+          {#if scanErrorDetails.requestedBirthdayBlock !== undefined}<div>
+              <dt>{translate($locale, 'Requested birthday')}</dt>
+              <dd>
+                {translate($locale, 'Block {height}', {
+                  height: formatInteger(scanErrorDetails.requestedBirthdayBlock, $locale)
+                })}
+              </dd>
+            </div>{/if}
+          {#if scanErrorDetails.requiredBlock !== undefined}<div>
+              <dt>{translate($locale, 'Required anchor')}</dt>
+              <dd>
+                {translate($locale, 'Block {height}', {
+                  height: formatInteger(scanErrorDetails.requiredBlock, $locale)
+                })}
+              </dd>
+            </div>{/if}
+          {#if scanErrorDetails.earliestRetainedBlock !== undefined}<div>
+              <dt>{translate($locale, 'Bitcoin Core retains full blocks from')}</dt>
+              <dd>
+                {translate($locale, 'Block {height}', {
+                  height: formatInteger(scanErrorDetails.earliestRetainedBlock, $locale)
+                })}
+              </dd>
+            </div>{/if}
+          {#if scanErrorDetails.minimumBirthdayBlock !== undefined}<div>
+              <dt>{translate($locale, 'Earliest usable birthday')}</dt>
+              <dd>
+                {translate($locale, 'Block {height}', {
+                  height: formatInteger(scanErrorDetails.minimumBirthdayBlock, $locale)
+                })}
+              </dd>
+            </div>{/if}
+        </dl>{/if}
+    </WarningNotice>{/if}
   <div class="modal-footer">
     {#if scanning}<Button
         variant="secondary"
@@ -2621,7 +2692,13 @@
     disabled={!selectedNetworkReuseSource?.ready}
     hint={translate($locale, 'Protects the copied connection for this wallet.')}
   />
-  {#if networkReuseError}<p class="form-error" role="alert">{networkReuseError}</p>{/if}
+  {#if networkReuseError}<WarningNotice
+      tone="danger"
+      icon
+      role="alert"
+      ariaLive="polite"
+      body={networkReuseError}
+    />{/if}
   <div class="modal-footer">
     <Button
       variant="secondary"
@@ -2643,7 +2720,7 @@
   title={translate($locale, 'Connect Bitcoin Core')}
   description={translate(
     $locale,
-    'Each wallet keeps isolated, encrypted RPC credentials. Use direct TLS or a local Tor SOCKS proxy remotely.'
+    'Used for activity sync, fee estimates, and broadcast. Credentials are encrypted for this wallet.'
   )}
   onclose={closeNodeSettings}
 >
@@ -2651,10 +2728,10 @@
     {#if defaultConfig.network === 'mainnet'}<button
         class:active={nodeMode === 'managed'}
         onclick={() => setNodeLocation('managed')}>{translate($locale, 'Groot managed')}</button
+      >{/if}{#if !mobileRuntime}<button
+        class:active={nodeMode === 'local_core'}
+        onclick={() => setNodeLocation('local_core')}>{translate($locale, 'This Mac')}</button
       >{/if}<button
-      class:active={nodeMode === 'local_core'}
-      onclick={() => setNodeLocation('local_core')}>{translate($locale, 'This Mac')}</button
-    ><button
       class:active={nodeMode === 'remote_core'}
       onclick={() => setNodeLocation('remote_core')}>{translate($locale, 'Custom remote')}</button
     >{#if defaultConfig.network !== 'mainnet'}<button
@@ -2766,7 +2843,13 @@
         )}</small
       >
     </div>{/if}
-  {#if nodeError}<p class="form-error">{nodeError}</p>{/if}
+  {#if nodeError}<WarningNotice
+      tone="danger"
+      icon
+      role="alert"
+      ariaLive="polite"
+      body={nodeError}
+    />{/if}
   <div class="modal-footer">
     <Button variant="secondary" onclick={closeNodeSettings}>{translate($locale, 'Cancel')}</Button
     >{#if nodeMode === 'managed' && managedNodeConfigured && !managedRenewalAvailable}<Button
@@ -2826,3 +2909,565 @@
     >
   </div>
 </Modal>
+
+<style>
+  /* Keep the original cascade weight while constraining these rules to this owner. */
+
+  :global(.settings-build-row):where(.settings-build-row) {
+    margin-top: 42px;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  :global(.settings-build-row):where(.settings-build-row) :global(.build-identity) {
+    min-width: 0;
+    justify-items: start;
+  }
+  :global(.settings-build-row):where(.settings-build-row) :global(.build-identity button) {
+    text-align: start;
+  }
+  @media (max-width: 700px) {
+    :global(.settings-build-row):where(.settings-build-row) :global(.build-identity button) {
+      min-height: 44px;
+    }
+  }
+  :global(.scan-form):where(.scan-form) {
+    display: grid;
+    gap: 18px;
+  }
+  :global(.scan-form):where(.scan-form) :global(.field) {
+    margin: 0;
+  }
+  :global(.scan-form):where(.scan-form) :global(.scan-tip) {
+    color: var(--text-soft);
+    font-variant-numeric: tabular-nums;
+  }
+  :global(.scan-optional-control):where(.scan-optional-control) {
+    border-bottom: 1px solid var(--border);
+  }
+  :global(.scan-optional-control):where(.scan-optional-control) > :global(summary) {
+    display: flex;
+    width: fit-content;
+    align-items: center;
+    gap: 5px;
+    padding: 2px 0 12px;
+    color: var(--link);
+    font-size: var(--font-size-meta);
+    font-weight: 700;
+    cursor: pointer;
+    list-style: none;
+  }
+  :global(.scan-optional-control):where(.scan-optional-control)
+    > :global(summary::-webkit-details-marker) {
+    display: none;
+  }
+  :global(.scan-optional-control):where(.scan-optional-control) > :global(summary svg) {
+    transition: transform 140ms ease;
+  }
+  :global(.scan-optional-control[open]):where(.scan-optional-control) > :global(summary svg) {
+    transform: rotate(180deg);
+  }
+  :global(.scan-optional-control):where(.scan-optional-control) > :global(.field) {
+    margin-bottom: 14px;
+  }
+  :global(.scan-progress):where(.scan-progress) {
+    display: grid;
+    gap: 9px;
+    padding: 12px 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+    background: var(--surface-control);
+  }
+  :global(.scan-progress):where(.scan-progress) > :global(div) {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: baseline;
+  }
+  :global(.scan-progress):where(.scan-progress) :global(strong) {
+    font-size: 13px;
+    color: var(--text-soft);
+  }
+  :global(.scan-progress):where(.scan-progress) :global(small) {
+    font-size: var(--font-size-meta);
+    color: var(--muted);
+    text-align: right;
+  }
+  :global(.scan-progress):where(.scan-progress) :global(progress) {
+    width: 100%;
+    height: 6px;
+    accent-color: var(--progress);
+  }
+  :global(.settings-group):where(.settings-group) :global(h2) {
+    font-size: 15px;
+    margin: 0;
+    font-weight: 600;
+  }
+  :global(.settings-list):where(.settings-list) > :global(button:focus-visible) {
+    /* Keep focus visible inside the shared rounded, clipped list container. */
+    outline: 2px solid var(--focus);
+    outline-offset: -3px;
+  }
+  :global(.modal-supporting-copy):where(.modal-supporting-copy) {
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+    line-height: 1.45;
+    margin: 16px 0 0;
+  }
+
+  :global(.settings-group):where(.settings-group) {
+    margin-bottom: 28px;
+  }
+  :global(.settings-group):where(.settings-group) :global(h2) {
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+    margin: 0 0 9px 3px;
+  }
+  :global(.settings-group):where(.settings-group) :global(h2:has(> span)) {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  :global(.settings-group):where(.settings-group) :global(h2 > strong) {
+    min-width: 0;
+    padding: 0;
+    color: var(--muted-2);
+    background: transparent;
+    border-radius: 0;
+    font-size: var(--font-size-meta);
+    font-weight: 550;
+    text-align: right;
+  }
+  :global(.settings-list):where(.settings-list) {
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-panel);
+    background: var(--panel);
+  }
+  :global(.settings-list):where(.settings-list) > :global(button),
+  :global(.settings-list):where(.settings-list) > :global(.setting-row) {
+    width: 100%;
+    min-height: 66px;
+    padding: 0 15px;
+    display: grid;
+    grid-template-columns: 34px minmax(0, 1fr) auto;
+    gap: 12px;
+    align-items: center;
+    color: var(--text);
+    background: var(--panel);
+    border: 0;
+    border-bottom: 1px solid var(--border);
+    text-align: left;
+  }
+  :global(.settings-list):where(.settings-list) > :global(.setting-row.language-setting-row) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  :global(.settings-list):where(.settings-list) > :global(.bitcoin-network-row) {
+    padding-block: 14px;
+  }
+  :global(.settings-list):where(.settings-list) > :global(button) {
+    cursor: pointer;
+  }
+  :global(.settings-list):where(.settings-list) > :global(button:hover),
+  :global(.settings-list):where(.settings-list) > :global(a.setting-row:hover) {
+    background: var(--panel-2);
+  }
+  :global(.settings-list):where(.settings-list) > :global(:last-child) {
+    border-bottom: 0;
+  }
+  :global(.settings-list):where(.settings-list) > :global(button > span:nth-child(2)),
+  :global(.settings-list):where(.settings-list) > :global(.setting-row > span:nth-child(2)) {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+  :global(.settings-list):where(.settings-list) :global(strong) {
+    font-size: 14px;
+  }
+  :global(.settings-list):where(.settings-list) :global(small) {
+    color: var(--muted);
+    font-size: 13px;
+    line-height: 1.4;
+  }
+  :global(.keyboard-shortcut-row):where(.keyboard-shortcut-row) {
+    align-items: start !important;
+    padding-block: 14px !important;
+  }
+  :global(.keyboard-shortcut-grid):where(.keyboard-shortcut-grid) {
+    width: min(390px, 44%);
+    margin: 0;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(150px, 1fr));
+    gap: 8px 16px;
+  }
+  :global(.keyboard-shortcut-grid):where(.keyboard-shortcut-grid) > :global(div) {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  :global(.keyboard-shortcut-grid):where(.keyboard-shortcut-grid) :global(dt) {
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+    white-space: normal;
+  }
+  :global(.keyboard-shortcut-grid):where(.keyboard-shortcut-grid) :global(dd) {
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    justify-content: flex-end;
+    min-width: max-content;
+  }
+  :global(.keyboard-shortcut-grid):where(.keyboard-shortcut-grid) :global(kbd) {
+    min-width: 21px;
+    min-height: 21px;
+    padding: 1px 5px;
+    border: 1px solid var(--border-strong);
+    border-bottom-width: 2px;
+    border-radius: 5px;
+    background: var(--surface-control);
+    color: var(--text);
+    display: inline-grid;
+    place-items: center;
+    font-family: inherit;
+    font-size: var(--font-size-meta);
+    font-weight: 650;
+    line-height: 1;
+  }
+  :global(.settings-list):where(.settings-list) > :global(button > svg:last-child),
+  :global(.settings-list):where(.settings-list) > :global(a.setting-row > svg:last-child) {
+    color: var(--muted-2);
+  }
+  :global(.setting-row-status):where(.setting-row-status) {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    color: var(--muted-2);
+  }
+  :global(.wallet-context-row):where(.wallet-context-row) :global(.setting-icon) {
+    color: var(--fr-red);
+    background: color-mix(in srgb, var(--fr-red) 7%, var(--surface-icon));
+  }
+  :global(.backup-information-row):where(.backup-information-row) {
+    cursor: default;
+  }
+  :global(.backup-information-row):where(.backup-information-row) :global(.info-badge) {
+    color: var(--muted);
+    background: var(--surface-control);
+    outline: 1px solid var(--border);
+  }
+  :global(.settings-sync-indicator):where(.settings-sync-indicator) {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    margin: 8px 0 0 auto;
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  :global(.info-badge):where(.info-badge) {
+    padding: 4px 8px;
+    color: var(--warning-text);
+    background: var(--accent-soft);
+    border-radius: 999px;
+    font-size: var(--font-size-meta);
+    font-weight: 650;
+    white-space: nowrap;
+  }
+  :global(.info-badge.healthy):where(.info-badge) {
+    color: var(--success);
+    background: color-mix(in srgb, var(--success) 10%, transparent);
+  }
+  :global(.info-badge.attention):where(.info-badge) {
+    color: var(--accent);
+    outline: 1px solid color-mix(in srgb, var(--accent) 34%, transparent);
+  }
+  :global(.info-badge.muted):where(.info-badge) {
+    color: var(--muted);
+    background: var(--surface-icon);
+  }
+  :global(.settings-list.timeout-menu-open):where(.settings-list) {
+    overflow: visible;
+  }
+  :global(.timeout-control):where(.timeout-control) {
+    position: relative;
+    min-width: 144px;
+  }
+  :global(.timeout-choice):where(.timeout-choice) {
+    width: 100%;
+    min-width: 124px;
+    height: 38px;
+    padding: 0 10px 0 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    color: var(--text);
+    background-color: var(--panel-2);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-control);
+    font-family: var(--font-ui);
+    font-size: 13px;
+    font-weight: 650;
+    line-height: 1.2;
+    cursor: pointer;
+  }
+  :global(.timeout-choice):where(.timeout-choice) > :global(span:last-child) {
+    display: flex;
+    color: var(--muted-2);
+    transition: transform 150ms ease;
+  }
+  :global(.timeout-choice):where(.timeout-choice) > :global(span:last-child.rotated) {
+    transform: rotate(180deg);
+  }
+  :global(.timeout-choice:focus-visible):where(.timeout-choice) {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+  }
+  :global(.timeout-choice:disabled):where(.timeout-choice) {
+    cursor: wait;
+    opacity: 0.65;
+  }
+  :global(.timeout-menu):where(.timeout-menu) {
+    position: absolute;
+    z-index: 40;
+    top: calc(100% + 6px);
+    right: 0;
+    min-width: 100%;
+    padding: 5px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-inset);
+    background: var(--panel-2);
+    box-shadow: 0 18px 40px rgb(0 0 0 / 24%);
+  }
+  :global(.timeout-menu):where(.timeout-menu) :global(button) {
+    width: 100%;
+    min-height: 36px;
+    padding: 7px 9px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    border: 0;
+    border-radius: var(--radius-control);
+    color: var(--text-soft);
+    background: transparent;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    text-align: left;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+  :global(.timeout-menu):where(.timeout-menu) :global(button:hover),
+  :global(.timeout-menu):where(.timeout-menu) :global(button:focus-visible) {
+    color: var(--text);
+    background: var(--surface-hover);
+    outline: 0;
+  }
+  :global(.timeout-menu):where(.timeout-menu) :global(button.active) {
+    color: var(--link);
+    background: color-mix(in srgb, var(--fr-blue) 12%, var(--panel-2));
+  }
+  :global(.mobile-wallet-manager):where(.mobile-wallet-manager) {
+    display: none;
+  }
+  :global(.settings-group):where(.settings-group) > :global(button),
+  :global(.settings-group):where(.settings-group) > :global(.setting-row),
+  :global(.settings-group.danger-zone):where(.settings-group) > :global(div) {
+    width: 100%;
+    min-height: 66px;
+    border: 1px solid var(--border);
+    border-bottom: 0;
+    background: var(--panel);
+    padding: 0 15px;
+    display: grid;
+    grid-template-columns: 34px 1fr auto;
+    gap: 12px;
+    align-items: center;
+    text-align: left;
+  }
+  :global(.settings-group):where(.settings-group) > :global(button) {
+    cursor: pointer;
+  }
+  :global(.settings-group):where(.settings-group) > :global(button:first-of-type) {
+    border-radius: 9px 9px 0 0;
+  }
+  :global(.settings-group):where(.settings-group) > :global(button:last-of-type) {
+    border-bottom: 1px solid var(--border);
+    border-radius: 0 0 9px 9px;
+  }
+  :global(.settings-group):where(.settings-group) > :global(button:only-of-type) {
+    border-radius: var(--radius-control);
+  }
+  :global(.settings-group):where(.settings-group) > :global(.setting-row:first-of-type) {
+    border-radius: 9px 9px 0 0;
+  }
+  :global(.settings-group):where(.settings-group) > :global(.setting-row:last-of-type) {
+    border-bottom: 1px solid var(--border);
+    border-radius: 0 0 9px 9px;
+  }
+  :global(.settings-group):where(.settings-group) :global(button > span:nth-child(2)),
+  :global(.settings-group):where(.settings-group) :global(.setting-row > span:nth-child(2)),
+  :global(.danger-zone):where(.danger-zone) :global(div > span) {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+  :global(.settings-group):where(.settings-group) :global(strong) {
+    font-size: 14px;
+  }
+  :global(.settings-group):where(.settings-group) :global(small) {
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+  }
+  :global(.settings-group):where(.settings-group) :global(svg:last-child) {
+    color: var(--muted-2);
+  }
+  :global(.badge):where(.badge) {
+    color: var(--success);
+    background: color-mix(in srgb, var(--success) 9%, transparent);
+    border-radius: var(--radius-inset);
+    font-size: var(--font-size-meta);
+    padding: 4px 8px;
+  }
+  :global(.badge.offline):where(.badge) {
+    color: var(--danger);
+    background: rgba(239, 100, 100, 0.08);
+  }
+  :global(.settings-group.danger-zone):where(.settings-group) > :global(div) {
+    border-bottom: 1px solid rgba(239, 100, 100, 0.2);
+    border-color: rgba(239, 100, 100, 0.2);
+    grid-template-columns: 1fr auto;
+    border-radius: var(--radius-control);
+  }
+  :global(.node-location):where(.node-location) {
+    margin-bottom: 14px;
+  }
+  :global(.node-wallet-credential):where(.node-wallet-credential) {
+    margin-top: 24px;
+  }
+  :global(.node-activity-source):where(.node-activity-source) {
+    display: grid;
+    justify-items: start;
+    gap: 7px;
+    margin-top: 16px;
+  }
+  :global(.node-activity-source):where(.node-activity-source) :global(small) {
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+    line-height: 1.45;
+  }
+  :global(.scan-error-details):where(.scan-error-details) {
+    margin: 6px 0 0;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px 14px;
+    color: var(--text);
+  }
+  :global(.scan-error-details):where(.scan-error-details) > :global(div) {
+    display: grid;
+    gap: 1px;
+  }
+  :global(.scan-error-details):where(.scan-error-details) :global(dt) {
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+  }
+  :global(.scan-error-details):where(.scan-error-details) :global(dd) {
+    margin: 0;
+    font-size: var(--font-size-meta);
+    font-weight: 650;
+    font-variant-numeric: tabular-nums;
+  }
+  @media (max-width: 640px) {
+    :global(.scan-error-details):where(.scan-error-details) {
+      grid-template-columns: 1fr;
+    }
+  }
+  :global(.theme-choice):where(.theme-choice) {
+    display: flex;
+    padding: 3px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+  }
+  :global(.theme-choice):where(.theme-choice) :global(button) {
+    border: 0;
+    background: transparent;
+    color: var(--muted);
+    border-radius: 4px;
+    padding: 6px 9px;
+    font-size: var(--font-size-meta);
+  }
+  :global(.theme-choice):where(.theme-choice) :global(button.active) {
+    background: var(--fr-blue);
+    color: var(--on-blue);
+  }
+
+  @media (max-width: 760px) {
+    :global(.mobile-wallet-manager):where(.mobile-wallet-manager) {
+      display: block;
+    }
+    .settings-page {
+      padding-inline: 14px;
+    }
+    .settings-page :global(.page-header) {
+      margin-bottom: 30px;
+    }
+    .settings-page :global(.subtitle) {
+      max-width: 34ch;
+      font-size: var(--font-size-meta);
+      line-height: 1.45;
+    }
+    .settings-page :global(.settings-group) {
+      margin-bottom: 24px;
+    }
+    .settings-page :global(.settings-list > button),
+    .settings-page :global(.settings-list > .setting-row) {
+      min-height: 0;
+      padding: 14px 12px;
+      gap: 10px;
+    }
+    .settings-page :global(.automatic-lock-row .timeout-control) {
+      grid-column: 2 / -1;
+      justify-self: stretch;
+      width: 100%;
+      margin-top: 2px;
+    }
+    .settings-page :global(.wallet-context-row .info-badge) {
+      grid-column: 2 / -1;
+      justify-self: start;
+    }
+    .settings-page :global(.theme-choice) {
+      grid-column: 2 / -1;
+      justify-self: stretch;
+      margin-top: 2px;
+    }
+    .settings-page :global(.theme-choice button) {
+      flex: 1;
+    }
+    .settings-page :global(.settings-list > .language-setting-row) {
+      padding: 12px;
+    }
+    .settings-page :global(.keyboard-shortcut-row) {
+      grid-template-columns: 28px minmax(0, 1fr);
+    }
+    .settings-page :global(.keyboard-shortcut-grid) {
+      grid-column: 2 / -1;
+      width: 100%;
+      margin-top: 8px;
+      grid-template-columns: 1fr;
+    }
+    .settings-page :global(.danger-zone > div) {
+      min-height: 0;
+      padding: 14px 12px;
+      gap: 10px;
+    }
+  }
+</style>

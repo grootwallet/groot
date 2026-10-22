@@ -35,7 +35,7 @@ export function trezorPinError(
     return {
       title: 'PIN not accepted',
       detail:
-        'Check the attempts remaining on Trezor. Ask it for a fresh layout, then tap each blank Groot cell by location—not by the digit printed on Trezor.'
+        'Check the attempts remaining on Trezor. Ask it for a fresh layout, then tap each blank Groot cell by location, not by the digit printed on Trezor.'
     };
   }
   if (code === 'hardware_challenge_expired') {
@@ -47,7 +47,9 @@ export function trezorPinError(
   if (code === 'hardware_unavailable' || code === 'hardware_io_error') {
     return {
       title: 'Trezor unavailable',
-      detail: 'Close other wallet apps, reconnect Trezor, and try again.'
+      detail:
+        fallback ||
+        'Close other wallet apps and scan again. Reconnect Trezor if it still cannot be found.'
     };
   }
   if (code === 'hardware_busy') {

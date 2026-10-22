@@ -1,6 +1,20 @@
 import type { CatalogSection } from './types';
 
 export const walletCopy = {
+  'Mobile Testnet4 sync requires a trusted remote Bitcoin Core node. Groot managed access is Mainnet-only.':
+    {
+      fr: 'La synchronisation Testnet4 sur mobile nécessite un nœud Bitcoin Core distant de confiance. L’accès géré par Groot est réservé à Mainnet.',
+      es: 'La sincronización Testnet4 en el móvil requiere un nodo Bitcoin Core remoto de confianza. El acceso gestionado por Groot solo está disponible en Mainnet.'
+    },
+  'PDF export is unavailable on mobile. Use a public descriptor backup instead.': {
+    fr: 'L’export PDF est indisponible sur mobile. Utilisez plutôt une sauvegarde du descripteur public.',
+    es: 'La exportación PDF no está disponible en el móvil. Usa una copia del descriptor público.'
+  },
+  'Key creation, recovery, signing and broadcast are unavailable on mobile while pairing safety is under review.':
+    {
+      fr: 'La création de clés, la restauration, la signature et la diffusion sont indisponibles sur mobile pendant l’examen de la sécurité de l’association.',
+      es: 'La creación de claves, la recuperación, la firma y la difusión no están disponibles en el móvil mientras se revisa la seguridad del emparejamiento.'
+    },
   'Sync unavailable': { fr: 'Synchronisation indisponible', es: 'Sincronización no disponible' },
   'The saved Bitcoin Core node is unreachable. Check that it is running and reachable, then try again.':
     {
@@ -528,6 +542,15 @@ export const walletCopy = {
     },
   RECEIVE: { fr: 'RECEVOIR', es: 'RECIBIR' },
   'Receive bitcoin': { fr: 'Recevoir du bitcoin', es: 'Recibir bitcoin' },
+  'Receive labels stay on this phone': {
+    fr: 'Les libellés de réception restent sur ce téléphone',
+    es: 'Las etiquetas de recepción permanecen en este teléfono'
+  },
+  'Without optional sync, create receive requests on one device at a time. Desktop will detect payments, but it will not receive this label.':
+    {
+      fr: 'Sans synchronisation facultative, créez les demandes de réception sur un seul appareil à la fois. L’ordinateur détectera les paiements, mais ne recevra pas ce libellé.',
+      es: 'Sin sincronización opcional, crea solicitudes de recepción en un solo dispositivo cada vez. El ordenador detectará los pagos, pero no recibirá esta etiqueta.'
+    },
   Type: { fr: 'Type', es: 'Tipo' },
   'Used and discarded addresses remain monitored.': {
     fr: 'Les adresses utilisées et écartées restent surveillées.',

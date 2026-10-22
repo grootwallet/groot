@@ -1,17 +1,11 @@
-use bdk_wallet::bitcoin::{constants::genesis_block, BlockHash, Network};
+use bdk_wallet::bitcoin::{constants::genesis_block, Amount, BlockHash, Network};
 
 use crate::network::ChainBackend;
 
 // Mainnet is reachable only in the separately configured mainnet candidate or
 // internal multi-network build. Fixed rehearsal builds cannot activate it from
 // a frontend preference or runtime environment change.
-#[cfg_attr(
-    not(any(groot_network = "mainnet", groot_network = "multi")),
-    allow(dead_code)
-)]
-pub const FIRST_MAINNET_MAX_SEND_SATS: u64 = 1_000_000;
-/// A second, independent loss limit for the fee paid by one candidate
-/// transaction. The total debit must still fit inside `FIRST_MAINNET_MAX_SEND_SATS`.
+/// Independent protection against excessive transaction fees, including acceleration.
 #[cfg_attr(
     not(any(groot_network = "mainnet", groot_network = "multi")),
     allow(dead_code)
@@ -41,7 +35,12 @@ pub enum ReleasePolicyError {
         not(any(groot_network = "mainnet", groot_network = "multi")),
         allow(dead_code)
     )]
-    AmountCapExceeded,
+    AmountOutOfRange,
+    #[cfg_attr(
+        not(any(groot_network = "mainnet", groot_network = "multi")),
+        allow(dead_code)
+    )]
+    InvalidFeeChild,
     #[cfg_attr(
         not(any(groot_network = "mainnet", groot_network = "multi")),
         allow(dead_code)
@@ -156,9 +155,9 @@ pub fn validate_final_spend(
         }
         let total_debit = amount_sats
             .checked_add(fee_sats)
-            .ok_or(ReleasePolicyError::AmountCapExceeded)?;
-        if total_debit > FIRST_MAINNET_MAX_SEND_SATS {
-            return Err(ReleasePolicyError::AmountCapExceeded);
+            .ok_or(ReleasePolicyError::AmountOutOfRange)?;
+        if total_debit > Amount::MAX_MONEY.to_sat() {
+            return Err(ReleasePolicyError::AmountOutOfRange);
         }
     }
     Ok(())
@@ -214,7 +213,7 @@ fn validate_first_mainnet_cpfp(
     wallet_owned_output: bool,
 ) -> Result<(), ReleasePolicyError> {
     if recipient_count != 0 || total_sats != 0 || !wallet_owned_output {
-        return Err(ReleasePolicyError::InvalidAmount);
+        return Err(ReleasePolicyError::InvalidFeeChild);
     }
     Ok(())
 }
@@ -233,8 +232,8 @@ fn validate_first_mainnet_spend(
     if total_sats == 0 {
         return Err(ReleasePolicyError::InvalidAmount);
     }
-    if total_sats > FIRST_MAINNET_MAX_SEND_SATS {
-        return Err(ReleasePolicyError::AmountCapExceeded);
+    if total_sats > Amount::MAX_MONEY.to_sat() {
+        return Err(ReleasePolicyError::AmountOutOfRange);
     }
     Ok(())
 }
@@ -359,61 +358,101 @@ mod tests {
     }
 
     #[test]
-    fn dormant_send_policy_is_explicitly_capped_and_single_recipient() {
-        // The live gate is intentionally checked first. These constants and
-        // invariants remain reviewable before that gate can ever be enabled.
-        assert_eq!(FIRST_MAINNET_MAX_SEND_SATS, 1_000_000);
-        assert_eq!(FIRST_MAINNET_MAX_FEE_SATS, 100_000);
-        assert_eq!(
-            validate_first_mainnet_spend(1, FIRST_MAINNET_MAX_SEND_SATS),
-            Ok(())
-        );
-        assert_eq!(
-            validate_first_mainnet_spend(2, 1),
-            Err(ReleasePolicyError::BatchSpendingDisabled)
-        );
+    fn mainnet_payments_have_no_rollout_amount_cap_but_keep_valid_amounts_and_one_recipient() {
+        for amount in [
+            1,
+            999_999,
+            1_000_000,
+            1_000_001,
+            88_742_475,
+            100_000_000,
+            Amount::MAX_MONEY.to_sat(),
+        ] {
+            assert_eq!(validate_first_mainnet_spend(1, amount), Ok(()));
+        }
+        for count in [0, 2, usize::MAX] {
+            assert_eq!(
+                validate_first_mainnet_spend(count, 1),
+                Err(ReleasePolicyError::BatchSpendingDisabled)
+            );
+        }
         assert_eq!(
             validate_first_mainnet_spend(1, 0),
             Err(ReleasePolicyError::InvalidAmount)
         );
-        assert_eq!(
-            validate_first_mainnet_spend(1, FIRST_MAINNET_MAX_SEND_SATS + 1),
-            Err(ReleasePolicyError::AmountCapExceeded)
-        );
+        for amount in [Amount::MAX_MONEY.to_sat() + 1, u64::MAX] {
+            assert_eq!(
+                validate_first_mainnet_spend(1, amount),
+                Err(ReleasePolicyError::AmountOutOfRange)
+            );
+        }
     }
 
     #[test]
-    fn final_mainnet_policy_caps_fee_and_total_debit() {
-        for network in [Network::Regtest, Network::Signet, Network::Testnet] {
+    fn final_mainnet_policy_keeps_fee_protection_without_a_rollout_debit_cap() {
+        for network in [
+            Network::Regtest,
+            Network::Signet,
+            Network::Testnet,
+            Network::Testnet4,
+        ] {
             assert_eq!(validate_final_spend(network, 1, u64::MAX, u64::MAX), Ok(()));
             assert_eq!(validate_final_cpfp(network, 0, 0, true, u64::MAX), Ok(()));
         }
         #[cfg(any(groot_network = "mainnet", groot_network = "multi"))]
         {
+            assert_eq!(FIRST_MAINNET_MAX_FEE_SATS, 100_000);
+            // Preparation and the shared final PSBT gate used by software,
+            // hardware, multisig and RBF must all accept the former boundary.
+            for amount in [999_999, 1_000_000, 1_000_001, 88_742_475, 100_000_000] {
+                assert_eq!(validate_spend(Network::Bitcoin, 1, amount), Ok(()));
+                for fee in [0, 30, FIRST_MAINNET_MAX_FEE_SATS] {
+                    assert_eq!(
+                        validate_final_spend(Network::Bitcoin, 1, amount, fee),
+                        Ok(())
+                    );
+                }
+            }
             assert_eq!(
                 validate_final_spend(
                     Network::Bitcoin,
                     1,
-                    FIRST_MAINNET_MAX_SEND_SATS - FIRST_MAINNET_MAX_FEE_SATS,
-                    FIRST_MAINNET_MAX_FEE_SATS,
+                    Amount::MAX_MONEY.to_sat() - FIRST_MAINNET_MAX_FEE_SATS,
+                    FIRST_MAINNET_MAX_FEE_SATS
                 ),
                 Ok(())
             );
             assert_eq!(
+                validate_final_spend(Network::Bitcoin, 1, Amount::MAX_MONEY.to_sat(), 1),
+                Err(ReleasePolicyError::AmountOutOfRange)
+            );
+            assert_eq!(
+                validate_final_spend(Network::Bitcoin, 1, u64::MAX, 1),
+                Err(ReleasePolicyError::AmountOutOfRange)
+            );
+            assert_eq!(
+                validate_final_spend(Network::Bitcoin, 1, 0, 1),
+                Err(ReleasePolicyError::InvalidAmount)
+            );
+            assert_eq!(
+                validate_final_spend(Network::Bitcoin, 2, 1, 1),
+                Err(ReleasePolicyError::BatchSpendingDisabled)
+            );
+            assert_eq!(
                 validate_final_spend(
                     Network::Bitcoin,
                     1,
-                    FIRST_MAINNET_MAX_SEND_SATS - FIRST_MAINNET_MAX_FEE_SATS + 1,
-                    FIRST_MAINNET_MAX_FEE_SATS,
+                    100_000_000,
+                    FIRST_MAINNET_MAX_FEE_SATS + 1
                 ),
-                Err(ReleasePolicyError::AmountCapExceeded)
-            );
-            assert_eq!(
-                validate_final_spend(Network::Bitcoin, 1, 1, FIRST_MAINNET_MAX_FEE_SATS + 1,),
                 Err(ReleasePolicyError::FeeCapExceeded)
             );
             assert_eq!(
-                validate_final_cpfp(Network::Bitcoin, 0, 0, true, FIRST_MAINNET_MAX_FEE_SATS + 1,),
+                validate_final_cpfp(Network::Bitcoin, 0, 0, true, FIRST_MAINNET_MAX_FEE_SATS),
+                Ok(())
+            );
+            assert_eq!(
+                validate_final_cpfp(Network::Bitcoin, 0, 0, true, FIRST_MAINNET_MAX_FEE_SATS + 1),
                 Err(ReleasePolicyError::FeeCapExceeded)
             );
         }
@@ -436,15 +475,15 @@ mod tests {
         assert_eq!(validate_first_mainnet_cpfp(0, 0, true), Ok(()));
         assert_eq!(
             validate_first_mainnet_cpfp(1, 0, true),
-            Err(ReleasePolicyError::InvalidAmount)
+            Err(ReleasePolicyError::InvalidFeeChild)
         );
         assert_eq!(
             validate_first_mainnet_cpfp(0, 1, true),
-            Err(ReleasePolicyError::InvalidAmount)
+            Err(ReleasePolicyError::InvalidFeeChild)
         );
         assert_eq!(
             validate_first_mainnet_cpfp(0, 0, false),
-            Err(ReleasePolicyError::InvalidAmount)
+            Err(ReleasePolicyError::InvalidFeeChild)
         );
     }
 }

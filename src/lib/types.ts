@@ -80,7 +80,7 @@ export type Utxo = {
   provenance: ProvenanceSummary;
   policyMaturity?: {
     state: 'unconfirmed' | 'immature' | 'approaching' | 'mature';
-    policyType: 'recovery' | 'inheritance';
+    policyType: 'recovery' | 'inheritance' | 'partner_continuity_v1' | 'family_continuity_v1';
     delayBlocks: number;
     ageBlocks: number;
     remainingBlocks: number | null;

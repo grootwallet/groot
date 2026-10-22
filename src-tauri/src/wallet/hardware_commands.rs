@@ -899,6 +899,32 @@ mod targeted_scan_tests {
     }
 
     #[test]
+    fn trezor_pin_submission_accepts_only_success_or_typed_already_unlocked() {
+        for (success, code) in [(Some(true), None), (None, Some(-11))] {
+            assert!(hardware_pin_submission_result(HwiSuccess {
+                success,
+                error: None,
+                code,
+            })
+            .is_ok());
+        }
+        let rejected = hardware_pin_submission_result(HwiSuccess {
+            success: None,
+            error: Some("Failure_PinInvalid".into()),
+            code: Some(-13),
+        })
+        .unwrap_err();
+        assert_eq!(rejected.code, "hardware_pin_rejected");
+        let lost = hardware_pin_submission_result(HwiSuccess {
+            success: None,
+            error: None,
+            code: Some(-3),
+        })
+        .unwrap_err();
+        assert_eq!(lost.code, "hardware_unavailable");
+    }
+
+    #[test]
     fn successful_trezor_pin_observation_survives_rescan_only_for_the_connected_path() {
         let state = AppState::default();
         let path = "webusb:007:4";
@@ -916,7 +942,7 @@ mod targeted_scan_tests {
         assert!(connected[0].observed_unlocked);
         let ready = hardware_device_dto(connected[0].clone());
         assert_eq!(ready.status, "ready");
-        assert_eq!(ready.action, "prompt_pin");
+        assert_eq!(ready.action, "import");
 
         let request_epoch = forget_hardware_scan(&state).unwrap();
         let mut disconnected = [];
@@ -1608,18 +1634,29 @@ pub async fn hardware_send_pin(
     let unlocked_path = pending.device_path.clone();
     let hwi = hwi_cli(&app)?;
     tauri::async_runtime::spawn_blocking(move || {
-        let output = hwi
-            .send_pin(&pending.device_type, &pending.device_path, pin.as_slice())
-            .map_err(hardware_api_error)?;
-        let response: HwiSuccess = serde_json::from_slice(&output).map_err(internal)?;
-        if response.success != Some(true) {
-            return Err(hardware_pin_response_error(response));
-        }
-        Ok(())
+        let output = match hwi.send_pin(&pending.device_type, &pending.device_path, pin.as_slice())
+        {
+            Ok(output) => output,
+            // HWI reports this when the device became unlocked between the
+            // prompt and submission. The following wallet action still proves
+            // the complete signer identity on a fresh connection.
+            Err(HardwareError::CommandFailed(Some(-11))) => return Ok(()),
+            Err(error) => return Err(hardware_api_error(error)),
+        };
+        hardware_pin_submission_result(serde_json::from_slice(&output).map_err(internal)?)
     })
     .await
     .map_err(internal)??;
     remember_unlocked_hardware_path(&state, &unlocked_path)
+}
+
+fn hardware_pin_submission_result(response: HwiSuccess) -> ApiResult<()> {
+    if response.success == Some(true) || response.code == Some(-11) {
+        // HWI's -11 means "already unlocked"; it is not an accepted PIN.
+        // Callers must still run the normal fresh account-identity proof.
+        return Ok(());
+    }
+    Err(hardware_pin_response_error(response))
 }
 
 fn hardware_pin_response_error(response: HwiSuccess) -> ApiError {
@@ -2113,6 +2150,115 @@ fn parse_hwi_account_keypool(
     Ok((fingerprint.to_ascii_lowercase(), xpub.to_owned()))
 }
 
+// A session is scoped to this exact native lease and closes before returning.
+// It never reuses a previous UI identification or an unlocked-state observation.
+fn scoped_hardware_result(
+    result: Result<Option<(String, Vec<u8>)>, crate::hardware::HardwareError>,
+    device: &HwiDevice,
+) -> ApiResult<Option<(Vec<u8>, VerifiedHardwareIdentity)>> {
+    result
+        .map_err(|error| {
+            if matches!(
+                error,
+                crate::hardware::HardwareError::CommandFailed(Some(-100))
+            ) {
+                unknown_hardware_signer()
+            } else {
+                hardware_device_api_error(error, &device.device_type)
+            }
+        })
+        .map(|value| {
+            value.map(|(fingerprint, output)| {
+                (
+                    output,
+                    VerifiedHardwareIdentity {
+                        device_type: device.device_type.clone(),
+                        fingerprint,
+                    },
+                )
+            })
+        })
+}
+
+pub(super) fn scoped_cosigner_action(
+    hwi: &HwiCli,
+    operation: &crate::hardware::HardwareOperation,
+    device: &HwiDevice,
+    expected: &[CosignerInput],
+    action: crate::hardware::HwiSessionAction,
+    value: Option<&str>,
+    allow: impl Fn(&CosignerInput) -> bool,
+) -> ApiResult<Option<(Vec<u8>, VerifiedHardwareIdentity)>> {
+    if !hwi.supports_operation_session(&device.device_type) {
+        return Ok(None);
+    }
+    let first = expected.first().ok_or_else(unknown_hardware_signer)?;
+    for signer in expected {
+        require_matching_policy_device_type(signer.device_type.as_deref(), &device.device_type)?;
+        if signer.derivation_path != first.derivation_path {
+            return Err(api_error(
+                "invalid_hardware_request",
+                "The saved signer candidates do not share one hardware account boundary.",
+            ));
+        }
+    }
+    let identities = expected
+        .iter()
+        .map(|signer| crate::hardware::HwiSessionExpected {
+            fingerprint: signer.fingerprint.to_ascii_lowercase(),
+            xpub: signer.xpub.clone(),
+            allow_action: allow(signer),
+        })
+        .collect::<Vec<_>>();
+    scoped_hardware_result(
+        hwi.session_action_in_operation(
+            operation,
+            crate::hardware::HwiSessionInput {
+                device_type: &device.device_type,
+                device_path: &device.path,
+                account_path: &first.derivation_path,
+                expected: &identities,
+                action,
+                value,
+            },
+        ),
+        device,
+    )
+}
+
+fn scoped_external_action(
+    hwi: &HwiCli,
+    operation: &crate::hardware::HardwareOperation,
+    device: &HwiDevice,
+    expected: &ExternalSignerInput,
+    action: crate::hardware::HwiSessionAction,
+    value: Option<&str>,
+) -> ApiResult<Option<(Vec<u8>, VerifiedHardwareIdentity)>> {
+    if !hwi.supports_operation_session(&device.device_type) {
+        return Ok(None);
+    }
+    require_matching_policy_device_type(expected.device_type.as_deref(), &device.device_type)?;
+    let identities = [crate::hardware::HwiSessionExpected {
+        fingerprint: expected.fingerprint.to_ascii_lowercase(),
+        xpub: expected.xpub.clone(),
+        allow_action: true,
+    }];
+    scoped_hardware_result(
+        hwi.session_action_in_operation(
+            operation,
+            crate::hardware::HwiSessionInput {
+                device_type: &device.device_type,
+                device_path: &device.path,
+                account_path: &expected.derivation_path,
+                expected: &identities,
+                action,
+                value,
+            },
+        ),
+        device,
+    )
+}
+
 pub(super) fn prove_live_cosigner_identity(
     hwi: &HwiCli,
     operation: &crate::hardware::HardwareOperation,
@@ -2146,6 +2292,18 @@ pub(super) fn prove_live_cosigner_identity_for_candidates(
             "invalid_hardware_request",
             "The saved signer candidates do not share one hardware account boundary.",
         ));
+    }
+
+    if let Some((_, identity)) = scoped_cosigner_action(
+        hwi,
+        operation,
+        device,
+        expected,
+        crate::hardware::HwiSessionAction::Identity,
+        None,
+        |_| true,
+    )? {
+        return Ok(identity);
     }
 
     // HWI's Jade login is initiated while opening an exact-path public-key
@@ -2216,6 +2374,16 @@ fn prove_live_external_signer_identity(
         )
     })?;
     require_matching_policy_device_type(Some(expected_device_type), &device.device_type)?;
+    if let Some((_, identity)) = scoped_external_action(
+        hwi,
+        operation,
+        device,
+        expected,
+        crate::hardware::HwiSessionAction::Identity,
+        None,
+    )? {
+        return Ok(identity);
+    }
     if device.fingerprint.is_none() && supports_locked_interactive_identity(&device.device_type) {
         let output = hwi
             .account_xpub_in_operation(
@@ -2605,103 +2773,116 @@ fn read_hardware_external_signer(
 }
 
 #[tauri::command]
-pub fn external_signer_create(
+pub async fn external_signer_create(
     app: AppHandle,
-    state: State<'_, AppState>,
     name: String,
     signer: ExternalSignerInput,
     credential: String,
 ) -> ApiResult<ExternalSignerWallet> {
     let credential = Zeroizing::new(credential);
-    let _operation = operation_guard(&state)?;
-    let _admission_cleanup = clear_new_wallet_admission_on_exit(&state);
-    let name = name.trim();
-    if name.is_empty() || name.chars().count() > 48 {
-        return Err(api_error(
-            "invalid_wallet_name",
-            "Wallet names must contain 1 to 48 characters.",
-        ));
-    }
-    validate_label_formatting(&signer.label)?;
-    validate_credential(credential.as_str())?;
-    signer.validate().map_err(external_signer_api_error)?;
-    require_mainnet_hardware_admission(
-        &state,
-        &signer.fingerprint,
-        &signer.xpub,
-        &signer.derivation_path,
-        signer.device_type.as_deref(),
-    )?;
-    let (external_descriptor, internal_descriptor) =
-        external_signer::descriptors(&signer).map_err(external_signer_api_error)?;
-    let metadata = ExternalSignerWallet {
-        version: 1,
-        name: name.to_owned(),
-        signer,
-        external_descriptor,
-        internal_descriptor,
-    };
-    let (id, dir) = prepare_profile_directory(&app)?;
-    let result = (|| {
-        let permit = database_open_permit_for_new_wallet(&state)?;
-        let mut db = open_wallet_database(&dir.join("wallet.sqlite"), &permit)?;
-        init_app_schema(&db)?;
-        let wallet = Wallet::create(
-            metadata.external_descriptor.clone(),
-            metadata.internal_descriptor.clone(),
-        )
-        .network(network())
-        .create_wallet(&mut db)
-        .map_err(internal)?;
-        write_private_json(&dir.join("wallet.json"), &metadata)?;
-        let marker = format!("groot-external-signer:{}", metadata.external_descriptor);
-        persist_secret_material(
-            &dir.join("secret.json"),
-            marker.as_bytes(),
-            credential.as_str(),
-            id,
+    let expected_wallet_id = load_registry(&app)?.selected_wallet_id;
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+
+        let _operation = operation_guard(&state)?;
+        if load_registry(&app)?.selected_wallet_id != expected_wallet_id {
+            return Err(api_error(
+                "wallet_selection_changed",
+                "The selected wallet changed. Retry in the current wallet.",
+            ));
+        }
+
+        let _admission_cleanup = clear_new_wallet_admission_on_exit(&state);
+        let name = name.trim();
+        if name.is_empty() || name.chars().count() > 48 {
+            return Err(api_error(
+                "invalid_wallet_name",
+                "Wallet names must contain 1 to 48 characters.",
+            ));
+        }
+        validate_label_formatting(&signer.label)?;
+        validate_credential(credential.as_str())?;
+        signer.validate().map_err(external_signer_api_error)?;
+        require_mainnet_hardware_admission(
+            &state,
+            &signer.fingerprint,
+            &signer.xpub,
+            &signer.derivation_path,
+            signer.device_type.as_deref(),
         )?;
-        profile_commands::persist_mainnet_node_admission_for_new_profile(
+        let (external_descriptor, internal_descriptor) =
+            external_signer::descriptors(&signer).map_err(external_signer_api_error)?;
+        let metadata = ExternalSignerWallet {
+            version: 1,
+            name: name.to_owned(),
+            signer,
+            external_descriptor,
+            internal_descriptor,
+        };
+        let (id, dir) = prepare_profile_directory(&app)?;
+        let result = (|| {
+            let permit = database_open_permit_for_new_wallet(&state)?;
+            let mut db = open_wallet_database(&dir.join("wallet.sqlite"), &permit)?;
+            init_app_schema(&db)?;
+            let wallet = Wallet::create(
+                metadata.external_descriptor.clone(),
+                metadata.internal_descriptor.clone(),
+            )
+            .network(network())
+            .create_wallet(&mut db)
+            .map_err(internal)?;
+            write_private_json(&dir.join("wallet.json"), &metadata)?;
+            let marker = format!("groot-external-signer:{}", metadata.external_descriptor);
+            persist_secret_material(
+                &dir.join("secret.json"),
+                marker.as_bytes(),
+                credential.as_str(),
+                id,
+            )?;
+            profile_commands::persist_mainnet_node_admission_for_new_profile(
+                &app,
+                &state,
+                id,
+                credential.as_str(),
+            )?;
+            // Unlike a Groot-generated seed, an imported hardware signer may have
+            // received bitcoin at any point in the chain. Start from genesis unless
+            // the user later narrows the saved birthday explicitly.
+            persist_initial_recovery_scan_settings(&db, 0)?;
+            commit_profile(
+                &app,
+                WalletProfile {
+                    id,
+                    name: metadata.name.clone(),
+                    network: network_name().to_owned(),
+                    kind: WalletKind::WatchOnly,
+                    descriptor_checksum: descriptor_checksum(
+                        &wallet.public_descriptor(KeychainKind::External).to_string(),
+                    )?,
+                    created_at: now(),
+                    backup_verified: true,
+                },
+                &metadata.external_descriptor,
+            )
+        })();
+        finish_new_profile_attempt(&state, id, &dir, result.is_ok())?;
+        result?;
+        unlock_selected(&app, &state)?;
+        diagnostics::record(
             &app,
             &state,
-            id,
-            credential.as_str(),
-        )?;
-        // Unlike a Groot-generated seed, an imported hardware signer may have
-        // received bitcoin at any point in the chain. Start from genesis unless
-        // the user later narrows the saved birthday explicitly.
-        persist_initial_recovery_scan_settings(&db, 0)?;
-        commit_profile(
-            &app,
-            WalletProfile {
-                id,
-                name: metadata.name.clone(),
-                network: network_name().to_owned(),
-                kind: WalletKind::WatchOnly,
-                descriptor_checksum: descriptor_checksum(
-                    &wallet.public_descriptor(KeychainKind::External).to_string(),
-                )?,
-                created_at: now(),
-                backup_verified: true,
+            diagnostics::DiagnosticEventKind::WalletCreated,
+            diagnostics::DiagnosticOutcome::Succeeded,
+            diagnostics::DiagnosticContext {
+                wallet_kind: Some(diagnostics::DiagnosticWalletKind::Hardware),
+                ..Default::default()
             },
-            &metadata.external_descriptor,
-        )
-    })();
-    finish_new_profile_attempt(&state, id, &dir, result.is_ok())?;
-    result?;
-    unlock_selected(&app, &state)?;
-    diagnostics::record(
-        &app,
-        &state,
-        diagnostics::DiagnosticEventKind::WalletCreated,
-        diagnostics::DiagnosticOutcome::Succeeded,
-        diagnostics::DiagnosticContext {
-            wallet_kind: Some(diagnostics::DiagnosticWalletKind::Hardware),
-            ..Default::default()
-        },
-        None,
-    );
-    Ok(metadata)
+            None,
+        );
+        Ok(metadata)
+    })
+    .await
+    .map_err(internal)?
 }
 
 #[tauri::command]
@@ -2764,31 +2945,45 @@ pub(crate) fn external_signer_backup(descriptor: String) -> ApiResult<ExternalSi
 }
 
 #[tauri::command]
-pub fn external_signer_export_descriptor(
+pub async fn external_signer_export_descriptor(
     app: AppHandle,
-    state: State<'_, AppState>,
     credential: String,
 ) -> ApiResult<ExternalSignerBackupDto> {
     let credential = Zeroizing::new(credential);
-    let _operation = operation_guard(&state)?;
-    require_unlocked(&app, &state)?;
-    check_auth_throttle(&app, &state)?;
-    let verified = verify_external_signer_credential(&app, credential.as_str());
-    record_auth_result(&app, &state, &verified)?;
-    verified?;
-    let backup = external_signer_backup(read_external_signer_metadata(&app)?.external_descriptor)?;
-    diagnostics::record(
-        &app,
-        &state,
-        diagnostics::DiagnosticEventKind::BackupExported,
-        diagnostics::DiagnosticOutcome::Succeeded,
-        diagnostics::DiagnosticContext {
-            wallet_kind: Some(diagnostics::DiagnosticWalletKind::Hardware),
-            ..Default::default()
-        },
-        None,
-    );
-    Ok(backup)
+    let expected_wallet_id = load_registry(&app)?.selected_wallet_id;
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+
+        let _operation = operation_guard(&state)?;
+        if load_registry(&app)?.selected_wallet_id != expected_wallet_id {
+            return Err(api_error(
+                "wallet_selection_changed",
+                "The selected wallet changed. Retry in the current wallet.",
+            ));
+        }
+
+        require_unlocked(&app, &state)?;
+        check_auth_throttle(&app, &state)?;
+        let verified = verify_external_signer_credential(&app, credential.as_str());
+        record_auth_result(&app, &state, &verified)?;
+        verified?;
+        let backup =
+            external_signer_backup(read_external_signer_metadata(&app)?.external_descriptor)?;
+        diagnostics::record(
+            &app,
+            &state,
+            diagnostics::DiagnosticEventKind::BackupExported,
+            diagnostics::DiagnosticOutcome::Succeeded,
+            diagnostics::DiagnosticContext {
+                wallet_kind: Some(diagnostics::DiagnosticWalletKind::Hardware),
+                ..Default::default()
+            },
+            None,
+        );
+        Ok(backup)
+    })
+    .await
+    .map_err(internal)?
 }
 
 pub(crate) fn external_proposal_dto(
@@ -2868,6 +3063,7 @@ pub(crate) fn external_proposal_dto(
         signed_fingerprints: progress.signed_fingerprints,
         spend_path: "primary".to_owned(),
         eligible_signer_fingerprints: vec![fingerprint.to_string()],
+        spending_path_details: None,
         status,
         created_at: created_at.to_string(),
         selection_impact,
@@ -2984,35 +3180,58 @@ fn import_external_proposal_in_db(
 }
 
 #[tauri::command]
-pub fn external_signer_proposal_import(
+pub async fn external_signer_proposal_import(
     app: AppHandle,
-    state: State<'_, AppState>,
     proposal_id: String,
     reviewed_psbt: String,
     signed_psbt: String,
 ) -> ApiResult<MultisigProposalDto> {
-    let _operation = operation_guard(&state)?;
-    require_unlocked(&app, &state)?;
-    let metadata = read_external_signer_metadata(&app)?;
-    let mut db = open_db(&app)?;
-    let current = load_external_proposal(&mut db, &metadata, &proposal_id)?;
-    require_external_proposal_inputs_available(current.inputs_available)?;
-    require_reviewed_psbt_unchanged(
-        &current.psbt,
-        &reviewed_psbt,
-        "The proposal changed after review. Reload it before importing a signature.",
-    )?;
-    import_external_proposal_in_db(&mut db, &metadata, &proposal_id, &signed_psbt)
+    let expected_wallet_id = load_registry(&app)?.selected_wallet_id;
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+
+        let _operation = operation_guard(&state)?;
+        if load_registry(&app)?.selected_wallet_id != expected_wallet_id {
+            return Err(api_error(
+                "wallet_selection_changed",
+                "The selected wallet changed. Retry in the current wallet.",
+            ));
+        }
+
+        require_unlocked(&app, &state)?;
+        let metadata = read_external_signer_metadata(&app)?;
+        let mut db = open_db(&app)?;
+        let current = load_external_proposal(&mut db, &metadata, &proposal_id)?;
+        require_external_proposal_inputs_available(current.inputs_available)?;
+        require_reviewed_psbt_unchanged(
+            &current.psbt,
+            &reviewed_psbt,
+            "The proposal changed after review. Reload it before importing a signature.",
+        )?;
+        import_external_proposal_in_db(&mut db, &metadata, &proposal_id, &signed_psbt)
+    })
+    .await
+    .map_err(internal)?
 }
 
 #[tauri::command]
-pub fn external_signer_proposal_discard_signature(
+pub async fn external_signer_proposal_discard_signature(
     app: AppHandle,
-    state: State<'_, AppState>,
     proposal_id: String,
     reviewed_psbt: String,
 ) -> ApiResult<MultisigProposalDto> {
+    let expected_wallet_id = load_registry(&app)?.selected_wallet_id;
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+
     let _operation = operation_guard(&state)?;
+        if load_registry(&app)?.selected_wallet_id != expected_wallet_id {
+            return Err(api_error(
+                "wallet_selection_changed",
+                "The selected wallet changed. Retry in the current wallet.",
+            ));
+        }
+
     require_unlocked(&app, &state)?;
     let metadata = read_external_signer_metadata(&app)?;
     let mut db = open_db(&app)?;
@@ -3046,6 +3265,9 @@ pub fn external_signer_proposal_discard_signature(
         ));
     }
     load_external_proposal(&mut db, &metadata, &proposal_id)
+    })
+    .await
+    .map_err(internal)?
 }
 
 #[tauri::command]
@@ -3056,6 +3278,7 @@ pub async fn hardware_sign_external(
     device_id: String,
     reviewed_psbt: String,
 ) -> ApiResult<MultisigProposalDto> {
+    require_desktop_key_operation()?;
     let context = diagnostics::DiagnosticContext {
         wallet_kind: Some(diagnostics::DiagnosticWalletKind::Hardware),
         ..Default::default()
@@ -3087,11 +3310,34 @@ pub async fn hardware_sign_external(
         let device = recently_scanned_hardware_device(&state, &device_id)?;
         let signed = tauri::async_runtime::spawn_blocking(move || {
             let operation = hwi.begin_signing_operation().map_err(hardware_api_error)?;
-            let identity =
-                prove_live_external_signer_identity(&hwi, &operation, &device, &expected_signer)?;
-            let output = hwi
-                .sign_psbt_in_operation(&operation, &identity.device_type, &device.path, &encoded)
-                .map_err(|error| hardware_signing_api_error(error, &identity.device_type, false))?;
+            let (output, identity) = if let Some((output, identity)) = scoped_external_action(
+                &hwi,
+                &operation,
+                &device,
+                &expected_signer,
+                crate::hardware::HwiSessionAction::Sign,
+                Some(&encoded),
+            )? {
+                (output, identity)
+            } else {
+                let identity = prove_live_external_signer_identity(
+                    &hwi,
+                    &operation,
+                    &device,
+                    &expected_signer,
+                )?;
+                let output = hwi
+                    .sign_psbt_in_operation(
+                        &operation,
+                        &identity.device_type,
+                        &device.path,
+                        &encoded,
+                    )
+                    .map_err(|error| {
+                        hardware_signing_api_error(error, &identity.device_type, false)
+                    })?;
+                (output, identity)
+            };
             let response: HwiPsbt = serde_json::from_slice(&output).map_err(internal)?;
             response.psbt.ok_or_else(|| {
                 drop(response.error);
@@ -3138,6 +3384,7 @@ pub async fn external_signer_proposal_broadcast(
     credential: String,
 ) -> ApiResult<BroadcastResultDto> {
     let credential = Zeroizing::new(credential);
+    require_desktop_key_operation()?;
     let diagnostic_app = app.clone();
     let context = diagnostics::DiagnosticContext {
         wallet_kind: Some(diagnostics::DiagnosticWalletKind::Hardware),
@@ -3206,50 +3453,48 @@ pub async fn external_signer_proposal_broadcast(
         }
         let transaction = psbt.extract_tx().map_err(internal)?;
         let txid = broadcast_transaction(&app, &state, &db, &proposal_id, &transaction)?;
-        let mut persisted = db.transaction().map_err(internal)?;
-        let mut wallet = load_wallet_transaction(&mut persisted)?;
-        apply_locally_broadcast_transaction(&mut wallet, &transaction);
-        let changed = persisted.execute(
-            "UPDATE groot_proposals SET status = 'broadcast', txid = ?1 WHERE proposal_id = ?2 AND status = 'ready'",
-            params![txid.to_string(), proposal_id],
-        ).map_err(internal)?;
-        if changed != 1 {
-            return Err(api_error(
-                "proposal_mismatch",
-                "The proposal changed while it was being broadcast.",
-            ));
-        }
-        label_provenance::bind_broadcast_transaction(
-            &persisted,
-            &proposal_id,
-            &txid.to_string(),
-            now(),
-        )
-        .map_err(internal)?;
-        record_replacement(&persisted, &proposal_id, &txid)?;
-        let snapshot = snapshot_from(&wallet, &persisted, None, false, None)?;
-        notifications::enqueue(
-            &persisted,
-            &WalletNotification::TransactionBroadcast {
-                txid: txid.to_string(),
-                balance: snapshot.balance.total,
-            },
-            now(),
-        )
-        .map_err(internal)?;
-        wallet.persist(&mut persisted).map_err(internal)?;
-        drop(wallet);
-        persisted.commit().map_err(internal)?;
-        let (snapshot, sync_pending) =
-            match sync_wallet_atomically(&app, &state, &mut db, false, None) {
-                Ok(snapshot) => (snapshot, false),
-                Err(_) => (snapshot, true),
-            };
-        Ok(BroadcastResultDto {
-            txid: txid.to_string(),
-            snapshot,
-            sync_pending,
-        })
+        Ok(accepted_broadcast_result(txid, || {
+            let mut persisted = db.transaction().map_err(internal)?;
+            let mut wallet = load_wallet_transaction(&mut persisted)?;
+            apply_locally_broadcast_transaction(&mut wallet, &transaction);
+            let changed = persisted.execute(
+                "UPDATE groot_proposals SET status = 'broadcast', txid = ?1 WHERE proposal_id = ?2 AND status = 'ready'",
+                params![txid.to_string(), proposal_id],
+            ).map_err(internal)?;
+            if changed != 1 {
+                return Err(api_error(
+                    "proposal_mismatch",
+                    "The proposal changed while it was being broadcast.",
+                ));
+            }
+            label_provenance::bind_broadcast_transaction(
+                &persisted,
+                &proposal_id,
+                &txid.to_string(),
+                now(),
+            )
+            .map_err(internal)?;
+            record_replacement(&persisted, &proposal_id, &txid)?;
+            let snapshot = snapshot_from(&wallet, &persisted, None, false, None)?;
+            notifications::enqueue(
+                &persisted,
+                &WalletNotification::TransactionBroadcast {
+                    txid: txid.to_string(),
+                    balance: snapshot.balance.total,
+                },
+                now(),
+            )
+            .map_err(internal)?;
+            wallet.persist(&mut persisted).map_err(internal)?;
+            drop(wallet);
+            persisted.commit().map_err(internal)?;
+            let (snapshot, sync_pending) =
+                match sync_wallet_atomically(&app, &state, &mut db, false, None) {
+                    Ok(snapshot) => (snapshot, false),
+                    Err(_) => (snapshot, true),
+                };
+            Ok((snapshot, sync_pending))
+        }))
     })
     .await
     .map_err(internal)?;
@@ -3265,12 +3510,19 @@ pub async fn external_signer_proposal_broadcast(
 }
 
 #[tauri::command]
-pub fn external_signer_proposal_cancel(
-    app: AppHandle,
-    state: State<'_, AppState>,
-    proposal_id: String,
-) -> ApiResult<()> {
+pub async fn external_signer_proposal_cancel(app: AppHandle, proposal_id: String) -> ApiResult<()> {
+    let expected_wallet_id = load_registry(&app)?.selected_wallet_id;
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+
     let _operation = operation_guard(&state)?;
+        if load_registry(&app)?.selected_wallet_id != expected_wallet_id {
+            return Err(api_error(
+                "wallet_selection_changed",
+                "The selected wallet changed. Retry in the current wallet.",
+            ));
+        }
+
     require_unlocked(&app, &state)?;
     let db = open_db(&app)?;
     let changed = db.execute(
@@ -3289,6 +3541,9 @@ pub fn external_signer_proposal_cancel(
         .map_err(internal)?
         .remove(&proposal_id);
     Ok(())
+    })
+    .await
+    .map_err(internal)?
 }
 
 #[tauri::command]
@@ -3324,6 +3579,17 @@ pub async fn hardware_verify_multisig_address(
             let operation = hwi
                 .begin_interactive_operation()
                 .map_err(hardware_api_error)?;
+            if let Some((displayed, identity)) = scoped_cosigner_action(
+                &hwi,
+                &operation,
+                &device,
+                &expected_signers,
+                crate::hardware::HwiSessionAction::Display,
+                Some(&descriptor),
+                |_| true,
+            )? {
+                return Ok::<_, ApiError>((displayed, identity, operation));
+            }
             let identity = prove_live_cosigner_identity_for_candidates(
                 &hwi,
                 &operation,
@@ -3343,13 +3609,10 @@ pub async fn hardware_verify_multisig_address(
         .await
         .map_err(internal)??;
     let response: HwiAddress = serde_json::from_slice(&displayed).map_err(internal)?;
-    let actual = response.address.ok_or_else(|| {
-        drop(response.error);
-        missing_hwi_value(
-            response.code,
-            "The device did not return the displayed address.",
-        )
-    })?;
+    let actual = response
+        .address
+        .clone()
+        .ok_or_else(|| missing_policy_address(&identity.device_type, response))?;
     if !hardware_display_matches_expected_address(&expected, &actual) {
         return Err(api_error(
             "hardware_address_mismatch",
@@ -3486,6 +3749,19 @@ pub(crate) fn bitbox_policy_address_error(
 
 fn missing_policy_address(device_type: &str, response: HwiAddress) -> ApiError {
     let code = response.code;
+    if device_type.eq_ignore_ascii_case("coldcard")
+        && code == Some(-7)
+        && response.error.as_deref().is_some_and(|error| {
+            error
+                .to_ascii_lowercase()
+                .contains("multisig wallet with those fingerprints not found")
+        })
+    {
+        return api_error(
+            "hardware_command_failed",
+            "Import this wallet policy on Coldcard first. Save the file from Policy → Coldcard → Review setup, then retry.",
+        );
+    }
     if let Some(error) = bitbox_policy_address_error(device_type, code, response.error.as_deref()) {
         return error;
     }
@@ -3510,6 +3786,29 @@ fn display_multisig_policy_address(
     let operation = hwi
         .begin_interactive_operation()
         .map_err(hardware_api_error)?;
+    if !records_interactive_policy_verification(&device.device_type) {
+        return Err(api_error(
+            "invalid_hardware_request",
+            "This signer does not require interactive policy verification.",
+        ));
+    }
+    if let Some((displayed, identity)) = scoped_cosigner_action(
+        hwi,
+        &operation,
+        &device,
+        std::slice::from_ref(expected_signer),
+        crate::hardware::HwiSessionAction::Display,
+        Some(descriptor),
+        |_| true,
+    )? {
+        if !records_interactive_policy_verification(&identity.device_type) {
+            return Err(api_error(
+                "invalid_hardware_request",
+                "This signer does not require interactive policy verification.",
+            ));
+        }
+        return Ok((displayed, identity, device, operation));
+    }
     let identity = prove_live_cosigner_identity(hwi, &operation, &device, expected_signer)?;
     if !records_interactive_policy_verification(&identity.device_type) {
         return Err(api_error(
@@ -3778,6 +4077,16 @@ pub async fn hardware_verify_external_address(
             let operation = hwi
                 .begin_interactive_operation()
                 .map_err(hardware_api_error)?;
+            if let Some((displayed, identity)) = scoped_external_action(
+                &hwi,
+                &operation,
+                &device,
+                &expected_signer,
+                crate::hardware::HwiSessionAction::Display,
+                Some(&descriptor),
+            )? {
+                return Ok::<_, ApiError>((displayed, identity, operation));
+            }
             let identity =
                 prove_live_external_signer_identity(&hwi, &operation, &device, &expected_signer)?;
             let displayed = hwi
@@ -4406,5 +4715,56 @@ mod health_check_tests {
         upsert_hardware_health_check(&db, &latest).unwrap();
 
         assert_eq!(read_hardware_health_checks(&db).unwrap(), vec![latest]);
+    }
+}
+
+#[cfg(test)]
+mod coldcard_address_error_tests {
+    use super::*;
+
+    fn response(code: Option<i64>, message: &str) -> HwiAddress {
+        HwiAddress {
+            address: None,
+            error: Some(message.to_owned()),
+            code,
+        }
+    }
+
+    #[test]
+    fn missing_coldcard_policy_has_actionable_sanitized_guidance() {
+        let error = missing_policy_address("Coldcard", response(Some(-7),
+            "Coldcard Error: Multisig wallet with those fingerprints not found sensitive-vendor-detail"));
+        assert_eq!(error.code, "hardware_command_failed");
+        assert!(error
+            .message
+            .contains("Import this wallet policy on Coldcard first"));
+        assert!(!error.message.contains("sensitive-vendor-detail"));
+    }
+
+    #[test]
+    fn missing_policy_guidance_does_not_reclassify_other_devices_codes_or_errors() {
+        for (device, code, message) in [
+            (
+                "ledger",
+                Some(-7),
+                "Multisig wallet with those fingerprints not found",
+            ),
+            (
+                "coldcard",
+                Some(-14),
+                "Multisig wallet with those fingerprints not found",
+            ),
+            ("coldcard", Some(-7), "A different vendor error"),
+            (
+                "coldcard",
+                None,
+                "Multisig wallet with those fingerprints not found",
+            ),
+        ] {
+            let error = missing_policy_address(device, response(code, message));
+            assert!(!error
+                .message
+                .contains("Import this wallet policy on Coldcard first"));
+        }
     }
 }

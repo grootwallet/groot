@@ -1,8 +1,9 @@
+import { readUiStyles } from '../testing/ui-styles';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 const tooltip = readFileSync(new URL('./Tooltip.svelte', import.meta.url), 'utf8');
-const appCss = readFileSync(new URL('../../app.css', import.meta.url), 'utf8');
+const appCss = readUiStyles();
 const labelEditor = readFileSync(new URL('./PermanentLabelEditor.svelte', import.meta.url), 'utf8');
 
 describe('label suggestion tooltips', () => {

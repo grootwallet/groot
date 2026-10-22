@@ -167,3 +167,17 @@ describe('multisig setup drafts', () => {
     expect(await adapter.multisigSetupDraft()).toBeNull();
   });
 });
+
+describe('fixture sync contract parity', () => {
+  it('emits a selected-wallet update after explicit refresh, like native IPC', async () => {
+    const adapter = new DummyWalletAdapter();
+    const selected = (await adapter.profiles()).selectedWalletId;
+    const events: import('./contracts').WalletEvent[] = [];
+    const unsubscribe = adapter.subscribe((event) => events.push(event));
+    const snapshot = await adapter.sync();
+    expect(events).toContainEqual(
+      expect.objectContaining({ type: 'wallet_updated', walletId: selected, snapshot })
+    );
+    unsubscribe();
+  });
+});

@@ -35,6 +35,7 @@ impl Drop for TemporaryDatabase {
     }
 }
 
+#[derive(Clone)]
 struct TestKey {
     fingerprint: String,
     account_private: Xpriv,
@@ -140,18 +141,30 @@ fn regtest_dir() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../.regtest"))
 }
 
-fn rpc() -> Client {
+fn rpc_at_wallet(wallet: Option<&str>) -> Client {
     let port = std::env::var("GROOT_RPC_PORT").unwrap_or_else(|_| "18443".to_owned());
+    let url = match wallet {
+        Some(name) => format!("http://127.0.0.1:{port}/wallet/{name}"),
+        None => format!("http://127.0.0.1:{port}"),
+    };
     let (username, password) = Auth::CookieFile(regtest_dir().join("regtest/.cookie"))
         .get_user_pass()
         .expect("read regtest cookie");
+    // The preceding continuity test can leave Core indexing over 50,000 mined
+    // blocks; loading its wallet may exceed the transport's 15-second default
+    // on a shared CI runner without indicating a wallet failure.
     let mut builder = jsonrpc::minreq_http::MinreqHttpTransport::builder()
-        .url(&format!("http://127.0.0.1:{port}"))
-        .expect("regtest RPC URL");
+        .url(&url)
+        .expect("regtest RPC URL")
+        .timeout(std::time::Duration::from_secs(120));
     if let Some(username) = username {
         builder = builder.basic_auth(username, password);
     }
     Client::from_jsonrpc(jsonrpc::Client::with_transport(builder.build()))
+}
+
+fn rpc() -> Client {
+    rpc_at_wallet(None)
 }
 
 fn sync(wallet: &mut PersistedWallet<Connection>, db: &mut Connection, rpc: Arc<Client>) {
@@ -1248,5 +1261,693 @@ fn funded_rbf_and_cpfp_cross_groot_proposal_boundaries() {
             )
             .unwrap(),
         0
+    );
+}
+
+fn continuity_metadata(keys: &[TestKey], family: bool) -> MultisigWalletDto {
+    let template = if family {
+        RecoveryTemplate::FamilyContinuityV1 {
+            parents: SpendingPath::new(2, ["signer-0", "signer-1"]),
+            child_assistance: SpendingPath::new(1, ["signer-2", "signer-3"]),
+            child_inheritance: SpendingPath::new(2, ["signer-4", "signer-5"]),
+            executor_signer_id: "signer-6".to_owned(),
+        }
+    } else {
+        RecoveryTemplate::PartnerContinuityV1 {
+            owner: SpendingPath::new(2, ["signer-0", "signer-1", "signer-2"]),
+            partner: SpendingPath::new(2, ["signer-3", "signer-4"]),
+            estate: SpendingPath::new(2, ["signer-5", "signer-6", "signer-7"]),
+        }
+    };
+    let mut metadata = metadata(keys);
+    let analysis = analyze_template(&template, &metadata.cosigners).unwrap();
+    metadata.external_descriptor = analysis.external_descriptor;
+    metadata.internal_descriptor = analysis.internal_descriptor;
+    metadata.spending_paths = analysis.paths;
+    metadata.policy_type = recovery_policy_type(&template).to_owned();
+    metadata.recovery_template = Some(template);
+    metadata
+}
+
+fn continuity_signing_wallet(metadata: &MultisigWalletDto, key: &TestKey) -> Wallet {
+    // Replacing the public account changes the test descriptor checksum.
+    // Drop only that obsolete fixture checksum; public backup checks remain intact.
+    let private_descriptor = |descriptor: &str| {
+        descriptor.split('#').next().unwrap().replace(
+            &key.account_public.to_string(),
+            &key.account_private.to_string(),
+        )
+    };
+    Wallet::create(
+        private_descriptor(&metadata.external_descriptor),
+        private_descriptor(&metadata.internal_descriptor),
+    )
+    .network(Network::Regtest)
+    .create_wallet_no_persist()
+    .unwrap()
+}
+
+// Exact fixed-delay policies are exercised against real Core using sparse,
+// Core-observed checkpoints. This avoids 52,560 per-block SQLite commits.
+#[test]
+#[ignore = "requires the isolated Bitcoin Core regtest harness"]
+fn funded_continuity_all_named_paths_renew_reorg_and_restore() {
+    use bdk_wallet::chain::TxUpdate;
+    assert!(std::env::var_os("GROOT_RUN_REGTEST").is_some());
+    let rpc = rpc();
+    // Keep long-delay coinbases out of the Core wallet, avoiding hundreds
+    // of thousands of irrelevant wallet records in this disposable fixture.
+    let block_destination =
+        Address::p2wsh(&bdk_wallet::bitcoin::ScriptBuf::new(), Network::Regtest);
+    let mine_bounded = |mut count: u64| {
+        while count > 0 {
+            let batch = count.min(128);
+            // A full year of block-relative policy exceeds Core's two-hour
+            // future-timestamp allowance when mined against a fixed clock.
+            // Advance only this disposable node's clock, never its block age.
+            let header = rpc
+                .get_block_header(&rpc.get_best_block_hash().unwrap())
+                .unwrap();
+            let _: serde_json::Value = rpc
+                .call(
+                    "setmocktime",
+                    &[serde_json::json!(u64::from(header.time) + batch)],
+                )
+                .unwrap();
+            rpc.generate_to_address(batch, &block_destination).unwrap();
+            count -= batch;
+        }
+    };
+    let mining = rpc
+        .get_new_address(Some("continuity isolated fixture"), None)
+        .unwrap()
+        .require_network(Network::Regtest)
+        .unwrap();
+    struct Case {
+        _database: TemporaryDatabase,
+        db: Connection,
+        wallet: PersistedWallet<Connection>,
+        metadata: MultisigWalletDto,
+        keys: Vec<TestKey>,
+        index: usize,
+        renewal: bool,
+        funding: Transaction,
+        outpoint: OutPoint,
+        proposal: Option<Psbt>,
+    }
+    let mut cases = Vec::new();
+    for family in [false, true] {
+        let keys = test_keys_with_count(if family { 7 } else { 8 });
+        let metadata = continuity_metadata(&keys, family);
+        let public_wallet = Wallet::create(
+            metadata.external_descriptor.clone(),
+            metadata.internal_descriptor.clone(),
+        )
+        .network(Network::Regtest)
+        .create_wallet_no_persist()
+        .unwrap();
+        // Validate every synthetic signer before the long fixed-delay mining run.
+        for key in &keys {
+            let signing_wallet = continuity_signing_wallet(&metadata, key);
+            for keychain in [KeychainKind::External, KeychainKind::Internal] {
+                assert_eq!(
+                    signing_wallet.peek_address(keychain, 0).address,
+                    public_wallet.peek_address(keychain, 0).address
+                );
+            }
+        }
+        for case_index in 0..=metadata.spending_paths.len() {
+            let renewal = case_index == metadata.spending_paths.len();
+            let index = if renewal { 0 } else { case_index };
+            let database = TemporaryDatabase::new();
+            let mut db = Connection::open(&database.0).unwrap();
+            init_app_schema(&db).unwrap();
+            let mut wallet = Wallet::create(
+                metadata.external_descriptor.clone(),
+                metadata.internal_descriptor.clone(),
+            )
+            .network(Network::Regtest)
+            .create_wallet(&mut db)
+            .unwrap();
+            let receive = wallet
+                .reveal_addresses_to(KeychainKind::External, case_index as u32)
+                .last()
+                .unwrap()
+                .address;
+            wallet.persist(&mut db).unwrap();
+            let txid: Txid = rpc
+                .call(
+                    "sendtoaddress",
+                    &[
+                        serde_json::json!(receive.to_string()),
+                        serde_json::json!(0.001),
+                    ],
+                )
+                .unwrap();
+            let funding = rpc.get_raw_transaction(&txid, None).unwrap();
+            let vout = funding
+                .output
+                .iter()
+                .position(|output| output.script_pubkey == receive.script_pubkey())
+                .unwrap() as u32;
+            cases.push(Case {
+                _database: database,
+                db,
+                wallet,
+                metadata: metadata.clone(),
+                keys: keys.clone(),
+                index,
+                renewal,
+                funding,
+                outpoint: OutPoint { txid, vout },
+                proposal: None,
+            });
+        }
+    }
+    rpc.generate_to_address(1, &mining).unwrap();
+    // All funding is complete. This fixture owns its disposable Core node;
+    // unload its funding wallet before mining and disconnecting long chains.
+    let funding_wallets: Vec<String> = rpc.call("listwallets", &[]).unwrap();
+    for name in funding_wallets {
+        let _: serde_json::Value = rpc
+            .call("unloadwallet", &[serde_json::json!(name)])
+            .unwrap();
+    }
+    let origin_funding_height = rpc.get_block_count().unwrap() as u32;
+    let funding_height = origin_funding_height;
+    let observe = |case: &mut Case| {
+        let height = rpc.get_block_count().unwrap() as u32;
+        // txindex updates asynchronously after a deep reorg. Prove inclusion
+        // from the actual canonical block, never an indexed orphan lookup.
+        let funding_hash = rpc.get_block_hash(funding_height as u64).unwrap();
+        let funding_block = rpc.get_block(&funding_hash).unwrap();
+        let confirmed_height = rpc.get_block_header_info(&funding_hash).unwrap().height as u32;
+        assert!(funding_block.txdata.iter().any(|tx| tx == &case.funding));
+        let mut checkpoint = CheckPoint::new(BlockId {
+            height: 0,
+            hash: rpc.get_block_hash(0).unwrap(),
+        });
+        let mut checkpoint_heights: Vec<_> = (origin_funding_height..=confirmed_height)
+            .chain(
+                case.wallet
+                    .latest_checkpoint()
+                    .iter()
+                    .map(|point| point.height()),
+            )
+            .filter(|value| *value > 0 && *value <= height)
+            .collect();
+        checkpoint_heights.push(height.saturating_sub(1));
+        checkpoint_heights.push(height);
+        checkpoint_heights.sort_unstable();
+        checkpoint_heights.dedup();
+        for checkpoint_height in checkpoint_heights {
+            checkpoint = checkpoint
+                .push(BlockId {
+                    height: checkpoint_height,
+                    hash: rpc.get_block_hash(checkpoint_height as u64).unwrap(),
+                })
+                .unwrap();
+        }
+        let mut tx_update = TxUpdate::default();
+        tx_update.txs.push(Arc::new(case.funding.clone()));
+        tx_update.anchors.insert((
+            ConfirmationBlockTime {
+                block_id: BlockId {
+                    height: confirmed_height,
+                    hash: funding_hash,
+                },
+                confirmation_time: funding_block.header.time as u64,
+            },
+            case.outpoint.txid,
+        ));
+        case.wallet
+            .apply_update(Update {
+                chain: Some(checkpoint),
+                tx_update,
+                ..Default::default()
+            })
+            .unwrap();
+        case.wallet.persist(&mut case.db).unwrap();
+        let snapshot =
+            snapshot_from(&case.wallet, &case.db, Some(now().to_string()), true, None).unwrap();
+        let observed = snapshot
+            .utxos
+            .iter()
+            .find(|coin| coin.outpoint == case.outpoint.to_string())
+            .unwrap();
+        assert_eq!(observed.confirmations, height - confirmed_height + 1);
+    };
+    let mut stages = vec![1];
+    for case in &cases {
+        let delay = case.metadata.spending_paths[case.index].available_after_blocks;
+        if delay > 0 {
+            stages.extend([delay - 1, delay, delay + 1]);
+        }
+    }
+    stages.sort_unstable();
+    stages.dedup();
+    for age in stages {
+        eprintln!("Continuity maturity stage: {age} blocks");
+        let target = funding_height + age - 1;
+        let current = rpc.get_block_count().unwrap() as u32;
+        if target > current {
+            mine_bounded((target - current) as u64);
+        }
+        for case in &mut cases {
+            observe(case);
+            let delay = case.metadata.spending_paths[case.index].available_after_blocks;
+            if case.renewal {
+                if age == 1 {
+                    let (renewal, address) = build_policy_renewal(
+                        &mut case.wallet,
+                        case.outpoint,
+                        FeeRate::from_sat_per_vb(2).unwrap(),
+                    )
+                    .unwrap();
+                    assert!(case.wallet.is_mine(address.script_pubkey()));
+                    assert!(!renewal.unsigned_tx.input[0]
+                        .sequence
+                        .is_relative_lock_time());
+                    case.proposal = Some(renewal);
+                }
+                continue;
+            }
+            if delay > 0 && age == delay - 1 {
+                let premature = build_named_policy_sweep(
+                    &mut case.wallet,
+                    &case.metadata,
+                    case.index,
+                    case.outpoint,
+                    &mining,
+                    FeeRate::from_sat_per_vb(2).unwrap(),
+                )
+                .unwrap();
+                assert!(validate_named_path_current(
+                    &case.wallet,
+                    &case.db,
+                    &case.metadata,
+                    &premature,
+                    case.index
+                )
+                .is_err());
+            }
+            if age == delay.max(1) {
+                let psbt = build_named_policy_sweep(
+                    &mut case.wallet,
+                    &case.metadata,
+                    case.index,
+                    case.outpoint,
+                    &mining,
+                    FeeRate::from_sat_per_vb(2).unwrap(),
+                )
+                .unwrap();
+                if delay > 0 {
+                    assert_eq!(psbt.unsigned_tx.input[0].sequence.to_consensus_u32(), delay);
+                    validate_named_path_current(
+                        &case.wallet,
+                        &case.db,
+                        &case.metadata,
+                        &psbt,
+                        case.index,
+                    )
+                    .unwrap();
+                    // A two-block fork with a shorter competing tip revokes
+                    // maturity; remine the next block to restore it. Existing
+                    // funded tests separately cover deep funding re-anchoring.
+                    let previous_height = rpc.get_block_count().unwrap();
+                    let fork = rpc.get_block_hash(previous_height - 1).unwrap();
+                    rpc.invalidate_block(&fork).unwrap();
+                    // Distinct coinbase output prevents regenerating the exact
+                    // invalidated block while its invalid flag is retained.
+                    let fork_script = bdk_wallet::bitcoin::ScriptBuf::from_bytes(vec![
+                        0x6a,
+                        0x02,
+                        u8::from(case.metadata.policy_type == "family_continuity_v1"),
+                        case.index as u8,
+                    ]);
+                    let fork_destination = Address::p2wsh(&fork_script, Network::Regtest);
+                    rpc.generate_to_address(1, &fork_destination).unwrap();
+                    observe(case);
+                    assert!(validate_named_path_current(
+                        &case.wallet,
+                        &case.db,
+                        &case.metadata,
+                        &psbt,
+                        case.index
+                    )
+                    .is_err());
+                    if case.metadata.policy_type == "partner_continuity_v1" && case.index == 1 {
+                        let recipient = Address::from_script(
+                            &psbt.unsigned_tx.output[0].script_pubkey,
+                            Network::Regtest,
+                        )
+                        .unwrap();
+                        case.db.execute("INSERT INTO groot_proposals (proposal_id,recipient,label,amount,fee,fee_rate,psbt,status,created_at,selection_strategy) VALUES('reorg-gate',?1,'Reorg gate',?2,?3,2,?4,'collecting',?5,'manual')", params![recipient.to_string(), psbt.unsigned_tx.output[0].value.to_sat(), psbt.fee_amount().unwrap().to_sat(), encode_psbt(&psbt), now()]).unwrap();
+                        case.db.execute("INSERT INTO groot_proposal_spend_paths(proposal_id,spend_path) VALUES('reorg-gate','delayed')", []).unwrap();
+                        let error = finalized_multisig_proposal_transaction(
+                            &mut case.db,
+                            &case.metadata,
+                            "reorg-gate",
+                            &encode_psbt(&psbt),
+                        )
+                        .unwrap_err();
+                        assert_eq!(error.code, "immature_spending_path");
+                    }
+                    mine_bounded(1);
+                    observe(case);
+                    validate_named_path_current(
+                        &case.wallet,
+                        &case.db,
+                        &case.metadata,
+                        &psbt,
+                        case.index,
+                    )
+                    .unwrap();
+                }
+                case.proposal = Some(psbt);
+            }
+            if age == delay + 1 && delay > 0 {
+                validate_named_path_current(
+                    &case.wallet,
+                    &case.db,
+                    &case.metadata,
+                    case.proposal.as_ref().unwrap(),
+                    case.index,
+                )
+                .unwrap();
+            }
+        }
+    }
+    for mut case in cases {
+        let mut psbt = case.proposal.take().unwrap();
+        let selected = case.metadata.spending_paths[case.index].clone();
+        let (_, eligible) =
+            signer_fingerprints_for_ids(&case.metadata, &selected.signer_ids).unwrap();
+        let signers: Vec<usize> = match (&case.metadata.recovery_template, case.index) {
+            (Some(RecoveryTemplate::PartnerContinuityV1 { .. }), 1) => vec![3, 4],
+            (Some(RecoveryTemplate::PartnerContinuityV1 { .. }), 2) => vec![3],
+            (Some(RecoveryTemplate::PartnerContinuityV1 { .. }), 3) => vec![5, 6],
+            (Some(RecoveryTemplate::FamilyContinuityV1 { .. }), 1) => vec![2, 3, 0],
+            (Some(RecoveryTemplate::FamilyContinuityV1 { .. }), 2) => vec![4, 6],
+            _ => vec![0, 1],
+        };
+        observe(&mut case);
+        let proposal_id = Uuid::new_v4().to_string();
+        let amount = psbt.unsigned_tx.output[0].value.to_sat();
+        let recipient =
+            Address::from_script(&psbt.unsigned_tx.output[0].script_pubkey, Network::Regtest)
+                .unwrap();
+        let fee = psbt.fee_amount().unwrap().to_sat();
+        case.db.execute("INSERT INTO groot_proposals (proposal_id,recipient,label,amount,fee,fee_rate,psbt,status,created_at,selection_strategy) VALUES(?1,?2,'Continuity isolated test',?3,?4,2,?5,'collecting',?6,'manual')", params![proposal_id, recipient.to_string(), amount, fee, encode_psbt(&psbt), now()]).unwrap();
+        if case.index > 0 {
+            case.db.execute("INSERT INTO groot_proposal_spend_paths(proposal_id,spend_path) VALUES(?1,'delayed')", [&proposal_id]).unwrap();
+        }
+        for (position, signer) in signers.into_iter().enumerate() {
+            let signing_wallet = continuity_signing_wallet(&case.metadata, &case.keys[signer]);
+            let mut returned = psbt.clone();
+            signing_wallet
+                .sign(
+                    &mut returned,
+                    SignOptions {
+                        trust_witness_utxo: true,
+                        try_finalize: false,
+                        ..Default::default()
+                    },
+                )
+                .unwrap();
+            let progress = import_multisig_proposal_in_db(
+                &mut case.db,
+                &case.metadata,
+                &proposal_id,
+                &encode_psbt(&returned),
+            )
+            .unwrap();
+            if (position == 0 && selected.threshold > 1)
+                || (matches!(
+                    case.metadata.recovery_template,
+                    Some(RecoveryTemplate::FamilyContinuityV1 { .. })
+                ) && case.index == 1
+                    && position == 1)
+            {
+                assert!(!progress.can_finalize);
+            }
+            // Reopen actual SQLite proposal/wallet state after each partial signature.
+            let mut reopened_db = Connection::open(&case._database.0).unwrap();
+            let reopened =
+                load_multisig_proposal(&mut reopened_db, &case.metadata, &proposal_id).unwrap();
+            psbt = decode_psbt(&reopened.psbt).unwrap();
+            assert_eq!(
+                reopened.spending_path_details.as_ref().unwrap().index,
+                case.index
+            );
+        }
+        assert!(path_signature_quorum(
+            &case.metadata,
+            case.index,
+            &signature_progress(
+                &psbt,
+                &eligible
+                    .iter()
+                    .map(|fp| Fingerprint::from_str(fp).unwrap())
+                    .collect::<Vec<_>>(),
+                selected.threshold
+            )
+            .unwrap()
+            .signed_fingerprints
+        ));
+        if !case.renewal && case.index > 0 {
+            validate_named_path_current(&case.wallet, &case.db, &case.metadata, &psbt, case.index)
+                .unwrap();
+        }
+        let transaction = finalized_multisig_proposal_transaction(
+            &mut case.db,
+            &case.metadata,
+            &proposal_id,
+            &encode_psbt(&psbt),
+        )
+        .unwrap();
+        rpc.send_raw_transaction(&transaction).unwrap();
+        let block = rpc.generate_to_address(1, &mining).unwrap()[0];
+        assert!(rpc
+            .get_block(&block)
+            .unwrap()
+            .txdata
+            .iter()
+            .any(|tx| tx.compute_txid() == transaction.compute_txid()));
+        // A clean descriptor reconstruction retains exact receive and change scripts.
+        let recovered = Wallet::create(
+            case.metadata.external_descriptor.clone(),
+            case.metadata.internal_descriptor.clone(),
+        )
+        .network(Network::Regtest)
+        .create_wallet_no_persist()
+        .unwrap();
+        for keychain in [KeychainKind::External, KeychainKind::Internal] {
+            assert_eq!(
+                recovered.peek_address(keychain, 0).address,
+                case.wallet.peek_address(keychain, 0).address
+            );
+        }
+    }
+}
+
+#[test]
+#[ignore = "requires the isolated Bitcoin Core regtest harness"]
+fn funded_continuity_descriptors_restore_history_in_core() {
+    assert!(std::env::var_os("GROOT_RUN_REGTEST").is_some());
+    let rpc = rpc();
+    let funding_name =
+        std::env::var("GROOT_REGTEST_WALLET").unwrap_or_else(|_| "groot-dev".to_owned());
+    let loaded: Vec<String> = rpc.call("listwallets", &[]).unwrap();
+    if !loaded.contains(&funding_name) {
+        let _: serde_json::Value = rpc
+            .call("loadwallet", &[serde_json::json!(funding_name)])
+            .unwrap();
+    }
+    let wallet_rpc = |name: &str| rpc_at_wallet(Some(name));
+    let funder = wallet_rpc(&funding_name);
+    let mining = funder
+        .get_new_address(None, None)
+        .unwrap()
+        .require_network(Network::Regtest)
+        .unwrap();
+    for family in [false, true] {
+        let keys = test_keys_with_count(if family { 7 } else { 8 });
+        let metadata = continuity_metadata(&keys, family);
+        let wallet = Wallet::create(
+            metadata.external_descriptor.clone(),
+            metadata.internal_descriptor.clone(),
+        )
+        .network(Network::Regtest)
+        .create_wallet_no_persist()
+        .unwrap();
+        let receive = wallet.peek_address(KeychainKind::External, 0).address;
+        let funding: Txid = funder
+            .call(
+                "sendtoaddress",
+                &[
+                    serde_json::json!(receive.to_string()),
+                    serde_json::json!(0.001),
+                ],
+            )
+            .unwrap();
+        rpc.generate_to_address(1, &mining).unwrap();
+        let name = if family {
+            "continuity-family-restore"
+        } else {
+            "continuity-partner-restore"
+        };
+        let _: serde_json::Value = rpc
+            .call(
+                "createwallet",
+                &[
+                    serde_json::json!(name),
+                    serde_json::json!(true),
+                    serde_json::json!(true),
+                    serde_json::json!(""),
+                    serde_json::json!(false),
+                    serde_json::json!(true),
+                    serde_json::json!(false),
+                ],
+            )
+            .unwrap();
+        let restored = wallet_rpc(name);
+        let mut imports = Vec::new();
+        for (descriptor, internal, keychain) in [
+            (&metadata.external_descriptor, false, KeychainKind::External),
+            (&metadata.internal_descriptor, true, KeychainKind::Internal),
+        ] {
+            let info: serde_json::Value = rpc
+                .call("getdescriptorinfo", &[serde_json::json!(descriptor)])
+                .unwrap();
+            assert_eq!(info["issolvable"], true);
+            assert_eq!(info["hasprivatekeys"], false);
+            let canonical = info["descriptor"].as_str().unwrap();
+            let addresses: Vec<String> = rpc
+                .call(
+                    "deriveaddresses",
+                    &[serde_json::json!(canonical), serde_json::json!([0, 0])],
+                )
+                .unwrap();
+            assert_eq!(
+                addresses,
+                vec![wallet.peek_address(keychain, 0).address.to_string()]
+            );
+            imports.push(serde_json::json!({"desc": canonical, "timestamp": 0, "range": [0, 10], "internal": internal, "active": true}));
+        }
+        let results: Vec<serde_json::Value> = restored
+            .call("importdescriptors", &[serde_json::json!(imports)])
+            .unwrap();
+        assert!(results.iter().all(|result| result["success"] == true));
+        let coins: Vec<serde_json::Value> = restored.call("listunspent", &[]).unwrap();
+        assert!(coins
+            .iter()
+            .any(|coin| coin["txid"].as_str() == Some(&funding.to_string())
+                && coin["address"].as_str() == Some(&receive.to_string())));
+        let history: Vec<serde_json::Value> = restored.call("listtransactions", &[]).unwrap();
+        assert!(history
+            .iter()
+            .any(|tx| tx["txid"].as_str() == Some(&funding.to_string())));
+        let _: serde_json::Value = rpc
+            .call("unloadwallet", &[serde_json::json!(name)])
+            .unwrap();
+    }
+}
+
+#[test]
+fn fixed_policy_finalization_honors_sequence_when_later_partner_path_is_mature() {
+    use bdk_wallet::chain::TxUpdate;
+    use bdk_wallet::miniscript::psbt::PsbtExt;
+    let keys = test_keys_with_count(8);
+    let metadata = continuity_metadata(&keys, false);
+    let mut wallet = Wallet::create(
+        metadata.external_descriptor.clone(),
+        metadata.internal_descriptor.clone(),
+    )
+    .network(Network::Regtest)
+    .create_wallet_no_persist()
+    .unwrap();
+    let receive = wallet.reveal_next_address(KeychainKind::External).address;
+    let funding = Transaction {
+        version: bdk_wallet::bitcoin::transaction::Version::TWO,
+        lock_time: bdk_wallet::bitcoin::absolute::LockTime::ZERO,
+        input: vec![bdk_wallet::bitcoin::TxIn::default()],
+        output: vec![bdk_wallet::bitcoin::TxOut {
+            value: bdk_wallet::bitcoin::Amount::from_sat(100_000),
+            script_pubkey: receive.script_pubkey(),
+        }],
+    };
+    let outpoint = OutPoint::new(funding.compute_txid(), 0);
+    let anchor = BlockId {
+        height: 1,
+        hash: BlockHash::from_byte_array([1; 32]),
+    };
+    let chain = wallet
+        .latest_checkpoint()
+        .push(anchor)
+        .unwrap()
+        .push(BlockId {
+            height: 60_000,
+            hash: BlockHash::from_byte_array([2; 32]),
+        })
+        .unwrap();
+    let mut tx_update = TxUpdate::default();
+    tx_update.txs.push(Arc::new(funding));
+    tx_update.anchors.insert((
+        ConfirmationBlockTime {
+            block_id: anchor,
+            confirmation_time: 1,
+        },
+        outpoint.txid,
+    ));
+    wallet
+        .apply_update(Update {
+            chain: Some(chain),
+            tx_update,
+            ..Default::default()
+        })
+        .unwrap();
+    let destination = wallet.next_unused_address(KeychainKind::Internal).address;
+    let mut psbt = build_named_policy_sweep(
+        &mut wallet,
+        &metadata,
+        1,
+        outpoint,
+        &destination,
+        FeeRate::from_sat_per_vb(2).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        psbt.unsigned_tx.input[0].sequence.to_consensus_u32(),
+        13_140
+    );
+    for (position, signer) in [3, 4].into_iter().enumerate() {
+        continuity_signing_wallet(&metadata, &keys[signer])
+            .sign(
+                &mut psbt,
+                SignOptions {
+                    trust_witness_utxo: true,
+                    try_finalize: false,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        if position == 0 {
+            assert!(!finalize_multisig_policy_psbt(&wallet, &metadata, &mut psbt.clone()).unwrap());
+        }
+    }
+    let mut tampered = psbt.clone();
+    tampered.inputs[0].witness_script = Some(bdk_wallet::bitcoin::ScriptBuf::new());
+    assert_eq!(
+        finalize_multisig_policy_psbt(&wallet, &metadata, &mut tampered)
+            .unwrap_err()
+            .code,
+        "proposal_mismatch"
+    );
+    assert!(finalize_multisig_policy_psbt(&wallet, &metadata, &mut psbt).unwrap());
+    assert!(psbt.extract(&Secp256k1::verification_only()).is_ok());
+    assert_eq!(
+        psbt.unsigned_tx.input[0].sequence.to_consensus_u32(),
+        13_140
     );
 }

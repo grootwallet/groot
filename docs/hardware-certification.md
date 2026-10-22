@@ -2,6 +2,18 @@
 
 Status: complete for the supported v0.4.96 macOS BIP84/BIP48 matrix.
 
+## 5.3.0 RC18 Mainnet speed rehearsal — owner report
+
+On 2026-10-22, the owner tested the ad-hoc, unnotarized `v5.3.0-rc18`
+candidate (`8b6361ce`) with the existing Mainnet wallets. Trezor Model One,
+Trezor Safe 3, BitBox02 Nova, original BitBox02, Ledger Nano S Plus and Jade
+Classic felt nearly instant across the reported health, identity, address and
+signing flows; Coldcard Mk4 was also acceptably fast. Network switching, scan
+progress and signer-error checks passed. No new numeric firmware inventory or
+per-action timings were captured in this round. These are owner observations
+for the exact ad-hoc candidate, not certification of a future Developer
+ID-signed and notarized 5.3.0 package.
+
 On 2026-10-04, the release owner confirmed successful physical testing across
 every supported signer and tested multisig signer permutation. The campaign
 covered pairing/import, identity and address review, signing, rejection,

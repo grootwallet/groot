@@ -1,13 +1,20 @@
 <script lang="ts">
+  import WarningNotice from '$lib/components/WarningNotice.svelte';
   import { locale } from '$lib/i18n';
   import { translate } from '$lib/i18n-catalog';
-  import { Camera, CameraOff } from '@lucide/svelte';
+  import { Camera } from '@lucide/svelte';
   import { onMount } from 'svelte';
   import type QrScanner from 'qr-scanner';
 
   let { onscan } = $props<{ onscan: (value: string) => void | Promise<void> }>();
   let video: HTMLVideoElement;
-  let error = $state('');
+  let error = $state<'denied' | 'unavailable' | 'too_large' | null>(null);
+  const errors = {
+    too_large: 'This payment request is too large to scan safely.',
+    denied: 'Camera access was denied. Allow camera access for Groot, then reopen this scanner.',
+    unavailable:
+      'No usable camera is available. Connect a camera or enter the payment request manually.'
+  } as const;
   let processing = $state(false);
 
   onMount(() => {
@@ -19,7 +26,7 @@
       const exact = value.trim();
       if (!exact || processing || stopped || seen.has(exact)) return;
       if (exact.length > 8 * 1024) {
-        error = 'This payment request is too large to scan safely.';
+        error = 'too_large';
         return;
       }
       seen.add(exact);
@@ -48,10 +55,7 @@
       } catch (cause) {
         if (stopped) return;
         const name = cause instanceof DOMException ? cause.name : '';
-        error =
-          name === 'NotAllowedError'
-            ? 'Camera access was denied. Allow camera access for Groot, then reopen this scanner.'
-            : 'No usable camera is available. Connect a camera or enter the payment request manually.';
+        error = name === 'NotAllowedError' ? 'denied' : 'unavailable';
       }
     })();
     return () => {
@@ -71,14 +75,21 @@
     ></video>
     <div class="scan-guide" aria-hidden="true"></div>
   </div>
-  <div class="scan-status" role="status">
-    {#if error}<CameraOff size={16} /><span>{error}</span>{:else}<Camera size={16} /><span
+  {#if error}<WarningNotice
+      tone="danger"
+      icon
+      role="alert"
+      body={translate($locale, errors[error])}
+    />{:else}
+    <div class="scan-status" role="status">
+      <Camera size={16} /><span
         >{translate(
           $locale,
           processing ? 'Reading payment request…' : 'Point the camera at a Bitcoin payment QR'
         )}</span
-      >{/if}
-  </div>
+      >
+    </div>
+  {/if}
 </div>
 
 <style>

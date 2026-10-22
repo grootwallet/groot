@@ -4,6 +4,11 @@ import type { CatalogSection } from './types';
 // These keys are intentionally explicit so uncommon recovery/error paths cannot
 // silently fall back to English in a non-English session.
 export const dynamicCopy = {
+  'Import this wallet policy on Coldcard first. Save the file from Policy → Coldcard → Review setup, then retry.':
+    {
+      fr: 'Importez d’abord cette politique dans Coldcard. Enregistrez le fichier depuis Politique → Coldcard → Configuration, puis réessayez.',
+      es: 'Importa primero esta política en Coldcard. Guarda el archivo desde Política → Coldcard → Configuración y vuelve a intentarlo.'
+    },
   'Proposal discarded': { fr: 'Proposition supprimée', es: 'Propuesta descartada' },
   'Discard proposal': { fr: 'Supprimer la proposition', es: 'Descartar propuesta' },
   'Discard proposal?': { fr: 'Supprimer la proposition ?', es: '¿Descartar propuesta?' },
@@ -208,6 +213,15 @@ export const dynamicCopy = {
   Review: { fr: 'Vérifier', es: 'Revisar' },
   'Review:': { fr: 'Vérification :', es: 'Revisión:' },
   Scanning: { fr: 'Analyse', es: 'Escaneando' },
+  'QR scan progress': { fr: 'Progression du scan QR', es: 'Progreso del escaneo QR' },
+  '{scanned} frames scanned · about {progress}%': {
+    fr: '{scanned} images analysées · environ {progress} %',
+    es: '{scanned} fotogramas escaneados · aprox. {progress} %'
+  },
+  'Keep the QR inside the square': {
+    fr: 'Gardez le QR dans le carré',
+    es: 'Mantén el QR dentro del cuadrado'
+  },
   sent: { fr: 'envoyé', es: 'enviado' },
   'Sent to': { fr: 'Envoyé à', es: 'Enviado a' },
   Settings: { fr: 'Réglages', es: 'Ajustes' },
@@ -244,9 +258,9 @@ export const dynamicCopy = {
   used: { fr: 'utilisée', es: 'usada' },
   Uses: { fr: 'Utilise', es: 'Usa' },
   Wallet: { fr: 'Portefeuille', es: 'Cartera' },
-  'Wallet policy reviewed — show transaction': {
-    fr: 'Politique vérifiée — afficher la transaction',
-    es: 'Política revisada — mostrar transacción'
+  'Wallet policy reviewed. Show transaction': {
+    fr: 'Politique vérifiée. Afficher la transaction',
+    es: 'Política revisada. Mostrar transacción'
   },
   wallets: { fr: 'portefeuilles', es: 'carteras' },
   '· Address reused': { fr: '· Adresse réutilisée', es: '· Dirección reutilizada' },

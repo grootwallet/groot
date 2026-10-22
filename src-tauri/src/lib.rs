@@ -7,6 +7,8 @@ mod auth;
 pub mod bsms;
 mod build_network;
 mod compact_filters;
+pub mod coordination;
+pub mod coordination_transport;
 mod direct_rpc;
 pub mod external_signer;
 mod hardware;
@@ -199,6 +201,7 @@ pub fn run() {
             wallet::ur_encode_psbt,
             wallet::ur_decode_psbt,
             wallet::profile_commands::wallet_lock,
+            wallet::profile_commands::wallet_lock_all,
             wallet::pin_change::wallet_pin_change,
             wallet::profile_commands::wallet_profiles,
             wallet::profile_commands::wallet_session,
@@ -277,6 +280,26 @@ pub fn run() {
             wallet::hardware_commands::multisig_policy_verification_address,
             wallet::hardware_commands::multisig_draft_policy_verification_address,
             wallet::multisig_setup_commands::multisig_preview,
+            wallet::coordination_commands::coordination_pairing_invitation,
+            wallet::coordination_commands::coordination_pairing_cancel,
+            wallet::coordination_commands::coordination_decode_invitation,
+            wallet::coordination_commands::coordination_mobile_accept,
+            wallet::coordination_commands::coordination_pending_mobile_pairings,
+            wallet::coordination_commands::coordination_mobile_resume,
+            wallet::coordination_commands::coordination_mobile_await_final,
+            wallet::coordination_commands::coordination_desktop_accept,
+            wallet::coordination_commands::coordination_desktop_finalize,
+            wallet::coordination_commands::coordination_mobile_final_inspect,
+            wallet::coordination_commands::coordination_mobile_complete,
+            wallet::coordination_commands::coordination_mobile_recovery_record,
+            wallet::coordination_commands::coordination_mobile_recovery_inspect,
+            wallet::coordination_commands::coordination_mobile_recover,
+            wallet::coordination_commands::coordination_mobile_psbt_review,
+            wallet::coordination_commands::coordination_mobile_signer_check,
+            wallet::coordination_commands::coordination_mobile_sign_psbt,
+            wallet::coordination_commands::coordination_status,
+            wallet::coordination_commands::coordination_watch_only_encode,
+            wallet::coordination_commands::coordination_watch_only_decode,
             wallet::multisig_setup_commands::multisig_setup_draft,
             wallet::multisig_setup_commands::multisig_setup_draft_save,
             wallet::multisig_setup_commands::multisig_setup_draft_discard,
@@ -306,6 +329,7 @@ pub fn run() {
             wallet::multisig_proposal_commands::multisig_tx_prepare,
             wallet::multisig_proposal_commands::multisig_policy_renewal_prepare,
             wallet::multisig_proposal_commands::multisig_delayed_spend_prepare,
+            wallet::multisig_proposal_commands::multisig_spending_paths,
             wallet::multisig_proposal_commands::multisig_tx_max_spend,
             wallet::multisig_coin_selection_preview,
             wallet::multisig_proposal_commands::multisig_proposals,

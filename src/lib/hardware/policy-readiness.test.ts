@@ -46,7 +46,7 @@ describe('hardware policy readiness', () => {
   });
 
   it('separates vendor firmware candidates from the pinned delayed-policy adapter boundary', () => {
-    for (const label of ['Ledger', 'BitBox02', 'BitBox Nova', 'Jade']) {
+    for (const label of ['Ledger', 'BitBox02', 'BitBox Nova', 'Jade', 'Jade Plus']) {
       expect(hardwarePolicyCompatibility({ label }, 'standard')).toBe('supported');
       expect(hardwarePolicyCompatibility({ label }, 'delayed')).toBe('firmware_candidate');
     }

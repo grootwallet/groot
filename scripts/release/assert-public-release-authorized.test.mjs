@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -43,12 +43,27 @@ test('a blocked authorization cannot be used for public packaging', () => {
   }
 });
 
-test('the repository authorizes the v5.2.0 release tag', () => {
-  assert.doesNotThrow(() =>
-    verifyPublicReleaseAuthorization({
-      commit
-    })
-  );
+test('the public approval binds exact v5.3.0 and rejects prereleases and other versions', () => {
+  const root = fixture();
+  try {
+    for (const file of ['mainnet-release-authorization.json', 'mainnet-release-checklist.md'])
+      cpSync(new URL(`../../docs/${file}`, import.meta.url), join(root, 'docs', file));
+    cpSync(
+      new URL('../../docs/adr/0105-authorize-5-3-0-release-campaign.md', import.meta.url),
+      join(root, 'docs/adr/0105-authorize-5-3-0-release-campaign.md')
+    );
+    writeFileSync(join(root, 'package.json'), '{"version":"5.3.0"}\n');
+    assert.doesNotThrow(() => verifyPublicReleaseAuthorization({ repoRoot: root, commit }));
+    for (const version of ['5.2.0', '5.3.0-rc18', '5.3.1']) {
+      writeFileSync(join(root, 'package.json'), JSON.stringify({ version }));
+      assert.throws(
+        () => verifyPublicReleaseAuthorization({ repoRoot: root, commit }),
+        /package version is invalid|authorization does not name the package version/
+      );
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test('approval must bind the package version, release tag, accepted ADR, and closed checklist', () => {

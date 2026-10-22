@@ -35,16 +35,23 @@ contains_fixed '"regtest" | "signet" | "testnet4" | "mainnet" | "multi" => {}' s
   || fail "the native compile-time network allowlist changed"
 node scripts/release/verify-mainnet-source-policy.mjs
 contains_fixed '"status": "approved"' docs/mainnet-release-authorization.json \
-  || fail "the v5.2.0 public-release authorization is not approved"
+  || fail "the v5.3.0 public-release authorization is not approved"
 contains_fixed '"schemaVersion": 2' docs/mainnet-release-authorization.json \
   || fail "the authorization record does not use the version/tag schema"
-contains_fixed '"authorizedVersion": "5.2.0"' docs/mainnet-release-authorization.json \
-  || fail "the authorization record does not name v5.2.0"
-contains_fixed '"authorizedTag": "v5.2.0"' docs/mainnet-release-authorization.json \
-  || fail "the authorization record does not name the v5.2.0 tag"
-contains_fixed '"decisionAdr": "0088"' docs/mainnet-release-authorization.json \
-  || fail "the authorization record does not name ADR 0088"
-node scripts/release/assert-public-release-authorized.mjs "$(git rev-parse HEAD)"
+contains_fixed '"authorizedVersion": "5.3.0"' docs/mainnet-release-authorization.json \
+  || fail "the authorization record does not name v5.3.0"
+contains_fixed '"authorizedTag": "v5.3.0"' docs/mainnet-release-authorization.json \
+  || fail "the authorization record does not name the v5.3.0 tag"
+contains_fixed '"decisionAdr": "0105"' docs/mainnet-release-authorization.json \
+  || fail "the authorization record does not name ADR 0105"
+release_version="$(node -p "require('./package.json').version")"
+if [[ "$release_version" =~ ^5\.3\.0-rc[1-9][0-9]*$ ]]; then
+  if node scripts/release/assert-public-release-authorized.mjs "$(git rev-parse HEAD)" >/dev/null 2>&1; then
+    fail "a prerelease candidate was authorized for public packaging"
+  fi
+else
+  node scripts/release/assert-public-release-authorized.mjs "$(git rev-parse HEAD)"
+fi
 contains_fixed "const authorization = verifyPublicReleaseAuthorization({ repoRoot, commit });" scripts/release/package-macos-ga.mjs \
   || fail "the production packager no longer enforces version/tag release authorization"
 contains_fixed "remoteTagEntries.get(peeledTagRef) !== commit" scripts/release/package-macos-ga.mjs \
@@ -138,4 +145,4 @@ contains_fixed "Blockstream Jade" docs/mainnet-release-checklist.md \
 contains_fixed "The authorization covers macOS Apple silicon only." docs/mainnet-threat-model.md \
   || fail "the threat model no longer scopes the approved release platform"
 
-echo "Mainnet release gate: v5.2.0 is approved for the exact annotated remote tag."
+echo "Mainnet release gate: v5.2.0 approval remains exact; prerelease public packaging is blocked."

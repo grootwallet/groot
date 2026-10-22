@@ -1,4 +1,5 @@
 export * from './contracts/errors';
+export * from './contracts/coordination';
 export * from './contracts/hardware';
 export * from './contracts/multisig';
 export * from './contracts/port';

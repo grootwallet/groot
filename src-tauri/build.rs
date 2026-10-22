@@ -3,6 +3,8 @@ fn main() {
     println!("cargo:rerun-if-env-changed=GROOT_BUILD_COMMIT");
     println!("cargo:rerun-if-env-changed=GROOT_BUNDLED_HWI_RESOURCE");
     println!("cargo:rerun-if-env-changed=GROOT_HWI_SHA256");
+    println!("cargo:rerun-if-env-changed=GROOT_HWI_RUNTIME_SHA256");
+    println!("cargo:rerun-if-env-changed=GROOT_HWI_SESSION_PROTOCOL");
     println!("cargo:rerun-if-env-changed=GROOT_MACOS_SIGNING_TEAM_ID");
     watch_git_identity();
     println!(
@@ -18,9 +20,52 @@ fn main() {
     println!("cargo:rustc-cfg=groot_network=\"{network}\"");
     let compiled_team_id = std::env::var("GROOT_MACOS_SIGNING_TEAM_ID")
         .unwrap_or_else(|_| "REHEARSAL_ONLY".to_owned());
+    let fast_runtime_scope = network == "multi"
+        && std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("macos")
+        && (compiled_team_id == "REHEARSAL_ONLY"
+            || (compiled_team_id == "6Z85HGDUU7" && env!("CARGO_PKG_VERSION") == "5.3.0"));
+    if std::env::var_os("GROOT_HWI_RUNTIME_SHA256").is_some() && !fast_runtime_scope {
+        panic!("The extracted HWI runtime requires an approved multi-network release scope");
+    }
+    if std::env::var_os("GROOT_HWI_RUNTIME_SHA256").is_some()
+        && std::env::var_os("GROOT_HWI_SHA256").is_none()
+    {
+        panic!("The extracted runtime requires the frozen source HWI digest");
+    }
+    if compiled_team_id == "6Z85HGDUU7"
+        && std::env::var_os("GROOT_HWI_RUNTIME_SHA256").is_some()
+        && std::env::var("GROOT_HWI_SESSION_PROTOCOL").as_deref() != Ok("1")
+    {
+        panic!("The 5.3.0 Developer ID runtime requires the one-operation session protocol");
+    }
+    if std::env::var_os("GROOT_HWI_SESSION_PROTOCOL").is_some()
+        && (std::env::var("GROOT_HWI_SESSION_PROTOCOL").as_deref() != Ok("1")
+            || std::env::var_os("GROOT_HWI_RUNTIME_SHA256").is_none()
+            || std::env::var_os("GROOT_HWI_SHA256").is_none()
+            || !fast_runtime_scope)
+    {
+        panic!("The operation worker requires the sealed approved HWI runtime");
+    }
     println!("cargo:rustc-env=GROOT_COMPILED_MACOS_SIGNING_TEAM_ID={compiled_team_id}");
     let commit = build_commit();
     println!("cargo:rustc-env=GROOT_BUILD_COMMIT={commit}");
+
+    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("ios") {
+        println!("cargo:rerun-if-changed=src/native_backup/ios.mm");
+        println!("cargo:rerun-if-changed=src/native_backup/ios_device_key.mm");
+        cc::Build::new()
+            .cpp(true)
+            .file("src/native_backup/ios.mm")
+            .file("src/native_backup/ios_device_key.mm")
+            .flag("-fobjc-arc")
+            .flag("-fblocks")
+            .compile("groot_ios_native_backup");
+        println!("cargo:rustc-link-lib=framework=Foundation");
+        println!("cargo:rustc-link-lib=framework=UIKit");
+        println!("cargo:rustc-link-lib=framework=Security");
+        println!("cargo:rustc-link-lib=framework=LocalAuthentication");
+    }
+
     tauri_build::build()
 }
 

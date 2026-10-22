@@ -65,6 +65,7 @@
 
 <style>
   .warning-notice {
+    text-align: left;
     border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
     border-radius: var(--radius-control);
     padding: 12px 14px;
@@ -116,6 +117,27 @@
       grid-column: 2;
       grid-row: 1 / span 2;
       align-self: center;
+      margin: 0;
+    }
+  }
+  @media (max-width: 760px) {
+    .compact-action {
+      padding: 10px 12px;
+      line-height: 1.35;
+    }
+    .compact-action .warning-notice-content {
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 4px 12px;
+      align-items: center;
+    }
+    .compact-action .warning-notice-title,
+    .compact-action .warning-notice-body {
+      grid-column: 1;
+    }
+    .compact-action .warning-notice-content > :global(.button) {
+      grid-column: 2;
+      grid-row: 1 / span 2;
+      min-height: 44px;
       margin: 0;
     }
   }

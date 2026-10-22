@@ -16,7 +16,7 @@ for (const language of ['en', 'fr', 'es'] as const) {
       name: language === 'en' ? 'What’s new' : language === 'fr' ? 'Nouveautés' : 'Novedades'
     });
     await expect(modal).toBeVisible({ timeout: 20_000 });
-    await expect(modal.locator('li')).toHaveCount(5);
+    await expect(modal.locator('li')).toHaveCount(6);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
       true
     );

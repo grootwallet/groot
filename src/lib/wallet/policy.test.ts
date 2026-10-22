@@ -459,3 +459,30 @@ describe('wallet invariants', () => {
     expect(approximateBlockDuration(null)).toBeNull();
   });
 });
+
+describe('Continuity presentation', () => {
+  for (const family of [false, true]) {
+    it(`keeps primary roles distinct from delayed roles for ${family ? 'Family' : 'Partner'}`, () => {
+      const primary = { threshold: 2, signerIds: family ? ['p1', 'p2'] : ['o1', 'o2', 'o3'] };
+      const recoveryTemplate = family
+        ? { type: 'family_continuity_v1', parents: primary }
+        : { type: 'partner_continuity_v1', owner: primary };
+      const result = walletPolicyPresentation({
+        recoveryTemplate,
+        threshold: 2,
+        cosigners: Array(family ? 7 : 8).fill({})
+      } as MultisigWallet);
+      expect(result.delayed).toBe(true);
+      expect(result.primarySignerCount).toBe(family ? 2 : 3);
+      expect(result.delayedKeyLabel).toBeNull();
+    });
+  }
+});
+
+it('recognizes only the fixed continuity policy types', async () => {
+  const { isContinuityPolicyType } = await import('./policy');
+  for (const type of ['partner_continuity_v1', 'family_continuity_v1'])
+    expect(isContinuityPolicyType(type)).toBe(true);
+  for (const type of [undefined, 'standard', 'recovery', 'inheritance', 'unknown_continuity'])
+    expect(isContinuityPolicyType(type)).toBe(false);
+});

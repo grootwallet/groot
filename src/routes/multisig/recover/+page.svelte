@@ -1,4 +1,5 @@
 <script lang="ts">
+  import WarningNotice from '$lib/components/WarningNotice.svelte';
   import { locale } from '$lib/i18n';
   import { translate, localizedError } from '$lib/i18n-catalog';
   import { Check, FileUp } from '@lucide/svelte';
@@ -325,7 +326,13 @@
               total: expectedSigners.length
             })}
           </p>
-          {#if hardwareError}<p class="form-error" role="alert">{hardwareError}</p>{/if}
+          {#if hardwareError}<WarningNotice
+              tone="danger"
+              icon
+              role="alert"
+              ariaLive="polite"
+              body={hardwareError}
+            />{/if}
         </section>{/if}
       <label class="check-row"
         ><input
@@ -366,9 +373,13 @@
           autocomplete="new-password"
         />
       </div>
-      {#if pin && confirmation && pin !== confirmation}<p class="form-error">
-          {translate($locale, 'PINs do not match.')}
-        </p>{/if}<Button
+      {#if pin && confirmation && pin !== confirmation}<WarningNotice
+          tone="danger"
+          icon
+          role="alert"
+          ariaLive="polite"
+          body={translate($locale, 'PINs do not match.')}
+        />{/if}<Button
         class="full"
         disabled={!verified ||
           !signersReady ||
@@ -380,7 +391,7 @@
         loadingLabel={translate($locale, 'Recovering wallet…')}
         onclick={recover}>{translate($locale, 'Recover wallet')}</Button
       >{/if}
-    {#if error}<p class="form-error" aria-live="polite">{error}</p>{/if}
+    {#if error}<WarningNotice tone="danger" icon role="alert" ariaLive="polite" body={error} />{/if}
   </section>
 </div>
 
@@ -413,10 +424,12 @@
   onclear={() => (pinPositions = '')}
   onsubmit={submitPin}
   onretry={() => {
-    const device = pinDevice;
     pinDevice = null;
     pinChallenge = '';
-    if (device) void identifyDevice(device);
+    pinPositions = '';
+    pinError = '';
+    pinErrorCode = '';
+    void scanDevices();
   }}
   onclose={() => {
     pinDevice = null;

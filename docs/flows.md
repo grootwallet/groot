@@ -1,6 +1,8 @@
 # User flows
 
-State transitions for the 5.2.0 GA preparation source. [Product behavior](product-spec.md) owns policy; [design system](design-system.md) owns presentation; [status](implementation-status.md) owns availability. Do not append historical overrides here.
+Desktop state transitions from the shipped 5.2.0 baseline. The [5.3 mobile plan](mobile-5.3-plan.md) owns mobile candidate flows; internal iOS Testnet4 key and QR signer flows are enabled under ADR 0096 for acceptance testing, while other mobile platforms/networks, USB signing and multisig broadcast remain blocked. [Product behavior](product-spec.md) owns policy; [design system](design-system.md) owns presentation; [status](implementation-status.md) owns availability. Do not append historical overrides here.
+
+ADR 0093 requires phone software create/restore and desktop-led multisig phone pairing/recovery/signing as distinct mobile flows. They are wired in the RC2 candidate; complete physical acceptance remains pending. QR shares public policy and PSBTs, never private keys; the [RC2 record](testing/5.3.0-rc2-mobile-keys.md) records what is actually verified.
 
 ## Create and restore
 
@@ -87,3 +89,35 @@ Settings exposes Updates beside build identity; the side menu exposes it only af
 `Updates → manual check OR daily opt-in → newer stable offer / no update / offline / rate limit → signed-manifest verification → bounded installer download → digest verification → reveal → explicit user installation`
 
 Closing in-flight work cancels it; failed/cancelled stages are removed. Missing owner trust key disables preparation with an inline reason. Wallet dialogs take precedence; corner actions and release toasts do not overlap them.
+
+## Accepted payment with local recording pending
+
+After Core accepts a payment, local storage failure keeps the accepted transaction ID visible with an inline warning and success notification. Do not offer another payment from that result. Sync repairs the existing saved proposal from exact canonical transaction identity; a missing snapshot is never replaced by an invented balance. Later refresh failure after a committed broadcast remains a separate pending-refresh state (ADR 0090).
+
+Separate mobile setup (`/mobile/pair`, `/mobile/recover`, `/mobile/watch`) remains reachable when an existing selected wallet is locked, including direct startup and Add another wallet. These routes pause selected-wallet session redirects and background sync; they never unlock that wallet. Phone-key creation/recovery still requires its own native backup and credential/device authorization. Background locking and authenticated wallet/signing routes remain protected.
+
+Phone-key pairing uses the same optional native backup verification as software creation. Cancelling word presentation creates no signer; Verify later stages the key with `backupVerified=false`, preserved through restart and final policy acceptance. Pairing and the shared-wallet policy page show the reminder. The latter offers native verification/reveal using a fresh app PIN and device authorization. Only a successful native word check clears the reminder. Existing staging and profile formats remain compatible.
+
+After a QR is completely verified, release its camera stream and replace the preview with a compact success result before credential entry. Native mobile content scrolls between the fixed safe header and bottom controls, never beneath them. Keep setup copy brief; phone signer connections are QR. iOS uses Groot credentials without repeated platform prompts; an old key may need one final platform approval (ADR 0097).
+
+Unlocked mobile screens omit the brand header and start below the system safe area. Sync and backup reminders use compact inline actions with 44px touch targets; recovery verification remains available. This presentation change has no BIP or persisted-format impact.
+
+Watch-only QR import retains an explicit Back to wallet action when mobile branding is hidden; leaving before camera permission resolves releases the eventual stream.
+
+Coldcard receive and policy-address checks report a missing device policy with instructions to save and import the existing policy file. They do not record address verification on this error. Other device, cancellation and transport errors retain their existing classification.
+
+Recipient fields disable OS capitalization, autocorrection and spellcheck so the system does not alter Bitcoin address text. Native network and checksum validation remains authoritative.
+
+Spend policy failures explain the specific reason inline and in the existing toast, including the 100,000-sat Mainnet fee limit and how to retry. Mainnet payment amounts have no rollout ceiling; standard PSBT review and authorization remain required (ADR 0099).
+
+## Fixed continuity rehearsal
+
+On test networks, choose Partner or Family → assign the fixed public signer roles → verify descriptor/first address → preserve the public backup → open the wallet. Mainnet creation is blocked. Phone pairing and direct USB Miniscript are not offered for these policies.
+
+Coins → choose a confirmed policy coin → choose an available named delayed path → recipient, labels and fee → review the actual PSBT and required roles → export/import partial signatures → finalize and broadcast after fresh native checks. Unavailable paths show the remaining blocks; a reorg, frozen input, stale chain state or missing role blocks progress with an inline error. Restart preserves the selected path through the transaction's exact CSV sequence. Renewal uses primary signatures and a fresh owned output; it is available before the delayed paths mature.
+
+## RC10 test-feedback corrections
+
+Saved signer → Check signer → connection/identity result leaves saved policy import/address evidence independent. Coldcard file import is an explicit acknowledgement performed outside Groot; its timestamp says Import recorded. Payment and policy setup/review errors use the existing WarningNotice, including fee-estimator failures. Partial Core fee responses enable only available target buttons; missing targets stay disabled, with explicit custom-rate entry. No rate is fabricated and an unset/invalid custom rate blocks preparation. Mobile payment actions retain scroll clearance above fixed navigation when longer localized errors appear.
+
+Hardware account-read failure remains visible as a shared error notice after closing the scan dialog; reconnecting or retrying clears the stale error before a new attempt. Creation/recovery/settings/mobile and credential validation use the same notice, preserving their existing actions and error classification.

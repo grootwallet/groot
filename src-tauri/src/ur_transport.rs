@@ -32,11 +32,8 @@ impl UrTransportError {
         match self {
             Self::TooLarge | Self::TooManyFrames => "psbt_too_large",
             Self::InvalidPsbt => "malformed_psbt",
-            Self::Empty
-            | Self::InvalidFrame
-            | Self::WrongType
-            | Self::Incomplete
-            | Self::InvalidCbor => "invalid_ur",
+            Self::Incomplete => "qr_incomplete",
+            Self::Empty | Self::InvalidFrame | Self::WrongType | Self::InvalidCbor => "invalid_ur",
         }
     }
 }
@@ -401,7 +398,7 @@ mod tests {
             (UrTransportError::TooManyFrames, "psbt_too_large"),
             (UrTransportError::InvalidFrame, "invalid_ur"),
             (UrTransportError::WrongType, "invalid_ur"),
-            (UrTransportError::Incomplete, "invalid_ur"),
+            (UrTransportError::Incomplete, "qr_incomplete"),
             (UrTransportError::InvalidCbor, "invalid_ur"),
             (UrTransportError::InvalidPsbt, "malformed_psbt"),
         ];

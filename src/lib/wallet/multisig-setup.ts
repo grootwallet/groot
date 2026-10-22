@@ -1,4 +1,10 @@
-import type { MultisigSetupDraft, MultisigSetupStage } from './contracts';
+import type { CosignerDraft } from '$lib/multisig/policy';
+import type {
+  MultisigSetupDraft,
+  MultisigSetupStage,
+  MultisigSetupTemplate,
+  RecoveryTemplate
+} from './contracts';
 
 const UNIX_SECONDS_PATTERN = /^\d{1,20}$/;
 
@@ -22,10 +28,50 @@ export function multisigVerificationTimestampForDisplay(value: string): string {
 }
 
 export function multisigSetupSignerTarget(draft: MultisigSetupDraft): number {
+  if (draft.templateKind === 'partner_continuity_v1') return 8;
+  if (draft.templateKind === 'family_continuity_v1') return 7;
   if (draft.templateKind !== 'standard') return 4;
   if (draft.standardRecipe === 'two_of_three') return 3;
   if (draft.standardRecipe === 'three_of_five') return 5;
   return draft.customCosignerCount;
+}
+
+export function multisigSetupRecoveryTemplate(
+  templateKind: MultisigSetupTemplate,
+  cosigners: CosignerDraft[],
+  recoveryDelayBlocks = 4_320
+): RecoveryTemplate | null {
+  const ids = cosigners.map((key) => key.id);
+  if (templateKind === 'standard') return null;
+  if (templateKind === 'partner_continuity_v1') {
+    if (ids.length < 8) return null;
+    return {
+      type: 'partner_continuity_v1',
+      owner: { threshold: 2, signerIds: ids.slice(0, 3) },
+      partner: { threshold: 2, signerIds: ids.slice(3, 5) },
+      estate: { threshold: 2, signerIds: ids.slice(5, 8) }
+    };
+  }
+  if (templateKind === 'family_continuity_v1') {
+    if (ids.length < 7) return null;
+    return {
+      type: 'family_continuity_v1',
+      parents: { threshold: 2, signerIds: ids.slice(0, 2) },
+      childAssistance: { threshold: 1, signerIds: ids.slice(2, 4) },
+      childInheritance: { threshold: 2, signerIds: ids.slice(4, 6) },
+      executorSignerId: ids[6]
+    };
+  }
+  if (ids.length < 4) return null;
+  return {
+    type: 'recovery',
+    immediate: { threshold: 2, signerIds: ids.slice(0, 3) },
+    recovery: {
+      threshold: 1,
+      signerIds: [ids[3]],
+      availableAfterBlocks: templateKind === 'inheritance' ? 52_560 : recoveryDelayBlocks
+    }
+  };
 }
 
 export function multisigSetupStageLabel(stage: MultisigSetupStage): string {

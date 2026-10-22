@@ -17,6 +17,11 @@ export const hardwareCopy = {
   },
   'Ledger Nano S Plus': { fr: 'Ledger Nano S Plus', es: 'Ledger Nano S Plus' },
   'Coldcard Mk4': { fr: 'Coldcard Mk4', es: 'Coldcard Mk4' },
+  'Jade may be on another Bitcoin network. Check that it is unlocked and set to {network}, then try again.':
+    {
+      fr: 'Jade utilise peut-être un autre réseau Bitcoin. Vérifiez qu’elle est déverrouillée et réglée sur {network}, puis réessayez.',
+      es: 'Es posible que Jade use otra red Bitcoin. Comprueba que esté desbloqueado y configurado en {network}, y vuelve a intentarlo.'
+    },
   'Coldcard fee limit': {
     fr: 'Limite de frais Coldcard',
     es: 'Límite de comisión de Coldcard'
@@ -186,9 +191,9 @@ export const hardwareCopy = {
       fr: 'Verrouillé. Démarrez la matrice du PIN, puis touchez les cases vides correspondant aux positions affichées sur l’appareil.',
       es: 'Bloqueado. Inicia la matriz del PIN y toca las casillas vacías que correspondan a las posiciones mostradas en el dispositivo.'
     },
-  'Unlocked. Select this signer to continue.': {
-    fr: 'Déverrouillé. Sélectionnez ce signataire pour continuer.',
-    es: 'Desbloqueado. Selecciona este firmante para continuar.'
+  'Recently unlocked. Select this signer to verify it again.': {
+    fr: 'Déverrouillé récemment. Sélectionnez ce signataire pour le vérifier à nouveau.',
+    es: 'Desbloqueado recientemente. Selecciona este firmante para verificarlo de nuevo.'
   },
   'Passphrase protection is enabled. Choose the standard wallet with no passphrase, or select a hidden wallet on-device when supported.':
     {
@@ -272,9 +277,9 @@ export const hardwareCopy = {
     fr: 'Trezor indisponible',
     es: 'Trezor no disponible'
   },
-  'Close other wallet apps, reconnect Trezor, and try again.': {
-    fr: 'Fermez les autres applications de portefeuille, reconnectez Trezor et réessayez.',
-    es: 'Cierra las demás aplicaciones de cartera, vuelve a conectar Trezor e inténtalo de nuevo.'
+  'Close other wallet apps and scan again. Reconnect Trezor if it still cannot be found.': {
+    fr: 'Fermez les autres applications de portefeuille et relancez la recherche. Reconnectez Trezor si Groot ne le trouve toujours pas.',
+    es: 'Cierra las demás aplicaciones de cartera y vuelve a buscar. Reconecta Trezor si Groot aún no lo encuentra.'
   },
   'Close other wallet apps and try again.': {
     fr: 'Fermez les autres applications de portefeuille et réessayez.',
@@ -285,8 +290,8 @@ export const hardwareCopy = {
     es: 'Trezor no aceptó esa entrada de la matriz.'
   },
   'Select this signer, unlock Ledger, and open Bitcoin Test—not Bitcoin—to continue.': {
-    fr: 'Sélectionnez ce signataire, déverrouillez Ledger et ouvrez Bitcoin Test — pas Bitcoin — pour continuer.',
-    es: 'Selecciona este firmante, desbloquea Ledger y abre Bitcoin Test —no Bitcoin— para continuar.'
+    fr: 'Sélectionnez ce signataire, déverrouillez Ledger et ouvrez Bitcoin Test, pas Bitcoin, pour continuer.',
+    es: 'Selecciona este firmante, desbloquea Ledger y abre Bitcoin Test, no Bitcoin, para continuar.'
   },
   'Select this signer, unlock Ledger, and open Bitcoin to continue.': {
     fr: 'Sélectionnez ce signataire, déverrouillez Ledger et ouvrez Bitcoin pour continuer.',

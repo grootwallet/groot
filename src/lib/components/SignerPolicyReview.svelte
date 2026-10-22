@@ -1,7 +1,7 @@
 <script lang="ts">
   import { locale } from '$lib/i18n';
   import { translate } from '$lib/i18n-catalog';
-  import { AlertTriangle, Check, ChevronRight, ShieldCheck } from '@lucide/svelte';
+  import { Check, ChevronRight, ShieldCheck } from '@lucide/svelte';
   import type { CosignerDraft } from '$lib/multisig/policy';
   import type {
     MultisigWallet,
@@ -16,6 +16,7 @@
   import { copyText } from '$lib/clipboard';
   import { toast } from '$lib/stores/toasts';
   import Button from './Button.svelte';
+  import WarningNotice from './WarningNotice.svelte';
   import LocalTimestamp from './LocalTimestamp.svelte';
   import PolicySignerList from './PolicySignerList.svelte';
   import HardwareAddressComparison from './HardwareAddressComparison.svelte';
@@ -211,11 +212,14 @@
         >{/if}
     </section>{/if}
 
-  {#if error}<div class="hardware-inline-error" role="alert" aria-live="polite">
-      <AlertTriangle size={18} /><span
-        ><strong>{translate($locale, 'Device needs attention')}</strong><small>{error}</small></span
-      >
-    </div>{/if}
+  {#if error}<WarningNotice
+      tone="danger"
+      icon
+      role="alert"
+      ariaLive="polite"
+      title={translate($locale, 'Device needs attention')}
+      body={error}
+    />{/if}
   <div class="modal-footer policy-review-actions">
     {#if onback}<Button variant="secondary" disabled={busy} onclick={onback}
         >{translate($locale, 'Back')}</Button
@@ -229,10 +233,123 @@
         })}</Button
       >
     {:else if busy}<Button onclick={onshowtransaction}
-        >{translate($locale, 'Wallet policy reviewed — show transaction')}</Button
+        >{translate($locale, 'Wallet policy reviewed. Show transaction')}</Button
       >
     {:else}<Button onclick={oncontinue}
         >{translate($locale, 'Review & sign on {device}', { device: deviceName })}</Button
       >{/if}
   </div>
 </section>
+
+<style>
+  /* Keep the original cascade weight while constraining these rules to this owner. */
+
+  :global(.policy-device-expectation):where(.policy-device-expectation) {
+    display: grid;
+    gap: 9px;
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+    background: var(--surface-inset);
+  }
+  :global(.policy-device-expectation):where(.policy-device-expectation) > :global(strong) {
+    font-size: 14px;
+  }
+  :global(.policy-device-expectation):where(.policy-device-expectation) :global(p) {
+    margin: 0;
+    color: var(--text-soft);
+    font-size: var(--font-size-meta);
+    line-height: 1.45;
+  }
+  :global(.policy-device-expectation):where(.policy-device-expectation) :global(dl) {
+    display: grid;
+    gap: 7px;
+    margin: 0;
+  }
+  :global(.policy-device-expectation):where(.policy-device-expectation) :global(dl div) {
+    display: grid;
+    grid-template-columns: 110px minmax(0, 1fr);
+    gap: 10px;
+    font-size: var(--font-size-meta);
+  }
+  :global(.policy-device-expectation):where(.policy-device-expectation) :global(dt) {
+    color: var(--muted);
+  }
+  :global(.policy-device-expectation):where(.policy-device-expectation) :global(dd) {
+    margin: 0;
+    color: var(--text);
+    font-weight: 400;
+    text-align: right;
+  }
+  :global(.policy-address-check):where(.policy-address-check) {
+    display: grid;
+    gap: 9px;
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+    background: var(--surface-inset);
+  }
+
+  :global(.policy-address-summary):where(.policy-address-summary) {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+    background: var(--surface-control);
+    color: var(--text);
+    padding: 0.85rem 1rem;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  :global(.policy-address-summary):where(.policy-address-summary) :global(code) {
+    font-size: 0.95rem;
+    font-weight: 500;
+  }
+
+  :global(.policy-address-summary):where(.policy-address-summary) :global(span) {
+    color: var(--link);
+    font-size: 0.82rem;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  :global(.policy-address-summary:hover):where(.policy-address-summary),
+  :global(.policy-address-summary:focus-visible):where(.policy-address-summary) {
+    border-color: var(--focus);
+    outline: none;
+  }
+
+  :global(.policy-review-step):where(.policy-review-step) {
+    margin: 0 0 2px;
+    color: var(--link);
+    font-size: 0.78rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  :global(.policy-address-check):where(.policy-address-check) > :global(div:first-child) {
+    display: grid;
+    gap: 3px;
+  }
+  :global(.policy-address-check):where(.policy-address-check) > :global(div:first-child strong) {
+    font-size: 14px;
+  }
+  :global(.policy-address-check):where(.policy-address-check) :global(small) {
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+    line-height: 1.4;
+  }
+
+  @media (max-width: 760px) {
+    :global(.policy-device-expectation):where(.policy-device-expectation) :global(dl div) {
+      grid-template-columns: 1fr;
+    }
+    :global(.policy-device-expectation):where(.policy-device-expectation) :global(dd) {
+      text-align: left;
+    }
+  }
+</style>

@@ -156,6 +156,7 @@ Passing dummy, simulator, or unit tests is not physical-device, operating-system
 
 - No software can make key cracking literally impossible or prove that an opaque platform/hardware entropy chain is uncompromised. The claim is conditional computational infeasibility under standard cryptographic and OS-CSPRNG assumptions.
 - A privileged compromised host can capture a hot software key, substitute public transaction intent, manipulate native UI, or deny service. Hardware multisig across independently administered devices reduces key-extraction risk but does not make the coordinator display trustworthy.
+- ADR 0099 removes the rollout amount/debit ceiling at the owner’s request. A valid payment above 0.01 BTC can now be signed and broadcast; larger approved mistakes have no rollout loss bound. Native final-PSBT checks, explicit amount/recipient/change review and the independent 100,000-sat Mainnet fee limit remain enforced. Boundary, fee, monetary-range and error-translation regressions are required; this change needs fresh reviewed-source/release evidence before public distribution.
 - Users can approve a wrong full address or malicious hardware display, lose or expose words/passphrases/descriptors, create correlated signer backups, or choose recovery scan parameters that omit history.
 - Backends and public metadata expose timing, balances, transaction graph, xpub/descriptor-derived addresses, and network identity. Tor reduces transport linkage but does not make wallet queries information-free.
 - Flash deletion, cloud/system backups, swap, crash dumps, cameras, and accessibility tooling may retain sensitive data beyond Groot's control.
@@ -173,3 +174,55 @@ wallet policies require fresh evidence and an exact authorization record.
 ## Change-control rule
 
 Every change that introduces an asset, trust boundary, parser, signer, backend, network protocol, recovery path, persistence format, platform permission, build/update path, or transaction type must update this document and the relevant ADR/checklist in the same change. A security control without a named failure test and release evidence is a design claim, not a completed mitigation.
+
+## Unified continuity rehearsal boundary
+
+ADR 0100 enables fixed-template coordination on test networks only. Hostile PSBT sequences cannot select a different delay; proposal identity, verified descriptors, eligible roles and fresh input maturity are native authorization inputs. Family assistance requires both role groups. Reorgs invalidate premature saved proposals. Existing primary/delayed storage and descriptor backups remain unchanged. Direct USB Miniscript and phone enrollment into continuity are blocked; standard phone signing and Coldcard rehearsal retain their existing controls. Independent review and physical acceptance remain pending; this is not Mainnet continuity authorization.
+
+## 5.3 Mainnet HWI operation-session boundary
+
+Status: owner-authorized implementation; signed GA certification pending.
+ADR 0103 extends the sealed, extracted HWI 3.2.0 one-client
+operation session from Testnet4 to Mainnet. ADR 0104 limits the associated 5.3
+GA scope to existing BIP84 and standard BIP48 desktop wallets; phone and fixed
+Continuity remain test-network previews. The owner tested all seven Mainnet
+signer models on the ad-hoc RC18 package and explicitly authorized the
+Developer ID-signed fast runtime. That does not certify the future signed
+package or authorize public GA distribution.
+
+The trust boundary passes a Mainnet request from Rust to a bundled
+Python worker and the selected USB signer, then return public identity,
+display or signature results to Rust. The worker, its extracted modules,
+framing, device response and USB path must be treated as hostile even when the
+outer app package is signed. The speed improvement comes from avoiding repeated
+HWI startup and device reopening _within one request_, not from retaining
+signer authority across requests.
+
+| Threat                                                                       | Required control                                                                                                                                                                                     | Adversarial evidence before Mainnet use                                                                                                             |
+| ---------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Testnet selector, xpub or BIP84/BIP48 account path used for a Mainnet wallet | Bind compiled active chain, worker selector, coin type, xpub version, descriptor and PSBT network before opening or acting on a device; use HWI's explicit Mainnet selector                          | Wrong-chain, wrong-path, wrong-xpub-version and cross-network saved-signer cases must fail before display or signing on all supported request types |
+| A different, locked, reconnected or stale signer inherits authority          | Read full fresh fingerprint and account xpub on the same connection as the one action; match the exact selected saved signer and current wallet policy; never cache unlock, identity or policy state | Zero, multiple, ambiguous and mismatched candidates; lock, disconnect, reconnect and repeated-action sequences on every exact model                 |
+| A substituted or partially extracted HWI runtime changes commands or results | Verify pinned original HWI digest, extracted manifest, launcher/worker seal and outer app signature before each operation; fail closed, with no fallback to an unverified helper                     | Missing, mutated, unsigned and swapped runtime/worker fixtures; no device action and no automatic replay                                            |
+| A valid identity result is reused to display or sign a changed transaction   | Permit at most one action per process; Rust rechecks current wallet/proposal context, policy authorization, actual address or exact reviewed PSBT, and returned signature before merge               | Changed recipient, fee, inputs, sighash, policy, wallet selection, cancellation and post-review mutation fixtures                                   |
+| A timeout, malformed response or worker crash triggers duplicate action      | Bound stdin/stdout, time, child process group and cleanup; discard arbitrary vendor error text; terminal failure requires a fresh explicit user request                                              | Oversized/duplicate-key/malformed responses, timeout, kill/reap, cancellation and no-replay tests                                                   |
+
+The Testnet4 Jade shared-test selector must never be accepted on Mainnet.
+Coldcard external policy-file acknowledgement is not live device verification.
+No host benchmark proves trusted display or signature correctness. The 5.3.0
+release also faces a package-substitution threat: a separately extracted
+runtime could differ from the source HWI or from the runtime digest compiled
+into Groot. Production preparation signs every extracted Mach-O and the Python
+framework with the approved Developer ID team, hardened runtime and timestamp
+before freezing the manifest. The two unsigned builds and final packager must
+bind and verify that same manifest, then check it again inside the outer signed
+app. Wrong-team, unsigned, changed-module and mismatched-evidence inputs must
+fail before distribution. A notarized exact app and physical signer check remain
+required evidence.
+
+The owner reports RC18 Mainnet identity, health, address and signing success on
+all seven models. Device-free runtime integrity and wrong-network tests, source
+pin review, and the signed-worker startup probes support the implementation.
+Those results apply to the ad-hoc package or the isolated worker. The final
+Developer ID-signed app must still be checked with the same signer models and
+release inputs; the already released app retains its existing HWI path until
+that exact 5.3.0 package is approved and published.

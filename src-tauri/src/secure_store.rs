@@ -15,6 +15,7 @@ use uuid::Uuid;
 use zeroize::Zeroizing;
 
 const VERSION: u8 = 5;
+const IOS_DEVICE_VERSION: u8 = 6;
 const DEVICE_BOUND_VERSION: u8 = 2;
 const LEGACY_PORTABLE_VERSION: u8 = 3;
 const LEGACY_AAD_VERSION: u8 = 4;
@@ -74,6 +75,10 @@ pub enum SecureStoreError {
     InvalidCredential,
     #[error("secure storage is unavailable")]
     Unavailable,
+    #[error("device authorization was cancelled")]
+    DeviceAuthorizationCancelled,
+    #[error("the device-bound key is unavailable")]
+    DeviceKeyUnavailable,
 }
 
 fn fill_os_random(destination: &mut [u8]) -> Result<(), SecureStoreError> {
@@ -262,11 +267,15 @@ fn read_metadata(path: &Path) -> Result<Metadata, SecureStoreError> {
         serde_json::from_str(&encoded).map_err(|_| SecureStoreError::Corrupt)?;
     if !matches!(
         metadata.version,
-        DEVICE_BOUND_VERSION | LEGACY_PORTABLE_VERSION | LEGACY_AAD_VERSION | VERSION
+        DEVICE_BOUND_VERSION
+            | LEGACY_PORTABLE_VERSION
+            | LEGACY_AAD_VERSION
+            | VERSION
+            | IOS_DEVICE_VERSION
     ) {
         return Err(SecureStoreError::Corrupt);
     }
-    if metadata.version == DEVICE_BOUND_VERSION
+    if matches!(metadata.version, DEVICE_BOUND_VERSION | IOS_DEVICE_VERSION)
         && (metadata.device_nonce.is_none() || metadata.device_wrapped_key.is_none())
     {
         return Err(SecureStoreError::Corrupt);
@@ -279,7 +288,9 @@ fn read_metadata(path: &Path) -> Result<Metadata, SecureStoreError> {
         return Err(SecureStoreError::Corrupt);
     }
     match metadata.version {
-        LEGACY_AAD_VERSION | VERSION if metadata.kdf.as_ref() != Some(&current_kdf_metadata()) => {
+        LEGACY_AAD_VERSION | VERSION | IOS_DEVICE_VERSION
+            if metadata.kdf.as_ref() != Some(&current_kdf_metadata()) =>
+        {
             Err(SecureStoreError::Corrupt)
         }
         DEVICE_BOUND_VERSION | LEGACY_PORTABLE_VERSION if metadata.kdf.is_some() => {
@@ -340,6 +351,22 @@ fn load_portable_with_writer(
     write_metadata: impl FnOnce(&Path, &[u8]) -> Result<(), SecureStoreError>,
 ) -> Result<Zeroizing<Vec<u8>>, SecureStoreError> {
     let metadata = read_metadata(metadata_path)?;
+    if metadata.version == IOS_DEVICE_VERSION {
+        return load_ios_metadata(metadata, credential, context);
+    }
+    let plaintext = decrypt_metadata(&metadata, credential, context)?;
+    if metadata.version != VERSION {
+        let migrated = new_metadata(&plaintext, credential, context)?;
+        write_metadata(metadata_path, &encode_metadata(&migrated)?)?;
+    }
+    Ok(plaintext)
+}
+
+fn decrypt_metadata(
+    metadata: &Metadata,
+    credential: &str,
+    context: SecureStoreContext,
+) -> Result<Zeroizing<Vec<u8>>, SecureStoreError> {
     let salt = Zeroizing::new(decode(&metadata.salt)?);
     if salt.len() != 16 {
         return Err(SecureStoreError::Corrupt);
@@ -378,11 +405,6 @@ fn load_portable_with_writer(
     )
     .map_err(|_| SecureStoreError::Corrupt)?;
 
-    if metadata.version != VERSION {
-        let migrated = new_metadata(&plaintext, credential, context)?;
-        write_metadata(metadata_path, &encode_metadata(&migrated)?)?;
-    }
-
     Ok(plaintext)
 }
 
@@ -400,6 +422,30 @@ pub fn store(
     credential: &str,
     context: SecureStoreContext,
 ) -> Result<(), SecureStoreError> {
+    #[cfg(target_os = "ios")]
+    if context.purpose == SecureStorePurpose::WalletSecret && !metadata_path.exists() {
+        let metadata = new_metadata(secret, credential, context)?;
+        let key = ios_device_key(context, true)?;
+        return write_owner_only(
+            metadata_path,
+            &encode_metadata(&wrap_ios_metadata(metadata, context, &key)?)?,
+        );
+    }
+    #[cfg(target_os = "ios")]
+    if context.purpose == SecureStorePurpose::WalletSecret
+        && metadata_path.exists()
+        && read_metadata(metadata_path)?.version == IOS_DEVICE_VERSION
+    {
+        let key = ios_device_key(context, false)?;
+        return write_owner_only(
+            metadata_path,
+            &encode_metadata(&wrap_ios_metadata(
+                new_metadata(secret, credential, context)?,
+                context,
+                &key,
+            )?)?,
+        );
+    }
     store_portable(metadata_path, secret, credential, context)
 }
 
@@ -411,11 +457,285 @@ pub fn load(
     load_portable(metadata_path, credential, context)
 }
 
+fn device_wrap_aad(context: SecureStoreContext) -> Vec<u8> {
+    format!(
+        "groot/secure-store/v6/{}/{}/device-wrap",
+        context.wallet_id,
+        context.purpose.as_str()
+    )
+    .into_bytes()
+}
+
+#[cfg(any(target_os = "ios", test))]
+fn wrap_ios_metadata(
+    mut metadata: Metadata,
+    context: SecureStoreContext,
+    key: &[u8],
+) -> Result<Metadata, SecureStoreError> {
+    let wrapped = Zeroizing::new(decode(&metadata.credential_wrapped_key)?);
+    let (nonce, ciphertext) = encrypt_with_aad(key, &wrapped, &device_wrap_aad(context))?;
+    metadata.version = IOS_DEVICE_VERSION;
+    metadata.credential_wrapped_key.clear();
+    metadata.device_nonce = Some(BASE64.encode(nonce));
+    metadata.device_wrapped_key = Some(BASE64.encode(ciphertext));
+    Ok(metadata)
+}
+
+fn unwrap_ios_metadata(
+    mut metadata: Metadata,
+    context: SecureStoreContext,
+    key: &[u8],
+) -> Result<Metadata, SecureStoreError> {
+    if metadata.version != IOS_DEVICE_VERSION || !metadata.credential_wrapped_key.is_empty() {
+        return Err(SecureStoreError::Corrupt);
+    }
+    let wrapped = decrypt_with_aad(
+        key,
+        &decode(
+            metadata
+                .device_nonce
+                .as_deref()
+                .ok_or(SecureStoreError::Corrupt)?,
+        )?,
+        &decode(
+            metadata
+                .device_wrapped_key
+                .as_deref()
+                .ok_or(SecureStoreError::Corrupt)?,
+        )?,
+        &device_wrap_aad(context),
+    )
+    .map_err(|_| SecureStoreError::Unavailable)?;
+    metadata.version = VERSION;
+    metadata.credential_wrapped_key = BASE64.encode(&wrapped);
+    metadata.device_nonce = None;
+    metadata.device_wrapped_key = None;
+    Ok(metadata)
+}
+
+fn load_ios_metadata(
+    metadata: Metadata,
+    credential: &str,
+    context: SecureStoreContext,
+) -> Result<Zeroizing<Vec<u8>>, SecureStoreError> {
+    let key = ios_device_key(context, false)?;
+    decrypt_ios_metadata_with_key(metadata, credential, context, &key, |key| {
+        #[cfg(target_os = "ios")]
+        remember_ios_device_key(context, key)?;
+        #[cfg(not(target_os = "ios"))]
+        let _ = key;
+        Ok(())
+    })
+}
+
+fn decrypt_ios_metadata_with_key(
+    metadata: Metadata,
+    credential: &str,
+    context: SecureStoreContext,
+    key: &[u8],
+    remember: impl FnOnce(&[u8]) -> Result<(), SecureStoreError>,
+) -> Result<Zeroizing<Vec<u8>>, SecureStoreError> {
+    let portable = unwrap_ios_metadata(metadata, context, key)?;
+    let secret = decrypt_metadata(&portable, credential, context)?;
+    remember(key)?;
+    Ok(secret)
+}
+
+#[cfg(target_os = "ios")]
+fn ios_device_key(
+    context: SecureStoreContext,
+    create: bool,
+) -> Result<Zeroizing<Vec<u8>>, SecureStoreError> {
+    use std::ffi::CString;
+    // Serialize initial installation-marker/key creation without retaining an authenticated key.
+    static DEVICE_KEY: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    let _guard = DEVICE_KEY
+        .lock()
+        .map_err(|_| SecureStoreError::Unavailable)?;
+    let scope = CString::new(format!(
+        "{}.{}",
+        context.wallet_id,
+        context.purpose.as_str()
+    ))
+    .map_err(|_| SecureStoreError::Unavailable)?;
+    let mut key = Zeroizing::new(vec![0_u8; KEY_BYTES]);
+    unsafe extern "C" {
+        fn groot_ios_device_key(
+            scope: *const std::ffi::c_char,
+            output: *mut u8,
+            capacity: usize,
+            create: bool,
+        ) -> i32;
+    }
+    // SAFETY: bounded owned output and NUL-terminated scope live for the blocking native call.
+    let status =
+        unsafe { groot_ios_device_key(scope.as_ptr(), key.as_mut_ptr(), key.len(), create) };
+    if status != 0 {
+        return Err(device_key_error(status));
+    }
+    Ok(key)
+}
+
+#[cfg(target_os = "ios")]
+fn remember_ios_device_key(
+    context: SecureStoreContext,
+    key: &[u8],
+) -> Result<(), SecureStoreError> {
+    use std::ffi::CString;
+    let scope = CString::new(format!(
+        "{}.{}",
+        context.wallet_id,
+        context.purpose.as_str()
+    ))
+    .map_err(|_| SecureStoreError::Unavailable)?;
+    unsafe extern "C" {
+        fn groot_ios_remember_device_key(
+            scope: *const std::ffi::c_char,
+            key: *const u8,
+            capacity: usize,
+        ) -> i32;
+    }
+    // SAFETY: native code copies this bounded key synchronously; Rust retains zeroizing ownership.
+    let status = unsafe { groot_ios_remember_device_key(scope.as_ptr(), key.as_ptr(), key.len()) };
+    if status != 0 {
+        return Err(device_key_error(status));
+    }
+    Ok(())
+}
+
+#[cfg(not(target_os = "ios"))]
+fn ios_device_key(
+    _context: SecureStoreContext,
+    _create: bool,
+) -> Result<Zeroizing<Vec<u8>>, SecureStoreError> {
+    Err(device_key_error(-1))
+}
+
+fn device_key_error(status: i32) -> SecureStoreError {
+    if status == 1 {
+        SecureStoreError::DeviceAuthorizationCancelled
+    } else {
+        SecureStoreError::DeviceKeyUnavailable
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::io::{self, Write};
     use std::time::Instant;
+
+    #[test]
+    fn device_policy_copy_requires_successful_groot_authentication() {
+        let context = SecureStoreContext {
+            wallet_id: Uuid::new_v4(),
+            purpose: SecureStorePurpose::WalletSecret,
+        };
+        let key = [7_u8; KEY_BYTES];
+        let wrapped = || {
+            wrap_ios_metadata(
+                new_metadata(b"synthetic-secret", "correct", context).unwrap(),
+                context,
+                &key,
+            )
+            .unwrap()
+        };
+        let called = std::cell::Cell::new(false);
+        assert!(
+            decrypt_ios_metadata_with_key(wrapped(), "wrong", context, &key, |_| {
+                called.set(true);
+                Ok(())
+            })
+            .is_err()
+        );
+        assert!(!called.get());
+        let secret = decrypt_ios_metadata_with_key(wrapped(), "correct", context, &key, |_| {
+            called.set(true);
+            Ok(())
+        })
+        .unwrap();
+        assert!(called.get());
+        assert_eq!(secret.as_slice(), b"synthetic-secret");
+        assert!(
+            decrypt_ios_metadata_with_key(wrapped(), "correct", context, &key, |_| Err(
+                SecureStoreError::Unavailable
+            ))
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn device_authentication_cancel_is_distinct_and_unknown_statuses_fail_closed() {
+        assert_eq!(
+            device_key_error(1),
+            SecureStoreError::DeviceAuthorizationCancelled
+        );
+        for status in [-1, 0, 2, i32::MAX] {
+            assert_eq!(
+                device_key_error(status),
+                SecureStoreError::DeviceKeyUnavailable
+            );
+        }
+    }
+
+    #[test]
+    fn ios_envelope_requires_both_factors_and_exact_context() {
+        let context = wallet_context(Uuid::new_v4());
+        let key = [11_u8; KEY_BYTES];
+        let encoded = encode_metadata(
+            &wrap_ios_metadata(
+                new_metadata(b"synthetic secret", "correct", context).unwrap(),
+                context,
+                &key,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let parse = || serde_json::from_slice::<Metadata>(&encoded).unwrap();
+        assert!(parse().credential_wrapped_key.is_empty());
+        let unwrapped = unwrap_ios_metadata(parse(), context, &key).unwrap();
+        assert_eq!(
+            decrypt_metadata(&unwrapped, "correct", context)
+                .unwrap()
+                .as_slice(),
+            b"synthetic secret"
+        );
+        assert_eq!(
+            decrypt_metadata(&unwrapped, "wrong", context),
+            Err(SecureStoreError::InvalidCredential)
+        );
+        assert!(unwrap_ios_metadata(parse(), context, &[12_u8; KEY_BYTES]).is_err());
+        assert!(unwrap_ios_metadata(parse(), wallet_context(Uuid::new_v4()), &key).is_err());
+        let mut bypass = parse();
+        bypass.credential_wrapped_key = unwrapped.credential_wrapped_key;
+        assert!(unwrap_ios_metadata(bypass, context, &key).is_err());
+        let mut tampered = parse();
+        tampered.device_wrapped_key = Some(BASE64.encode([4_u8; 64]));
+        assert!(unwrap_ios_metadata(tampered, context, &key).is_err());
+    }
+
+    #[test]
+    fn ios_envelope_cannot_fall_back_to_a_portable_load_or_rewrite() {
+        let dir = directory();
+        let path = dir.join("secret.json");
+        let context = wallet_context(Uuid::new_v4());
+        let metadata = wrap_ios_metadata(
+            new_metadata(b"synthetic", "correct", context).unwrap(),
+            context,
+            &[8_u8; KEY_BYTES],
+        )
+        .unwrap();
+        let encoded = encode_metadata(&metadata).unwrap();
+        write_owner_only(&path, &encoded).unwrap();
+        assert_eq!(read_metadata(&path).unwrap().version, IOS_DEVICE_VERSION);
+        #[cfg(not(target_os = "ios"))]
+        assert_eq!(
+            load(&path, "correct", context),
+            Err(SecureStoreError::DeviceKeyUnavailable)
+        );
+        assert_eq!(fs::read(&path).unwrap(), encoded);
+        fs::remove_dir_all(dir).unwrap();
+    }
 
     fn directory() -> std::path::PathBuf {
         std::env::temp_dir().join(format!("groot-secure-store-{}", Uuid::new_v4()))
@@ -743,7 +1063,7 @@ mod tests {
         store(&metadata, b"future secret", "correct", context).unwrap();
         let mut value: serde_json::Value =
             serde_json::from_slice(&fs::read(&metadata).unwrap()).unwrap();
-        value["version"] = serde_json::Value::from(VERSION + 1);
+        value["version"] = serde_json::Value::from(IOS_DEVICE_VERSION + 1);
         write_owner_only(&metadata, &serde_json::to_vec(&value).unwrap()).unwrap();
         let before = fs::read(&metadata).unwrap();
 

@@ -79,7 +79,7 @@
       if (!locked) {
         try {
           const fees = await walletService.estimateFees();
-          priorityFee = Number(fees.priority);
+          priorityFee = fees.priority === null ? null : Number(fees.priority);
         } catch {
           priorityFee = null;
         }
@@ -230,3 +230,175 @@
     </section>
   {/if}
 </div>
+
+<style>
+  /* Keep the original cascade weight while constraining these rules to this owner. */
+
+  :global(.network-status):where(.network-status) {
+    position: relative;
+    border-top: 1px solid var(--border);
+    padding-top: 8px;
+  }
+  :global(.network-trigger):where(.network-trigger) {
+    width: 100%;
+    min-height: 38px;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    padding: 0 11px;
+    border: 0;
+    border-radius: var(--radius-control);
+    color: var(--muted);
+    background: transparent;
+    font-size: var(--font-size-meta);
+    text-align: left;
+    cursor: pointer;
+  }
+  :global(.network-trigger:hover):where(.network-trigger),
+  :global(.network-trigger:focus-visible):where(.network-trigger),
+  :global(.network-status.open):where(.network-status) :global(.network-trigger) {
+    color: var(--text-soft);
+    background: var(--surface-hover);
+  }
+  :global(.network-trigger):where(.network-trigger) :global(i) {
+    width: 7px;
+    height: 7px;
+    flex: 0 0 auto;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 10%, transparent);
+  }
+  :global(.network-trigger):where(.network-trigger) :global(i.online),
+  :global(.network-trigger):where(.network-trigger) :global(i.mainnet:not(.offline)) {
+    background: var(--success);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--success) 10%, transparent);
+  }
+  :global(.network-trigger):where(.network-trigger) :global(i.offline) {
+    background: var(--danger);
+    box-shadow: 0 0 0 3px rgba(214, 62, 73, 0.1);
+  }
+  :global(.network-popover):where(.network-popover) {
+    position: absolute;
+    z-index: 90;
+    left: calc(100% + 10px);
+    bottom: 0;
+    width: 258px;
+    padding: 13px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-inset);
+    color: var(--text);
+    background: var(--panel-2);
+    box-shadow: 0 18px 55px rgba(0, 0, 0, 0.32);
+  }
+  :global(.network-popover):where(.network-popover) :global(header) {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding-bottom: 11px;
+    border-bottom: 1px solid var(--border);
+  }
+  :global(.network-popover):where(.network-popover) :global(header > span) {
+    width: 30px;
+    height: 30px;
+    display: grid;
+    place-items: center;
+    border-radius: var(--radius-control);
+    color: var(--link);
+    background: color-mix(in srgb, var(--link) 12%, transparent);
+  }
+  :global(.network-popover):where(.network-popover) :global(header > div) {
+    display: grid;
+    gap: 2px;
+  }
+  :global(.network-popover-close):where(.network-popover-close) {
+    width: 30px;
+    height: 30px;
+    display: grid;
+    place-items: center;
+    margin-left: auto;
+    padding: 0;
+    border: 0;
+    border-radius: var(--radius-control);
+    color: var(--muted);
+    background: transparent;
+  }
+  :global(.network-popover-close:hover):where(.network-popover-close),
+  :global(.network-popover-close:focus-visible):where(.network-popover-close) {
+    color: var(--text);
+    background: var(--surface-hover);
+  }
+  :global(.network-popover):where(.network-popover) :global(header strong) {
+    font-size: 14px;
+  }
+  :global(.network-popover):where(.network-popover) :global(header small) {
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+  }
+  :global(.network-popover):where(.network-popover) :global(dl) {
+    display: grid;
+    gap: 1px;
+    margin: 8px 0 0;
+  }
+  :global(.network-popover):where(.network-popover) :global(dl > div) {
+    min-height: 42px;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    gap: 12px;
+    padding: 0 4px;
+    border-bottom: 1px solid var(--border);
+  }
+  :global(.network-popover):where(.network-popover) :global(dl > div:last-child) {
+    border: 0;
+  }
+  :global(.network-popover):where(.network-popover) :global(dt) {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--text-soft);
+    font-size: 13px;
+  }
+  :global(.network-popover):where(.network-popover) :global(dt svg) {
+    color: var(--muted);
+  }
+  :global(.network-popover):where(.network-popover) :global(dd) {
+    margin: 0;
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+    text-align: right;
+  }
+  :global(.network-popover):where(.network-popover) > :global(p) {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 7px;
+    align-items: start;
+    margin: 8px 0 0;
+    padding: 9px;
+    border-radius: var(--radius-control);
+    color: var(--muted);
+    background: var(--surface-inset);
+    font-size: var(--font-size-meta);
+    line-height: 1.4;
+  }
+  :global(.network-popover):where(.network-popover) > :global(p svg) {
+    color: var(--accent);
+  }
+  :global(.network-refresh):where(.network-refresh) {
+    width: 100%;
+    min-height: 34px;
+    margin-top: 8px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-soft);
+    background: var(--surface-control);
+    font-size: var(--font-size-meta);
+    cursor: pointer;
+  }
+  :global(.network-refresh:hover):where(.network-refresh) {
+    background: var(--surface-hover);
+  }
+  :global(.network-refresh:disabled):where(.network-refresh) {
+    cursor: wait;
+    opacity: 0.65;
+  }
+</style>

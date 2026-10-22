@@ -1325,7 +1325,7 @@ fn confirmed_activity_prefers_first_observation_over_future_block_time() {
 fn coldcard_policy_acknowledgement_is_serialized_before_authorization() {
     let source = include_str!("../wallet.rs");
     let command = source
-        .split("pub fn multisig_acknowledge_coldcard_policy")
+        .split("pub async fn multisig_acknowledge_coldcard_policy")
         .nth(1)
         .unwrap()
         .split("fn snapshot_from")
@@ -1334,6 +1334,27 @@ fn coldcard_policy_acknowledgement_is_serialized_before_authorization() {
     let guard = command.find("operation_guard(&state)").unwrap();
     let authorization = command.find("require_unlocked(&app, &state)").unwrap();
     assert!(guard < authorization);
+}
+
+#[test]
+fn wallet_exists_reconciles_pairing_storage_only_under_the_operation_lock() {
+    // The startup poll must not race coordination_mobile_complete: an
+    // unguarded reconcile could delete a profile directory or restore a
+    // tombstone while completion is actively writing it.
+    let source = include_str!("profile_commands.rs");
+    let command = source
+        .split("pub async fn wallet_exists")
+        .nth(1)
+        .unwrap()
+        .split("pub(crate) fn registered_wallets_exist")
+        .next()
+        .unwrap();
+    let guard = command.find("operation_guard(&state)").unwrap();
+    let reconcile = command
+        .find("reconcile_mobile_pairing_storage(&app)")
+        .unwrap();
+    assert!(guard < reconcile);
+    assert!(command.find("spawn_blocking").unwrap() < guard);
 }
 
 #[test]
@@ -3903,6 +3924,22 @@ fn not_ready_hardware_remains_visible_with_safe_device_specific_actions() {
     assert_eq!(passive_model_one.status, "needs_pin");
     assert_eq!(passive_model_one.action, "prompt_pin");
 
+    // A successful PIN exchange is only a short-lived routing hint. The next
+    // action must still prove the full account identity, but must not issue a
+    // redundant HWI promptpin request against an already-unlocked Model One.
+    let recently_unlocked_model_one = hardware_device_dto(HwiDevice {
+        passive: true,
+        observed_unlocked: true,
+        model: "trezor_1".to_owned(),
+        capability: "opaque-passive-model-one".to_owned(),
+        fingerprint: None,
+        device_type: "trezor".to_owned(),
+        path: "hid:model-one".to_owned(),
+        ..HwiDevice::default()
+    });
+    assert_eq!(recently_unlocked_model_one.status, "ready");
+    assert_eq!(recently_unlocked_model_one.action, "import");
+
     let passive_coldcard = hardware_device_dto(HwiDevice {
         passive: true,
         observed_unlocked: false,
@@ -4465,9 +4502,13 @@ fn manual_selection_rejects_empty_malformed_duplicate_and_frozen_outpoints() {
 }
 
 fn descriptor_backup() -> MultisigBackupDto {
+    descriptor_backup_with_signers(4)
+}
+
+fn descriptor_backup_with_signers(count: u8) -> MultisigBackupDto {
     let secp = Secp256k1::new();
     let path = DerivationPath::from_str(multisig_account_path()).unwrap();
-    let cosigners = (1_u8..=4)
+    let cosigners = (1_u8..=count)
         .map(|index| {
             let master = Xpriv::new_master(NetworkKind::Test, &[index; 32]).unwrap();
             let account = master.derive_priv(&secp, &path).unwrap();
@@ -4534,6 +4575,89 @@ fn delayed_policies_fail_closed_at_the_hwi_boundary() {
         })
         .collect::<Vec<_>>();
     assert!(reject_usb_cosigners_for_delayed_policy(&offline).is_ok());
+}
+
+#[test]
+fn continuity_primary_paths_preserve_roles_and_descriptor_identity() {
+    for (template, count, eligible) in [
+        (
+            RecoveryTemplate::PartnerContinuityV1 {
+                owner: SpendingPath::new(2, ["key-1", "key-2", "key-3"]),
+                partner: SpendingPath::new(2, ["key-4", "key-5"]),
+                estate: SpendingPath::new(2, ["key-6", "key-7", "key-8"]),
+            },
+            8,
+            3,
+        ),
+        (
+            RecoveryTemplate::FamilyContinuityV1 {
+                parents: SpendingPath::new(2, ["key-1", "key-2"]),
+                child_assistance: SpendingPath::new(1, ["key-3", "key-4"]),
+                child_inheritance: SpendingPath::new(2, ["key-5", "key-6"]),
+                executor_signer_id: "key-7".to_owned(),
+            },
+            7,
+            2,
+        ),
+    ] {
+        let mut metadata = descriptor_backup_with_signers(count).wallet;
+        let analysis = analyze_template(&template, &metadata.cosigners).unwrap();
+        metadata.external_descriptor = analysis.external_descriptor;
+        metadata.internal_descriptor = analysis.internal_descriptor;
+        metadata.spending_paths = analysis.paths;
+        metadata.policy_type = recovery_policy_type(&template).to_owned();
+        metadata.recovery_template = Some(template);
+        let wallet = Wallet::create(
+            metadata.external_descriptor.clone(),
+            metadata.internal_descriptor.clone(),
+        )
+        .network(network())
+        .create_wallet_no_persist()
+        .unwrap();
+        assert_eq!(immediate_policy_paths(&wallet).unwrap().len(), 2);
+        let db = Connection::open_in_memory().unwrap();
+        init_app_schema(&db).unwrap();
+        let signing = proposal_signing_context(&db, &metadata, "legacy-primary").unwrap();
+        assert_eq!(signing.required, 2);
+        assert_eq!(
+            signing.fingerprint_strings,
+            (1..=eligible)
+                .map(|index| metadata
+                    .cosigners
+                    .iter()
+                    .find(|key| key.id == format!("key-{index}"))
+                    .unwrap()
+                    .fingerprint
+                    .clone())
+                .collect::<Vec<_>>()
+        );
+        assert_eq!(
+            require_hwi_supported_multisig_policy(&metadata)
+                .unwrap_err()
+                .code,
+            "hardware_policy_unsupported"
+        );
+        // Legacy backup readers still derive the same exact policy and first address.
+        let backup = MultisigBackupDto {
+            version: 1,
+            network: network_name().to_owned(),
+            wallet: metadata.clone(),
+        };
+        let restored = validate_multisig_backup(&serde_json::to_string(&backup).unwrap())
+            .unwrap()
+            .wallet;
+        assert_eq!(
+            first_multisig_address(&restored).unwrap(),
+            first_multisig_address(&metadata).unwrap()
+        );
+        metadata.spending_paths[0].threshold = 1;
+        assert_eq!(
+            proposal_signing_context(&db, &metadata, "legacy-primary")
+                .unwrap_err()
+                .code,
+            "wallet_corrupt"
+        );
+    }
 }
 
 #[test]
@@ -6526,4 +6650,417 @@ fn deletion_requires_keys_and_separate_software_passphrase_backups() {
         "backup_mismatch"
     );
     assert!(validate_wallet_deletion_backup(WalletKind::SingleKey, true, 1, true, true).is_ok());
+}
+
+#[test]
+fn mobile_key_operations_fail_closed_without_affecting_desktop() {
+    assert!(validate_key_operation_platform(false).is_ok());
+    let error = validate_key_operation_platform(true).unwrap_err();
+    assert_eq!(error.code, "mobile_operation_unavailable");
+    assert!(error.existing_wallet_id.is_none());
+    assert!(error.details.is_none());
+}
+
+#[test]
+fn software_mobile_capability_is_explicitly_ios_testnet4_only() {
+    for network in ["regtest", "signet", "testnet4", "mainnet", "multi"] {
+        assert!(validate_software_key_platform(false, false, network).is_ok());
+        assert_eq!(
+            validate_software_key_platform(true, false, network).is_ok(),
+            network == "testnet4"
+        );
+        assert!(validate_software_key_platform(false, true, network).is_err());
+    }
+}
+
+#[test]
+fn mobile_key_operation_guards_precede_command_work() {
+    for (source, names) in [
+        (
+            include_str!("profile_commands.rs"),
+            vec![
+                "wallet_generate_mnemonic",
+                "wallet_create",
+                "wallet_recover",
+                "wallet_verify_backup",
+                "wallet_reveal_and_verify_backup",
+            ],
+        ),
+        (
+            include_str!("transaction_commands.rs"),
+            vec!["tx_sign_and_broadcast"],
+        ),
+        (
+            include_str!("multisig_proposal_commands.rs"),
+            vec!["hardware_sign_multisig", "multisig_proposal_broadcast"],
+        ),
+        (
+            include_str!("hardware_commands.rs"),
+            vec![
+                "hardware_sign_external",
+                "external_signer_proposal_broadcast",
+            ],
+        ),
+    ] {
+        for name in names {
+            let function = source.split(&format!("fn {name}(")).nth(1).unwrap();
+            let body = function.split_once('{').unwrap().1.trim_start();
+            let body = body
+                .strip_prefix("let credential = Zeroizing::new(credential);")
+                .unwrap_or(body)
+                .trim_start();
+            assert!(
+                body.starts_with("require_desktop_key_operation()?;")
+                    || body.starts_with("require_software_key_operation()?;"),
+                "{name} must reject mobile before performing work"
+            );
+        }
+    }
+}
+
+#[test]
+fn accepted_broadcast_preserves_txid_after_sqlite_failure_without_a_false_snapshot() {
+    let mut db = Connection::open_in_memory().unwrap();
+    db.execute_batch("CREATE TABLE recording(value INTEGER); CREATE TRIGGER reject_recording BEFORE INSERT ON recording BEGIN SELECT RAISE(ABORT, 'synthetic storage failure'); END;").unwrap();
+    let txid = Txid::from_byte_array([42; 32]);
+    let outcome = accepted_broadcast_result(txid, || {
+        let transaction = db.transaction().map_err(internal)?;
+        transaction
+            .execute("INSERT INTO recording VALUES(1)", [])
+            .map_err(internal)?;
+        Err(internal("unreachable after injected failure"))
+    });
+    assert_eq!(outcome.txid, txid.to_string());
+    assert!(outcome.snapshot.is_none());
+    assert!(outcome.persistence_pending && outcome.sync_pending);
+    assert_eq!(
+        db.query_row("SELECT COUNT(*) FROM recording", [], |row| row
+            .get::<_, u64>(0))
+            .unwrap(),
+        0
+    );
+    let encoded = serde_json::to_value(outcome).unwrap();
+    assert!(encoded["snapshot"].is_null());
+    assert_eq!(encoded["persistencePending"], true);
+}
+
+#[test]
+fn accepted_broadcast_distinguishes_committed_state_from_a_later_sync_failure() {
+    let (wallet, _, _, txid) = anchor_reconciliation_wallet(71, 72, 73);
+    let db = Connection::open_in_memory().unwrap();
+    init_app_schema(&db).unwrap();
+    let snapshot = snapshot_from(&wallet, &db, None, false, None).unwrap();
+    let outcome = accepted_broadcast_result(txid, || Ok((snapshot, true)));
+    assert!(outcome.snapshot.is_some());
+    assert!(outcome.sync_pending);
+    assert!(!outcome.persistence_pending);
+}
+
+#[test]
+fn sync_reconciles_only_exact_observed_proposals_atomically_and_after_reopen() {
+    let path =
+        std::env::temp_dir().join(format!("groot-broadcast-repair-{}.sqlite", Uuid::new_v4()));
+    let (wallet, _, _, txid) = anchor_reconciliation_wallet(74, 75, 76);
+    let observed = wallet.get_tx(txid).unwrap().tx_node.tx.as_ref().clone();
+    let psbt = Psbt::from_unsigned_tx(observed).unwrap();
+    let mut other = psbt.clone();
+    other.unsigned_tx.output[0].value = Amount::from_sat(123);
+    let mut db = Connection::open(&path).unwrap();
+    init_app_schema(&db).unwrap();
+    for (id, psbt, status) in [
+        ("accepted", &psbt, "ready"),
+        ("foreign", &other, "collecting"),
+        ("cancelled", &psbt, "cancelled"),
+    ] {
+        db.execute("INSERT INTO groot_proposals (proposal_id,recipient,label,amount,fee,fee_rate,psbt,status,created_at) VALUES(?1,'synthetic','Synthetic',1,1,1,?2,?3,1)", params![id, encode_psbt(psbt), status]).unwrap();
+    }
+    label_provenance::assign_labels(
+        &db,
+        &["Synthetic intent".to_owned()],
+        LabelOrigin::Payment,
+        "transaction_intent",
+        "accepted",
+        1,
+    )
+    .unwrap();
+    db.execute("INSERT INTO groot_accelerations (proposal_id, method, original_txid, original_kind, original_direction, original_amount, original_date, original_label, created_at) VALUES('accepted','rbf',?1,'payment','sent',1,'1','Synthetic',1)", [Txid::from_byte_array([77;32]).to_string()]).unwrap();
+    {
+        let transaction = db.transaction().unwrap();
+        let repaired = reconcile_broadcast_proposals(&wallet, &transaction).unwrap();
+        assert_eq!(repaired, [txid]);
+        enqueue_reconciled_broadcasts(&transaction, &repaired, 0).unwrap();
+        // Dropping the transaction simulates a failed local commit.
+    }
+    assert_eq!(
+        db.query_row(
+            "SELECT status FROM groot_proposals WHERE proposal_id='accepted'",
+            [],
+            |r| r.get::<_, String>(0)
+        )
+        .unwrap(),
+        "ready"
+    );
+    assert!(notifications::pending(&db).unwrap().is_empty());
+    assert_eq!(
+        db.query_row(
+            "SELECT COUNT(*) FROM groot_label_assignments WHERE subject_kind='transaction'",
+            [],
+            |r| r.get::<_, u64>(0)
+        )
+        .unwrap(),
+        0
+    );
+    assert!(db
+        .query_row(
+            "SELECT replacement_txid FROM groot_accelerations WHERE proposal_id='accepted'",
+            [],
+            |r| r.get::<_, Option<String>>(0)
+        )
+        .unwrap()
+        .is_none());
+    {
+        let transaction = db.transaction().unwrap();
+        let repaired = reconcile_broadcast_proposals(&wallet, &transaction).unwrap();
+        enqueue_reconciled_broadcasts(&transaction, &repaired, 0).unwrap();
+        transaction.commit().unwrap();
+    }
+    drop(db);
+    let db = Connection::open(&path).unwrap();
+    assert!(reconcile_broadcast_proposals(&wallet, &db)
+        .unwrap()
+        .is_empty());
+    assert_eq!(notifications::pending(&db).unwrap().len(), 1);
+    assert_eq!(db.query_row("SELECT COUNT(*) FROM groot_label_assignments WHERE subject_kind='transaction' AND subject_id=?1", [txid.to_string()], |r| r.get::<_, u64>(0)).unwrap(), 1);
+    assert_eq!(
+        db.query_row(
+            "SELECT replacement_txid FROM groot_accelerations WHERE proposal_id='accepted'",
+            [],
+            |r| r.get::<_, String>(0)
+        )
+        .unwrap(),
+        txid.to_string()
+    );
+    for (id, status) in [
+        ("accepted", "broadcast"),
+        ("foreign", "collecting"),
+        ("cancelled", "cancelled"),
+    ] {
+        assert_eq!(
+            db.query_row(
+                "SELECT status FROM groot_proposals WHERE proposal_id=?1",
+                [id],
+                |r| r.get::<_, String>(0)
+            )
+            .unwrap(),
+            status
+        );
+    }
+    drop(db);
+    fs::remove_file(path).unwrap();
+}
+
+#[test]
+fn release_spend_errors_explain_each_policy_rejection() {
+    use crate::release_policy::ReleasePolicyError;
+    let cases = [
+        (ReleasePolicyError::MainnetDisabled, "Mainnet payments are unavailable in this build. Use a mainnet-enabled Groot release."),
+        (ReleasePolicyError::BackendAdmissionRequired, "Connect and verify a Bitcoin Core node before making a mainnet payment."),
+        (ReleasePolicyError::WrongGenesis, "The connected node is on another Bitcoin network. Check the connection in Settings."),
+        (ReleasePolicyError::UnsupportedBackend, "This node connection cannot be used for mainnet payments. Choose a supported Bitcoin Core connection in Settings."),
+        (ReleasePolicyError::InvalidAmount, "Amount must be greater than zero."),
+        (ReleasePolicyError::AmountOutOfRange, "The payment amount plus fee exceeds Bitcoin's maximum supply."),
+        (ReleasePolicyError::InvalidFeeChild, "A fee acceleration child must pay only an address owned by this wallet."),
+        (ReleasePolicyError::FeeCapExceeded, "The network fee exceeds Groot's mainnet limit of 100,000 sats. Lower the fee rate and try again."),
+        (ReleasePolicyError::BatchSpendingDisabled, "Mainnet payments support one recipient at a time."),
+        (ReleasePolicyError::UnsupportedWalletPolicy, "This wallet policy is not supported for mainnet payments."),
+    ];
+    for (reason, message) in cases {
+        let error = release_spend_api_error(reason);
+        assert_eq!(error.code, "invalid_amount");
+        assert_eq!(error.message, message);
+    }
+}
+
+fn continuity_test_metadata(family: bool) -> MultisigWalletDto {
+    let template = if family {
+        RecoveryTemplate::FamilyContinuityV1 {
+            parents: SpendingPath::new(2, ["key-1", "key-2"]),
+            child_assistance: SpendingPath::new(1, ["key-3", "key-4"]),
+            child_inheritance: SpendingPath::new(2, ["key-5", "key-6"]),
+            executor_signer_id: "key-7".to_owned(),
+        }
+    } else {
+        RecoveryTemplate::PartnerContinuityV1 {
+            owner: SpendingPath::new(2, ["key-1", "key-2", "key-3"]),
+            partner: SpendingPath::new(2, ["key-4", "key-5"]),
+            estate: SpendingPath::new(2, ["key-6", "key-7", "key-8"]),
+        }
+    };
+    let mut metadata = descriptor_backup_with_signers(if family { 7 } else { 8 }).wallet;
+    let analysis = analyze_template(&template, &metadata.cosigners).unwrap();
+    metadata.external_descriptor = analysis.external_descriptor;
+    metadata.internal_descriptor = analysis.internal_descriptor;
+    metadata.spending_paths = analysis.paths;
+    metadata.policy_type = recovery_policy_type(&template).to_owned();
+    metadata.recovery_template = Some(template);
+    metadata
+}
+
+#[test]
+fn every_named_continuity_path_selects_its_exact_csv_and_preserves_roles() {
+    for family in [false, true] {
+        let metadata = continuity_test_metadata(family);
+        let wallet = Wallet::create(
+            metadata.external_descriptor.clone(),
+            metadata.internal_descriptor.clone(),
+        )
+        .network(network())
+        .create_wallet_no_persist()
+        .unwrap();
+        let analysis = verified_analysis(&metadata).unwrap();
+        for (index, path) in analysis.paths.iter().enumerate() {
+            for (keychain, selected) in named_policy_paths(&wallet, &metadata, index).unwrap() {
+                let policy = wallet.policies(keychain).unwrap().unwrap();
+                let condition = policy.get_condition(&selected).unwrap();
+                assert_eq!(
+                    condition
+                        .csv
+                        .map(|value| value.to_consensus_u32())
+                        .unwrap_or(0),
+                    path.available_after_blocks
+                );
+            }
+            if index == 0 {
+                continue;
+            }
+            for (age, available) in [
+                (path.available_after_blocks - 1, false),
+                (path.available_after_blocks, true),
+                (path.available_after_blocks + 1, true),
+            ] {
+                let details =
+                    path_details(&metadata, &analysis, index, Some(age), true, false).unwrap();
+                assert_eq!(details.available, available);
+                assert_eq!(details.required, path.threshold);
+            }
+            assert!(
+                !path_details(
+                    &metadata,
+                    &analysis,
+                    index,
+                    Some(path.available_after_blocks),
+                    false,
+                    false
+                )
+                .unwrap()
+                .available
+            );
+            assert!(
+                !path_details(
+                    &metadata,
+                    &analysis,
+                    index,
+                    Some(path.available_after_blocks),
+                    true,
+                    true
+                )
+                .unwrap()
+                .available
+            );
+            assert!(
+                !path_details(&metadata, &analysis, index, None, true, false)
+                    .unwrap()
+                    .available
+            );
+        }
+    }
+}
+
+#[test]
+fn named_continuity_paths_resume_from_existing_psbt_and_reject_sequence_substitution() {
+    for family in [false, true] {
+        let metadata = continuity_test_metadata(family);
+        let analysis = verified_analysis(&metadata).unwrap();
+        for (index, path) in analysis.paths.iter().enumerate().skip(1) {
+            let transaction = Transaction {
+                version: Version::TWO,
+                lock_time: LockTime::ZERO,
+                input: vec![TxIn {
+                    previous_output: OutPoint::null(),
+                    script_sig: ScriptBuf::new(),
+                    sequence: Sequence(path.available_after_blocks),
+                    witness: Witness::new(),
+                }],
+                output: vec![],
+            };
+            let mut psbt = Psbt::from_unsigned_tx(transaction).unwrap();
+            assert_eq!(selected_delayed_index(&analysis, &psbt).unwrap(), index);
+            let reopened = decode_psbt(&encode_psbt(&psbt)).unwrap();
+            assert_eq!(selected_delayed_index(&analysis, &reopened).unwrap(), index);
+            let db = Connection::open_in_memory().unwrap();
+            init_app_schema(&db).unwrap();
+            db.execute("INSERT INTO groot_proposals (proposal_id,recipient,label,amount,fee,fee_rate,psbt,status,created_at) VALUES('named','synthetic','Test',1,1,1,?1,'collecting',1)", [encode_psbt(&psbt)]).unwrap();
+            db.execute("INSERT INTO groot_proposal_spend_paths(proposal_id,spend_path) VALUES('named','delayed')", []).unwrap();
+            let context = proposal_signing_context(&db, &metadata, "named").unwrap();
+            assert_eq!(context.path_index, Some(index));
+            assert_eq!(context.required, path.threshold);
+            assert_eq!(context.fingerprint_strings.len(), path.signer_ids.len());
+            psbt.unsigned_tx.input[0].sequence = Sequence::ENABLE_RBF_NO_LOCKTIME;
+            assert!(selected_delayed_index(&analysis, &psbt).is_err());
+            psbt.unsigned_tx.input[0].sequence = Sequence(path.available_after_blocks | (1 << 22));
+            assert!(selected_delayed_index(&analysis, &psbt).is_err());
+        }
+    }
+}
+
+#[test]
+fn family_assistance_requires_a_parent_and_an_assistance_role() {
+    let metadata = continuity_test_metadata(true);
+    let fp = |index: usize| {
+        metadata
+            .cosigners
+            .iter()
+            .find(|key| key.id == format!("key-{}", index + 1))
+            .unwrap()
+            .fingerprint
+            .clone()
+    };
+    assert!(!path_signature_quorum(&metadata, 1, &[fp(2), fp(3)]));
+    assert!(!path_signature_quorum(&metadata, 1, &[fp(0), fp(1)]));
+    for parent in [0, 1] {
+        for child in [2, 3] {
+            assert!(path_signature_quorum(
+                &metadata,
+                1,
+                &[fp(parent), fp(child)]
+            ));
+        }
+    }
+}
+
+#[test]
+fn fee_estimates_preserve_each_available_target_without_filling_missing_targets() {
+    for mask in 0..8 {
+        let known = [0.2, 0.5, 1.25];
+        let available = |index: usize| ((mask & (1 << index)) != 0).then_some(known[index]);
+        let result = partial_fee_estimates(available(0), available(1), available(2));
+        if mask == 0 {
+            assert_eq!(result.err().unwrap().code, "fee_estimate_unavailable");
+            continue;
+        }
+        let result = result.unwrap();
+        assert_eq!(result.economy, available(0));
+        assert_eq!(result.standard, available(1));
+        assert_eq!(result.priority, available(2));
+        let json = serde_json::to_value(result).unwrap();
+        for (index, name) in ["economy", "standard", "priority"].into_iter().enumerate() {
+            assert_eq!(json[name].is_null(), available(index).is_none());
+        }
+    }
+    let result = partial_fee_estimates(Some(5.0), None, Some(1.0)).unwrap();
+    assert_eq!(result.standard, None);
+    assert_eq!(result.priority, Some(5.0));
+    let result = partial_fee_estimates(None, Some(5.0), Some(1.0)).unwrap();
+    assert_eq!(result.economy, None);
+    assert_eq!(result.priority, Some(5.0));
 }

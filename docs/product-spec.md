@@ -1,6 +1,12 @@
 # Product behavior
 
-Canonical behavior for the 5.2.0 GA preparation source. [Current status](implementation-status.md) separates implementation from release certification. ADR 0088 conditionally authorizes v5.2.0 only when the final source, annotated tag, fresh remote main, reproduced evidence and signed/notarized published package all bind to one reviewed commit.
+Canonical desktop behavior from the shipped 5.2.0 baseline, with the gated 5.3 mobile development boundary below. [Current status](implementation-status.md) separates implementation from release certification. ADR 0088 authorized v5.2.0; ADR 0105 authorizes the exact v5.3.0 release campaign. The final source, annotated tag, fresh remote main, reproduced evidence and signed/notarized package must bind to one reviewed commit, and the owner must test that package before public publication.
+
+## Mobile development boundary
+
+The [5.3 mobile plan](mobile-5.3-plan.md) and ADRs 0093–0096 cover an internal Testnet4 iOS software wallet and QR multisig signer. The current candidate wires native backup/recovery, new device-protected secrets, bounded pairing and exact-PSBT review/signing; physical acceptance remains in progress. Mainnet mobile, Android key operations, mobile USB signing and mobile multisig broadcast stay blocked. Desktop behavior and existing wallet files are preserved.
+
+A phone software wallet keeps its own BIP84 key and labelled receive authority. A multisig phone contributes an independent BIP48 key; desktop receives its public account, verifies the complete policy and later validates returned PSBT signatures. QR never transfers a seed, private descriptor, app credential or RPC credential. Shared and mobile watch-only receive requests are allocated on desktop to avoid independent address-index reuse. General label/history synchronization and a relay are not implemented. See the [candidate record](testing/5.3.0-rc2-mobile-keys.md) for actual evidence.
 
 ## Wallets and credentials
 
@@ -14,7 +20,7 @@ Groot is an onchain wallet for software keys, a single hardware signer, and stan
 
 Software creation requests exactly 32 bytes from the OS CSPRNG in Rust and fails if entropy is unavailable. Optional bounded coin-flip/die transcripts mix with, never replace, that source. Recovery words and signing secrets never enter the webview.
 
-Native backup/recovery sheets require an explicit privacy gate. Users record the 24 words and reconstruct their exact order from a shuffled pool. **Verify later** leaves a durable reminder; merely viewing the words does not verify a backup. Later verification requires fresh passphrase authorization. Recovery supplies the complete mnemonic through native UI and counts as verification. Unsupported native platforms fail closed. Groot warns against digital capture but does not override user-initiated OS screenshots (ADR 0078).
+Native backup/recovery sheets require an explicit privacy gate. Users record the 24 words and reconstruct their exact order from a shuffled pool. **Verify later** leaves a durable reminder; merely viewing the words does not verify a backup. Later verification requires fresh passphrase authorization (the local app PIN for a paired phone signer). Phone pairing may continue with an unverified backup; the shared wallet keeps a durable reminder and native verify/reveal actions. Recovery supplies the complete mnemonic through native UI and counts as verification. Unsupported native platforms fail closed. Groot warns against digital capture but does not override user-initiated OS screenshots (ADR 0078).
 
 After creation show the public master fingerprint, with copy, and an optional watch-only descriptor disclosure. Neither can restore a software wallet without its words and passphrase.
 
@@ -34,7 +40,7 @@ The multi-network desktop app switches Regtest/Testnet4/Mainnet through global S
 
 ## History and connectivity
 
-Before first history verification, do not present a numeric balance as verified. Ask for privacy approval: use Groot's network for simplicity and speed, or set up a private node. Resolve the configured backend before showing its specific privacy disclosure or enabling approval; a failed lookup stays blocked with an inline retry. Approval saves genesis height 0 and starts a resumable scan. Declining opens the Bitcoin Core connection dialog directly. Partial observations do not block an explicitly targeted genesis retry (ADRs 0084/0085).
+Before first history verification, do not present a numeric balance as verified. Ask for privacy approval: use Groot's network for simplicity and speed, or set up a private node. Resolve the configured backend before showing its specific privacy disclosure or enabling approval; a failed lookup stays blocked with an inline retry. Approval saves genesis height 0 and starts a resumable scan. Overview immediately shows scan startup/progress and loading placeholders instead of another approval prompt or an unverified zero balance; an interrupted scan offers a retry. On native mobile, local Core and missing remote RPC configuration require setup before approval; Testnet4 has no Groot managed access. The dialog states this limitation and opens the remote node connection form. Declining opens the Bitcoin Core connection dialog directly. Partial observations do not block an explicitly targeted genesis retry (ADRs 0084/0085).
 
 Settings owns authenticated birthday, recovery gap and full-rescan controls. A birthday must precede possible wallet activity and cannot exceed the verified tip. Gaps remain 20–1,000 and cannot be reduced below already revealed receive/change runs. A pruned node must retain required history; errors show the native retention facts and a retry. Progress reaches 100% only after pending transactions and the atomic result are reconciled. Lock/restart can reattach to saved progress; cancellation never presents discarded run progress as completed history.
 
@@ -52,21 +58,21 @@ Allow concurrent payment requests. Only an unused awaiting-payment address may b
 
 Full address/xpub views group four characters with a short final block; copy returns the exact unspaced value. Descriptor view/copy/QR/export presents one public receive/change multipath descriptor.
 
-Hardware address verification is address-specific. Discovery candidates use amber **Select to identify**; selected-device unlock instructions remain distinct. Fresh full-account identity proof precedes device display, policy registration and signing. Standard multisig must have policy/first-address verification on enough signers to intersect every signing quorum before receiving. Policy first-address detail uses the same comparison/derivation component as Receive for all devices.
+Hardware address verification is address-specific. Discovery candidates use amber **Select to identify**; selected-device unlock instructions remain distinct. Fresh full-account identity proof precedes device display, policy registration and signing. A failed connection/identity health check does not revoke or recolour the separate saved policy-import acknowledgement. Coldcard microSD/Virtual Disk import is explicitly acknowledged by the user; its timestamp says Import recorded rather than implying USB policy/address verification. Standard multisig must have policy/first-address verification on enough signers to intersect every signing quorum before receiving. Policy first-address detail uses the same comparison/derivation component as Receive for all devices.
 
 BIP329 exports representable public labels/spendability deterministically. Import is bounded, additive and atomic: conflicts leave the wallet unchanged. Restored-wallet address ownership is derived in Rust across receive indexes 0–9,999 plus indexed ownership, but an import that would exceed Groot's supported recovery gap is rejected atomically. Matching xpub records report matched signer keys and preserve current editable signer names. Labels are not a seed/descriptor backup or live synchronization protocol.
 
 ## Send, coins and activity
 
-Use integer satoshis and positive validated sat/vB rates. Economy/Standard/Priority come from the exact configured Core backend; unavailable estimates stay unavailable. A validated custom rate remains possible. Regtest alone has a deterministic fee policy.
+Use integer satoshis and positive validated sat/vB rates. Economy/Standard/Priority come from the exact configured Core backend. Preserve each available target when another target has insufficient data; missing targets stay unavailable and cannot be selected. Never substitute a longer-target rate for a missing shorter-target estimate. A validated custom rate remains possible. Regtest alone has a deterministic fee policy.
 
 Coin selection offers automatic strategies or exact eligible inputs. Frozen coins never enter either path. Review explains amounts, fees, change and source linkage from the actual unsigned PSBT. Self-transfers show Rust-proven **Consolidating** totals and a fee-only wallet debit; labels do not prove ownership.
 
-Proposals and collected signatures persist across restart. Leaving signing preserves the proposal; discarding requires confirmation. Each imported partial signature must cryptographically verify against the unchanged proposal. Final authorization rechecks wallet/session identity, canonical prevouts, outputs and policy before broadcast. A successful broadcast remains success if later sync fails; show the pending refresh separately.
+Proposals and collected signatures persist across restart. Leaving signing preserves the proposal; discarding requires confirmation. Each imported partial signature must cryptographically verify against the unchanged proposal. Final authorization rechecks wallet/session identity, canonical prevouts, outputs and policy before broadcast. A successful broadcast remains success if later sync fails; show the pending refresh separately. If local recording fails after Core accepts it, retain the accepted transaction ID with a durable warning, no fabricated snapshot, and no invitation to resend. Sync reconciles the exact saved proposal with canonical wallet history; the pending-result screen directs the user to sync instead of resending (ADR 0090).
 
 RBF preserves the intended recipient amount; CPFP spends an eligible wallet output. Failed or stale quotes block signing. Before final submission verify the original is still in the configured mempool. A confirmed original leaves the saved proposal read-only with explicit discard; never erase the confirmed payment. Separate RPC checks and submission are not atomic.
 
-Mainnet final-PSBT caps remain **100,000 sats fee** and **1,000,000 sats recipient plus fee**, including acceleration. Sparse estimates are capped, not extrapolated without bound.
+Mainnet payments have no rollout amount ceiling (ADR 0099). Positive amounts, Bitcoin supply bounds and the single-recipient rule remain enforced. The final-PSBT **100,000-sat fee limit** still applies, including acceleration. Policy errors explain the actual rejection in EN/FR/ES. Sparse estimates are capped, not extrapolated without bound.
 
 Activity paginates committed history and retains it on failed later reads. Reuse counts canonical external outputs, including spent receipts; replaced/evicted transaction versions do not create phantom receipts. Preserve original history and labels. Receipt/first-confirmation notification markers persist atomically and are acknowledged idempotently for the current wallet/session.
 
@@ -87,3 +93,11 @@ Rust selects exact repository/platform assets and verifies the signed Ed25519 ma
 ## Exclusions
 
 No cloud backup, editable permanent labels, Lightning, address book, arbitrary policy editor, terminated-app push or Payjoin sessions. Public platform support and future policy/services require the [roadmap](roadmap.md) gates. The Apache-2.0 core must remain recoverable and usable without paid services.
+
+On iOS, Groot credentials authorize key access without repeated iOS passcode prompts (ADR 0097). Existing protected keys may need one final device approval when first accessed; encrypted wallet files and original Keychain entries remain intact.
+
+## Retained Miniscript track
+
+Partner and Family continuity are fixed native-SegWit templates under ADRs 0050/0100. Internal test-network setup exposes their fixed roles. Primary proposals select a lock-free BDK path; delayed proposals explicitly select a named path and show its required signers, block delay and remaining blocks. Availability is per coin and rechecked from current native state before signature import and finalization. Family assistance requires one parent and one child-assistance signer. Renewal uses primary signers and sends to a fresh owned output before or after delayed maturity. Mainnet creation, direct USB Miniscript and phone enrollment into these templates remain blocked. Physical acceptance and independent review remain release requirements. Existing backups, drafts, descriptors and proposal tables remain compatible without migration.
+
+Unlocked mobile screens omit the brand header and start below the system safe area. Sync and backup reminders use compact inline actions with 44px touch targets; recovery verification remains available. This presentation change has no BIP or persisted-format impact.

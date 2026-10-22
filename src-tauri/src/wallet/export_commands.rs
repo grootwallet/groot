@@ -11,9 +11,13 @@ use std::{
     path::{Path, PathBuf},
     time::{Duration, Instant},
 };
+#[cfg(target_os = "ios")]
+use tauri::Manager;
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+use tauri::WebviewWindow;
 #[cfg(target_os = "macos")]
 use tauri::{webview::PageLoadEvent, WebviewUrl, WebviewWindowBuilder};
-use tauri::{AppHandle, State, WebviewWindow};
+use tauri::{AppHandle, State};
 use tauri_plugin_dialog::DialogExt;
 use uuid::Uuid;
 
@@ -116,6 +120,60 @@ pub(super) fn write_public_export(path: &Path, content: &[u8]) -> ApiResult<()> 
     result
 }
 
+fn save_public_file(
+    app: &AppHandle,
+    filename: &str,
+    filter_name: &str,
+    extensions: &[&str],
+    content: &[u8],
+) -> ApiResult<Option<PathBuf>> {
+    #[cfg(desktop)]
+    {
+        let selected = app
+            .dialog()
+            .file()
+            .set_file_name(filename)
+            .add_filter(filter_name, extensions)
+            .blocking_save_file();
+        let Some(selected) = selected else {
+            return Ok(None);
+        };
+        let path = selected.into_path().map_err(internal)?;
+        write_public_export(&path, content)?;
+        Ok(Some(path))
+    }
+
+    #[cfg(target_os = "ios")]
+    {
+        // UIDocumentPicker exports an existing source file instead of granting
+        // desktop-style access to a selected file's parent directory. Prepare
+        // the complete owner-only file atomically inside Groot's document
+        // directory before opening the picker; never truncate the returned URL.
+        let source = app.path().document_dir().map_err(internal)?.join(filename);
+        write_public_export(&source, content)?;
+        let selected = app
+            .dialog()
+            .file()
+            .set_file_name(filename)
+            .add_filter(filter_name, extensions)
+            .blocking_save_file();
+        let _ = fs::remove_file(&source);
+        let Some(selected) = selected else {
+            return Ok(None);
+        };
+        selected.into_path().map(Some).map_err(internal)
+    }
+
+    #[cfg(target_os = "android")]
+    {
+        let _ = (app, filename, filter_name, extensions, content);
+        Err(api_error(
+            "unsupported_operation",
+            "Native public-file export is not yet certified for Android. Use copy or QR export.",
+        ))
+    }
+}
+
 pub async fn public_backup_save(
     app: AppHandle,
     state: State<'_, AppState>,
@@ -138,18 +196,13 @@ pub async fn public_backup_save(
         } else {
             "json"
         };
-        let selected = app
-            .dialog()
-            .file()
-            .set_file_name(&filename)
-            .add_filter("Groot public backup", &[extension])
-            .blocking_save_file();
-        let Some(selected) = selected else {
-            return Ok(None);
-        };
-        let path = selected.into_path().map_err(internal)?;
-        write_public_export(&path, content.as_bytes())?;
-        Ok(Some(path))
+        save_public_file(
+            &app,
+            &filename,
+            "Groot public backup",
+            &[extension],
+            content.as_bytes(),
+        )
     })
     .await
     .map_err(internal)??;
@@ -183,18 +236,13 @@ pub async fn psbt_file_save(
     let content = psbt.trim().to_owned();
     decode_psbt(&content).map_err(proposal_api_error)?;
     let saved_path = tauri::async_runtime::spawn_blocking(move || {
-        let selected = app
-            .dialog()
-            .file()
-            .set_file_name(&filename)
-            .add_filter("Partially signed Bitcoin transaction", &["psbt"])
-            .blocking_save_file();
-        let Some(selected) = selected else {
-            return Ok(None);
-        };
-        let path = selected.into_path().map_err(internal)?;
-        write_public_export(&path, content.as_bytes())?;
-        Ok(Some(path))
+        save_public_file(
+            &app,
+            &filename,
+            "Partially signed Bitcoin transaction",
+            &["psbt"],
+            content.as_bytes(),
+        )
     })
     .await
     .map_err(internal)??;
@@ -557,19 +605,37 @@ pub async fn public_backup_pdf_save(
     saved_file_result(&state, Some(saved_path))
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(any(target_os = "linux", target_os = "windows"))]
 pub fn public_backup_pdf_prepare(
     app: AppHandle,
     state: State<'_, AppState>,
-    window: WebviewWindow,
+    _window: WebviewWindow,
     _suggested_filename: String,
 ) -> ApiResult<PendingPdfExportDto> {
     require_unlocked(&app, &state)?;
-    window.print().map_err(internal)?;
-    Ok(PendingPdfExportDto {
-        prepared: false,
-        save_token: None,
-    })
+    #[cfg(mobile)]
+    {
+        Err(api_error(
+            "backup_export_failed",
+            "PDF export is unavailable on mobile. Use a public descriptor backup instead.",
+        ))
+    }
+    #[cfg(desktop)]
+    {
+        _window.print().map_err(internal)?;
+        Ok(PendingPdfExportDto {
+            prepared: false,
+            save_token: None,
+        })
+    }
+}
+
+#[cfg(any(target_os = "android", target_os = "ios"))]
+pub fn public_backup_pdf_prepare(_suggested_filename: String) -> ApiResult<PendingPdfExportDto> {
+    Err(api_error(
+        "backup_export_failed",
+        "Native PDF printing is not available on mobile.",
+    ))
 }
 
 #[cfg(not(target_os = "macos"))]

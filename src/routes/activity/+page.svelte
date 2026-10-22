@@ -27,6 +27,8 @@
   let syncing = $state(false);
   let syncError = $state('');
   let loadError = $state('');
+  let refreshError = $state('');
+  let hasLoaded = false;
   let walletId = '';
   let mounted = $state(false);
   let generation = 0;
@@ -66,6 +68,9 @@
     if (!mounted) return;
     ++generation;
     selectedTransactionId = null;
+    transactions = [];
+    hasLoaded = false;
+    refreshError = '';
     cursor = null;
     loading = true;
     const timer = setTimeout(() => void load(), selection.query.trim() ? 180 : 0);
@@ -74,10 +79,8 @@
   async function load(more = false) {
     const requestGeneration = ++generation;
     if (more) loadingMore = true;
-    else {
-      loading = true;
-      cursor = null;
-    }
+    else loading = !hasLoaded;
+    refreshError = '';
     loadError = '';
     pageError = '';
     restartRequired = false;
@@ -99,6 +102,7 @@
       if (requestGeneration !== generation || walletId !== walletShell.selectedWalletId()) return;
       transactions = more ? [...transactions, ...page.transactions] : page.transactions;
       cursor = page.nextCursor;
+      hasLoaded = true;
     } catch (cause) {
       if (requestGeneration !== generation) return;
       if (cause instanceof WalletError && cause.code === 'wallet_locked') {
@@ -109,7 +113,8 @@
       if (more) {
         pageError = message;
         restartRequired = cause instanceof WalletError && cause.code === 'history_changed';
-      } else loadError = message;
+      } else if (hasLoaded) refreshError = message;
+      else loadError = message;
       toast({ title: 'Could not load transactions', description: message, tone: 'danger' });
     } finally {
       if (requestGeneration === generation) {
@@ -234,6 +239,13 @@
       </select></label
     >
   </section>
+  {#if refreshError}
+    <LoadFailure
+      title={translate($locale, 'Transactions are unavailable')}
+      description={refreshError}
+      onretry={() => load()}
+    />
+  {/if}
   <section class="section-block">
     {#if loading}
       <TxList items={[]} {loading} />
@@ -287,3 +299,68 @@
 </div>
 
 <TxDetailsModal transaction={selected} {multisig} onclose={() => (selectedTransactionId = null)} />
+
+<style>
+  /* Keep the original cascade weight while constraining these rules to this owner. */
+
+  :global(.activity-controls):where(.activity-controls) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 190px;
+    gap: 12px;
+    margin: -14px 0 20px;
+  }
+  :global(.activity-controls):where(.activity-controls) :global(label) {
+    display: grid;
+    gap: 6px;
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+  }
+  :global(.activity-controls):where(.activity-controls) :global(input),
+  :global(.activity-controls):where(.activity-controls) :global(select) {
+    width: 100%;
+    height: 44px;
+    padding: 0 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+    color: var(--text);
+    background: var(--surface-control);
+    font: inherit;
+  }
+  .activity-header-actions {
+    flex-wrap: wrap;
+  }
+
+  :global(.segmented):where(.segmented) {
+    display: flex;
+    padding: 3px;
+    background: var(--surface-control);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+  }
+  :global(.segmented):where(.segmented) :global(button) {
+    border: 0;
+    background: transparent;
+    color: var(--muted);
+    border-radius: 5px;
+    min-height: 29px;
+    padding: 0 12px;
+    font-size: var(--font-size-meta);
+  }
+  :global(.segmented):where(.segmented) :global(button.active) {
+    color: var(--text);
+    background: var(--surface-active);
+  }
+
+  @media (max-width: 760px) {
+    :global(.activity-controls):where(.activity-controls) {
+      grid-template-columns: 1fr;
+    }
+    :global(.activity-page):where(.activity-page) :global(.page-header) {
+      flex-wrap: wrap;
+    }
+    .activity-header-actions {
+      width: 100%;
+      justify-content: space-between;
+    }
+  }
+</style>

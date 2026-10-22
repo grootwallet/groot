@@ -1,10 +1,15 @@
+import { readUiStyles } from '../testing/ui-styles';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 const shell = readFileSync(new URL('./AppShell.svelte', import.meta.url), 'utf8');
 const buildIdentity = readFileSync(new URL('./BuildIdentity.svelte', import.meta.url), 'utf8');
 const brandLockup = readFileSync(new URL('./BrandLockup.svelte', import.meta.url), 'utf8');
-const appCss = readFileSync(new URL('../../app.css', import.meta.url), 'utf8');
+const appCss = readUiStyles();
+const unlockRoute = readFileSync(
+  new URL('../../routes/unlock/+page.svelte', import.meta.url),
+  'utf8'
+);
 const settings = readFileSync(
   new URL('../../routes/settings/+page.svelte', import.meta.url),
   'utf8'
@@ -16,6 +21,8 @@ describe('startup wallet lock gate', () => {
     expect(shell).toContain(
       "let startupState = $state<'checking' | 'ready' | 'failed'>('checking')"
     );
+    expect(shell).toContain('const runtime = await walletService.runtimePlatform()');
+    expect(shell).toContain('runtime.network !== defaultConfig.network');
     expect(shell).toContain('const selection = await walletService.session()');
     expect(shell).toContain("await goto('/unlock')");
 
@@ -27,9 +34,29 @@ describe('startup wallet lock gate', () => {
     expect(routeContent).toBeGreaterThan(authenticatedBranch);
   });
 
+  it('shows native build identity and keeps wallet creation reachable while locked', () => {
+    expect(shell).toContain('runtimeIdentity?.network ?? defaultConfig.network');
+    expect(buildIdentity).toContain("'Groot v{version} · {commit}'");
+    expect(unlockRoute).toContain('href="/welcome?add=1"');
+    expect(unlockRoute).toContain("translate($locale, 'Add another wallet')");
+    const lockedCardClose = unlockRoute.indexOf('</main>');
+    const addWalletAction = unlockRoute.indexOf('href="/welcome?add=1"');
+    expect(addWalletAction).toBeGreaterThan(lockedCardClose);
+    expect(shell).toContain('class:locked-brand={lockedRoute}');
+    expect(appCss).toMatch(
+      /\.locked-mobile-utilities\s*\{[\s\S]*?top:\s*max\(12px, env\(safe-area-inset-top\)\)/
+    );
+    expect(unlockRoute).toContain('{#if runtimeIdentity?.mobile}');
+    expect(unlockRoute).toMatch(
+      /<BuildIdentity\s+runtime=\{runtimeIdentity\}\s+placement="onboarding"\s*\/>/
+    );
+  });
+
   it('shows no wallet data when startup session verification fails', () => {
     expect(shell).toContain("startupState = 'failed'");
     expect(shell).toContain('Groot could not verify the wallet lock state.');
+    expect(shell).toContain('This Groot app contains mismatched components.');
+    expect(shell).toContain('Groot could not verify this app build.');
     expect(shell).toContain("{translate($locale, 'Retry')}</button");
   });
 
@@ -40,8 +67,8 @@ describe('startup wallet lock gate', () => {
     expect(session).toBeGreaterThan(runtime);
     expect(shell).toContain('runtime.version !== APP_VERSION');
     expect(shell).toContain('<BuildIdentity runtime={runtimeIdentity} placement="sidebar" />');
-    expect(shell).toContain(
-      '{#if onboardingRoute}<BuildIdentity runtime={runtimeIdentity} placement="onboarding" />{/if}'
+    expect(shell).toMatch(
+      /\{#if onboardingRoute && !mobileRuntime\}\s*<BuildIdentity\s+runtime=\{runtimeIdentity\}\s+placement="onboarding"\s*\/>/
     );
     expect(settings).toContain('<BuildIdentity placement="settings" />');
     expect(buildIdentity).toContain("'Groot v{version} · {commit}'");

@@ -1,10 +1,11 @@
 <script lang="ts">
   import { locale } from '$lib/i18n';
   import { translate } from '$lib/i18n-catalog';
-  import { AlertTriangle, Check, ChevronRight, Download, ShieldCheck } from '@lucide/svelte';
+  import { Check, ChevronRight, Download, ShieldCheck } from '@lucide/svelte';
   import type { CosignerDraft } from '$lib/multisig/policy';
   import type { MultisigWallet } from '$lib/wallet';
   import Button from './Button.svelte';
+  import WarningNotice from './WarningNotice.svelte';
   import InstructionCard from './InstructionCard.svelte';
   import PolicySignerList from './PolicySignerList.svelte';
 
@@ -87,13 +88,14 @@
       ></span
     ></label
   >
-  {#if error}<div class="hardware-inline-error" role="alert">
-      <AlertTriangle size={18} /><span
-        ><strong>{translate($locale, 'Coldcard setup was not recorded')}</strong><small
-          >{error}</small
-        ></span
-      >
-    </div>{/if}
+  {#if error}<WarningNotice
+      tone="danger"
+      icon
+      role="alert"
+      ariaLive="polite"
+      title={translate($locale, 'Coldcard setup was not recorded')}
+      body={error}
+    />{/if}
   <div class="modal-footer policy-review-actions">
     {#if onback}<Button variant="secondary" disabled={busy} onclick={onback}
         >{translate($locale, 'Back')}</Button
@@ -106,3 +108,38 @@
     >
   </div>
 </section>
+
+<style>
+  /* Keep the original cascade weight while constraining these rules to this owner. */
+
+  :global(.policy-review-confirmation):where(.policy-review-confirmation) {
+    display: grid;
+    grid-template-columns: 18px minmax(0, 1fr);
+    align-items: start;
+    gap: 9px;
+    padding: 11px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+    background: var(--surface-control);
+    cursor: pointer;
+  }
+  :global(.policy-review-confirmation):where(.policy-review-confirmation) :global(input) {
+    margin-top: 2px;
+  }
+  :global(.policy-review-confirmation):where(.policy-review-confirmation) :global(span) {
+    display: grid;
+    gap: 3px;
+  }
+  :global(.policy-review-confirmation):where(.policy-review-confirmation) :global(strong) {
+    font-size: var(--font-size-meta);
+  }
+  :global(.policy-review-confirmation):where(.policy-review-confirmation) :global(small) {
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+    line-height: 1.4;
+  }
+  :global(.policy-review-confirmation:has(input:disabled)):where(.policy-review-confirmation) {
+    cursor: default;
+    opacity: 0.72;
+  }
+</style>

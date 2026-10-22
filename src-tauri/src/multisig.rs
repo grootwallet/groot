@@ -9,7 +9,7 @@ use std::{collections::HashSet, fmt, str::FromStr};
 pub use crate::build_network::multisig_account_path;
 use crate::build_network::parameters;
 const MIN_COSIGNERS: usize = 3;
-const MAX_COSIGNERS: usize = 7;
+const MAX_COSIGNERS: usize = 8;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -21,7 +21,7 @@ pub enum CosignerSource {
     Virtual,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CosignerInput {
     pub id: String,

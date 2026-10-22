@@ -33,7 +33,7 @@
     title={translate($locale, 'You will need to add the signers again.')}
     body={translate($locale, 'No wallet, signer seed, or bitcoin is deleted.')}
   />
-  {#if error}<p class="inline-error" role="alert">{error}</p>{/if}
+  {#if error}<WarningNotice tone="danger" icon role="alert" ariaLive="polite" body={error} />{/if}
   <div class="modal-footer">
     <Button variant="secondary" disabled={busy} onclick={onclose}
       >{translate($locale, 'Keep setup')}</Button

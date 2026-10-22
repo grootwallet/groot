@@ -158,6 +158,7 @@
   let maxSpendActive = $state(false);
   let maxSpendRequestRevision = 0;
   let txid = $state('');
+  let persistencePending = $state(false);
   let broadcastTxidCopied = $state(false);
   let broadcastExplorerError = $state('');
   let sentAmount = $state(0);
@@ -883,9 +884,11 @@
         );
       }
       txid = result.txid;
+      persistencePending = result.persistencePending === true;
+      if (persistencePending) toast({ title: 'Local recording pending', tone: 'warning' });
       sentAmount = Number(proposal.amount);
       balanceSyncPending = result.syncPending;
-      available = result.snapshot.balance.total;
+      if (result.snapshot) available = result.snapshot.balance.total;
       passphrase = '';
       step = 4;
     } catch (cause) {
@@ -1627,6 +1630,9 @@
               <div class="address-input-control">
                 <input
                   aria-label={translate($locale, 'Bitcoin address')}
+                  autocapitalize="none"
+                  autocorrect="off"
+                  spellcheck={false}
                   bind:value={address}
                   oninput={() => {
                     draftError = '';
@@ -1658,13 +1664,15 @@
               class="full"
               >{translate($locale, 'Continue to amount')}<ArrowRight size={17} /></Button
             >
-            {#if draftError}<div class="hardware-inline-error send-form-error" role="alert">
-                <AlertTriangle size={18} /><span
-                  ><strong>{translate($locale, 'Could not save payment draft')}</strong><small
-                    >{draftError}</small
-                  ></span
-                >
-              </div>{/if}
+            {#if draftError}<WarningNotice
+                tone="danger"
+                icon
+                role="alert"
+                ariaLive="polite"
+                class="send-form-error"
+                title={translate($locale, 'Could not save payment draft')}
+                body={draftError}
+              />{/if}
           </form>
         {:else if step === 1}
           <form
@@ -2067,18 +2075,20 @@
                   ><Download size={16} />{translate($locale, 'Save unsigned PSBT')}</Button
                 >
               </div>
-              {#if importError}<div
-                  class="hardware-inline-error signing-transport-error"
+              {#if importError}<WarningNotice
+                  tone="danger"
+                  icon
                   role="alert"
-                >
-                  <AlertTriangle size={18} /><span
-                    ><strong>{translate($locale, 'Signed PSBT rejected')}</strong><small
-                      >{importError}</small
-                    ></span
-                  >
-                </div>{:else if credentialError}<p class="form-error" role="alert">
-                  {credentialError}
-                </p>{/if}
+                  ariaLive="polite"
+                  class="signing-transport-error"
+                  title={translate($locale, 'Signed PSBT rejected')}
+                  body={importError}
+                />{:else if credentialError}<WarningNotice
+                  tone="danger"
+                  icon
+                  role="alert"
+                  body={credentialError}
+                />{/if}
             {/if}
             <Button
               variant="ghost"
@@ -2230,12 +2240,21 @@
                 )}{:else}{translate(
                   $locale,
                   'Your payment was accepted by the Bitcoin network.'
-                )}{/if}{#if balanceSyncPending}
+                )}{/if}{#if balanceSyncPending && !persistencePending}{' '}
                 {translate(
                   $locale,
                   'Balance refresh is pending; sync when the node is available.'
                 )}{/if}
             </p>
+            {#if persistencePending}
+              <WarningNotice
+                title={translate($locale, 'Local recording pending')}
+                body={translate(
+                  $locale,
+                  'The transaction was accepted, but its local record could not be saved. Sync this wallet before making another payment. Do not resend it.'
+                )}
+              />
+            {/if}
             <button class="hash-box" type="button" onclick={copyBroadcastTxid}
               ><span>{translate($locale, 'Transaction ID')}</span><code
                 >{compactIdentifier(txid)}</code
@@ -2243,6 +2262,7 @@
             >
             <div class="success-actions">
               <Button
+                disabled={persistencePending}
                 onclick={() => {
                   step = 1;
                   address = '';
@@ -2253,6 +2273,7 @@
                   txid = '';
                   sentAmount = 0;
                   balanceSyncPending = false;
+                  persistencePending = false;
                   accelerationMethod = null;
                   broadcastExplorerError = '';
                 }}>{translate($locale, 'Make another payment')}</Button
@@ -2263,9 +2284,12 @@
             {#if broadcastExplorerUrl}<div class="explorer-panel">
                 <button class="explorer-link" type="button" onclick={openBroadcastExplorer}
                   >{translate($locale, 'View on mempool.space')} <ExternalLink size={14} /></button
-                >{#if broadcastExplorerError}<p class="form-error" role="alert">
-                    {broadcastExplorerError}
-                  </p>{/if}
+                >{#if broadcastExplorerError}<WarningNotice
+                    tone="danger"
+                    icon
+                    role="alert"
+                    body={broadcastExplorerError}
+                  />{/if}
                 <p class="explorer-privacy">
                   {translate(
                     $locale,
@@ -2435,20 +2459,22 @@
           onselect={signHardware}
           onrescan={scanHardware}
           showRescan
-        />{/if}{#if deviceError}<div class="hardware-inline-error" role="alert">
-          <AlertTriangle size={18} /><span
-            ><strong
-              >{translate(
-                $locale,
-                hardwareAction === 'identify'
-                  ? 'Signer identification failed'
-                  : 'Hardware signing failed'
-              )}</strong
-            ><small>{deviceError}</small></span
+        />{/if}{#if deviceError}<WarningNotice
+          tone="danger"
+          icon
+          role="alert"
+          ariaLive="polite"
+          title={translate(
+            $locale,
+            hardwareAction === 'identify'
+              ? 'Signer identification failed'
+              : 'Hardware signing failed'
+          )}
+          body={deviceError}
           ><Button variant="secondary" size="small" onclick={scanHardware}
             >{translate($locale, 'Rescan')}</Button
-          >
-        </div>{/if}
+          ></WarningNotice
+        >{/if}
     </div>
   </div></Modal
 >
@@ -2465,7 +2491,13 @@
   onclear={() => (pinPositions = '')}
   onsubmit={submitHardwarePin}
   onretry={() => {
-    if (pinDevice) startHardwarePin(pinDevice);
+    pinOpen = false;
+    pinPositions = '';
+    pinChallenge = '';
+    pinDevice = null;
+    pinError = '';
+    pinErrorCode = '';
+    void scanHardware();
   }}
   onclose={() => {
     pinOpen = false;
@@ -2501,12 +2533,14 @@
         credentialError = '';
       }}
       placeholder={translate($locale, 'cHNidP8…')}></textarea></label
-  >{#if importError}<div class="hardware-inline-error" role="alert">
-      <AlertTriangle size={18} /><span
-        ><strong>{translate($locale, 'Signed PSBT rejected')}</strong><small>{importError}</small
-        ></span
-      >
-    </div>{/if}
+  >{#if importError}<WarningNotice
+      tone="danger"
+      icon
+      role="alert"
+      ariaLive="polite"
+      title={translate($locale, 'Signed PSBT rejected')}
+      body={importError}
+    />{/if}
   <div class="modal-footer">
     <Button variant="secondary" disabled={broadcasting} onclick={closePsbtImport}
       >{translate($locale, 'Cancel')}</Button
@@ -2547,12 +2581,14 @@
   onclose={() => (paymentScanOpen = false)}
 >
   <PaymentRequestQrScanner onscan={receivePaymentRequest} />
-  {#if paymentScanError}<div class="hardware-inline-error" role="alert">
-      <AlertTriangle size={18} /><span
-        ><strong>{translate($locale, 'QR code rejected')}</strong><small>{paymentScanError}</small
-        ></span
-      >
-    </div>{/if}
+  {#if paymentScanError}<WarningNotice
+      tone="danger"
+      icon
+      role="alert"
+      ariaLive="polite"
+      title={translate($locale, 'QR code rejected')}
+      body={paymentScanError}
+    />{/if}
 </Modal>
 
 <Modal
@@ -2580,7 +2616,12 @@
       <dd><PermanentLabelTags labels={submissionLabels} prominent /></dd>
     </div>
   </dl>
-  {#if discardDraftError}<p class="form-error" role="alert">{discardDraftError}</p>{/if}
+  {#if discardDraftError}<WarningNotice
+      tone="danger"
+      icon
+      role="alert"
+      body={discardDraftError}
+    />{/if}
   <div class="modal-footer">
     <Button
       variant="secondary"
@@ -2628,9 +2669,12 @@
         <dd>{externalProposal.signed} {translate($locale, 'of 1 → 0 of 1')}</dd>
       </div>
     </dl>
-    {#if discardSignatureError}<p class="form-error" role="alert">
-        {discardSignatureError}
-      </p>{/if}
+    {#if discardSignatureError}<WarningNotice
+        tone="danger"
+        icon
+        role="alert"
+        body={discardSignatureError}
+      />{/if}
     <div class="modal-footer">
       <Button
         variant="secondary"
@@ -2686,7 +2730,7 @@
         </dd>
       </div>
     </dl>
-    {#if cancelError}<p class="form-error" role="alert">{cancelError}</p>{/if}
+    {#if cancelError}<WarningNotice tone="danger" icon role="alert" body={cancelError} />{/if}
     <div class="modal-footer">
       <Button
         variant="secondary"
@@ -2745,3 +2789,68 @@
   detail={translate($locale, 'Internal wallet output · not the recipient')}
   onclose={() => (hardwareChangeAddressOpen = false)}
 />
+
+<style>
+  .send-page :global(.signing-transport-error) {
+    margin-top: 14px;
+  }
+
+  /* Keep the original cascade weight while constraining these rules to this owner. */
+
+  :global(.sign-card):where(.sign-card) {
+    text-align: center;
+  }
+  :global(.sign-card):where(.sign-card) :global(.sign-icon) {
+    margin: 5px auto 18px;
+  }
+  :global(.sign-card):where(.sign-card) :global(h2) {
+    font-size: 18px;
+    margin: 0;
+  }
+  :global(.sign-card):where(.sign-card) > :global(p) {
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+    line-height: 1.5;
+    max-width: 380px;
+    margin: 8px auto 24px;
+  }
+  :global(.sign-card):where(.sign-card) :global(.sign-back-action) {
+    margin-top: 8px;
+  }
+  :global(.sign-card):where(.sign-card) :global(.field) {
+    text-align: left;
+  }
+  :global(.signed-transaction-review):where(.signed-transaction-review) > :global(.details-list) {
+    border-top: 0;
+  }
+  :global(.signed-transaction-review):where(.signed-transaction-review)
+    > :global(.details-list > div:last-child) {
+    border-bottom: 0;
+  }
+  :global(.signed-transaction-review):where(.signed-transaction-review) {
+    width: 100%;
+    box-sizing: border-box;
+    margin: 4px 0 12px;
+    padding: 0 14px 5px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+    background: var(--surface-control);
+    text-align: left;
+  }
+  :global(.signed-transaction-review):where(.signed-transaction-review) :global(.details-list) {
+    margin: 0;
+  }
+  :global(.signed-transaction-review):where(.signed-transaction-review) > :global(.details-list) {
+    border-top: 0;
+  }
+  :global(.signed-transaction-review):where(.signed-transaction-review)
+    :global(.proposal-review-details) {
+    margin-top: 2px;
+    border-bottom: 0;
+  }
+  @media (max-width: 760px) {
+    .send-stage-card :global(.split-actions .button) {
+      scroll-margin-block: calc(160px + env(safe-area-inset-bottom));
+    }
+  }
+</style>

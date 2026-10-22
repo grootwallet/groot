@@ -81,3 +81,65 @@
     </div>
   </div>
 </Modal>
+
+<style>
+  /* Keep the original cascade weight while constraining these rules to this owner. */
+
+  :global(.coin-freeze-confirmation):where(.coin-freeze-confirmation) {
+    display: grid;
+    gap: 14px;
+  }
+  :global(.coin-freeze-summary):where(.coin-freeze-summary) {
+    min-width: 0;
+    display: grid;
+    grid-template-columns: 38px minmax(0, 1fr);
+    align-items: center;
+    gap: 11px;
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+    background: var(--surface-control);
+  }
+  :global(.coin-freeze-summary):where(.coin-freeze-summary) > :global(span) {
+    width: 38px;
+    height: 38px;
+    display: grid;
+    place-items: center;
+    border-radius: var(--radius-control);
+    color: var(--success);
+    background: color-mix(in srgb, var(--success) 8%, transparent);
+  }
+  :global(.coin-freeze-summary):where(.coin-freeze-summary) > :global(span.frozen) {
+    color: var(--link);
+    background: color-mix(in srgb, var(--link) 10%, transparent);
+  }
+  :global(.coin-freeze-summary):where(.coin-freeze-summary) > :global(div) {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  :global(.coin-freeze-summary):where(.coin-freeze-summary) :global(strong) {
+    overflow: hidden;
+    color: var(--text);
+    font-size: 14px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  :global(.coin-freeze-summary):where(.coin-freeze-summary) :global(small) {
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+  }
+  :global(.coin-freeze-confirmation):where(.coin-freeze-confirmation) > :global(p) {
+    margin: 0;
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+    line-height: 1.55;
+  }
+  :global(.coin-freeze-actions):where(.coin-freeze-actions) {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    padding-top: 2px;
+  }
+</style>

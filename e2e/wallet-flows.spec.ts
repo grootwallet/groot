@@ -109,7 +109,7 @@ test('copies the public build identity with inline retry feedback', async ({ pag
   await page.goto('/unlock?fixture-locked-wallet-switch=1');
   const buildIdentity = page.getByRole('button', { name: 'Copy build information' });
   const displayedIdentity = (await buildIdentity.textContent())?.trim();
-  expect(displayedIdentity).toMatch(/^Groot v\d+\.\d+\.\d+(?:-rc[0-9]{2})? · [a-z0-9-]+$/);
+  expect(displayedIdentity).toMatch(/^Groot v\d+\.\d+\.\d+(?:-rc[1-9][0-9]*)? · [a-z0-9-]+$/);
 
   await buildIdentity.click();
   const copyStatus = page.locator('.build-identity-sidebar .build-copy-status');
@@ -290,12 +290,17 @@ test('creates a 24-word wallet and clears onboarding secrets', async ({ page }) 
   ).toBeVisible();
   await expect(page.getByRole('button', { name: 'Recover software wallet' })).toBeVisible();
   await page.getByRole('button', { name: 'Add wallet' }).click();
-  await expect(page.locator('.wallet-type-card')).toHaveCount(3);
+  const mobile = (page.viewportSize()?.width ?? 1180) <= 760;
+  await expect(page.locator('.wallet-type-card')).toHaveCount(mobile ? 6 : 3);
   await expect(page.getByText('Create and back up your keys in Groot.')).toBeVisible();
   await expect(page.getByText('Connect a device you already trust.')).toBeVisible();
   await expect(
     page.getByText('Custom spending, recovery, inheritance, or shared control.')
   ).toBeVisible();
+  if (mobile) {
+    await expect(page.getByText('Add this phone as one signer in a shared wallet.')).toBeVisible();
+    await expect(page.getByText('Import a hardware wallet without its signing key.')).toBeVisible();
+  }
   await chooseSoftwareWallet(page);
   const setupProgress = page.getByRole('navigation', { name: 'Software wallet setup progress' });
   await expect(setupProgress).toContainText('Generate');
@@ -518,6 +523,8 @@ test('keeps recovery words out of the webview and unlock rejects the wrong crede
   await unlockCredential.fill('prototype-passphrase');
   await unlockCredential.press('Enter');
   await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible();
+  // Both viewport projects use the browser adapter. Native iOS connection
+  // restrictions depend on the reported platform, not the viewport width.
   await expect(page.getByRole('button', { name: 'Syncing' })).toBeVisible();
   await expect(page.locator('.sync-progress')).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Updated now' })).toBeVisible();
@@ -602,9 +609,15 @@ test('shows skeletons while a restored wallet loads its first synced data', asyn
   await page.goto('/?fixture-delayed-wallet-data=1', { waitUntil: 'commit' });
   await expect
     .poll(() =>
-      page
-        .locator('.wallet-skeleton')
-        .evaluateAll((skeletons) => skeletons.map((item) => item.className).sort())
+      page.locator('.wallet-skeleton').evaluateAll((skeletons) =>
+        skeletons
+          .map((item) =>
+            Array.from(item.classList)
+              .filter((name) => !name.startsWith('svelte-'))
+              .join(' ')
+          )
+          .sort()
+      )
     )
     .toEqual(['wallet-skeleton balance', 'wallet-skeleton transactions']);
   await page.clock.runFor(1000);
@@ -696,6 +709,7 @@ test('creates, switches, unlocks, and deletes isolated wallet profiles', async (
       .locator('.wallet-manager')
       .getByRole('button', { name: /Add wallet/ })
       .click();
+    await expect(page).toHaveURL(/\/welcome\?add=1$/);
   } else {
     await page
       .getByRole('complementary')
@@ -969,7 +983,7 @@ test('creates an external-signer wallet, signs by cable, and configures its isol
   await page.getByRole('button', { name: 'Scan signed QR' }).click();
   await expect(
     page.getByText(
-      /Point the camera at a crypto-psbt QR|Camera access was denied|No usable camera is available/
+      /Allow camera access to scan this QR|Camera access was denied|No camera was found/
     )
   ).toBeVisible();
   await expect(
@@ -1079,7 +1093,7 @@ test('creates an external-signer wallet, signs by cable, and configures its isol
   await expect(page.getByText('Descriptor backup saved', { exact: true })).toBeVisible();
   await descriptorDialog.getByRole('button', { name: 'Close' }).click();
   await page.getByRole('button', { name: /Bitcoin Core connection/ }).click();
-  await page.getByRole('button', { name: 'Custom remote' }).click();
+  await page.getByRole('button', { name: 'Custom remote', exact: true }).click();
   await page.getByLabel('RPC URL').fill('https://regtest-node.example:18443');
   await page.getByLabel('RPC username').fill('groot');
   await page.getByLabel('RPC password', { exact: true }).fill('rpc-secret');
@@ -1091,10 +1105,22 @@ test('creates an external-signer wallet, signs by cable, and configures its isol
 test('localizes hardware scan progress in French', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('groot-language', 'fr'));
   await page.goto('/hardware/new');
+  await page.evaluate(async () => {
+    const path = '/src/lib/wallet/index.ts';
+    const { walletService } = await import(path);
+    walletService.listHardwareDevices = () =>
+      new Promise((resolve) => {
+        (window as Window & { releaseHardwareScan?: () => void }).releaseHardwareScan = () =>
+          resolve([]);
+      });
+  });
   await page.getByRole('button', { name: /Connecter par câble/ }).click();
   await expect(
     page.getByRole('status', { name: 'Configuration du signataire matériel en cours' })
   ).toContainText('Recherche de tous les signataires matériels USB…');
+  await page.evaluate(() =>
+    (window as Window & { releaseHardwareScan: () => void }).releaseHardwareScan()
+  );
 });
 
 test('imports a public hardware backup without requiring a wallet name first', async ({ page }) => {
@@ -1167,7 +1193,6 @@ test('unlocks a Trezor before choosing its standard single-key wallet', async ({
   const standard = page.getByRole('dialog', { name: 'Use Trezor standard wallet?' });
   await expect(standard).toBeVisible();
   await expect(standard.getByText('Your hidden wallet is unchanged.')).toBeVisible();
-  await expect(standard).toContainText('They have different fingerprints and addresses.');
   await standard.getByRole('button', { name: 'Use standard wallet' }).click();
 
   await expect(page.getByText('PUBLIC DATA REVIEW')).toBeVisible();
@@ -1191,6 +1216,10 @@ test('global keyboard shortcuts navigate safely and match the Settings reference
   await expect(page.getByRole('heading', { name: 'App appearance' })).toBeVisible();
 
   const shortcuts = page.locator('.keyboard-shortcut-grid');
+  if (testInfo.project.name === 'mobile') {
+    await expect(shortcuts).toHaveCount(0);
+    return;
+  }
   await expect(shortcuts).toBeVisible();
   await expect(shortcuts.locator('dt')).toHaveText([
     'Overview',
@@ -1920,23 +1949,34 @@ test('recovery scan and private network controls preserve explicit safety choice
     .getByRole('button', { name: 'Use compact filters for wallet activity' })
     .click();
   const syncSource = page.getByRole('dialog', { name: 'Wallet activity sync' });
-  await syncSource.getByRole('button', { name: 'Compact filters' }).click();
-  await expect(syncSource.getByText('Confirmed activity only.')).toBeVisible();
-  await syncSource.getByLabel('Peer selection').selectOption({ label: 'Manual peers only' });
-  await expect(
-    syncSource.getByText('Manual mode never falls back to DNS seeds or public peers.')
-  ).toBeVisible();
-  await syncSource
-    .getByLabel('Manual peers · one numeric IP:port per line')
-    .fill('127.0.0.1:18444');
-  await syncSource.getByLabel('Optional local Tor SOCKS5 proxy').fill('127.0.0.1:9050');
-  await syncSource.getByLabel('Wallet passphrase', { exact: true }).fill('prototype-passphrase');
-  await syncSource.getByRole('button', { name: 'Save source' }).click();
-  await expect(
-    page.getByRole('button', {
-      name: /Wallet activity sync.*P2P compact filters.*confirmed activity only/
-    })
-  ).toBeVisible();
+  const mobileRuntime = (page.viewportSize()?.width ?? 1280) <= 760;
+  if (mobileRuntime) {
+    await expect(
+      syncSource.getByRole('button', { name: 'Compact filters · Experimental' })
+    ).toHaveCount(0);
+    await expect(
+      syncSource.getByRole('button', { name: 'Bitcoin Core', exact: true })
+    ).toBeVisible();
+    await syncSource.getByRole('button', { name: 'Cancel' }).click();
+  } else {
+    await syncSource.getByRole('button', { name: 'Compact filters · Experimental' }).click();
+    await expect(syncSource.getByText('Experimental test-network feature.')).toBeVisible();
+    await syncSource.getByLabel('Peer selection').selectOption({ label: 'Manual peers only' });
+    await expect(
+      syncSource.getByText('Manual mode never falls back to DNS seeds or public peers.')
+    ).toBeVisible();
+    await syncSource
+      .getByLabel('Manual peers · one numeric IP:port per line')
+      .fill('127.0.0.1:18444');
+    await syncSource.getByLabel('Optional local Tor SOCKS5 proxy').fill('127.0.0.1:9050');
+    await syncSource.getByLabel('Wallet passphrase', { exact: true }).fill('prototype-passphrase');
+    await syncSource.getByRole('button', { name: 'Save source' }).click();
+    await expect(
+      page.getByRole('button', {
+        name: /Wallet activity sync.*P2P compact filters.*confirmed activity only/
+      })
+    ).toBeVisible();
+  }
 
   await page.getByRole('button', { name: /Bitcoin Core connection/ }).click();
   await page.getByRole('button', { name: 'Tor onion' }).click();
@@ -1964,6 +2004,15 @@ test('network services use one Core row unless compact filters are active', asyn
   await coreDialog.getByRole('button', { name: 'Use compact filters for wallet activity' }).click();
 
   const syncDialog = page.getByRole('dialog', { name: 'Wallet activity sync' });
+  if ((page.viewportSize()?.width ?? 1180) <= 760) {
+    await expect(syncDialog.getByRole('button', { name: /Compact filters/ })).toHaveCount(0);
+    await expect(
+      syncDialog.getByRole('button', { name: 'Bitcoin Core', exact: true })
+    ).toBeVisible();
+    await syncDialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await expect(coreRow).toContainText('activity, fees, and broadcast');
+    return;
+  }
   await syncDialog.getByRole('button', { name: 'Compact filters' }).click();
   await syncDialog.getByLabel('Wallet passphrase', { exact: true }).fill('prototype-passphrase');
   await syncDialog.getByRole('button', { name: 'Save source' }).click();
@@ -2157,19 +2206,21 @@ test('receive label suggestions expose aligned tooltips only when truncated', as
   const suggestion = page.getByRole('button', {
     name: 'Reuse A deliberately long reusable label'
   });
-  await suggestion.hover();
+  if ((page.viewportSize()?.width ?? 1180) <= 760) await suggestion.focus();
+  else await suggestion.hover();
   const tooltip = page.getByRole('tooltip');
   await expect(tooltip).toHaveText('A deliberately long reusable label');
-  const tooltipGap = await suggestion.evaluate((suggestionNode) => {
-    const tooltipNode = document.querySelector<HTMLElement>('[role="tooltip"]');
-    if (!tooltipNode) return null;
-    const suggestionBox = suggestionNode.getBoundingClientRect();
-    const tooltipBox = tooltipNode.getBoundingClientRect();
-    return suggestionBox.top - tooltipBox.bottom;
-  });
-  expect(tooltipGap).not.toBeNull();
-  expect(tooltipGap!).toBeGreaterThanOrEqual(4);
-  expect(tooltipGap!).toBeLessThanOrEqual(12);
+  const suggestionBox = await suggestion.boundingBox();
+  const tooltipBox = await tooltip.boundingBox();
+  expect(suggestionBox && tooltipBox).toBeTruthy();
+  const tooltipGap = suggestionBox!.y - (tooltipBox!.y + tooltipBox!.height);
+  expect(tooltipGap).toBeGreaterThanOrEqual(4);
+  expect(tooltipGap).toBeLessThanOrEqual(9);
+  await suggestion.click();
+  await expect(
+    page.getByRole('button', { name: 'Remove A deliberately long reusable label', exact: true })
+  ).toBeVisible();
+  await expect(page.getByRole('tooltip')).toHaveCount(0);
 });
 
 test('manually refreshes incoming payments without leaving Receive', async ({ page }) => {
@@ -2205,7 +2256,8 @@ test('receive keeps multiple labeled payment requests and discards them independ
     Math.abs((await page.getByRole('dialog').boundingBox())!.height - stableDialogHeight!)
   ).toBeLessThanOrEqual(1.1);
   await page.getByLabel('Label', { exact: true }).fill('');
-  await page.getByRole('button', { name: 'Reuse Savings' }).click();
+  const savingsSuggestion = page.getByRole('button', { name: 'Reuse Savings' });
+  await savingsSuggestion.click();
   await expect(page.getByLabel('Label', { exact: true })).toHaveValue('');
   await expect(page.getByRole('button', { name: 'Remove Savings' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Reuse Savings' })).toHaveCount(0);
@@ -2236,7 +2288,8 @@ test('receive keeps multiple labeled payment requests and discards them independ
   const longSuggestion = page.getByRole('button', {
     name: 'Reuse A deliberately long reusable label'
   });
-  await longSuggestion.hover();
+  if ((page.viewportSize()?.width ?? 1180) <= 760) await longSuggestion.focus();
+  else await longSuggestion.hover();
   await expect(page.getByRole('tooltip')).toHaveText('A deliberately long reusable label');
   await page.getByRole('button', { name: 'Cancel' }).click();
   await expect(page.getByRole('img', { name: /QR code for/ })).toBeVisible();
@@ -2564,6 +2617,64 @@ test('an address copied from Receive completes the browser send flow', async ({ 
   await page.getByRole('button', { name: /Sign & broadcast/ }).click();
   await expect(page.getByRole('heading', { name: 'Payment sent' })).toBeVisible();
   await expect(page.getByText('Remaining wallet balance: 2,455,253 sats')).toBeVisible();
+});
+
+test('closing a phone QR scan while camera permission is pending releases the stream', async ({
+  page
+}) => {
+  let decoderRequested = false;
+  await page.route(/\/qr-scanner\.js(?:\?|$)/, async (route) => {
+    decoderRequested = true;
+    await route.abort();
+  });
+  await page.addInitScript(() => {
+    const flags = window as unknown as {
+      releaseCameraPermission?: () => void;
+      permissionTrackStopped?: boolean;
+    };
+    Object.defineProperty(navigator, 'mediaDevices', {
+      configurable: true,
+      value: {
+        getUserMedia: () =>
+          new Promise((resolve) => {
+            flags.releaseCameraPermission = () =>
+              resolve({
+                getTracks: () => [
+                  {
+                    stop: () => {
+                      flags.permissionTrackStopped = true;
+                    }
+                  }
+                ]
+              });
+          })
+      }
+    });
+  });
+  await page.goto('/mobile/watch');
+  await page.getByRole('button', { name: 'Allow camera', exact: true }).click();
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        Boolean(
+          (window as unknown as { releaseCameraPermission?: unknown }).releaseCameraPermission
+        )
+      )
+    )
+    .toBe(true);
+  await page.getByRole('link', { name: 'Back to wallet', exact: true }).click();
+  await expect(page).toHaveURL(/\/$/);
+  await page.evaluate(() =>
+    (window as unknown as { releaseCameraPermission: () => void }).releaseCameraPermission()
+  );
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => (window as unknown as { permissionTrackStopped?: boolean }).permissionTrackStopped
+      )
+    )
+    .toBe(true);
+  expect(decoderRequested).toBe(false);
 });
 
 test('payment QR scanner loads on demand and cancels safely while loading', async ({ page }) => {

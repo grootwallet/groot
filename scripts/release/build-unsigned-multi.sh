@@ -21,13 +21,18 @@ fi
   || fail "set the reviewed 10-character Developer ID team"
 [[ "${GROOT_SIGNED_HWI:-}" = /* && "${GROOT_SIGNED_HWI_MANIFEST:-}" = /* ]] \
   || fail "set absolute GROOT_SIGNED_HWI and GROOT_SIGNED_HWI_MANIFEST paths"
+[[ "${GROOT_SIGNED_HWI_RUNTIME:-}" = /* ]] \
+  || fail "set the absolute frozen GROOT_SIGNED_HWI_RUNTIME directory"
 for command_name in codesign sw_vers xcodebuild xcrun; do
   command -v "$command_name" >/dev/null 2>&1 || fail "missing ${command_name}"
 done
 
 node scripts/release/verify-signed-hwi.mjs \
   "$GROOT_SIGNED_HWI" "$GROOT_SIGNED_HWI_MANIFEST" "$GROOT_MACOS_SIGNING_TEAM_ID"
+node scripts/release/signed-hwi-runtime.mjs verify \
+  "$GROOT_SIGNED_HWI" "$GROOT_SIGNED_HWI_MANIFEST" "$GROOT_SIGNED_HWI_RUNTIME"
 signed_hwi_sha256="$(node -e 'const m=require(process.argv[1]); process.stdout.write(m.artifact.sha256)' "$GROOT_SIGNED_HWI_MANIFEST")"
+runtime_sha256="$(shasum -a 256 "$GROOT_SIGNED_HWI_RUNTIME/runtime-manifest.json" | awk '{print $1}')"
 
 release_commit="$(git rev-parse HEAD)"
 export SOURCE_DATE_EPOCH="$(git show -s --format=%ct "$release_commit")"
@@ -35,6 +40,8 @@ export GROOT_BUILD_COMMIT="$release_commit"
 export GROOT_BUILD_NETWORK=multi
 export GROOT_BUNDLED_HWI_RESOURCE=hwi
 export GROOT_HWI_SHA256="$signed_hwi_sha256"
+export GROOT_HWI_RUNTIME_SHA256="$runtime_sha256"
+export GROOT_HWI_SESSION_PROTOCOL=1
 release_out="${GROOT_RELEASE_OUT:-$repo_root/release-artifacts/$release_commit/multi-unsigned}"
 [[ ! -e "$release_out" ]] || fail "release output already exists: $release_out"
 
@@ -83,6 +90,8 @@ node scripts/release/generate-sbom.mjs "$release_out/groot.cdx.json" "$release_o
   echo "signing_team_id=$GROOT_MACOS_SIGNING_TEAM_ID"
   echo "hwi_sha256=$signed_hwi_sha256"
   echo "signed_hwi_manifest_sha256=$(shasum -a 256 "$GROOT_SIGNED_HWI_MANIFEST" | awk '{print $1}')"
+  echo "hwi_runtime_sha256=$runtime_sha256"
+  echo "hwi_session_protocol=1"
   echo "hwi_upstream_sha256=$(node -e 'const m=require(process.argv[1]); process.stdout.write(m.upstream.sha256)' "$GROOT_SIGNED_HWI_MANIFEST")"
   echo "rustc=$(rustc --version)"
   echo "cargo=$(cargo --version)"

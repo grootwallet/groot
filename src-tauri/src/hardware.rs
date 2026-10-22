@@ -39,6 +39,13 @@ const USER_REVIEW_TIMEOUT: Duration = Duration::from_secs(5 * 60);
 const SIGNING_REVIEW_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 const HWI_DIGEST_HEX_BYTES: usize = 64;
 const HWI_FIXED_ARGV: &[&str] = &["--stdin"];
+// Explicit Mainnet routing is restricted to the sealed internal multi runtime.
+#[cfg(target_os = "macos")]
+const MAINNET_FAST_ENABLED: bool = true;
+#[cfg(target_os = "macos")]
+mod runtime;
+mod session;
+pub(crate) use session::{HwiSessionAction, HwiSessionExpected, HwiSessionInput};
 static HWI_COORDINATOR: OnceLock<HardwareCoordinator> = OnceLock::new();
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -887,6 +894,7 @@ impl HwiCli {
         run_program_in_operation(
             &self.program,
             &self.source,
+            self.chain,
             &[
                 "--chain".into(),
                 self.chain.as_hwi_argument_for_device(device_type).into(),
@@ -916,6 +924,7 @@ impl HwiCli {
         run_program_in_operation(
             &self.program,
             &self.source,
+            self.chain,
             &self.device_command(device_type, device_path, "getxpub", derivation_path)?,
             operation,
             self.home.as_deref(),
@@ -933,6 +942,7 @@ impl HwiCli {
         run_program_in_operation(
             &self.program,
             &self.source,
+            self.chain,
             &self.device_command(device_type, device_path, "signtx", psbt)?,
             operation,
             self.home.as_deref(),
@@ -953,6 +963,7 @@ impl HwiCli {
         run_program_in_operation(
             &self.program,
             &self.source,
+            self.chain,
             &arguments,
             operation,
             self.home.as_deref(),
@@ -968,6 +979,7 @@ impl HardwareTransport for HwiCli {
         run_program_in_operation(
             &self.program,
             &self.source,
+            self.chain,
             &[
                 "--chain".into(),
                 self.chain.as_hwi_argument().into(),
@@ -1036,6 +1048,7 @@ impl HardwareTransport for HwiCli {
         run_program_in_operation(
             &self.program,
             &self.source,
+            self.chain,
             &self.device_command_without_value(device_type, device_path, "promptpin")?,
             &operation,
             self.home.as_deref(),
@@ -1058,6 +1071,7 @@ impl HardwareTransport for HwiCli {
         run_program_in_operation(
             &self.program,
             &self.source,
+            self.chain,
             &arguments,
             &operation,
             self.home.as_deref(),
@@ -1128,7 +1142,15 @@ fn run_program(
     }
     let _ = trusted_executable(program, source)?;
     let operation = HardwareOperation::acquire(HardwareOperationKind::Interactive, timeout)?;
-    run_program_in_operation(program, source, arguments, &operation, home, None)
+    run_program_in_operation(
+        program,
+        source,
+        HwiChain::Test,
+        arguments,
+        &operation,
+        home,
+        None,
+    )
 }
 
 fn quote_hwi_stdin_argument(argument: &str) -> String {
@@ -1168,11 +1190,14 @@ fn hwi_stdin_command(
 fn run_program_in_operation(
     program: &Path,
     source: &HwiSource,
+    active_chain: HwiChain,
     arguments: &[String],
     operation: &HardwareOperation,
     home: Option<&Path>,
     extra_input: Option<&[u8]>,
 ) -> Result<Vec<u8>, HardwareError> {
+    #[cfg(not(target_os = "macos"))]
+    let _ = active_chain;
     operation.remaining()?;
     if !program.is_absolute() {
         return Err(HardwareError::Unavailable);
@@ -1190,11 +1215,25 @@ fn run_program_in_operation(
     if let Some(home) = home {
         command.env("HOME", trusted_home(home)?);
     }
+    #[cfg(target_os = "macos")]
+    if let Some(runtime) = runtime::for_operation(source, arguments, active_chain)? {
+        // Only the compiled, app-sealed runtime may bypass PyInstaller extraction.
+        command.env("_MEIPASS2", runtime);
+    }
+    run_verified_process(command, &input, operation)
+}
+
+fn run_verified_process(
+    mut command: Command,
+    input: &[u8],
+    operation: &HardwareOperation,
+) -> Result<Vec<u8>, HardwareError> {
     #[cfg(unix)]
     {
         use std::os::unix::process::CommandExt as _;
         command.process_group(0);
     }
+    operation.remaining()?;
     let mut child = command
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -1216,7 +1255,7 @@ fn run_program_in_operation(
         let _ = collect_pipes(&stdout_rx, &stderr_rx);
         return Err(HardwareError::Io);
     };
-    if let Err(error) = stdin.write_all(&input) {
+    if let Err(error) = stdin.write_all(input) {
         // A command can reject the request and close stdin before this
         // writer is scheduled. BrokenPipe is therefore part of the
         // command-exit path, not an HWI transport failure; the bounded
@@ -1657,6 +1696,62 @@ mod tests {
         }
     }
 
+    #[cfg(target_os = "macos")]
+    #[test]
+    #[ignore = "explicit packaged --version benchmark; never opens a device"]
+    fn packaged_coldcard_runtime_startup_probe() {
+        assert!(option_env!("GROOT_HWI_RUNTIME_SHA256").is_some());
+        let app = PathBuf::from(std::env::var("GROOT_TEST_HWI_APP").unwrap());
+        let output = PathBuf::from(std::env::var("GROOT_TEST_HWI_TIMINGS").unwrap());
+        let hwi = HwiCli::for_bundled_resource(
+            HwiChain::Testnet4,
+            &app.join("Contents/Resources"),
+            "hwi",
+        )
+        .unwrap()
+        .with_home(PathBuf::from(std::env::var("HOME").unwrap()))
+        .unwrap();
+        let mut stock_ms = Vec::new();
+        let mut sealed_ms = Vec::new();
+        for _ in 0..20 {
+            for (device_type, timings) in [("trezor", &mut stock_ms), ("coldcard", &mut sealed_ms)]
+            {
+                // argparse exits for --version before get_client. These are
+                // transport selectors only: neither family is opened/probed.
+                let arguments = [
+                    "--chain",
+                    "testnet4",
+                    "--device-type",
+                    device_type,
+                    "--device-path",
+                    "host-version-probe-only",
+                    "--version",
+                ]
+                .map(str::to_owned);
+                let operation = hwi.begin_interactive_operation().unwrap();
+                let started = Instant::now();
+                let bytes = run_program_in_operation(
+                    &hwi.program,
+                    &hwi.source,
+                    hwi.chain,
+                    &arguments,
+                    &operation,
+                    hwi.home.as_deref(),
+                    None,
+                )
+                .unwrap();
+                assert_eq!(std::str::from_utf8(&bytes).unwrap().trim(), "hwi 3.2.0");
+                timings.push(started.elapsed().as_secs_f64() * 1000.0);
+            }
+        }
+        let report = serde_json::json!({
+            "scope":"packaged --version through Rust signature/digest/runtime checks; no device API calls",
+            "source":env!("GROOT_BUILD_COMMIT"),
+            "stockMs":stock_ms,"sealedMs":sealed_ms
+        });
+        std::fs::write(output, serde_json::to_vec_pretty(&report).unwrap()).unwrap();
+    }
+
     #[cfg(unix)]
     fn test_script(name: &str, body: &str) -> PathBuf {
         use std::os::unix::fs::PermissionsExt as _;
@@ -1872,10 +1967,11 @@ mod tests {
 
     #[test]
     fn reports_failure_timeout_and_missing_executable_without_output_leaks() {
+        let failure = test_script("failure", "IFS= read -r command\nexit 1");
         for _ in 0..64 {
             assert_eq!(
                 run_program(
-                    Path::new("/usr/bin/false"),
+                    &failure,
                     &HwiSource::External,
                     &["test".to_owned()],
                     Duration::from_secs(1),
@@ -1884,6 +1980,7 @@ mod tests {
                 Err(HardwareError::CommandFailed(None))
             );
         }
+        std::fs::remove_file(failure).unwrap();
         let slow = test_script("slow", "IFS= read -r command\n/bin/sleep 1");
         assert_eq!(
             run_program(
@@ -2007,6 +2104,7 @@ mod tests {
             run_program_in_operation(
                 &script,
                 &HwiSource::External,
+                HwiChain::Test,
                 &["enumerate".into()],
                 &operation,
                 None,
@@ -2053,6 +2151,7 @@ mod tests {
             run_program_in_operation(
                 &script,
                 &HwiSource::External,
+                HwiChain::Test,
                 &["enumerate".into()],
                 &operation,
                 None,
@@ -2139,6 +2238,7 @@ mod tests {
             run_program_in_operation(
                 &script,
                 &HwiSource::External,
+                HwiChain::Test,
                 &["enumerate".into()],
                 &operation,
                 None,

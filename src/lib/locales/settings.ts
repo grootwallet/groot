@@ -1,6 +1,30 @@
 import type { CatalogSection } from './types';
 
 export const settingsCopy = {
+  'Choose where this wallet gets transaction activity.': {
+    fr: 'Choisissez la source de l’activité de ce portefeuille.',
+    es: 'Elige de dónde obtiene actividad esta cartera.'
+  },
+  'Configure Bitcoin Core': { fr: 'Configurer Bitcoin Core', es: 'Configurar Bitcoin Core' },
+  'Includes confirmed activity and mempool changes. Fee estimates and broadcast use this connection too.':
+    {
+      fr: 'Inclut l’activité confirmée et les changements de la mempool. Les frais et la diffusion utilisent aussi cette connexion.',
+      es: 'Incluye actividad confirmada y cambios de mempool. Las comisiones y la difusión también usan esta conexión.'
+    },
+  'Pending incoming payments appear after confirmation. Groot validates filters and matching blocks on this phone.':
+    {
+      fr: 'Les paiements entrants en attente apparaissent après confirmation. Groot valide les filtres et les blocs correspondants sur ce téléphone.',
+      es: 'Los pagos entrantes pendientes aparecen tras confirmarse. Groot valida los filtros y bloques coincidentes en este teléfono.'
+    },
+  'Used for activity sync, fee estimates, and broadcast. Credentials are encrypted for this wallet.':
+    {
+      fr: 'Utilisé pour l’activité, les frais et la diffusion. Les identifiants sont chiffrés pour ce portefeuille.',
+      es: 'Se usa para actividad, comisiones y difusión. Las credenciales están cifradas para esta cartera.'
+    },
+  'Uses your Bitcoin Core connection.': {
+    fr: 'Utilise votre connexion Bitcoin Core.',
+    es: 'Usa tu conexión de Bitcoin Core.'
+  },
   '{walletName} settings': {
     fr: 'Réglages de {walletName}',
     es: 'Ajustes de {walletName}'
@@ -264,10 +288,57 @@ export const settingsCopy = {
     fr: 'Filtres compacts P2P · activité confirmée uniquement',
     es: 'Filtros compactos P2P · solo actividad confirmada'
   },
+  'Experimental P2P compact filters · confirmed activity only': {
+    fr: 'Filtres compacts P2P expérimentaux · activité confirmée uniquement',
+    es: 'Filtros compactos P2P experimentales · solo actividad confirmada'
+  },
+  'Experimental compact filters are unavailable on mobile · switch to Bitcoin Core': {
+    fr: 'Les filtres compacts expérimentaux sont indisponibles sur mobile · passez à Bitcoin Core',
+    es: 'Los filtros compactos experimentales no están disponibles en móvil · cambia a Bitcoin Core'
+  },
+  'Compact filters · Experimental': {
+    fr: 'Filtres compacts · Expérimental',
+    es: 'Filtros compactos · Experimental'
+  },
+  'Experimental test-network feature.': {
+    fr: 'Fonction expérimentale sur réseau de test.',
+    es: 'Función experimental de red de pruebas.'
+  },
+  'Confirmed activity only. The initial scan may repeat after interruption; do not rely on this source for recovery.':
+    {
+      fr: 'Activité confirmée uniquement. L’analyse initiale peut recommencer après une interruption ; n’utilisez pas cette source pour la récupération.',
+      es: 'Solo actividad confirmada. El análisis inicial puede repetirse tras una interrupción; no uses esta fuente para recuperación.'
+    },
+  'Compact filters are unavailable on mobile.': {
+    fr: 'Les filtres compacts sont indisponibles sur mobile.',
+    es: 'Los filtros compactos no están disponibles en móvil.'
+  },
+  'Their initial scan is not yet durably resumable. Configure Bitcoin Core to continue.': {
+    fr: 'Leur analyse initiale ne peut pas encore reprendre durablement. Configurez Bitcoin Core pour continuer.',
+    es: 'Su análisis inicial todavía no se puede reanudar de forma duradera. Configura Bitcoin Core para continuar.'
+  },
   Check: { fr: 'Tester', es: 'Comprobar' },
   Connected: { fr: 'Connecté', es: 'Conectado' },
   Offline: { fr: 'Hors ligne', es: 'Sin conexión' },
   'Trusted remote server': { fr: 'Serveur distant approuvé', es: 'Servidor remoto de confianza' },
+  'Not configured on this phone': {
+    fr: 'Non configuré sur ce téléphone',
+    es: 'No configurado en este teléfono'
+  },
+  'Set up sync': { fr: 'Configurer la synchro', es: 'Configurar sincronización' },
+  'Set up wallet sync': {
+    fr: 'Configurer la synchronisation du portefeuille',
+    es: 'Configurar la sincronización de la cartera'
+  },
+  'Choose a trusted remote Bitcoin Core node or compact filters before refreshing this wallet.': {
+    fr: 'Choisissez un nœud Bitcoin Core distant approuvé ou des filtres compacts avant d’actualiser ce portefeuille.',
+    es: 'Elige un nodo Bitcoin Core remoto de confianza o filtros compactos antes de actualizar esta cartera.'
+  },
+  'Configure a trusted remote Bitcoin Core node before refreshing this wallet on mobile.': {
+    fr: 'Configurez un nœud Bitcoin Core distant approuvé avant d’actualiser ce portefeuille sur mobile.',
+    es: 'Configura un nodo Bitcoin Core remoto de confianza antes de actualizar esta cartera en el móvil.'
+  },
+  'Configure sync': { fr: 'Configurer la synchronisation', es: 'Configurar sincronización' },
   'Not checked': { fr: 'Non vérifié', es: 'Sin comprobar' },
   'Previous scan failed': { fr: 'Échec de l’analyse précédente', es: 'El escaneo anterior falló' },
   'Previous scan interrupted': {
@@ -526,6 +597,10 @@ export const settingsCopy = {
     es: '· Se usa en las pantallas de firma y verificación'
   },
   'Add wallet': { fr: 'Ajouter un portefeuille', es: 'Añadir cartera' },
+  'Add another wallet': {
+    fr: 'Ajouter un autre portefeuille',
+    es: 'Añadir otra cartera'
+  },
   'Address gap limit': {
     fr: 'Limite d’écart des adresses',
     es: 'Límite de intervalo de direcciones'

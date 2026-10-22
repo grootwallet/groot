@@ -47,17 +47,20 @@ test('disabled loading buttons keep visibly rotating until the operation ends', 
   page
 }) => {
   await page.goto('/multisig');
+  await expect(page.getByRole('heading', { name: 'Family wallet', exact: true })).toBeVisible();
+  await page.waitForLoadState('networkidle');
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
   const indicator = page.locator('.button-loading-indicator');
-  await page.evaluate(() => {
-    const button = document.createElement('button');
-    button.className = 'button';
-    button.disabled = true;
-    button.setAttribute('aria-busy', 'true');
-    button.innerHTML =
-      '<span class="button-loading-indicator" aria-hidden="true"></span><span>Working…</span>';
-    document.body.append(button);
+  await page.evaluate(async () => {
+    const path = '/src/lib/testing/loading-button.ts';
+    const { mountLoadingButton } = await import(path);
+    const target = document.createElement('div');
+    document.body.append(target);
+    mountLoadingButton(target);
   });
   await expect(indicator).toBeVisible();
+  await expect(indicator).toHaveCSS('animation-name', 'groot-spinner-rotation');
+  await expect(indicator).toHaveCSS('animation-duration', '1s');
   expect(await indicator.evaluate((element) => getComputedStyle(element, '::after').content)).toBe(
     'none'
   );
@@ -752,13 +755,23 @@ test('spends end-to-end from the ready-made demo wallet', async ({ page }) => {
   await unsignedQrDialog.getByRole('button', { name: 'Close' }).click();
   await page.getByRole('button', { name: 'Sign with device' }).click();
   const hardwareDialog = page.getByRole('dialog', { name: 'Sign with hardware' });
-  const reviewPane = await hardwareDialog.locator('.single-hardware-review-pane').boundingBox();
-  const devicePane = await hardwareDialog.locator('.single-hardware-device-pane').boundingBox();
-  expect(reviewPane).not.toBeNull();
-  expect(devicePane).not.toBeNull();
-  if ((page.viewportSize()?.width ?? 1180) <= 760)
-    expect(devicePane!.y).toBeGreaterThanOrEqual(reviewPane!.y + reviewPane!.height);
-  else expect(devicePane!.x).toBeGreaterThanOrEqual(reviewPane!.x + reviewPane!.width);
+  await expect(hardwareDialog).toBeVisible();
+  // Discovery can resize the dialog between separate WebKit geometry reads.
+  // Measure both panes atomically and retain the same stacking constraint.
+  await expect
+    .poll(() =>
+      hardwareDialog.evaluate((dialog) => {
+        const review = dialog
+          .querySelector('.single-hardware-review-pane')
+          ?.getBoundingClientRect();
+        const device = dialog
+          .querySelector('.single-hardware-device-pane')
+          ?.getBoundingClientRect();
+        if (!review || !device) return false;
+        return innerWidth <= 760 ? device.y >= review.bottom : device.x >= review.right;
+      })
+    )
+    .toBe(true);
   await page.screenshot({
     path: test.info().outputPath(`multisig-cable-review-${page.viewportSize()?.width}.png`),
     animations: 'disabled'
@@ -1039,14 +1052,16 @@ test('keeps advanced wallet actions compact with one multipath descriptor', asyn
   await descriptors.getByRole('button', { name: 'Close' }).click();
 });
 
-test('shows signer details and runs honest health checks', async ({ page }) => {
+test('keeps hardware checks available for imported signers and hides them for offline keys', async ({
+  page
+}) => {
   await page.goto('/multisig');
 
   await expect(page.locator('.saved-cosigner-list article')).toHaveCount(3);
   await expect(page.locator('.signer-readiness-list')).toHaveCount(0);
 
   await page.getByRole('button', { name: 'View Coldcard details' }).click();
-  const coldcardDialog = page.getByRole('dialog', { name: 'Coldcard' });
+  const coldcardDialog = page.getByRole('dialog', { name: 'Coldcard', exact: true });
   await expect(coldcardDialog).toBeVisible();
   await expect(coldcardDialog.getByText('f00dbabe', { exact: true })).toBeVisible();
   await expect(coldcardDialog.getByText("m/48'/1'/0'/2'", { exact: true })).toBeVisible();
@@ -1054,10 +1069,18 @@ test('shows signer details and runs honest health checks', async ({ page }) => {
   await expect(coldcardDialog.getByText('Setup not recorded', { exact: true })).toBeVisible();
   await expect(coldcardDialog.getByRole('button', { name: 'Review setup' })).toBeVisible();
   await coldcardDialog.getByRole('button', { name: 'View public account key (xpub)' }).click();
-  const xpubDialog = page.getByRole('dialog', { name: 'Coldcard public account key (xpub)' });
+  const xpubDialog = page.getByRole('dialog', {
+    name: 'Coldcard public account key (xpub)',
+    exact: true
+  });
   await expect(
     xpubDialog.getByRole('button', { name: 'Copy exact Public account key (xpub)' })
   ).toBeVisible();
+  const xpubBounds = await xpubDialog.boundingBox();
+  const xpubViewport = page.viewportSize();
+  expect(xpubBounds && xpubViewport).toBeTruthy();
+  expect(xpubBounds!.y).toBeGreaterThanOrEqual(0);
+  expect(xpubBounds!.y + xpubBounds!.height).toBeLessThanOrEqual(xpubViewport!.height);
   await xpubDialog.getByRole('button', { name: 'Close' }).click();
   await expect(coldcardDialog.getByText('Not checked yet', { exact: true })).toBeVisible();
   await coldcardDialog.getByRole('button', { name: 'Check signer' }).click();
@@ -1073,17 +1096,14 @@ test('shows signer details and runs honest health checks', async ({ page }) => {
 
   await page.getByRole('button', { name: 'View Offline backup details' }).click();
   const backupDialog = page.getByRole('dialog', { name: 'Offline backup' });
-  await expect(backupDialog.getByText('Signer check', { exact: true })).toBeVisible();
-  await backupDialog.getByRole('button', { name: 'Check signer' }).click();
-  await expect(
-    backupDialog.getByText('This signer has no interactive USB device type.')
-  ).toBeVisible();
+  await expect(backupDialog.locator('.ready-badge')).toHaveText('Ready');
+  await expect(backupDialog.getByRole('button', { name: 'Check signer' })).toHaveCount(0);
   await backupDialog.getByRole('button', { name: 'Close' }).click();
 
   await page.reload();
   await page.getByRole('button', { name: 'View Coldcard details' }).click();
-  const restoredHealth = page.getByRole('dialog', { name: 'Coldcard' });
-  await expect(restoredHealth.getByText('Not checked yet', { exact: true })).toBeVisible();
+  const restoredDetails = page.getByRole('dialog', { name: 'Coldcard' });
+  await expect(restoredDetails.getByRole('button', { name: 'Check signer' })).toBeVisible();
 });
 
 test('uses the same wallet navigation for a multisig policy', async ({ page }) => {
@@ -1347,9 +1367,12 @@ test('offers safe recipes and advanced M-of-N control', async ({ page }, testInf
     await expect(selectedMark).toBeVisible();
     await expect(selectedMark).toHaveCSS('stroke', 'rgb(255, 255, 255)');
   }
-  const assistedRecovery = page.getByRole('button', { name: /^Assisted recovery/ });
-  await expect(assistedRecovery).toBeDisabled();
-  await expect(assistedRecovery).toContainText('Coming soon');
+  await expect(page.getByText('Miniscript signer compatibility', { exact: true })).toBeVisible();
+  await expect(page.getByText(/no direct USB Miniscript workflow is certified/)).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Partner continuity/ })).toBeEnabled();
+  const assistedRecovery = page.getByRole('button', { name: /^Family continuity/ });
+  await expect(assistedRecovery).toBeEnabled();
+  await expect(assistedRecovery).toContainText('Test networks only');
   await page.getByRole('button', { name: /^Standard/ }).click();
   await revealInsight(page, 'How Standard multisig works', testInfo.project.name === 'mobile');
   await expect(
@@ -1522,9 +1545,7 @@ test('explicitly selects a Trezor standard wallet without changing hidden wallet
   await standard.click();
 
   const choice = page.getByRole('dialog', { name: 'Use Trezor standard wallet?' });
-  await expect(choice).toContainText(
-    /It does not disable, change, or\s+reveal any hidden passphrase wallet/
-  );
+  await expect(choice).toContainText('Your hidden wallet is unchanged.');
   await choice.getByRole('button', { name: 'Use standard wallet' }).click();
   await expect(
     choice.getByRole('status', { name: 'Hardware signer import in progress' })
@@ -1887,7 +1908,7 @@ test('creates and verifies a simple 2-of-3 descriptor wallet', async ({ page }) 
   await expect(signingPolicyReview.getByText('Policy reference saved in Groot')).toBeVisible();
   await signingPolicyReview.getByRole('button', { name: 'Review & sign on Ledger' }).click();
   await signingPolicyReview
-    .getByRole('button', { name: 'Wallet policy reviewed — show transaction' })
+    .getByRole('button', { name: 'Wallet policy reviewed. Show transaction' })
     .click();
   await expect(signingPolicyReview).toBeHidden();
   await expect(paymentSigners.getByText('1 of 2 collected')).toBeVisible();
@@ -1950,8 +1971,12 @@ test('creates and verifies a simple 2-of-3 descriptor wallet', async ({ page }) 
   await page.evaluate(() => {
     window.print = () => document.documentElement.setAttribute('data-print-called', 'true');
   });
-  await page.getByRole('button', { name: 'Save PDF' }).click();
-  await expect(page.locator('html')).toHaveAttribute('data-print-called', 'true');
+  if ((page.viewportSize()?.width ?? 1180) > 760) {
+    await page.getByRole('button', { name: 'Save PDF' }).click();
+    await expect(page.locator('html')).toHaveAttribute('data-print-called', 'true');
+  } else {
+    await expect(page.getByRole('button', { name: 'Save PDF' })).toHaveCount(0);
+  }
   await page.getByLabel('Backup file import').setInputFiles({
     name: 'family-vault-backup.json',
     mimeType: 'application/json',
@@ -2179,7 +2204,7 @@ test('reveals draft errors only after review and keeps signer identity readable'
   await expect(page.getByText('Device fingerprint', { exact: true })).toBeVisible();
   await expect(page.getByText('Manual entry', { exact: true })).toBeVisible();
   await expect(page.getByText(keys[0].xpub, { exact: true })).toBeVisible();
-  await expect(page.locator('.policy-errors')).toHaveCount(0);
+  await expect(page.getByRole('alert')).toHaveCount(0);
 
   await page.getByRole('button', { name: 'View Coldcard details' }).click();
   const details = page.getByRole('dialog', { name: 'Coldcard' });
@@ -2224,16 +2249,16 @@ test('gates and simulates guided Miniscript recovery policies', async ({ page })
   await expect(page.getByText(/intentionally reduce theft resistance/)).toBeVisible();
 });
 
-test('keeps untested timelocked creation disabled and defaults to standard 2-of-3', async ({
-  page
-}) => {
+test('offers fixed test-network continuity and defaults to standard 2-of-3', async ({ page }) => {
   await page.goto('/multisig/new');
-  await expect(page.getByRole('button', { name: /^Recovery/ })).toBeDisabled();
-  await expect(page.getByRole('button', { name: /^Recovery/ })).toContainText('Coming soon');
+  await expect(page.getByRole('button', { name: /^Partner continuity/ })).toBeEnabled();
+  await expect(page.getByRole('button', { name: /^Partner continuity/ })).toContainText(
+    'Test networks only'
+  );
   await expect(
-    page.getByText('A smaller signer group can recover the wallet after a delay.')
+    page.getByText('Your 2 of 3 now, guided access for your partner later.')
   ).toBeVisible();
-  await expect(page.getByRole('button', { name: /^Assisted recovery/ })).toBeDisabled();
+  await expect(page.getByRole('button', { name: /^Family continuity/ })).toBeEnabled();
   await page.getByRole('button', { name: /^Standard/ }).click();
   await page.getByRole('button', { name: 'Continue', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Standard multisig' })).toBeVisible();
@@ -2408,3 +2433,95 @@ test('unknown-source received labels tokenize on Tab and save multiple permanent
   await expect(page.getByText('Recovered payment', { exact: true }).first()).toBeVisible();
   await expect(page.getByText('Family', { exact: true }).first()).toBeVisible();
 });
+
+test('recipient fields disable OS text correction on both send routes', async ({ page }) => {
+  for (const route of ['/send', '/multisig/send']) {
+    for (const theme of ['light', 'dark']) {
+      await page.goto(route);
+      await page.evaluate(
+        (value) => document.documentElement.setAttribute('data-theme', value),
+        theme
+      );
+      const recipient = page.getByLabel('Bitcoin address');
+      await expect(recipient).toHaveAttribute('autocapitalize', 'none');
+      await expect(recipient).toHaveAttribute('autocorrect', 'off');
+      await expect(recipient).toHaveAttribute('spellcheck', 'false');
+      const address = 'bcrt1qdummy00085n8k2r7v4cx9s6jlawephgzuqf5t8ul';
+      await recipient.fill(address);
+      await recipient.blur();
+      await expect(recipient).toHaveValue(address);
+      await page.screenshot({
+        path: test
+          .info()
+          .outputPath(`recipient-${route === '/send' ? 'single' : 'multi'}-${theme}.png`)
+      });
+    }
+  }
+});
+
+// Fixture evidence for native error presentation/retry; Rust tests own enforcement.
+for (const language of ['en', 'fr', 'es'] as const) {
+  test(`spend policy failures stay specific and retryable in ${language}`, async ({ page }) => {
+    for (const route of ['/send', '/multisig/send']) {
+      for (const theme of ['light', 'dark']) {
+        await page.addInitScript(() => localStorage.setItem('groot-language', 'en'));
+        await page.goto(route);
+        await page
+          .getByLabel('Bitcoin address')
+          .fill('bcrt1qdummy00085n8k2r7v4cx9s6jlawephgzuqf5t8ul');
+        await page.getByLabel('Payment label').fill('Policy error retry');
+        await page.getByRole('button', { name: 'Continue to amount' }).click();
+        const showSats = page.getByRole('button', { name: 'Show transaction amount in sats' });
+        if (await showSats.isVisible()) await showSats.click();
+        await page.getByLabel('Amount', { exact: true }).fill('1500000');
+        const { message, reviewLabel } = await page.evaluate(
+          async ({ language, theme, route }) => {
+            const modulePath = '/src/lib/wallet/index.ts';
+            const localePath = '/src/lib/i18n.ts';
+            const catalogPath = '/src/lib/i18n-catalog.ts';
+            const { walletService, WalletError } = await import(/* @vite-ignore */ modulePath);
+            const { setLocale } = await import(/* @vite-ignore */ localePath);
+            const { translate } = await import(/* @vite-ignore */ catalogPath);
+            const method = route === '/send' ? 'preparePayment' : 'prepareMultisigPayment';
+            const original = walletService[method].bind(walletService);
+            const source =
+              "The network fee exceeds Groot's mainnet limit of 100,000 sats. Lower the fee rate and try again.";
+            let fail = true;
+            walletService[method] = async (...args: unknown[]) => {
+              if (fail) {
+                fail = false;
+                throw new WalletError('invalid_amount', source);
+              }
+              return original(...args);
+            };
+            document.documentElement.setAttribute('data-theme', theme);
+            setLocale(language);
+            return {
+              message: translate(language, source),
+              reviewLabel: translate(language, 'Review payment')
+            };
+          },
+          { language, theme, route }
+        );
+        const review = page.getByRole('button', { name: reviewLabel, exact: true });
+        await review.click();
+        const reason = page.getByText(message, { exact: true }).first();
+        await expect(reason).toBeVisible();
+        await reason.scrollIntoViewIfNeeded();
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+          true
+        );
+        await page.screenshot({
+          path: test
+            .info()
+            .outputPath(
+              `spend-policy-${route === '/send' ? 'single' : 'multi'}-${language}-${theme}.png`
+            ),
+          fullPage: true
+        });
+        await review.click();
+        await expect(review).toHaveCount(0);
+      }
+    }
+  });
+}

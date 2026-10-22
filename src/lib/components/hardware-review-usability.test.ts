@@ -1,3 +1,4 @@
+import { readUiStyles } from '../testing/ui-styles';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
@@ -8,7 +9,7 @@ const recipientAddressModal = readFileSync(
   new URL('./RecipientAddressModal.svelte', import.meta.url),
   'utf8'
 );
-const appCss = readFileSync(new URL('../../app.css', import.meta.url), 'utf8');
+const appCss = readUiStyles();
 const singleSend = readFileSync(new URL('../../routes/send/+page.svelte', import.meta.url), 'utf8');
 const multisigSend = readFileSync(
   new URL('../../routes/multisig/send/+page.svelte', import.meta.url),
@@ -32,7 +33,7 @@ describe('hardware signing review usability', () => {
 
   it('keeps the Ledger policy and transaction reviews as explicit reachable steps', () => {
     expect(policy).toContain("'Step 1 of 2 · Wallet policy'");
-    expect(policy).toContain("'Wallet policy reviewed — show transaction'");
+    expect(policy).toContain("'Wallet policy reviewed. Show transaction'");
     expect(policy).toContain("'Review & sign on {device}'");
     expect(multisigSend).toContain("'Step 2 of 2 · Transaction review'");
     expect(multisigSend).toContain('showTransactionDuringSigning()');
@@ -55,9 +56,8 @@ describe('hardware signing review usability', () => {
       "description={translate($locale, 'Check the policy, signer keys, and first address.')}"
     );
     expect(appCss).toMatch(/\.signer-policy-review\s*\{[^}]*gap:\s*10px;/s);
-    expect(appCss).toMatch(
-      /\.policy-review-step,[\s\S]*?\.hardware-review-step\s*\{[^}]*margin:\s*0 0 2px;/s
-    );
+    expect(appCss).toMatch(/\.policy-review-step\s*\{[^}]*margin:\s*0 0 2px;/s);
+    expect(appCss).toMatch(/\.hardware-review-step\s*\{[^}]*margin:\s*0 0 2px;/s);
   });
 
   it('starts with a compact first-address reference and expands on request', () => {
@@ -200,5 +200,11 @@ describe('hardware signing review usability', () => {
     expect(singleSend).toContain('await signHardware(device, true)');
     expect(singleSend).toContain('walletService.sendHardwarePin(pinChallenge, positions)');
     expect(singleSend).toContain('<TrezorPinModal');
+  });
+
+  it('does not repeat Model One PIN entry after the signer was identified', () => {
+    expect(multisigSend).toContain(
+      "if (device.action === 'prompt_pin' && !pinResolved && !identifiedDevices[device.id])"
+    );
   });
 });

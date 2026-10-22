@@ -172,7 +172,13 @@
           onclick={verifyBackup}>{translate($locale, 'Test recovery')}</Button
         >
       {/if}
-      {#if drillError}<p class="form-error" aria-live="polite">{drillError}</p>{/if}
+      {#if drillError}<WarningNotice
+          tone="danger"
+          icon
+          role="alert"
+          ariaLive="polite"
+          body={drillError}
+        />{/if}
     </section>
 
     <section class="form-card danger-card">
@@ -218,7 +224,13 @@
         onclick={() => (deleteConfirmOpen = true)}
         >{translate($locale, 'Delete wallet from this device')}</Button
       >
-      {#if deleteError}<p class="form-error" aria-live="polite">{deleteError}</p>{/if}
+      {#if deleteError}<WarningNotice
+          tone="danger"
+          icon
+          role="alert"
+          ariaLive="polite"
+          body={deleteError}
+        />{/if}
     </section>
   {:else}
     <section class="empty-state">
@@ -258,3 +270,44 @@
     >
   </div>
 </Modal>
+
+<style>
+  /* Keep the original cascade weight while constraining these rules to this owner. */
+
+  .danger-card {
+    border-color: rgba(239, 100, 100, 0.25);
+  }
+  :global(.backup-required-action):where(.backup-required-action) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 14px;
+    padding: 13px 14px;
+    margin-bottom: 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+    background: var(--surface-inset);
+  }
+  :global(.backup-required-action):where(.backup-required-action) > :global(span) {
+    min-width: 0;
+    display: grid;
+    gap: 3px;
+  }
+  :global(.backup-required-action):where(.backup-required-action) :global(strong) {
+    font-size: var(--font-size-meta);
+  }
+  :global(.backup-required-action):where(.backup-required-action) :global(small) {
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+    line-height: 1.45;
+  }
+
+  @media (max-width: 760px) {
+    :global(.backup-required-action):where(.backup-required-action) {
+      grid-template-columns: 1fr;
+    }
+    :global(.backup-required-action):where(.backup-required-action) :global(.button) {
+      width: 100%;
+    }
+  }
+</style>

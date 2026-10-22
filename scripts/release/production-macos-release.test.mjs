@@ -68,6 +68,10 @@ test('multi-network evidence builder is release-bound and uses signed HWI proven
   assert.match(source, /bundle_identifier=app\.groot\.wallet/);
   assert.match(source, /--features tauri\/custom-protocol/);
   assert.match(source, /verify-signed-hwi\.mjs/);
+  assert.match(source, /signed-hwi-runtime\.mjs verify/);
+  assert.match(source, /export GROOT_HWI_RUNTIME_SHA256="\$runtime_sha256"/);
+  assert.match(source, /export GROOT_HWI_SESSION_PROTOCOL=1/);
+  assert.match(source, /hwi_runtime_sha256=/);
   assert.match(source, /signed_hwi_manifest_sha256=/);
   assert.match(source, /multi_config_sha256=/);
   assert.ok(
@@ -100,6 +104,11 @@ test('production package binds the exact reproduced payload before signing', () 
   assert.match(source, /build-packaged-macos-app\.sh/);
   assert.match(source, /GROOT_BUILD_NETWORK: 'multi'/);
   assert.match(source, /GROOT_HWI_SHA256: hwiVerification\.manifest\.artifact\.sha256/);
+  assert.match(source, /GROOT_HWI_RUNTIME_SHA256: runtimeDigest/);
+  assert.match(source, /buildInfo\.hwi_runtime_sha256 !== runtimeDigest/);
+  assert.match(source, /copyHwiRuntime\(/);
+  assert.match(source, /verifyProductionHwiRuntime\(/);
+  assert.ok(source.indexOf('copyHwiRuntime(') < appSigning);
   assert.match(source, /'ls-remote', '--exit-code', 'origin', 'refs\/heads\/main'/);
   assert.match(source, /const tagRef = `refs\/tags\/\$\{authorization\.tag\}`/);
   assert.match(source, /const peeledTagRef = `\$\{tagRef\}\^\{\}`/);

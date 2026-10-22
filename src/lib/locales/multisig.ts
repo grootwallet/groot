@@ -1,6 +1,15 @@
 import type { CatalogSection } from './types';
 
 export const multisigCopy = {
+  'Miniscript signer compatibility': {
+    fr: 'Compatibilité des signataires Miniscript',
+    es: 'Compatibilidad de firmantes Miniscript'
+  },
+  'Recovery and inheritance are not enabled yet. Ledger, Jade/Jade Plus and BitBox02 models are candidates only; no direct USB Miniscript workflow is certified in Groot. Standard multisig and phone pairing keep their existing support.':
+    {
+      fr: 'La récupération et la succession ne sont pas encore activées. Ledger, Jade/Jade Plus et les modèles BitBox02 sont seulement candidats ; aucun flux USB Miniscript direct n’est certifié dans Groot. Le multisig standard et l’association du téléphone conservent leur prise en charge actuelle.',
+      es: 'La recuperación y la herencia aún no están habilitadas. Ledger, Jade/Jade Plus y los modelos BitBox02 son solo candidatos; ningún flujo USB Miniscript directo está certificado en Groot. El multisig estándar y el emparejamiento del teléfono mantienen su compatibilidad actual.'
+    },
   '{walletName} Review': {
     fr: 'Vérification de {walletName}',
     es: 'Revisión de {walletName}'
@@ -450,6 +459,14 @@ export const multisigCopy = {
     fr: 'Réautoriser cet export',
     es: 'Volver a autenticar esta exportación'
   },
+  'Confirm this export': {
+    fr: 'Confirmer cette exportation',
+    es: 'Confirmar esta exportación'
+  },
+  'Enter this wallet’s app PIN. The backup cannot spend, but it reveals every wallet address.': {
+    fr: 'Saisissez le code PIN de ce portefeuille. La sauvegarde ne peut pas dépenser, mais elle révèle toutes les adresses du portefeuille.',
+    es: 'Introduce el PIN de esta cartera. La copia no puede gastar, pero revela todas las direcciones de la cartera.'
+  },
   'BSMS is an unencrypted public descriptor: it cannot spend, but reveals wallet addresses. Enter the app PIN and keep the export private.':
     {
       fr: 'BSMS est un descripteur public non chiffré : il ne peut pas dépenser, mais révèle les adresses du portefeuille. Saisissez le PIN de l’application et gardez cet export privé.',
@@ -607,9 +624,9 @@ export const multisigCopy = {
   'WALLET BACKUP': { fr: 'SAUVEGARDE DU PORTEFEUILLE', es: 'COPIA DE LA CARTERA' },
   'WALLET DELETION': { fr: 'SUPPRESSION DU PORTEFEUILLE', es: 'ELIMINACIÓN DE LA CARTERA' },
   'WALLET POLICY': { fr: 'POLITIQUE DU PORTEFEUILLE', es: 'POLÍTICA DE LA CARTERA' },
-  'Watch-only descriptors — cannot spend bitcoin': {
-    fr: 'Descripteurs d’observation — ne peuvent pas dépenser de bitcoin',
-    es: 'Descriptores de solo lectura — no pueden gastar bitcoin'
+  'Watch-only descriptors. Cannot spend bitcoin': {
+    fr: 'Descripteurs d’observation. Ils ne peuvent pas dépenser de bitcoin',
+    es: 'Descriptores de solo lectura. No pueden gastar bitcoin'
   },
   wu: { fr: 'wu', es: 'wu' },
   '2 of 3 now; an emergency key after about one month.': {
@@ -987,5 +1004,82 @@ export const multisigCopy = {
     {
       fr: 'La signature matérielle USB est bloquée, car la version HWI intégrée à Groot ne peut pas exécuter cette politique Miniscript en toute sécurité.',
       es: 'La firma con dispositivo USB está bloqueada porque la versión HWI integrada en Groot no puede ejecutar esta política Miniscript de forma segura.'
-    }
+    },
+  'Partner continuity': { fr: 'Continuité du couple', es: 'Continuidad de pareja' },
+  'Family continuity': { fr: 'Continuité familiale', es: 'Continuidad familiar' },
+  'Your 2 of 3 now, guided access for your partner later.': {
+    fr: 'Votre 2 sur 3 maintenant, puis un accès guidé pour votre partenaire.',
+    es: 'Tu 2 de 3 ahora y acceso guiado para tu pareja más adelante.'
+  },
+  'Parents stay in control; children can assist or inherit later.': {
+    fr: 'Les parents gardent le contrôle ; les enfants peuvent aider ou hériter plus tard.',
+    es: 'Los padres mantienen el control; los hijos pueden ayudar o heredar más adelante.'
+  },
+  '3 · 9 · 12 months': { fr: '3 · 9 · 12 mois', es: '3 · 9 · 12 meses' },
+  '3 · 12 months': { fr: '3 · 12 mois', es: '3 · 12 meses' },
+  'How Partner continuity works': {
+    fr: 'Fonctionnement de la continuité du couple',
+    es: 'Cómo funciona la continuidad de pareja'
+  },
+  'How Family continuity works': {
+    fr: 'Fonctionnement de la continuité familiale',
+    es: 'Cómo funciona la continuidad familiar'
+  },
+  'Your 2-of-3 remains available. After three months your partner uses both partner keys, after nine months either partner key works, and after twelve months two estate guardians can recover. Renewing moves every delayed path back.':
+    {
+      fr: 'Votre 2 sur 3 reste disponible. Après trois mois, votre partenaire utilise ses deux clés ; après neuf mois, une seule suffit ; après douze mois, deux responsables successoraux peuvent récupérer les fonds. Le renouvellement repousse chaque voie différée.',
+      es: 'Tu 2 de 3 sigue disponible. Tras tres meses, tu pareja usa sus dos claves; tras nueve meses, basta una; tras doce meses, dos custodios sucesorios pueden recuperar los fondos. La renovación retrasa de nuevo cada vía.'
+    },
+  'Both parents sign now. After three months either parent can sign with either child assistance key. After twelve months two of the children’s inheritance role keys and the executor can recover. Renewing moves the delayed paths back.':
+    {
+      fr: 'Les deux parents signent maintenant. Après trois mois, un parent peut signer avec une clé d’assistance d’un enfant. Après douze mois, deux clés parmi les rôles successoraux des enfants et l’exécuteur peuvent récupérer les fonds. Le renouvellement repousse les voies différées.',
+      es: 'Ambos padres firman ahora. Tras tres meses, uno de ellos puede firmar con una clave de asistencia de un hijo. Tras doce meses, dos claves entre los roles de herencia de los hijos y el ejecutor pueden recuperar los fondos. La renovación retrasa de nuevo las vías.'
+    },
+  'Eight independent role keys protect you, your partner, and the estate path.': {
+    fr: 'Huit clés de rôle indépendantes protègent votre couple et la voie successorale.',
+    es: 'Ocho claves de rol independientes protegen a la pareja y la vía sucesoria.'
+  },
+  'Seven role keys keep parents autonomous while enabling assistance and inheritance.': {
+    fr: 'Sept clés de rôle préservent l’autonomie des parents tout en permettant aide et succession.',
+    es: 'Siete claves de rol mantienen la autonomía de los padres y permiten asistencia y herencia.'
+  },
+  '2 of 3 + continuity': { fr: '2 sur 3 + continuité', es: '2 de 3 + continuidad' },
+  'Parents + family': { fr: 'Parents + famille', es: 'Padres + familia' },
+  'Owner: 2 of 3': { fr: 'Propriétaire : 2 sur 3', es: 'Titular: 2 de 3' },
+  'Parents: 2 of 2': { fr: 'Parents : 2 sur 2', es: 'Padres: 2 de 2' },
+  'Both partner keys': { fr: 'Les deux clés du partenaire', es: 'Las dos claves de la pareja' },
+  'Either partner key': { fr: 'Une clé du partenaire', es: 'Una clave de la pareja' },
+  'One parent + one child': { fr: 'Un parent + un enfant', es: 'Un padre + un hijo' },
+  '2 of 3 estate guardians': {
+    fr: '2 responsables successoraux sur 3',
+    es: '2 de 3 custodios sucesorios'
+  },
+  '2 of 3 estate quorum': { fr: 'Quorum successoral 2 sur 3', es: 'Cuórum sucesorio 2 de 3' },
+  'ABOUT 9 MONTHS': { fr: 'ENVIRON 9 MOIS', es: 'UNOS 9 MESES' },
+  'ABOUT 12 MONTHS': { fr: 'ENVIRON 12 MOIS', es: 'UNOS 12 MESES' },
+  'Renew around six months to move every delayed path back.': {
+    fr: 'Renouvelez vers six mois pour repousser chaque voie différée.',
+    es: 'Renueva cerca de los seis meses para retrasar de nuevo cada vía.'
+  },
+  'Fixed, reviewed roles': { fr: 'Rôles fixes et vérifiés', es: 'Roles fijos y revisados' },
+  'Only Ledger, Jade/Jade Plus, BitBox02, and BitBox02 Nova are Miniscript candidates; each exact setup still requires certification.':
+    {
+      fr: 'Seuls Ledger, Jade/Jade Plus, BitBox02 et BitBox02 Nova sont candidats Miniscript ; chaque configuration exacte doit encore être certifiée.',
+      es: 'Solo Ledger, Jade/Jade Plus, BitBox02 y BitBox02 Nova son candidatos Miniscript; cada configuración exacta aún requiere certificación.'
+    },
+  'Direct USB is not enabled for Continuity policies yet.': {
+    fr: 'L’USB direct n’est pas encore activé pour les politiques de continuité.',
+    es: 'El USB directo aún no está habilitado para las políticas de continuidad.'
+  },
+  'Ledger, Jade/Jade Plus, BitBox02, and BitBox02 Nova support Miniscript at the firmware level, but Groot enables each exact model only after descriptor registration, display, and signing certification. For now, add public keys by file or manual entry and use the offline PSBT workflow.':
+    {
+      fr: 'Ledger, Jade/Jade Plus, BitBox02 et BitBox02 Nova prennent en charge Miniscript dans leur micrologiciel, mais Groot n’active chaque modèle exact qu’après certification de l’enregistrement du descripteur, de l’affichage et de la signature. Pour l’instant, ajoutez les clés publiques par fichier ou saisie manuelle et utilisez le flux PSBT hors ligne.',
+      es: 'Ledger, Jade/Jade Plus, BitBox02 y BitBox02 Nova admiten Miniscript en su firmware, pero Groot solo habilita cada modelo exacto tras certificar el registro del descriptor, la visualización y la firma. Por ahora, añade las claves públicas mediante archivo o entrada manual y usa el flujo PSBT sin conexión.'
+    },
+  partner_continuity_v1: { fr: 'continuité du couple v1', es: 'continuidad de pareja v1' },
+  family_continuity_v1: { fr: 'continuité familiale v1', es: 'continuidad familiar v1' },
+  'A watch-only wallet whose spending policy is enforced by independent keys.': {
+    fr: 'Un portefeuille en lecture seule dont la politique de dépense repose sur des clés indépendantes.',
+    es: 'Una cartera de solo lectura cuya política de gasto depende de claves independientes.'
+  }
 } as const satisfies CatalogSection;

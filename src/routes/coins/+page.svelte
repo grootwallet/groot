@@ -25,6 +25,7 @@
     approximateBlockDuration,
     policyMaturitySummary,
     selectedCoinTotal,
+    isContinuityPolicyType,
     validPolicyMaturity
   } from '$lib/wallet/policy';
   import { walletService, WalletError } from '$lib/wallet';
@@ -92,7 +93,10 @@
       ? (utxos.find((coin) => {
           const maturity = validPolicyMaturity(coin);
           return (
-            coin.outpoint === selected[0] && !coin.frozen && maturity?.state === MATURITY_MATURE
+            coin.outpoint === selected[0] &&
+            !coin.frozen &&
+            (maturity?.state === MATURITY_MATURE ||
+              (isContinuityPolicyType(maturity?.policyType) && coin.confirmations > 0))
           );
         }) ?? null)
       : null
@@ -144,7 +148,11 @@
       : ''
   );
   const extraKeyName = (maturity: NonNullable<Utxo['policyMaturity']>) =>
-    maturity.policyType === 'inheritance' ? 'Heir key' : 'Recovery key';
+    isContinuityPolicyType(maturity.policyType)
+      ? 'Delayed signers'
+      : maturity.policyType === 'inheritance'
+        ? 'Heir key'
+        : 'Recovery key';
 
   $effect(() => {
     if ($discreetMode) labelFilter = '';
@@ -419,16 +427,18 @@
               expanded={selectionMenuOpen}
               onclick={() => (selectionMenuOpen = !selectionMenuOpen)}
             />{#if selectionMenuOpen}<div class="wallet-more-menu coin-selection-menu" role="menu">
-                {#if renewalCoin && chainTipCurrent && multisig}{#if renewalCoin.policyMaturity?.delayedSpendSupported}<a
+                {#if renewalCoin && chainTipCurrent && multisig}{#if renewalCoin.policyMaturity?.delayedSpendSupported && renewalCoin.policyMaturity.state === MATURITY_MATURE}<a
                       role="menuitem"
                       href={delayedSpendHref}
                       ><Unlock size={15} /><span
                         ><strong
                           >{translate(
                             $locale,
-                            renewalCoin.policyMaturity?.policyType === 'inheritance'
-                              ? 'Use heir key'
-                              : 'Use recovery key'
+                            isContinuityPolicyType(renewalCoin.policyMaturity?.policyType)
+                              ? 'Choose spending path'
+                              : renewalCoin.policyMaturity?.policyType === 'inheritance'
+                                ? 'Use heir key'
+                                : 'Use recovery key'
                           )}</strong
                         ><small>{translate($locale, 'Spend this coin with its backup key')}</small
                         ></span
@@ -695,18 +705,22 @@
                         {maturityIs(maturity, MATURITY_MATURE)
                           ? translate(
                               $locale,
-                              '{key} can now spend this coin alone. Your normal 2-of-3 keys still work.',
+                              isContinuityPolicyType(maturity.policyType)
+                                ? 'A delayed path is available. Review its required signers before spending. Primary signers remain available.'
+                                : '{key} can now spend this coin alone. Your normal 2-of-3 keys still work.',
                               { key: translate($locale, extraKeyName(maturity)) }
                             )
                           : translate(
                               $locale,
-                              '{key} cannot spend this coin yet. Your normal 2-of-3 keys work now and remain available later.',
+                              isContinuityPolicyType(maturity.policyType)
+                                ? 'Delayed paths are still waiting. Primary signers can spend now and remain available later.'
+                                : '{key} cannot spend this coin yet. Your normal 2-of-3 keys work now and remain available later.',
                               { key: translate($locale, extraKeyName(maturity)) }
                             )}
                       </dd>
                     </div>
                   </dl>
-                  {#if multisig && chainTipCurrent && maturityIs(maturity, MATURITY_MATURE)}<div
+                  {#if multisig && chainTipCurrent && (maturityIs(maturity, MATURITY_MATURE) || (isContinuityPolicyType(maturity.policyType) && utxo.confirmations > 0))}<div
                       class="coin-policy-renewal"
                     >
                       <RefreshCw size={15} />
@@ -730,7 +744,7 @@
                               ? 'Postpone heir access'
                               : 'Restart recovery wait'
                           )}</Button
-                        >{#if maturity.delayedSpendSupported}<Button
+                        >{#if maturity.delayedSpendSupported && maturityIs(maturity, MATURITY_MATURE)}<Button
                             variant="secondary"
                             size="small"
                             href={`/multisig/send?coins=${encodeURIComponent(utxo.outpoint)}&delayedSpend=1${maturityFixtureSuffix}`}
@@ -998,7 +1012,13 @@
       bind:labels={claimLabels}
       bind:value={claimLabel}
     />
-    {#if claimError}<p class="form-error" role="alert">{claimError}</p>{/if}
+    {#if claimError}<WarningNotice
+        tone="danger"
+        icon
+        role="alert"
+        ariaLive="polite"
+        body={claimError}
+      />{/if}
     <div class="modal-footer">
       <Button
         type="button"
@@ -1016,3 +1036,694 @@
     </div>
   </form>
 </Modal>
+
+<style>
+  /* Keep the original cascade weight while constraining these rules to this owner. */
+
+  :global(.stat-pill):where(.stat-pill) {
+    display: flex;
+    flex-direction: column;
+    text-align: right;
+    gap: 5px;
+  }
+  :global(.stat-pill):where(.stat-pill) > :global(span) {
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+  }
+  :global(.stat-pill):where(.stat-pill) > :global(strong) {
+    font-size: 13px;
+  }
+  :global(.coin-list):where(.coin-list) {
+    margin-top: 18px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-panel);
+    overflow: hidden;
+  }
+  :global(.coin-list):where(.coin-list) :global(article) {
+    position: relative;
+    min-height: 89px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    display: grid;
+    grid-template-columns: 38px 1fr auto;
+    align-items: center;
+    gap: 13px;
+    padding: 13px 16px;
+    transition:
+      background-color 150ms ease,
+      box-shadow 150ms ease;
+  }
+  :global(.coin-row-selection):where(.coin-row-selection) {
+    position: absolute;
+    z-index: 1;
+    inset: 0;
+    width: 100%;
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+  }
+  :global(.coin-row-selection:focus-visible):where(.coin-row-selection) {
+    outline: 2px solid var(--focus);
+    outline-offset: -3px;
+  }
+  :global(.coin-row-selection:disabled):where(.coin-row-selection) {
+    cursor: default;
+  }
+  :global(.coin-check):where(.coin-check),
+  :global(.coin-row-actions):where(.coin-row-actions),
+  :global(.coin-details):where(.coin-details) {
+    position: relative;
+    z-index: 2;
+  }
+  :global(.coin-list.selectable):where(.coin-list) :global(article:not(.frozen)) {
+    cursor: pointer;
+  }
+  :global(.coin-list.selectable):where(.coin-list) :global(article:not(.frozen):hover) {
+    background: color-mix(in srgb, var(--fr-blue) 4%, var(--panel));
+  }
+  :global(.coin-list.selectable):where(.coin-list) :global(article.selected) {
+    background: color-mix(in srgb, var(--fr-blue) 9%, var(--panel));
+    box-shadow: inset 3px 0 0 var(--fr-blue);
+  }
+  :global(.coin-list):where(.coin-list) :global(article:last-child) {
+    border: 0;
+  }
+  :global(.coin-icon):where(.coin-icon) {
+    width: 36px;
+    height: 36px;
+    border-radius: var(--radius-control);
+    background: var(--accent-soft);
+    color: var(--accent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  :global(.coin-main):where(.coin-main),
+  :global(.coin-meta):where(.coin-meta) {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+  :global(.coin-main):where(.coin-main) :global(strong) {
+    font-size: 15px;
+  }
+  :global(.coin-main):where(.coin-main) :global(span),
+  :global(.coin-meta):where(.coin-meta) :global(span) {
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+  }
+  :global(.coin-main):where(.coin-main) :global(code),
+  :global(.coin-meta):where(.coin-meta) :global(small) {
+    color: var(--muted-2);
+    font-size: var(--font-size-meta);
+  }
+  :global(.coin-meta):where(.coin-meta) {
+    text-align: right;
+  }
+  :global(.coin-meta):where(.coin-meta) :global(strong) {
+    font-size: 14px;
+  }
+  :global(.coin-toolbar):where(.coin-toolbar) {
+    min-height: 66px;
+    margin-bottom: 14px;
+    border: 1px solid var(--border);
+    background: var(--panel);
+    border-radius: var(--radius-control);
+    padding: 12px 14px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+  }
+  :global(.coin-toolbar):where(.coin-toolbar) > :global(div) {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  :global(.coin-toolbar):where(.coin-toolbar) > :global(div:first-child) {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+  :global(.coin-selection-count):where(.coin-selection-count) {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+  :global(.coin-selection-actions):where(.coin-selection-actions) {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .coin-selection-menu {
+    width: 260px;
+  }
+  :global(.coin-toolbar):where(.coin-toolbar) :global(strong) {
+    font-size: 14px;
+  }
+  :global(.coin-toolbar):where(.coin-toolbar) :global(span) {
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+  }
+  :global(.auto-note):where(.auto-note) {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  :global(.coin-filters):where(.coin-filters) {
+    margin: 0 0 14px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 180px;
+    gap: 10px;
+  }
+  :global(.coin-filters):where(.coin-filters) :global(label) {
+    display: grid;
+    gap: 5px;
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+  }
+  :global(.coin-filters):where(.coin-filters) :global(input),
+  :global(.coin-filters):where(.coin-filters) :global(select) {
+    width: 100%;
+    height: 44px;
+    min-height: 44px;
+    box-sizing: border-box;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+    padding: 0 12px;
+    color: var(--text);
+    background: var(--surface-control);
+  }
+  :global(.coin-list.selectable):where(.coin-list) :global(article) {
+    grid-template-columns: 22px 38px minmax(0, 1fr) auto;
+  }
+  :global(.coin-list):where(.coin-list) :global(article.frozen) {
+    opacity: 0.72;
+  }
+  :global(.coin-list):where(.coin-list) :global(article.reused) {
+    box-shadow: inset 3px 0 0 color-mix(in srgb, var(--accent) 68%, transparent);
+  }
+  :global(.coin-list):where(.coin-list) :global(article.selected),
+  :global(.coin-list):where(.coin-list) :global(article.selected.reused) {
+    box-shadow: inset 3px 0 0 var(--fr-blue);
+  }
+  :global(.coin-check):where(.coin-check) {
+    display: grid;
+    place-items: center;
+  }
+  :global(.coin-check):where(.coin-check) :global(input) {
+    position: absolute;
+    opacity: 0;
+  }
+  :global(.coin-check):where(.coin-check) :global(span) {
+    width: 16px;
+    height: 16px;
+    border: 1px solid var(--border-strong);
+    border-radius: 4px;
+    display: block;
+  }
+  :global(.coin-check):where(.coin-check) :global(input:checked + span) {
+    background: var(--fr-blue);
+    border-color: var(--fr-blue);
+    box-shadow: inset 0 0 0 3px var(--panel);
+  }
+  :global(.coin-check):where(.coin-check) :global(input:disabled + span) {
+    opacity: 0.35;
+  }
+  :global(.coin-title):where(.coin-title) {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    flex-wrap: wrap;
+  }
+  :global(.coin-title):where(.coin-title) > :global(strong) {
+    flex: 0 0 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  :global(.coin-title):where(.coin-title) :global(.permanent-label-tags) {
+    flex: 1 1 160px;
+  }
+
+  :global(.coin-details):where(.coin-details) :global(dl > .coin-policy-explanation) {
+    grid-column: 1 / -1;
+  }
+
+  :global(.coin-policy-section):where(.coin-policy-section) {
+    display: grid;
+    gap: 12px;
+  }
+  :global(.coin-detail-heading):where(.coin-detail-heading) {
+    display: grid;
+    gap: 2px;
+  }
+  :global(.coin-detail-heading):where(.coin-detail-heading) :global(strong) {
+    color: var(--text);
+    font-size: var(--font-size-meta);
+  }
+  :global(.coin-detail-heading):where(.coin-detail-heading) :global(small) {
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+  }
+  :global(.coin-approximate-time):where(.coin-approximate-time) {
+    color: var(--muted);
+  }
+
+  :global(.coin-policy-explanation):where(.coin-policy-explanation) :global(dd) {
+    max-width: 62ch;
+    line-height: 1.45;
+  }
+  :global(.coin-policy-renewal):where(.coin-policy-renewal) {
+    display: grid;
+    grid-template-columns: 28px minmax(0, 1fr);
+    align-items: center;
+    gap: 9px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border);
+  }
+  :global(.coin-policy-renewal):where(.coin-policy-renewal) > :global(svg) {
+    padding: 6px;
+    box-sizing: content-box;
+    border-radius: var(--radius-control);
+    color: var(--link);
+    background: var(--surface-icon);
+  }
+  :global(.coin-policy-renewal):where(.coin-policy-renewal) > :global(.coin-policy-copy) {
+    min-width: 0;
+    display: grid;
+    gap: 1px;
+  }
+  :global(.coin-policy-renewal):where(.coin-policy-renewal) :global(strong) {
+    font-size: var(--font-size-meta);
+  }
+  :global(.coin-policy-renewal):where(.coin-policy-renewal) :global(small) {
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+    line-height: 1.4;
+  }
+  :global(.coin-policy-actions):where(.coin-policy-actions) {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+  :global(.coin-policy-actions):where(.coin-policy-actions) :global(.button) {
+    width: 100%;
+    min-width: 0;
+    white-space: normal;
+    text-align: center;
+  }
+  :global(.coin-main):where(.coin-main) > :global(span) {
+    color: var(--text-soft);
+    font-size: var(--font-size-meta);
+  }
+  :global(.coin-main):where(.coin-main) :global(.coin-reuse) {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    color: var(--warning-text);
+    font-size: var(--font-size-meta);
+  }
+  :global(.coin-main):where(.coin-main) :global(.coin-reuse svg) {
+    flex: 0 0 auto;
+    color: var(--accent);
+  }
+  :global(.coin-meta):where(.coin-meta) :global(button) {
+    border: 0;
+    background: transparent;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 4px;
+    font-size: var(--font-size-meta);
+    padding: 3px 0;
+    cursor: pointer;
+  }
+  :global(.coin-meta):where(.coin-meta) :global(.coin-details-toggle) {
+    margin-top: 3px;
+    color: var(--link);
+  }
+  :global(.coin-details-toggle):where(.coin-details-toggle) :global(svg) {
+    transition: transform 0.15s ease;
+  }
+  :global(.coin-details-toggle):where(.coin-details-toggle) :global(svg.rotated) {
+    transform: rotate(180deg);
+  }
+  :global(.coin-meta.coin-actions-meta):where(.coin-meta) {
+    align-items: flex-end;
+  }
+  :global(.coin-row-actions):where(.coin-row-actions) {
+    display: inline-flex;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+    background: var(--surface-control);
+  }
+  :global(.coin-meta):where(.coin-meta) :global(.coin-row-actions > button) {
+    min-height: 38px;
+    margin: 0;
+    padding: 0 10px;
+    justify-content: center;
+    color: var(--text-soft);
+    font-size: var(--font-size-meta);
+    font-weight: 600;
+  }
+  :global(.coin-meta):where(.coin-meta) :global(.coin-row-actions > button + button) {
+    border-left: 1px solid var(--border);
+  }
+  :global(.coin-meta):where(.coin-meta) :global(.coin-row-actions > button:hover),
+  :global(.coin-meta):where(.coin-meta) :global(.coin-row-actions > button:focus-visible) {
+    color: var(--link);
+    background: var(--surface-hover);
+    outline: 0;
+  }
+  :global(.coin-meta):where(.coin-meta) :global(.coin-row-actions > button:focus-visible) {
+    box-shadow: inset 0 0 0 2px var(--focus);
+  }
+  :global(.coin-meta):where(.coin-meta) :global(.coin-row-actions > button:disabled) {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+  :global(.coin-details):where(.coin-details) {
+    grid-column: 1 / -1;
+    display: grid;
+    gap: 14px;
+    margin: 2px -4px -3px 58px;
+    padding: 15px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+    background: var(--surface-inset);
+  }
+  :global(.coin-details):where(.coin-details) :global(dl) {
+    margin: 0;
+    display: grid;
+    gap: 11px;
+  }
+  :global(.coin-detail-group):where(.coin-detail-group) {
+    border-top: 1px solid var(--border);
+    padding-top: 11px;
+  }
+  :global(.coin-details):where(.coin-details) > :global(.coin-detail-group:first-of-type) {
+    padding-top: 0;
+    border-top: 0;
+  }
+  :global(.coin-detail-group):where(.coin-detail-group) :global(summary) {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    cursor: pointer;
+    color: var(--link);
+    list-style: none;
+  }
+  :global(.coin-detail-group):where(.coin-detail-group) :global(summary::-webkit-details-marker) {
+    display: none;
+  }
+  :global(.coin-detail-group):where(.coin-detail-group) :global(summary span) {
+    display: grid;
+    gap: 2px;
+  }
+  :global(.coin-detail-group):where(.coin-detail-group) :global(summary strong) {
+    color: var(--text-soft);
+    font-size: var(--font-size-meta);
+  }
+  :global(.coin-detail-group):where(.coin-detail-group) :global(summary small) {
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+  }
+  :global(.coin-detail-group):where(.coin-detail-group) :global(.coin-detail-chevron) {
+    flex: 0 0 auto;
+    color: var(--muted);
+    transition:
+      transform 0.15s ease,
+      color 0.15s ease;
+  }
+  :global(.coin-detail-group):where(.coin-detail-group) :global(summary:hover .coin-detail-chevron),
+  :global(.coin-detail-group):where(.coin-detail-group)
+    :global(summary:focus-visible .coin-detail-chevron) {
+    color: var(--link);
+  }
+  :global(.coin-detail-group[open]):where(.coin-detail-group) :global(.coin-detail-chevron) {
+    transform: rotate(180deg);
+  }
+  :global(.coin-detail-group[open]):where(.coin-detail-group) :global(summary) {
+    margin-bottom: 12px;
+  }
+  :global(.coin-detail-group):where(.coin-detail-group) :global(dl) {
+    gap: 0;
+  }
+  :global(.coin-detail-group):where(.coin-detail-group) :global(dl > div) {
+    grid-template-columns: minmax(132px, 28%) minmax(0, 1fr);
+    min-height: 38px;
+    padding: 8px 0;
+    box-sizing: border-box;
+    align-items: center;
+    border-bottom: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+  }
+  :global(.coin-detail-group):where(.coin-detail-group) :global(dl > div:first-child) {
+    padding-top: 0;
+  }
+  :global(.coin-detail-group):where(.coin-detail-group) :global(dl > div:last-child) {
+    padding-bottom: 0;
+    border-bottom: 0;
+  }
+  :global(.coin-detail-group):where(.coin-detail-group) :global(dl dt) {
+    justify-content: flex-start;
+    gap: 5px;
+  }
+  :global(.coin-details):where(.coin-details) :global(dl > div) {
+    min-width: 0;
+    display: grid;
+    grid-template-columns: 128px minmax(0, 1fr);
+    gap: 10px;
+    align-items: start;
+  }
+  :global(.coin-detail-group):where(.coin-detail-group) :global(dl > div) {
+    column-gap: 24px;
+  }
+  :global(.coin-details):where(.coin-details) :global(dt) {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+    line-height: 1.45;
+  }
+  :global(.coin-details):where(.coin-details) :global(dd) {
+    min-width: 0;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    color: var(--text-soft);
+    font-size: var(--font-size-meta);
+    line-height: 1.45;
+  }
+  :global(.coin-details):where(.coin-details) :global(code) {
+    overflow-wrap: anywhere;
+  }
+  :global(.coin-details):where(.coin-details) :global(dd button) {
+    display: grid;
+    place-items: center;
+    border: 0;
+    color: var(--muted);
+    background: transparent;
+    cursor: pointer;
+  }
+  :global(.coin-details):where(.coin-details) > :global(p) {
+    margin: 0;
+    padding-top: 9px;
+    display: grid;
+    grid-template-columns: 18px 1fr;
+    gap: 8px;
+    border-top: 1px solid var(--border);
+    color: var(--accent);
+  }
+  :global(.coin-details):where(.coin-details) > :global(p span) {
+    display: grid;
+    gap: 3px;
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+    line-height: 1.45;
+  }
+  :global(.coin-details):where(.coin-details) > :global(p strong) {
+    color: var(--text-soft);
+  }
+  :global(.coin-reuse-details):where(.coin-reuse-details) {
+    display: grid;
+    gap: 9px;
+    padding-top: 9px;
+    border-top: 1px solid var(--border);
+  }
+  :global(.coin-reuse-explanation):where(.coin-reuse-explanation) {
+    display: grid;
+    grid-template-columns: 18px minmax(0, 1fr);
+    gap: 8px;
+    color: var(--accent);
+  }
+  :global(.coin-reuse-explanation):where(.coin-reuse-explanation) > :global(span) {
+    display: grid;
+    gap: 3px;
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+    line-height: 1.45;
+  }
+  :global(.coin-reuse-explanation):where(.coin-reuse-explanation) :global(strong) {
+    color: var(--text-soft);
+  }
+  :global(.coin-reuse-details):where(.coin-reuse-details) :global(ul) {
+    list-style: none;
+    margin: 0 0 0 26px;
+    padding: 0;
+    display: grid;
+    gap: 5px;
+  }
+  :global(.coin-reuse-details):where(.coin-reuse-details) :global(li) {
+    min-width: 0;
+    display: grid;
+    grid-template-columns: auto auto minmax(0, 1fr);
+    gap: 7px;
+    align-items: center;
+    padding: 7px 9px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+    background: var(--surface-control);
+    font-size: var(--font-size-meta);
+  }
+  :global(.coin-reuse-details):where(.coin-reuse-details) :global(li span) {
+    color: var(--muted);
+  }
+  :global(.coin-reuse-details):where(.coin-reuse-details) :global(li strong) {
+    color: var(--text-soft);
+  }
+  :global(.coin-reuse-details):where(.coin-reuse-details) :global(li code) {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--muted);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-align: right;
+  }
+
+  :global(.observed-receive-prompt):where(.observed-receive-prompt) {
+    display: grid;
+    grid-template-columns: 28px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 9px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border);
+  }
+
+  :global(.observed-receive-prompt):where(.observed-receive-prompt) > :global(span) {
+    width: 28px;
+    height: 28px;
+    display: grid;
+    place-items: center;
+    border-radius: var(--radius-control);
+    color: var(--warning-text);
+    background: color-mix(in srgb, var(--accent) 10%, var(--surface-control));
+  }
+
+  :global(.observed-receive-prompt):where(.observed-receive-prompt) > :global(div) {
+    min-width: 0;
+    display: grid;
+    gap: 1px;
+  }
+
+  :global(.observed-receive-prompt):where(.observed-receive-prompt) :global(strong) {
+    font-size: var(--font-size-meta);
+  }
+
+  :global(.observed-receive-prompt):where(.observed-receive-prompt) :global(small) {
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+  }
+
+  :global(.coins-empty):where(.coins-empty) {
+    min-height: 180px;
+    display: grid;
+    place-items: center;
+    align-content: center;
+    gap: 7px;
+    color: var(--muted);
+  }
+  :global(.coins-empty):where(.coins-empty) :global(span) {
+    font-size: var(--font-size-meta);
+  }
+  :global(.provenance-labels):where(.provenance-labels) {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  @media (max-width: 700px) {
+    :global(.coin-policy-actions):where(.coin-policy-actions) {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  @media (max-width: 760px) {
+    :global(.coin-details):where(.coin-details) {
+      margin-left: 0;
+    }
+    :global(.coin-detail-group):where(.coin-detail-group) :global(dl > div) {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 3px;
+      align-items: start;
+    }
+    :global(.coin-detail-group):where(.coin-detail-group) :global(dt) {
+      justify-content: flex-start;
+    }
+    :global(.coin-reuse-details):where(.coin-reuse-details) :global(ul) {
+      margin-left: 0;
+    }
+    :global(.coin-reuse-details):where(.coin-reuse-details) :global(li) {
+      grid-template-columns: 1fr auto;
+    }
+    :global(.coin-reuse-details):where(.coin-reuse-details) :global(li code) {
+      grid-column: 1 / -1;
+      text-align: left;
+    }
+    :global(.coin-list):where(.coin-list) :global(article),
+    :global(.coin-list.selectable):where(.coin-list) :global(article) {
+      grid-template-columns: 22px 34px 1fr;
+    }
+    :global(.coin-main):where(.coin-main) {
+      grid-column: 3;
+    }
+    :global(.coin-meta):where(.coin-meta) {
+      grid-column: 3;
+      text-align: left;
+      flex-direction: row;
+      align-items: center;
+    }
+    :global(.coin-meta.coin-actions-meta):where(.coin-meta) {
+      width: 100%;
+      align-items: stretch;
+    }
+    :global(.coin-row-actions):where(.coin-row-actions) {
+      width: min(100%, 250px);
+    }
+    :global(.coin-meta):where(.coin-meta) :global(.coin-row-actions > button) {
+      min-height: 44px;
+      flex: 1 1 0;
+      padding-inline: 8px;
+    }
+    :global(.coin-meta):where(.coin-meta) :global(small) {
+      display: none;
+    }
+    :global(.coin-toolbar):where(.coin-toolbar) {
+      align-items: flex-start;
+    }
+    :global(.coin-toolbar):where(.coin-toolbar) > :global(div:last-child) {
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+  }
+</style>

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import WarningNotice from '$lib/components/WarningNotice.svelte';
   import {
     ArrowLeft,
     Check,
@@ -240,12 +241,11 @@
   {/if}
 
   {#if !loading && error}
-    <div class="diagnostics-state form-error" role="alert">
-      <span>{error}</span>
+    <WarningNotice tone="danger" icon role="alert" body={error} class="inline-action">
       <Button variant="secondary" size="small" onclick={load}
         ><RefreshCw size={15} />{translate($locale, 'Try again')}</Button
       >
-    </div>
+    </WarningNotice>
   {:else if !loading && records.length === 0}
     <div class="diagnostics-state">
       {translate($locale, 'No diagnostic events have been recorded yet.')}
@@ -943,9 +943,7 @@
     .log-controls {
       grid-template-columns: 1fr 1fr;
     }
-    .log-search {
-      grid-column: 1 / -1;
-    }
+    .log-search,
     .log-view {
       grid-column: 1 / -1;
     }
@@ -1005,5 +1003,13 @@
     .raw-log textarea {
       min-height: 340px;
     }
+  }
+
+  /* Keep the original cascade weight while constraining these rules to this owner. */
+
+  :global(.list-pagination):where(.list-pagination) {
+    display: flex;
+    justify-content: center;
+    margin-block: 24px;
   }
 </style>

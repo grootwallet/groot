@@ -109,3 +109,32 @@
     {/if}
   </div>
 {/if}
+
+<style>
+  /* Keep the original cascade weight while constraining these rules to this owner. */
+
+  :global(.hardware-device-list):where(.hardware-device-list) :global(em) {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    width: fit-content;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 3px 8px;
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+    font-style: normal;
+    font-weight: 400;
+  }
+  :global(.hardware-device-list):where(.hardware-device-list) :global(em.ready),
+  :global(.hardware-device-list):where(.hardware-device-list) :global(em.signed) {
+    border-color: rgba(34, 197, 94, 0.3);
+    background: rgba(34, 197, 94, 0.08);
+    color: var(--success);
+  }
+  :global(.hardware-device-list):where(.hardware-device-list) :global(em.attention) {
+    border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
+</style>

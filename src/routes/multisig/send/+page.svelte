@@ -66,7 +66,9 @@
     addressPrefixForNetwork,
     hasAddressPrefixForNetwork,
     normalizePermanentLabel,
-    validPolicyMaturity
+    isContinuityPolicyType,
+    validPolicyMaturity,
+    walletPolicyPresentation
   } from '$lib/wallet/policy';
   import { compactAddress, compactIdentifier } from '$lib/address-display';
   import {
@@ -144,6 +146,7 @@
     pin = $state(''),
     imported = $state(''),
     txid = $state(''),
+    persistencePending = $state(false),
     broadcastExplorerError = $state(''),
     error = $state(''),
     importError = $state(''),
@@ -329,11 +332,20 @@
   const renewalKeyName = $derived(
     renewalMaturity?.policyType === 'inheritance' ? 'Heir key' : 'Recovery key'
   );
+  let namedPaths = $state<import('$lib/wallet/contracts').SpendingPathDetails[]>([]);
+  let namedPathIndex = $state(1);
+  const selectedNamedPath = $derived(
+    namedPaths.find((path) => path.index === Number(namedPathIndex))
+  );
   const delayedSpendMaturity = $derived(
     delayedSpendCoin ? validPolicyMaturity(delayedSpendCoin) : null
   );
   const delayedSpendKeyName = $derived(
-    delayedSpendMaturity?.policyType === 'inheritance' ? 'heir key' : 'recovery key'
+    isContinuityPolicyType(wallet?.policyType)
+      ? 'selected signers'
+      : delayedSpendMaturity?.policyType === 'inheritance'
+        ? 'heir key'
+        : 'recovery key'
   );
   const renewalValid = $derived(
     renewalMode && renewalCoin !== null && submissionLabels.length > 0 && customFeeValid
@@ -341,6 +353,7 @@
   const delayedSpendValid = $derived(
     delayedSpendMode &&
       delayedSpendCoin !== null &&
+      (namedPaths.length === 0 || selectedNamedPath?.available === true) &&
       addressValid &&
       submissionLabels.length > 0 &&
       customFeeValid
@@ -349,13 +362,23 @@
     proposal ? Math.max(0, proposal.required - proposal.signed) : 0
   );
   const signatureRequirementLabel = $derived(
-    translate(
-      $locale,
-      signaturesRemaining === 1
-        ? '{count} more signature required'
-        : '{count} more signatures required',
-      { count: signaturesRemaining }
-    )
+    proposal?.spendingPathDetails?.available === false
+      ? translate(
+          $locale,
+          proposal.spendingPathDetails.reason ?? 'The selected spending path is unavailable.'
+        )
+      : proposal && !proposal.canFinalize && signaturesRemaining === 0
+        ? translate(
+            $locale,
+            'Required signer roles are still missing. Review the selected spending path.'
+          )
+        : translate(
+            $locale,
+            signaturesRemaining === 1
+              ? '{count} more signature required'
+              : '{count} more signatures required',
+            { count: signaturesRemaining }
+          )
   );
   const eligibleSignerSet = $derived.by(() => {
     if (proposal)
@@ -552,7 +575,12 @@
       if (renewalRequested && proposals.length === 0 && selectedCoins.length === 1) {
         const candidate = coins.find((coin) => coin.outpoint === selectedCoins[0]) ?? null;
         const maturity = candidate ? validPolicyMaturity(candidate) : null;
-        if (candidate && maturity?.state === 'mature' && snapshotCurrent) {
+        if (
+          candidate &&
+          (maturity?.state === 'mature' ||
+            (isContinuityPolicyType(maturity?.policyType) && candidate.confirmations > 0)) &&
+          snapshotCurrent
+        ) {
           renewalMode = true;
           renewalCoin = candidate;
         } else {
@@ -584,6 +612,8 @@
         ) {
           delayedSpendMode = true;
           delayedSpendCoin = candidate;
+          namedPaths = await walletService.multisigSpendingPaths(candidate.outpoint);
+          namedPathIndex = namedPaths.find((path) => path.index > 0 && path.available)?.index ?? 1;
         } else {
           toast({
             title: translate($locale, 'Recovery key unavailable'),
@@ -862,7 +892,8 @@
         delayedSpendCoin.outpoint,
         address,
         submissionLabels,
-        feeRate(selectedRateNumber)
+        feeRate(selectedRateNumber),
+        Number(namedPathIndex)
       );
     } catch (cause) {
       error = localizedError(cause, $locale, 'Could not prepare recovery-key payment.');
@@ -1177,7 +1208,7 @@
     )
       return;
     if (deviceHasSigned(device)) return;
-    if (device.action === 'prompt_pin' && !pinResolved) {
+    if (device.action === 'prompt_pin' && !pinResolved && !identifiedDevices[device.id]) {
       await startHardwarePin(device);
       return;
     }
@@ -1371,10 +1402,14 @@
       deviceOpen = false;
       toast({
         title: 'Signature added',
-        description: translate($locale, '{signed} of {required} signatures', {
-          signed: proposal.signed,
-          required: proposal.required
-        }),
+        description:
+          proposal.spendingPathDetails?.available === false ||
+          (!proposal.canFinalize && proposal.signed >= proposal.required)
+            ? signatureRequirementLabel
+            : translate($locale, '{signed} of {required} signatures', {
+                signed: proposal.signed,
+                required: proposal.required
+              }),
         tone: 'success'
       });
     } catch (cause) {
@@ -1522,6 +1557,8 @@
         pin
       );
       txid = result.txid;
+      persistencePending = result.persistencePending === true;
+      if (persistencePending) toast({ title: 'Local recording pending', tone: 'warning' });
     } catch (cause) {
       if (cause instanceof WalletError && cause.code === 'transaction_confirmed') {
         markAccelerationConfirmed();
@@ -1730,9 +1767,11 @@
       imported = await walletService.decodePsbtUr(scannedFrames);
       qrScanOpen = false;
       await importPsbt();
+      return true;
     } catch (cause) {
-      const message = localizedError(cause, $locale, '');
-      if (!message.includes('Keep scanning')) error = message || 'The QR frame was rejected.';
+      if (cause instanceof WalletError && cause.code === 'qr_incomplete') return false;
+      error = localizedError(cause, $locale, 'The QR frame was rejected.');
+      throw cause;
     }
   }
 </script>
@@ -1822,7 +1861,9 @@
               ><small
                 >{translate(
                   $locale,
-                  'Use the one-key recovery flow, or continue here with your normal 2-of-3 keys.'
+                  isContinuityPolicyType(wallet?.policyType)
+                    ? 'Choose a named delayed path, or continue with the primary signers.'
+                    : 'Use the one-key recovery flow, or continue here with your normal 2-of-3 keys.'
                 )}</small
               >
             </div>
@@ -1851,12 +1892,20 @@
             <span><LockKeyhole size={18} /></span>
             <div>
               <strong
-                >{translate($locale, 'The {key} is ready', { key: delayedSpendKeyName })}</strong
+                >{translate(
+                  $locale,
+                  isContinuityPolicyType(wallet?.policyType)
+                    ? 'Delayed spending is available'
+                    : 'The {key} is ready',
+                  { key: delayedSpendKeyName }
+                )}</strong
               >
               <p>
                 {translate(
                   $locale,
-                  'It can now move this coin by itself. Your usual 2-of-3 keys still work too.'
+                  isContinuityPolicyType(wallet?.policyType)
+                    ? 'A delayed path is available. Review its required signers before spending. Primary signers remain available.'
+                    : 'It can now move this coin by itself. Your usual 2-of-3 keys still work too.'
                 )}
               </p>
               <details>
@@ -1874,7 +1923,14 @@
                       'The network fee is deducted from that coin, so the recipient gets the remainder.'
                     )}
                   </li>
-                  <li>{translate($locale, 'Only the extra key signs this payment.')}</li>
+                  <li>
+                    {translate(
+                      $locale,
+                      isContinuityPolicyType(wallet?.policyType)
+                        ? 'Only the signers in the selected spending path can approve this payment.'
+                        : 'Only the extra key signs this payment.'
+                    )}
+                  </li>
                 </ul>
               </details>
             </div>
@@ -1898,7 +1954,7 @@
                   <li>
                     {translate(
                       $locale,
-                      'Your usual 2-of-3 keys approve the move. The {key} is not used.',
+                      'The primary signers approve the renewal. Delayed signers are not used.',
                       { key: translate($locale, renewalKeyName) }
                     )}
                   </li>
@@ -1952,6 +2008,15 @@
                 {networkName(defaultConfig.network)}
                 {translate($locale, 'network.')}{/if}
             </p>
+            {#if persistencePending}
+              <WarningNotice
+                title={translate($locale, 'Local recording pending')}
+                body={translate(
+                  $locale,
+                  'The transaction was accepted, but its local record could not be saved. Sync this wallet before making another payment. Do not resend it.'
+                )}
+              />
+            {/if}
             <button class="hash-box" type="button" onclick={copyBroadcastTxid}
               ><span>{translate($locale, 'Transaction ID')}</span><code
                 >{compactIdentifier(txid)}</code
@@ -1966,9 +2031,12 @@
             {#if broadcastExplorerUrl}<div class="explorer-panel">
                 <button class="explorer-link" type="button" onclick={openBroadcastExplorer}
                   >{translate($locale, 'View on mempool.space')} <ExternalLink size={14} /></button
-                >{#if broadcastExplorerError}<p class="form-error" role="alert">
-                    {broadcastExplorerError}
-                  </p>{/if}
+                >{#if broadcastExplorerError}<WarningNotice
+                    tone="danger"
+                    icon
+                    role="alert"
+                    body={broadcastExplorerError}
+                  />{/if}
                 <p class="explorer-privacy">
                   {translate(
                     $locale,
@@ -2147,11 +2215,39 @@
               <span>{translate($locale, 'RECOVERY PAYMENT')}</span>
               <h2>{translate($locale, 'Where should this coin go?')}</h2>
               <p>
-                {translate($locale, 'The {key} signs alone. The fee is deducted from this coin.', {
-                  key: delayedSpendKeyName
-                })}
+                {translate(
+                  $locale,
+                  isContinuityPolicyType(wallet?.policyType)
+                    ? 'The selected path determines the required signers. The fee is deducted from this coin.'
+                    : 'The {key} signs alone. The fee is deducted from this coin.',
+                  { key: delayedSpendKeyName }
+                )}
               </p>
             </div>
+            {#if namedPaths.length}
+              <label class="field"
+                ><span>{translate($locale, 'Spending path')}</span>
+                <select
+                  aria-label={translate($locale, 'Spending path')}
+                  bind:value={namedPathIndex}
+                >
+                  {#each namedPaths.filter((path) => path.index > 0) as path (path.index)}
+                    <option value={path.index} disabled={!path.available}
+                      >{translate($locale, path.name)} · {path.availableAfterBlocks}
+                      {translate($locale, 'blocks')}{path.available
+                        ? ''
+                        : ` · ${path.remainingBlocks ?? '—'} ${translate($locale, 'blocks remaining')}`}</option
+                    >
+                  {/each}
+                </select>
+              </label>
+              {#if selectedNamedPath}<WarningNotice
+                  title={translate($locale, selectedNamedPath.name)}
+                  body={translate($locale, 'Required signatures: {count}', {
+                    count: selectedNamedPath.required
+                  })}
+                />{/if}
+            {/if}
             <div class="renewal-coin-summary">
               <span>{translate($locale, 'Coin available')}</span>
               <strong><Amount value={delayedSpendCoin.amount} hidden={$discreetMode} /></strong>
@@ -2162,6 +2258,9 @@
             <label class="field"
               ><span>{translate($locale, 'Send to')}</span><input
                 aria-label={translate($locale, 'Bitcoin address')}
+                autocapitalize="none"
+                autocorrect="off"
+                spellcheck={false}
                 bind:value={address}
                 oninput={clearDraftError}
                 placeholder="{addressPrefixForNetwork(defaultConfig.network)}q…"
@@ -2193,13 +2292,15 @@
                 }}
               />
             </details>
-            {#if error}<div class="hardware-inline-error send-form-error" role="alert">
-                <AlertTriangle size={18} /><span
-                  ><strong>{translate($locale, 'Payment could not be prepared')}</strong><small
-                    >{error}</small
-                  ></span
-                >
-              </div>{/if}
+            {#if error}<WarningNotice
+                tone="danger"
+                icon
+                role="alert"
+                ariaLive="polite"
+                class="send-form-error"
+                title={translate($locale, 'Payment could not be prepared')}
+                body={error}
+              />{/if}
             <Button
               type="submit"
               size="large"
@@ -2259,12 +2360,15 @@
                 }}
               />
             </details>
-            {#if error}<div class="hardware-inline-error send-form-error" role="alert">
-                <AlertTriangle size={18} /><span
-                  ><strong>{translate($locale, 'Protection renewal could not be prepared')}</strong
-                  ><small>{error}</small></span
-                >
-              </div>{/if}
+            {#if error}<WarningNotice
+                tone="danger"
+                icon
+                role="alert"
+                ariaLive="polite"
+                class="send-form-error"
+                title={translate($locale, 'Protection renewal could not be prepared')}
+                body={error}
+              />{/if}
             <Button
               type="submit"
               size="large"
@@ -2297,6 +2401,9 @@
               <div class="address-input-control">
                 <input
                   aria-label={translate($locale, 'Bitcoin address')}
+                  autocapitalize="none"
+                  autocorrect="off"
+                  spellcheck={false}
                   bind:value={address}
                   oninput={() => {
                     clearDraftError();
@@ -2325,13 +2432,15 @@
             <Button type="submit" size="large" class="full" disabled={!intentValid}
               >{translate($locale, 'Continue to amount')}</Button
             >
-            {#if error}<div class="hardware-inline-error send-form-error" role="alert">
-                <AlertTriangle size={18} /><span
-                  ><strong>{translate($locale, 'Could not save payment draft')}</strong><small
-                    >{error}</small
-                  ></span
-                >
-              </div>{/if}
+            {#if error}<WarningNotice
+                tone="danger"
+                icon
+                role="alert"
+                ariaLive="polite"
+                class="send-form-error"
+                title={translate($locale, 'Could not save payment draft')}
+                body={error}
+              />{/if}
           </form>
         {:else if !proposal}
           <form
@@ -2558,13 +2667,15 @@
             {#if maxSpendRefreshing}<p class="available-balance-summary" role="status">
                 {translate($locale, 'Updating the maximum spendable amount for this fee…')}
               </p>{/if}
-            {#if error}<div class="hardware-inline-error send-form-error" role="alert">
-                <AlertTriangle size={18} /><span
-                  ><strong>{translate($locale, 'Payment could not be prepared')}</strong><small
-                    >{error}</small
-                  ></span
-                >
-              </div>{/if}
+            {#if error}<WarningNotice
+                tone="danger"
+                icon
+                role="alert"
+                ariaLive="polite"
+                class="send-form-error"
+                title={translate($locale, 'Payment could not be prepared')}
+                body={error}
+              />{/if}
             <div class="split-actions">
               <Button
                 variant="secondary"
@@ -2634,6 +2745,10 @@
                   <dd><Amount value={Number(proposal.total)} interactive /></dd>
                 </div>
               </dl>
+              {#if proposal.spendingPathDetails}<WarningNotice
+                  title={translate($locale, 'Spending path')}
+                  body={`${translate($locale, proposal.spendingPathDetails.name)} · ${proposal.spendingPathDetails.availableAfterBlocks} ${translate($locale, 'blocks')}`}
+                />{/if}
               {#if delayedSpendMode}<div class="selection-review renewal-review">
                   <strong
                     >{translate($locale, 'Signed by the {key}', {
@@ -2679,10 +2794,14 @@
                 {proposal}
                 interactiveAmounts
                 policy={proposal.spendPath === 'delayed'
-                  ? `${delayedSpendKeyName} only`
+                  ? isContinuityPolicyType(wallet?.policyType)
+                    ? (proposal.spendingPathDetails?.name ?? '')
+                    : `${delayedSpendKeyName} only`
                   : wallet?.recoveryTemplate?.type === 'recovery'
                     ? '2 of 3 primary keys'
-                    : `${wallet?.threshold} of ${wallet?.cosigners.length}`}
+                    : wallet
+                      ? walletPolicyPresentation(wallet).summary
+                      : ''}
                 onChangeAddress={() => (changeAddressOpen = true)}
               />
               {#if accelerationConfirmed}<div class="hardware-inline-error" role="status">
@@ -2694,19 +2813,18 @@
                       )}</small
                     ></span
                   >
-                </div>{:else if proposalInputsUnavailable(proposal)}<div
-                  class="hardware-inline-error signing-transport-error"
+                </div>{:else if proposalInputsUnavailable(proposal)}<WarningNotice
+                  tone="danger"
+                  icon
                   role="alert"
-                >
-                  <AlertTriangle size={18} /><span
-                    ><strong>{translate($locale, 'Payment inputs unavailable')}</strong><small
-                      >{translate(
-                        $locale,
-                        'This proposal uses coins no longer available in this wallet. Sync, then cancel it and prepare a new payment. Do not sign or broadcast this PSBT.'
-                      )}</small
-                    ></span
-                  >
-                </div>{:else}
+                  ariaLive="polite"
+                  class="signing-transport-error"
+                  title={translate($locale, 'Payment inputs unavailable')}
+                  body={translate(
+                    $locale,
+                    'This proposal uses coins no longer available in this wallet. Sync, then cancel it and prepare a new payment. Do not sign or broadcast this PSBT.'
+                  )}
+                />{:else}
                 {#if !proposal.canFinalize}<div class="psbt-actions">
                     {#if !wallet?.recoveryTemplate}<Button variant="secondary" onclick={scan}
                         ><Cpu size={16} />{translate($locale, 'Sign with device')}</Button
@@ -2782,21 +2900,30 @@
                       onclick={saveProposalPsbt}
                       ><Download size={16} />{translate($locale, 'Save signed PSBT')}</Button
                     >
-                  </details>{:else}<Button
+                  </details>{:else if proposal.spendingPathDetails?.available === false || signaturesRemaining === 0}<WarningNotice
+                    role="status"
+                    ariaLive="polite"
+                    title={translate(
+                      $locale,
+                      proposal.spendingPathDetails?.available === false
+                        ? 'Spending path'
+                        : 'Signatures required'
+                    )}
+                    body={signatureRequirementLabel}
+                  />{:else}<Button
                     size="large"
                     class="full signature-requirement-action"
                     disabled
                     ariaLabel={signatureRequirementLabel}>{signatureRequirementLabel}</Button
-                  >{/if}{#if error}<div
-                    class="hardware-inline-error signing-transport-error"
+                  >{/if}{#if error}<WarningNotice
+                    tone="danger"
+                    icon
                     role="alert"
-                  >
-                    <AlertTriangle size={18} /><span
-                      ><strong>{translate($locale, 'Payment action failed')}</strong><small
-                        >{error}</small
-                      ></span
-                    >
-                  </div>{/if}{/if}<Button
+                    ariaLive="polite"
+                    class="signing-transport-error"
+                    title={translate($locale, 'Payment action failed')}
+                    body={error}
+                  />{/if}{/if}<Button
                 variant="ghost-danger"
                 class="full proposal-cancel-action"
                 disabled={busy}
@@ -2910,10 +3037,14 @@
             compact
             interactiveAmounts
             policy={proposal.spendPath === 'delayed'
-              ? `${delayedSpendKeyName} only`
+              ? isContinuityPolicyType(wallet?.policyType)
+                ? (proposal.spendingPathDetails?.name ?? '')
+                : `${delayedSpendKeyName} only`
               : wallet?.recoveryTemplate?.type === 'recovery'
                 ? '2 of 3 primary keys'
-                : `${wallet?.threshold} of ${wallet?.cosigners.length}`}
+                : wallet
+                  ? walletPolicyPresentation(wallet).summary
+                  : ''}
             changeAddressOverride={hardwareChangeAddress}
             onChangeAddress={() => (hardwareChangeAddressOpen = true)}
           />
@@ -3037,20 +3168,22 @@
             ><Download size={14} />{translate($locale, 'Save wallet policy')}</Button
           >
         </div>{/if}
-      {#if deviceError}<div class="hardware-inline-error" role="alert">
-          <AlertTriangle size={18} /><span
-            ><strong
-              >{translate(
-                $locale,
-                hardwareAction === 'identify'
-                  ? 'Signer identification failed'
-                  : 'This device could not sign'
-              )}</strong
-            ><small>{deviceError}</small></span
+      {#if deviceError}<WarningNotice
+          tone="danger"
+          icon
+          role="alert"
+          ariaLive="polite"
+          title={translate(
+            $locale,
+            hardwareAction === 'identify'
+              ? 'Signer identification failed'
+              : 'This device could not sign'
+          )}
+          body={deviceError}
           ><Button variant="secondary" size="small" onclick={scan}
             >{translate($locale, 'Rescan')}</Button
-          >
-        </div>{/if}
+          ></WarningNotice
+        >{/if}
     </div>
   </div>
 </Modal>
@@ -3128,7 +3261,13 @@
   onclear={() => (pinPositions = '')}
   onsubmit={submitHardwarePin}
   onretry={() => {
-    if (pinDevice) startHardwarePin(pinDevice);
+    pinOpen = false;
+    pinPositions = '';
+    pinChallenge = '';
+    pinDevice = null;
+    pinError = '';
+    pinErrorCode = '';
+    void scan();
   }}
   onclose={() => {
     pinOpen = false;
@@ -3159,12 +3298,14 @@
       bind:value={imported}
       oninput={() => (importError = '')}
       placeholder={translate($locale, 'cHNidP8…')}></textarea></label
-  >{#if importError}<div class="hardware-inline-error" role="alert">
-      <AlertTriangle size={18} /><span
-        ><strong>{translate($locale, 'Signed PSBT rejected')}</strong><small>{importError}</small
-        ></span
-      >
-    </div>{/if}
+  >{#if importError}<WarningNotice
+      tone="danger"
+      icon
+      role="alert"
+      ariaLive="polite"
+      title={translate($locale, 'Signed PSBT rejected')}
+      body={importError}
+    />{/if}
   <div class="modal-footer">
     <Button variant="secondary" disabled={busy} onclick={closePsbtImport}
       >{translate($locale, 'Cancel')}</Button
@@ -3205,12 +3346,14 @@
   onclose={() => (paymentScanOpen = false)}
 >
   <PaymentRequestQrScanner onscan={receivePaymentRequest} />
-  {#if paymentScanError}<div class="hardware-inline-error" role="alert">
-      <AlertTriangle size={18} /><span
-        ><strong>{translate($locale, 'QR code rejected')}</strong><small>{paymentScanError}</small
-        ></span
-      >
-    </div>{/if}
+  {#if paymentScanError}<WarningNotice
+      tone="danger"
+      icon
+      role="alert"
+      ariaLive="polite"
+      title={translate($locale, 'QR code rejected')}
+      body={paymentScanError}
+    />{/if}
 </Modal>
 
 <Modal
@@ -3220,7 +3363,14 @@
     $locale,
     'Groot accepts only crypto-psbt UR frames and verifies the exact proposal before merging.'
   )}
-  onclose={() => (qrScanOpen = false)}><UrQrScanner onframe={receiveUrFrame} /></Modal
+  onclose={() => (qrScanOpen = false)}
+  ><UrQrScanner
+    onframe={receiveUrFrame}
+    onreset={() => {
+      scannedFrames = [];
+      error = '';
+    }}
+  /></Modal
 >
 <Modal
   open={discardDraftOpen}
@@ -3238,7 +3388,12 @@
       <dd><PermanentLabelTags labels={submissionLabels} prominent /></dd>
     </div>
   </dl>
-  {#if discardDraftError}<p class="form-error" role="alert">{discardDraftError}</p>{/if}
+  {#if discardDraftError}<WarningNotice
+      tone="danger"
+      icon
+      role="alert"
+      body={discardDraftError}
+    />{/if}
   <div class="modal-footer">
     <Button
       variant="secondary"
@@ -3288,7 +3443,7 @@
         <dd>{proposal.signed} of {proposal.required} {translate($locale, 'collected')}</dd>
       </div>
     </dl>
-    {#if cancelError}<p class="form-error" role="alert">{cancelError}</p>{/if}
+    {#if cancelError}<WarningNotice tone="danger" icon role="alert" body={cancelError} />{/if}
     <div class="modal-footer">
       <Button
         variant="secondary"
@@ -3336,7 +3491,7 @@
         </dd>
       </div>
     </dl>
-    {#if discardError}<p class="form-error" role="alert">{discardError}</p>{/if}
+    {#if discardError}<WarningNotice tone="danger" icon role="alert" body={discardError} />{/if}
     <div class="modal-footer">
       <Button
         variant="secondary"
@@ -3430,3 +3585,232 @@
   detail={translate($locale, 'Internal wallet output · not the recipient')}
   onclose={() => (hardwareChangeAddressOpen = false)}
 />
+
+<style>
+  .send-page :global(.signing-transport-error) {
+    margin-top: 14px;
+  }
+
+  /* Keep the original cascade weight while constraining these rules to this owner. */
+
+  :global(.policy-renewal-banner):where(.policy-renewal-banner) {
+    display: grid;
+    grid-template-columns: 34px minmax(0, 1fr);
+    gap: 12px;
+    margin-bottom: 14px;
+    padding: 14px;
+    border: 1px solid color-mix(in srgb, var(--link) 30%, var(--border));
+    border-radius: var(--radius-inset);
+    background: color-mix(in srgb, var(--link) 6%, var(--panel));
+  }
+  :global(.policy-renewal-banner):where(.policy-renewal-banner) > :global(span) {
+    width: 34px;
+    height: 34px;
+    display: grid;
+    place-items: center;
+    border-radius: var(--radius-control);
+    color: var(--link);
+    background: var(--surface-icon);
+  }
+  :global(.policy-renewal-banner):where(.policy-renewal-banner) > :global(div) {
+    min-width: 0;
+  }
+  :global(.policy-renewal-banner):where(.policy-renewal-banner) :global(strong) {
+    font-size: 14px;
+  }
+  :global(.policy-renewal-banner):where(.policy-renewal-banner) :global(p),
+  :global(.policy-renewal-banner):where(.policy-renewal-banner) :global(ul),
+  :global(.policy-renewal-banner):where(.policy-renewal-banner) :global(details) {
+    margin: 4px 0 0;
+    color: var(--text-soft);
+    font-size: var(--font-size-meta);
+    line-height: 1.5;
+  }
+  :global(.policy-renewal-banner):where(.policy-renewal-banner) :global(ul) {
+    padding-left: 17px;
+  }
+  :global(.policy-renewal-banner):where(.policy-renewal-banner) :global(summary) {
+    width: fit-content;
+    cursor: pointer;
+    color: var(--link);
+    font-weight: 650;
+  }
+  :global(.policy-renewal-banner):where(.policy-renewal-banner) :global(details[open] summary) {
+    margin-bottom: 4px;
+  }
+  :global(.renewal-coin-summary):where(.renewal-coin-summary) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 2px 12px;
+    margin-bottom: 18px;
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+    background: var(--surface-inset);
+  }
+  :global(.renewal-coin-summary):where(.renewal-coin-summary) :global(span),
+  :global(.renewal-coin-summary):where(.renewal-coin-summary) :global(small) {
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+  }
+  :global(.renewal-coin-summary):where(.renewal-coin-summary) :global(strong) {
+    grid-row: 1 / 3;
+    grid-column: 2;
+    align-self: center;
+    font-size: 13px;
+  }
+  :global(.renewal-review):where(.renewal-review) {
+    border-color: color-mix(in srgb, var(--link) 24%, var(--border));
+  }
+  :global(.multisig-signing-layout):where(.multisig-signing-layout) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 250px;
+    align-items: start;
+    gap: 16px;
+  }
+  .proposal-review-primary {
+    border-top: 0;
+  }
+  .proposal-review-primary > :global(div:last-child) {
+    border-bottom: 0;
+  }
+  :global(.hardware-phase-reference):where(.hardware-phase-reference) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 10px;
+    padding: 10px 12px;
+    border: 1px solid color-mix(in srgb, var(--fr-blue) 42%, var(--border));
+    border-radius: var(--radius-control);
+    background: color-mix(in srgb, var(--fr-blue) 6%, var(--panel));
+  }
+  :global(.hardware-phase-reference):where(.hardware-phase-reference) :global(span) {
+    display: grid;
+    gap: 3px;
+  }
+  :global(.hardware-phase-reference):where(.hardware-phase-reference) :global(strong) {
+    font-size: var(--font-size-meta);
+  }
+  :global(.hardware-phase-reference):where(.hardware-phase-reference) :global(small) {
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+    line-height: 1.4;
+  }
+  :global(.hardware-policy-help):where(.hardware-policy-help) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 4px 12px;
+    align-items: center;
+    margin-top: 12px;
+    padding: 11px 12px;
+    border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border));
+    border-radius: var(--radius-control);
+    background: var(--accent-soft);
+  }
+  :global(.hardware-policy-help):where(.hardware-policy-help) :global(strong),
+  :global(.hardware-policy-help):where(.hardware-policy-help) :global(span) {
+    grid-column: 1;
+  }
+  :global(.hardware-policy-help):where(.hardware-policy-help) :global(strong) {
+    font-size: var(--font-size-meta);
+  }
+  :global(.hardware-policy-help):where(.hardware-policy-help) :global(span) {
+    color: var(--text-soft);
+    font-size: var(--font-size-meta);
+    line-height: 1.45;
+  }
+  :global(.hardware-policy-help):where(.hardware-policy-help) :global(.button) {
+    grid-column: 2;
+    grid-row: 1 / 3;
+  }
+
+  :global(.hardware-review-step):where(.hardware-review-step) {
+    margin: 0 0 2px;
+    color: var(--link);
+    font-size: 0.78rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .signed-psbt-options {
+    margin-top: 14px;
+    border-bottom: 0;
+  }
+  .signed-psbt-options > :global(.button) {
+    margin: 0 0 12px;
+  }
+  :global(.selection-technical):where(.selection-technical) {
+    margin-top: 4px;
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+  }
+  :global(.selection-technical):where(.selection-technical) :global(summary) {
+    width: fit-content;
+    cursor: pointer;
+  }
+  :global(.selection-technical):where(.selection-technical) > :global(span) {
+    display: block;
+    margin-top: 4px;
+  }
+  :global(.recovery-key-option):where(.recovery-key-option) {
+    display: grid;
+    grid-template-columns: 30px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 14px;
+    padding: 12px 14px;
+    border: 1px solid color-mix(in srgb, var(--danger) 34%, var(--border));
+    border-radius: var(--radius-inset);
+    background: color-mix(in srgb, var(--danger) 6%, var(--panel));
+  }
+  :global(.recovery-key-option):where(.recovery-key-option) > :global(span) {
+    display: grid;
+    width: 30px;
+    height: 30px;
+    place-items: center;
+    border-radius: var(--radius-control);
+    color: var(--link);
+    background: var(--surface-icon);
+  }
+  :global(.recovery-key-option):where(.recovery-key-option) > :global(div) {
+    display: grid;
+    gap: 2px;
+  }
+  :global(.recovery-key-option):where(.recovery-key-option) :global(strong) {
+    font-size: var(--font-size-meta);
+  }
+  :global(.recovery-key-option):where(.recovery-key-option) :global(small) {
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+    line-height: 1.4;
+  }
+
+  @media (max-width: 700px) {
+    :global(.recovery-key-option):where(.recovery-key-option) {
+      grid-template-columns: 30px minmax(0, 1fr);
+    }
+
+    :global(.recovery-key-option):where(.recovery-key-option) :global(.button) {
+      grid-column: 1 / -1;
+      width: 100%;
+    }
+  }
+
+  @media (max-width: 760px) {
+    :global(.multisig-signing-layout):where(.multisig-signing-layout) {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  @media (min-width: 761px) and (max-width: 1050px) {
+    :global(.multisig-signing-layout):where(.multisig-signing-layout) {
+      grid-template-columns: 1fr;
+    }
+  }
+  @media (max-width: 760px) {
+    .send-stage-card :global(.split-actions .button) {
+      scroll-margin-block: calc(160px + env(safe-area-inset-bottom));
+    }
+  }
+</style>

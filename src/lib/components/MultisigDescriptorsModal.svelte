@@ -1,4 +1,5 @@
 <script lang="ts">
+  import WarningNotice from '$lib/components/WarningNotice.svelte';
   import { locale } from '$lib/i18n';
   import { translate } from '$lib/i18n-catalog';
   import { Check, Copy, ShieldCheck } from '@lucide/svelte';
@@ -61,12 +62,16 @@
           >
         </section>
       {:else}
-        <p class="form-error" role="alert">
-          {translate(
+        <WarningNotice
+          tone="danger"
+          icon
+          role="alert"
+          ariaLive="polite"
+          body={translate(
             $locale,
             'The wallet descriptor could not be combined. Your saved backup is unchanged.'
           )}
-        </p>
+        />
       {/if}
       <p>
         <ShieldCheck size={14} />{translate(

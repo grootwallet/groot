@@ -4,12 +4,13 @@ import { settingsCopy } from './locales/settings';
 import { onboardingCopy } from './locales/onboarding';
 import { componentCopy } from './locales/components';
 import { walletCopy } from './locales/wallet';
-import { sendCopy } from './locales/send';
+import { sendCopy, spendPolicyCopy, signerRoleCopy } from './locales/send';
 import { hardwareCopy } from './locales/hardware';
 import { multisigCopy } from './locales/multisig';
 import { accessibilityCopy } from './locales/accessibility';
 import { attributeCopy } from './locales/attributes';
 import { dynamicCopy } from './locales/dynamic';
+import { coordinationCopy } from './locales/coordination';
 
 export type { MessageValues, Translation, CatalogSection } from './locales/types';
 
@@ -100,6 +101,37 @@ export const copyCatalog = {
     es: 'Falló la descarga de actualización'
   },
   'Groot v{version}': { fr: 'Groot v{version}', es: 'Groot v{version}' },
+  'Seven hardware signers now connect, identify, verify addresses and sign much faster.': {
+    fr: 'Sept appareils de signature matériels se connectent, s’identifient, vérifient les adresses et signent beaucoup plus vite.',
+    es: 'Siete dispositivos de firma se conectan, se identifican, verifican direcciones y firman mucho más rápido.'
+  },
+  'A simpler start page helps you create, connect or recover a wallet.': {
+    fr: 'Une page d’accueil plus simple vous aide à créer, connecter ou restaurer un portefeuille.',
+    es: 'Una página de inicio más sencilla te ayuda a crear, conectar o recuperar un monedero.'
+  },
+  'Mainnet payments no longer have a 0.01 BTC app limit; transaction and fee checks still apply.': {
+    fr: 'Sur Mainnet, les paiements ne sont plus limités à 0,01 BTC par l’application ; les contrôles des transactions et des frais restent en place.',
+    es: 'En Mainnet, los pagos ya no tienen el límite de 0,01 BTC de la aplicación; siguen las comprobaciones de transacciones y comisiones.'
+  },
+  'Wallet scans show progress sooner, with clearer activity, errors and payment results.': {
+    fr: 'Les analyses de portefeuille affichent leur progression plus tôt, avec une activité, des erreurs et des résultats de paiement plus clairs.',
+    es: 'Los análisis del monedero muestran antes su progreso, con actividad, errores y resultados de pago más claros.'
+  },
+  'Testnet4 preview: pair an iPhone key and sign multisig transactions by QR; unavailable on Mainnet.':
+    {
+      fr: 'Aperçu Testnet4 : associez une clé iPhone et signez des transactions multisig par QR ; indisponible sur Mainnet.',
+      es: 'Vista previa de Testnet4: vincula una clave de iPhone y firma transacciones multifirma por QR; no disponible en Mainnet.'
+    },
+  'Test-network preview: Partner and Family Continuity wallets with Miniscript recovery paths; unavailable on Mainnet.':
+    {
+      fr: 'Aperçu sur les réseaux de test : portefeuilles Continuité Partenaire et Famille avec voies de récupération Miniscript ; indisponibles sur Mainnet.',
+      es: 'Vista previa en redes de prueba: monederos de Continuidad de Pareja y Familia con rutas de recuperación Miniscript; no disponibles en Mainnet.'
+    },
+  'Testnet4 iPhone development UI; mobile key creation, recovery, signing and broadcast remain unavailable.':
+    {
+      fr: 'Interface iPhone de développement Testnet4 ; création de clés, restauration, signature et diffusion mobiles restent indisponibles.',
+      es: 'Interfaz de desarrollo Testnet4 para iPhone; la creación de claves, recuperación, firma y difusión móviles siguen sin estar disponibles.'
+    },
   'Approve the first wallet-history scan or connect your own node, with clearer retry controls.': {
     fr: 'Autorisez la première analyse de l’historique ou connectez votre propre nœud, avec des contrôles de reprise plus clairs.',
     es: 'Autoriza el primer análisis del historial o conecta tu propio nodo, con controles de reintento más claros.'
@@ -368,6 +400,7 @@ export const copyCatalog = {
   ...accessibilityCopy,
   ...attributeCopy,
   ...dynamicCopy,
+  ...coordinationCopy,
   Dismiss: { fr: 'Fermer', es: 'Cerrar' },
   Cancel: { fr: 'Annuler', es: 'Cancelar' },
   Back: { fr: 'Retour', es: 'Atrás' },
@@ -525,6 +558,15 @@ export const copyCatalog = {
   'Descriptors were restored. Run a full rescan before relying on the balance.': {
     fr: 'Les descripteurs ont été restaurés. Effectuez une analyse complète avant de vous fier au solde.',
     es: 'Los descriptores se restauraron. Ejecuta un escaneo completo antes de confiar en el saldo.'
+  },
+  'Import recorded': { fr: 'Importation enregistrée', es: 'Importación registrada' },
+  'Some fee estimates are unavailable': {
+    fr: 'Certaines estimations de frais sont indisponibles',
+    es: 'Algunas estimaciones de comisión no están disponibles'
+  },
+  'Choose an available estimate or enter a custom rate.': {
+    fr: 'Choisissez une estimation disponible ou saisissez un taux personnalisé.',
+    es: 'Elige una estimación disponible o introduce una tarifa personalizada.'
   },
   'Fee estimates unavailable': {
     fr: 'Estimations de frais indisponibles',
@@ -930,6 +972,14 @@ export const copyCatalog = {
     fr: 'Synchronisation · {percent} %',
     es: 'Sincronizando · {percent}%'
   },
+  'Starting wallet-history scan…': {
+    fr: 'Démarrage de l’analyse de l’historique…',
+    es: 'Iniciando el escaneo del historial…'
+  },
+  'Balance and activity will appear after the scan completes.': {
+    fr: 'Le solde et l’activité apparaîtront une fois l’analyse terminée.',
+    es: 'El saldo y la actividad aparecerán cuando termine el escaneo.'
+  },
   'Start at the current chain tip. Fastest, but it will not find older payments.': {
     fr: 'Commencer à la pointe actuelle de la chaîne. C’est le plus rapide, mais les anciens paiements ne seront pas trouvés.',
     es: 'Empezar en la punta actual de la cadena. Es lo más rápido, pero no encontrará pagos anteriores.'
@@ -1067,6 +1117,15 @@ export function localizedError(
     return cause instanceof Error ? cause.message : fallback;
   }
   if (cause && typeof cause === 'object' && 'code' in cause) {
+    // Translate only allowlisted native spend-policy messages; unknown text
+    // continues through the stable category fallback.
+    if (
+      cause instanceof Error &&
+      ((cause.code === 'invalid_amount' && Object.hasOwn(spendPolicyCopy, cause.message)) ||
+        (cause.code === 'insufficient_signatures' && Object.hasOwn(signerRoleCopy, cause.message)))
+    ) {
+      return translate(current, cause.message);
+    }
     const category = errorCategoryCopy[String(cause.code) as keyof typeof errorCategoryCopy];
     if (category) return category[current];
   }

@@ -17,6 +17,7 @@ import {
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { validateCompiledTeamId, verifyPackagedHwi } from './verify-packaged-hwi.mjs';
+import { copyHwiRuntime, prepareHwiRuntime, verifyHwiRuntime } from './prepare-hwi-runtime.mjs';
 
 const repoRoot = resolve(fileURLToPath(new URL('../../', import.meta.url)));
 const tauriRoot = join(repoRoot, 'src-tauri');
@@ -25,19 +26,31 @@ const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
 const buildTarget = process.argv[2] ?? 'mainnet';
 const buildIdentity = {
   mainnet: {
-    appName: 'Groot Mainnet.app',
+    appName: 'Groot Mainnet RC.app',
+    productName: 'Groot Mainnet RC',
+    identifier: 'app.groot.wallet.mainnet.internal',
     config: 'src-tauri/tauri.mainnet.conf.json',
     outputDirectory: 'mainnet-internal-rc'
   },
   multi: {
-    appName: 'Groot.app',
+    appName: 'Groot RC.app',
+    productName: 'Groot RC',
+    identifier: 'app.groot.wallet.internal',
     config: 'src-tauri/tauri.multi.conf.json',
     outputDirectory: 'multi-network-internal-rc'
+  },
+  'ga-candidate': {
+    appName: 'Groot.app',
+    productName: 'Groot',
+    identifier: 'app.groot.wallet',
+    config: 'src-tauri/tauri.multi.conf.json',
+    outputDirectory: 'multi-network-ga-candidate'
   }
 }[buildTarget];
 if (!buildIdentity) {
-  throw new Error('Internal RC build target must be exactly mainnet or multi');
+  throw new Error('Internal RC build target must be exactly mainnet, multi, or ga-candidate');
 }
+const buildNetwork = buildTarget === 'mainnet' ? 'mainnet' : 'multi';
 const source = resolve(process.env.GROOT_HWI_SOURCE ?? '/opt/homebrew/bin/hwi');
 const cargoMetadata = JSON.parse(
   execFileSync(
@@ -95,26 +108,83 @@ try {
   chmodSync(stagedHwi, 0o755);
   if (digest(stagedHwi) !== manifest.artifact.sha256) fail('staged HWI changed during copy');
 
+  // Internal multi-network RCs only. Native routing binds this payload to the
+  // active Mainnet or Testnet4 chain and approved signer families.
+  const runtime =
+    buildNetwork === 'multi'
+      ? prepareHwiRuntime(
+          stagedHwi,
+          join(stageDirectory, 'hwi-runtime'),
+          manifest.artifact.sha256,
+          true
+        )
+      : null;
+  const baseConfig = JSON.parse(readFileSync(join(repoRoot, buildIdentity.config), 'utf8'));
+
   execFileSync(
     'pnpm',
-    ['exec', 'tauri', 'build', '--config', buildIdentity.config, '--bundles', 'app'],
+    [
+      'exec',
+      'tauri',
+      'build',
+      '--config',
+      JSON.stringify({
+        ...baseConfig,
+        productName: buildIdentity.productName,
+        identifier: buildIdentity.identifier
+      }),
+      '--bundles',
+      'app'
+    ],
     {
       cwd: repoRoot,
       env: {
         ...process.env,
         GROOT_BUILD_COMMIT: commit,
-        GROOT_BUILD_NETWORK: buildTarget,
+        GROOT_BUILD_NETWORK: buildNetwork,
         GROOT_BUNDLED_HWI_RESOURCE: 'hwi',
         GROOT_HWI_SHA256: manifest.artifact.sha256,
+        ...(runtime
+          ? { GROOT_HWI_RUNTIME_SHA256: runtime.sha256, GROOT_HWI_SESSION_PROTOCOL: '1' }
+          : {}),
         GROOT_MACOS_SIGNING_TEAM_ID: 'REHEARSAL_ONLY'
       },
       stdio: 'inherit'
     }
   );
 
-  execFileSync('codesign', ['--force', '--sign', '-', '--timestamp=none', builtApp], {
-    stdio: 'inherit'
-  });
+  if (runtime) {
+    // Tauri's resource-file copier dereferences symlinks. Preserve the exact
+    // framework layout explicitly, then seal it with the outer app below.
+    copyHwiRuntime(
+      join(stageDirectory, 'hwi-runtime'),
+      join(builtApp, 'Contents', 'Resources', 'hwi-runtime'),
+      runtime.sha256,
+      manifest.artifact.sha256
+    );
+  }
+
+  // This private QR rehearsal can request camera access only after a user gesture.
+  // Do not inherit HWI entitlements or broaden the production signing workflow.
+  const cameraEntitlements = join(tauriRoot, 'Entitlements.camera.plist');
+  const cameraPolicy = JSON.parse(
+    execFileSync('/usr/bin/plutil', ['-convert', 'json', '-o', '-', cameraEntitlements], {
+      encoding: 'utf8'
+    })
+  );
+  if (
+    Object.keys(cameraPolicy).length !== 1 ||
+    cameraPolicy['com.apple.security.device.camera'] !== true
+  ) {
+    throw new Error('Internal camera entitlement file must contain only camera access');
+  }
+  execFileSync(
+    'codesign',
+    ['--force', '--sign', '-', '--timestamp=none', '--entitlements', cameraEntitlements, builtApp],
+    {
+      stdio: 'inherit'
+    }
+  );
   const result = verifyPackagedHwi(builtApp, {
     manifestPath,
     requireProductionSigning: false
@@ -123,9 +193,23 @@ try {
     readFileSync(join(builtApp, 'Contents', 'MacOS', 'Groot')),
     'REHEARSAL_ONLY'
   );
+  if (runtime) {
+    verifyHwiRuntime(
+      join(builtApp, 'Contents', 'Resources', 'hwi-runtime'),
+      runtime.sha256,
+      manifest.artifact.sha256
+    );
+  }
 
   mkdirSync(outputRoot, { recursive: true, mode: 0o755 });
-  cpSync(builtApp, outputApp, { recursive: true });
+  cpSync(builtApp, outputApp, { recursive: true, verbatimSymlinks: true });
+  if (runtime) {
+    verifyHwiRuntime(
+      join(outputApp, 'Contents', 'Resources', 'hwi-runtime'),
+      runtime.sha256,
+      manifest.artifact.sha256
+    );
+  }
   execFileSync('codesign', ['--verify', '--deep', '--strict', '--verbose=2', outputApp], {
     stdio: 'pipe'
   });
@@ -136,11 +220,13 @@ try {
   const executable = join(outputApp, 'Contents', 'MacOS', 'Groot');
   const buildInfo = [
     `commit=${commit}`,
-    `compiled_network=${buildTarget}`,
+    `compiled_network=${buildNetwork}`,
+    `bundle_identifier=${buildIdentity.identifier}`,
     'signing=ad-hoc-internal-only',
     'compiled_signing_requirement=REHEARSAL_ONLY',
     `hwi_version=${result.version}`,
     `hwi_sha256=${result.sha256}`,
+    ...(runtime ? [`hwi_runtime_sha256=${runtime.sha256}`, 'hwi_session_protocol=1'] : []),
     `executable_sha256=${digest(executable)}`,
     ''
   ].join('\n');

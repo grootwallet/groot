@@ -76,8 +76,8 @@ describe('multisig policy invariants', () => {
     expect(
       validatePolicyDraft({
         name: 'Vault',
-        threshold: 8,
-        cosigners: Array.from({ length: 8 }, (_, index) =>
+        threshold: 9,
+        cosigners: Array.from({ length: 9 }, (_, index) =>
           cosigner({
             id: String(index),
             fingerprint: index.toString(16).padStart(8, '0'),
@@ -85,7 +85,7 @@ describe('multisig policy invariants', () => {
           })
         )
       })
-    ).toContain('V1 supports at most 7 signers.');
+    ).toContain('V1 supports at most 8 signers.');
     const enough = [
       cosigner(),
       cosigner({ fingerprint: 'b1b2c3d4', xpub: 'two' }),
@@ -140,6 +140,29 @@ describe('multisig policy invariants', () => {
     });
     expect(errors).toContain('Every signer must have a unique master fingerprint.');
     expect(errors).toContain('Every signer must have a unique account xpub.');
+  });
+
+  it('allows only one Groot phone signer in a V1 wallet', () => {
+    const errors = validatePolicyDraft({
+      name: 'Vault',
+      threshold: 2,
+      cosigners: [
+        cosigner({ deviceType: 'groot-mobile' }),
+        cosigner({
+          id: 'phone-two',
+          fingerprint: 'b1b2c3d4',
+          xpub: 'tpubD6NzVbkrYhZ4Y-public-regtest-key-2',
+          deviceType: 'groot-mobile'
+        }),
+        cosigner({
+          id: 'hardware',
+          fingerprint: 'c1b2c3d4',
+          xpub: 'tpubD6NzVbkrYhZ4Y-public-regtest-key-3',
+          deviceType: 'ledger'
+        })
+      ]
+    });
+    expect(errors).toContain('V1 supports one Groot phone signer per wallet.');
   });
 
   it('identifies an existing signer independently of labels and import methods', () => {

@@ -1,3 +1,4 @@
+import { readUiStyles } from '../testing/ui-styles';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
@@ -11,6 +12,14 @@ const multisigCommands = readFileSync(
   'utf8'
 );
 const overview = readFileSync(new URL('../../routes/+page.svelte', import.meta.url), 'utf8');
+const settings = readFileSync(
+  new URL('../../routes/settings/+page.svelte', import.meta.url),
+  'utf8'
+);
+const walletCore = readFileSync(
+  new URL('../../../src-tauri/src/wallet.rs', import.meta.url),
+  'utf8'
+);
 const unlock = readFileSync(new URL('../../routes/unlock/+page.svelte', import.meta.url), 'utf8');
 const activity = readFileSync(
   new URL('../../routes/activity/+page.svelte', import.meta.url),
@@ -22,7 +31,7 @@ const multisigReceive = readFileSync(
   new URL('../../routes/multisig/receive/+page.svelte', import.meta.url),
   'utf8'
 );
-const appStyles = readFileSync(new URL('../../app.css', import.meta.url), 'utf8');
+const appStyles = readUiStyles();
 
 describe('foreground wallet navigation', () => {
   it('focuses the selected wallet credential after the locked route finishes loading', () => {
@@ -48,7 +57,7 @@ describe('foreground wallet navigation', () => {
     );
     expect(appShell).toContain('previousPath && profileMutatingRoutes.has(previousPath)');
     const afterNavigation = appShell.slice(
-      appShell.indexOf('afterNavigate(({ from }) =>'),
+      appShell.indexOf('afterNavigate('),
       appShell.indexOf('async function selectWallet')
     );
     expect(
@@ -71,7 +80,7 @@ describe('foreground wallet navigation', () => {
 
   it('keeps scans alive across read-only routes and cancels before exclusive routes or lock', () => {
     const navigationStart = appShell.indexOf('beforeNavigate(({ to }) =>');
-    const navigationEnd = appShell.indexOf('afterNavigate(({ from }) =>', navigationStart);
+    const navigationEnd = appShell.indexOf('afterNavigate(', navigationStart);
     const navigation = appShell.slice(navigationStart, navigationEnd);
     expect(navigation).toContain('routeCancelsSync(to.url.pathname)');
     expect(navigation).toContain('walletService.cancelSync().catch(() => undefined)');
@@ -91,6 +100,14 @@ describe('foreground wallet navigation', () => {
       monitor.indexOf("goto('/unlock')")
     );
     expect(monitor).not.toContain('cancelFullRescan');
+
+    const backgroundLockStart = appShell.indexOf('async function enforceMobileBackgroundLock()');
+    const backgroundLockEnd = appShell.indexOf('onMount(() =>', backgroundLockStart);
+    const backgroundLock = appShell.slice(backgroundLockStart, backgroundLockEnd);
+    expect(backgroundLock).toContain('walletService.cancelHardwareOperations()');
+    expect(backgroundLock).toContain('walletService.cancelSync()');
+    expect(backgroundLock).toContain('walletService.lockAll()');
+    expect(backgroundLock).not.toContain('cancelFullRescan');
 
     const manualLockStart = appShell.indexOf('async function lockSelectedWallet()');
     const manualLockEnd = appShell.indexOf('async function refreshSetupDraft()', manualLockStart);
@@ -148,13 +165,13 @@ describe('foreground wallet navigation', () => {
 
   it('keeps a manual refresh alive across Activity navigation', () => {
     const navigationStart = appShell.indexOf('beforeNavigate(({ to }) =>');
-    const navigationEnd = appShell.indexOf('afterNavigate(({ from }) =>', navigationStart);
+    const navigationEnd = appShell.indexOf('afterNavigate(', navigationStart);
     const navigation = appShell.slice(navigationStart, navigationEnd);
     expect(navigation).not.toContain("'/activity'");
     expect(navigation).toContain('routeCancelsSync(to.url.pathname)');
 
     const afterNavigation = appShell.slice(
-      appShell.indexOf('afterNavigate(({ from }) =>'),
+      appShell.indexOf('afterNavigate('),
       appShell.indexOf('async function selectWallet')
     );
     expect(afterNavigation).toContain('automaticSyncPauseCount === 0');
@@ -297,7 +314,7 @@ describe('foreground wallet navigation', () => {
 
   it('does not race cached Overview loading when selecting an unlocked wallet from unlock', () => {
     const afterNavigation = appShell.slice(
-      appShell.indexOf('afterNavigate(({ from }) =>'),
+      appShell.indexOf('afterNavigate('),
       appShell.indexOf('async function selectWallet')
     );
     expect(afterNavigation).toContain(

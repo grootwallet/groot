@@ -209,8 +209,12 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
   }
   async runtimePlatform() {
     return {
-      platform: 'browser' as const,
-      mobile: false,
+      platform:
+        typeof location !== 'undefined' &&
+        new URLSearchParams(location.search).has('fixture-native-mobile')
+          ? ('ios' as const)
+          : ('browser' as const),
+      mobile: typeof window !== 'undefined' && matchMedia('(max-width: 760px)').matches,
       network: defaultConfig.network,
       networkSwitching: false,
       version: APP_VERSION,
@@ -381,6 +385,9 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
   }
   async lock() {
     if (this._selectedWalletId) this._unlockedWalletIds.delete(this._selectedWalletId);
+  }
+  async lockAll() {
+    this._unlockedWalletIds.clear();
   }
   async deleteWallet(
     credential: string,
@@ -865,7 +872,12 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
         'initial_scan_required',
         'Complete the first wallet-history scan before syncing.'
       );
-    return this.snapshot();
+    const walletId = this._selectedWalletId;
+    const kind = this._profiles.find((profile) => profile.id === walletId)?.kind;
+    const snapshot = await this.snapshot();
+    if (walletId && kind && this._selectedWalletId === walletId)
+      this.#emit({ type: 'wallet_updated', walletId, walletKind: kind, snapshot });
+    return snapshot;
   }
 
   async cancelSync() {}
@@ -951,8 +963,8 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     }
     return {
       economy: feeRate(3),
-      standard: feeRate(7),
-      priority: feeRate(12),
+      standard: this._partialFeeEstimates ? null : feeRate(7),
+      priority: this._partialFeeEstimates ? null : feeRate(12),
       source: 'Bitcoin Core'
     };
   }
@@ -1266,16 +1278,36 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     const txid = this._accelerations.has(proposalId)
       ? '1b8cf4e8a09c7d12883143f9ab3fdf1d5f25a4784a96b35ec2e7a6c120437bad'
       : '0a7bf3d7a98d8bc981975320eba8e9b8ac1aa92145dcf018e48c3c2f8c19e2aa';
+    if (
+      typeof location !== 'undefined' &&
+      new URLSearchParams(location.search).has('fixture-broadcast-record-error')
+    )
+      return { txid, snapshot: null, syncPending: true, persistencePending: true };
     this.#recordFixtureBroadcast(proposalId, proposal, txid);
     this._balance = Math.max(0, this._balance - Number(proposal.total));
     this.#emit({ type: 'transaction_broadcast', txid, balance: sats(this._balance) });
     this._proposals.delete(proposalId);
-    return { txid, snapshot: await this.snapshot(), syncPending: false };
+    return { txid, snapshot: await this.snapshot(), syncPending: false, persistencePending: false };
   }
 
   async listHardwareDevices() {
     await new Promise((resolve) => setTimeout(resolve, 200));
     return [
+      ...(typeof location !== 'undefined' &&
+      new URLSearchParams(location.search).has('fixture-jade-network-error')
+        ? [
+            {
+              id: 'virtual-jade-network',
+              label: 'Virtual Jade',
+              model: 'jade',
+              fingerprint: null,
+              connected: true,
+              status: 'ready' as const,
+              message: 'Ready to import the public account key.',
+              action: 'import' as const
+            }
+          ]
+        : []),
       {
         id: 'virtual-coldcard',
         label: 'Virtual Coldcard',
@@ -1417,6 +1449,14 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
   ) {
     await new Promise((resolve) => setTimeout(resolve, 200));
     const checkedAt = new Date().toISOString();
+    if (
+      typeof sessionStorage !== 'undefined' &&
+      sessionStorage.getItem('fixture-health-disconnected') === '1'
+    )
+      throw new WalletError(
+        'hardware_unavailable',
+        'The saved hardware signer was not found. Keep that signer connected and unlocked, then try again.'
+      );
     const connected = await this.importHardwareCosigner(deviceId, cosigner.label, true);
     const identityMatches =
       connected.fingerprint.toLowerCase() === cosigner.fingerprint.toLowerCase() &&
@@ -1587,6 +1627,17 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     allowEmptyPassphrase = false
   ): Promise<ExternalSigner> {
     await new Promise((resolve) => setTimeout(resolve, 200));
+    if (deviceId === 'virtual-jade-network')
+      throw new WalletError('hardware_unavailable', 'The signer could not be opened.');
+    if (
+      typeof sessionStorage !== 'undefined' &&
+      sessionStorage.getItem('fixture-hardware-external-import-failure') === '1'
+    ) {
+      throw new WalletError(
+        'hardware_unavailable',
+        'Unlock the signer and quit other wallet apps, then try again.'
+      );
+    }
     const trezor = deviceId === 'virtual-trezor-standard' || deviceId === 'virtual-trezor';
     if (trezor && !allowEmptyPassphrase)
       throw new WalletError(
@@ -1734,6 +1785,16 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     if (!proposal?.canFinalize) throw new WalletError('insufficient_signatures', 'Sign first.');
     if (proposal.psbt !== reviewedPsbt)
       throw new WalletError('proposal_mismatch', 'The signed proposal changed after review.');
+    if (
+      typeof location !== 'undefined' &&
+      new URLSearchParams(location.search).has('fixture-broadcast-record-error')
+    )
+      return {
+        txid: '0a7bf3d7a98d8bc981975320eba8e9b8ac1aa92145dcf018e48c3c2f8c19e2aa',
+        snapshot: null,
+        syncPending: true,
+        persistencePending: true
+      };
     this._externalProposals.delete(proposalId);
     return {
       txid: '0a7bf3d7a98d8bc981975320eba8e9b8ac1aa92145dcf018e48c3c2f8c19e2aa',
@@ -1790,10 +1851,35 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     template: RecoveryTemplate,
     cosigners: PolicyDraft['cosigners']
   ): Promise<RecoveryPolicyAnalysis> {
-    const paths =
+    const paths: import('./contracts').TimedSpendingPath[] =
       template.type === 'recovery'
         ? [{ ...template.immediate, availableAfterBlocks: 0 }, template.recovery]
-        : template.stages;
+        : template.type === 'decaying' || template.type === 'expanding'
+          ? template.stages
+          : template.type === 'partner_continuity_v1'
+            ? [
+                { ...template.owner, availableAfterBlocks: 0 },
+                { ...template.partner, availableAfterBlocks: 13_140 },
+                {
+                  threshold: 1,
+                  signerIds: template.partner.signerIds,
+                  availableAfterBlocks: 39_420
+                },
+                { ...template.estate, availableAfterBlocks: 52_560 }
+              ]
+            : [
+                { ...template.parents, availableAfterBlocks: 0 },
+                {
+                  threshold: 2,
+                  signerIds: [...template.parents.signerIds, ...template.childAssistance.signerIds],
+                  availableAfterBlocks: 13_140
+                },
+                {
+                  threshold: 2,
+                  signerIds: [...template.childInheritance.signerIds, template.executorSignerId],
+                  availableAfterBlocks: 52_560
+                }
+              ];
     if (
       paths.length < 2 ||
       paths.some((path) => path.threshold < 1 || path.threshold > path.signerIds.length)
@@ -1922,7 +2008,10 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
       externalDescriptor: analysis.externalDescriptor,
       internalDescriptor: analysis.internalDescriptor,
       createdAt: new Date().toISOString(),
-      policyType: 'recovery',
+      policyType:
+        template.type === 'partner_continuity_v1' || template.type === 'family_continuity_v1'
+          ? template.type
+          : 'recovery',
       recoveryTemplate: template,
       spendingPaths: analysis.paths
     };
@@ -2237,8 +2326,8 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
           : null
     };
   }
-  async syncMultisig(_automatic = false) {
-    return this.snapshot();
+  async syncMultisig(automatic = false) {
+    return this.sync(automatic);
   }
   async createMultisigAddress(labels: string[]) {
     if (
@@ -2312,10 +2401,7 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     const parts = multipart.filter((part): part is NonNullable<typeof part> => part !== null);
     const total = parts[0]?.total ?? 0;
     if (parts.length < total)
-      throw new WalletError(
-        'internal_error',
-        `Keep scanning (${parts.length} of ${total} frames).`
-      );
+      throw new WalletError('qr_incomplete', `Keep scanning (${parts.length} of ${total} frames).`);
     return atob(
       parts
         .sort((a, b) => a.index - b.index)
@@ -2413,7 +2499,10 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     const coin = this._coins.find((candidate) => candidate.outpoint === outpoint);
     if (!coin || coin.frozen)
       throw new WalletError('coin_unavailable', 'The selected coin is not available.');
-    if (coin.policyMaturity?.state !== 'mature')
+    if (
+      coin.policyMaturity?.state !== 'mature' &&
+      !(this._multisig?.policyType?.includes('continuity') && coin.confirmations > 0)
+    )
       throw new WalletError(
         'coin_unavailable',
         'The extra recovery or heir key cannot spend this coin yet.'
@@ -2435,19 +2524,63 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     this._multisigProposals.set(proposal.proposalId, proposal);
     return structuredClone(proposal);
   }
+  async multisigSpendingPaths(
+    outpoint: string
+  ): Promise<import('./contracts').SpendingPathDetails[]> {
+    const coin = this._coins.find((coin) => coin.outpoint === outpoint);
+    const wallet = await this.multisigWallet();
+    if (!coin || !wallet?.recoveryTemplate)
+      throw new WalletError('unknown_spending_path', 'This wallet has no delayed spending paths.');
+    const analysis = await this.analyzeRecoveryPolicy(wallet.recoveryTemplate, wallet.cosigners);
+    const names =
+      wallet.recoveryTemplate.type === 'partner_continuity_v1'
+        ? [
+            'Owner: 2 of 3',
+            'Both partner signers',
+            'Either partner signer',
+            'Estate guardians: 2 of 3'
+          ]
+        : wallet.recoveryTemplate.type === 'family_continuity_v1'
+          ? ['Both parents', 'One parent and one child assistance signer', 'Inheritance: 2 of 3']
+          : ['Primary signers', 'Recovery signers'];
+    return analysis.paths.map((path, index) => {
+      const remaining = Math.max(0, path.availableAfterBlocks - coin.confirmations);
+      const reason = coin.frozen
+        ? 'Unfreeze this coin before spending it.'
+        : remaining > 0
+          ? 'This spending path is still waiting for blocks.'
+          : null;
+      return {
+        index,
+        name: names[index] ?? 'Recovery signers',
+        required: path.threshold,
+        eligibleSignerFingerprints: wallet.cosigners
+          .filter((key) => path.signerIds.includes(key.id))
+          .map((key) => key.fingerprint),
+        availableAfterBlocks: path.availableAfterBlocks,
+        remainingBlocks: remaining,
+        available: reason === null,
+        reason
+      };
+    });
+  }
   async prepareMultisigDelayedSpend(
     outpoint: string,
     recipient: string,
     rawLabels: string[],
-    selectedRate: ReturnType<typeof feeRate>
+    selectedRate: ReturnType<typeof feeRate>,
+    pathIndex = 1
   ) {
     const coin = this._coins.find((candidate) => candidate.outpoint === outpoint);
     const multisig = this._multisig;
     const template = multisig?.recoveryTemplate;
     if (!coin || coin.frozen || coin.policyMaturity?.state !== 'mature')
       throw new WalletError('coin_unavailable', 'This coin is not ready for the extra key.');
-    if (!multisig || !template || template.type !== 'recovery')
-      throw new WalletError('internal_error', 'This wallet has no delayed spending key.');
+    if (!multisig || !template || ['decaying', 'expanding'].includes(template.type))
+      throw new WalletError(
+        'unknown_spending_path',
+        'This wallet has no supported delayed spending path.'
+      );
     const fee = Math.ceil(Number(selectedRate) * 220);
     const proposal = await this.prepareMultisigPayment(
       recipient,
@@ -2456,12 +2589,17 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
       selectedRate,
       { mode: 'manual', outpoints: [outpoint] }
     );
-    const eligible = multisig.cosigners
-      .filter((key) => template.recovery.signerIds.includes(key.id))
-      .map((key) => key.fingerprint);
+    const paths = await this.multisigSpendingPaths(outpoint);
+    const path = paths.find((path) => path.index === pathIndex);
+    if (!path?.available || pathIndex === 0)
+      throw new WalletError(
+        'immature_spending_path',
+        path?.reason ?? 'Choose an available delayed path.'
+      );
     proposal.spendPath = 'delayed';
-    proposal.eligibleSignerFingerprints = eligible;
-    proposal.required = template.recovery.threshold;
+    proposal.eligibleSignerFingerprints = path.eligibleSignerFingerprints;
+    proposal.required = path.required;
+    proposal.spendingPathDetails = path;
     this._multisigProposals.set(proposal.proposalId, proposal);
     return structuredClone(proposal);
   }
@@ -2542,12 +2680,17 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
       throw new WalletError('invalid_credential', 'Incorrect app PIN.');
     if (!proposal.canFinalize)
       throw new WalletError('internal_error', 'Collect the required signatures first.');
+    const txid = '7d4a2c7f9e317f9859d7a8566fe02d773afb09fcddb617dbda98bfba8f721234';
+    if (
+      typeof location !== 'undefined' &&
+      new URLSearchParams(location.search).has('fixture-broadcast-record-error')
+    )
+      return { txid, snapshot: null, syncPending: true, persistencePending: true };
     proposal.status = 'broadcast';
     this._balance = Math.max(0, this._balance - Number(proposal.total));
-    const txid = '7d4a2c7f9e317f9859d7a8566fe02d773afb09fcddb617dbda98bfba8f721234';
     this.#recordFixtureBroadcast(proposalId, proposal, txid);
     this.#emit({ type: 'transaction_broadcast', txid, balance: sats(this._balance) });
-    return { txid, snapshot: await this.snapshot(), syncPending: false };
+    return { txid, snapshot: await this.snapshot(), syncPending: false, persistencePending: false };
   }
   async discardMultisigSignature(
     proposalId: string,
@@ -2571,7 +2714,7 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
       );
     proposal.signedFingerprints.splice(index, 1);
     proposal.signed = proposal.signedFingerprints.length;
-    proposal.canFinalize = proposal.signed >= proposal.required;
+    proposal.canFinalize = this.#dummyMultisigQuorum(proposal);
     proposal.status = proposal.canFinalize ? 'ready' : 'collecting';
     proposal.psbt = `${proposal.psbt}:discarded-${signerFingerprint.toLowerCase()}`;
     return structuredClone(proposal);
@@ -2580,6 +2723,105 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     const proposal = this._multisigProposals.get(proposalId);
     if (!proposal) throw new WalletError('proposal_not_found', 'Payment proposal was not found.');
     proposal.status = 'cancelled';
+  }
+  async createPairingInvitation(
+    _walletName: string,
+    _threshold: number,
+    _signerCount: number
+  ): ReturnType<WalletPort['createPairingInvitation']> {
+    throw new WalletError('unsupported_operation', 'Device pairing requires the native Groot app.');
+  }
+  async coordinationStatus() {
+    return {
+      shared: false,
+      role: null,
+      canSignOnThisDevice: false,
+      mobileSignerFingerprint: null,
+      keyProtection: null
+    };
+  }
+  async encodeWatchOnlyQr(_content: string): ReturnType<WalletPort['encodeWatchOnlyQr']> {
+    throw new WalletError('unsupported_operation', 'Watch-only QR export requires the native app.');
+  }
+  async decodeWatchOnlyQr(_frames: string[]): ReturnType<WalletPort['decodeWatchOnlyQr']> {
+    throw new WalletError('unsupported_operation', 'Watch-only QR import requires the native app.');
+  }
+  async cancelPairing(_sessionId: string) {}
+  async decodePairingInvitation(
+    _frames: string[]
+  ): ReturnType<WalletPort['decodePairingInvitation']> {
+    throw new WalletError('unsupported_operation', 'Device pairing requires the native Groot app.');
+  }
+  async pendingMobilePairings(): ReturnType<WalletPort['pendingMobilePairings']> {
+    return [];
+  }
+  async resumePairingOnMobile(
+    _sessionId: string,
+    _credential: string
+  ): ReturnType<WalletPort['resumePairingOnMobile']> {
+    throw new WalletError('unsupported_operation', 'Device pairing requires the native Groot app.');
+  }
+  async awaitFinalPairingPolicy(
+    _sessionId: string,
+    _credential: string
+  ): ReturnType<WalletPort['awaitFinalPairingPolicy']> {
+    throw new WalletError('unsupported_operation', 'Device pairing requires the native Groot app.');
+  }
+  async acceptPairingOnMobile(
+    _invitationJson: string,
+    _signerLabel: string,
+    _credential: string
+  ): ReturnType<WalletPort['acceptPairingOnMobile']> {
+    throw new WalletError('unsupported_operation', 'Device pairing requires the native Groot app.');
+  }
+  async acceptMobileSigner(_frames: string[]): ReturnType<WalletPort['acceptMobileSigner']> {
+    throw new WalletError('unsupported_operation', 'Device pairing requires the native Groot app.');
+  }
+  async finalizePairingOnDesktop(
+    _sessionId: string
+  ): ReturnType<WalletPort['finalizePairingOnDesktop']> {
+    throw new WalletError('unsupported_operation', 'Device pairing requires the native Groot app.');
+  }
+  async inspectFinalPairingOnMobile(
+    _frames: string[]
+  ): ReturnType<WalletPort['inspectFinalPairingOnMobile']> {
+    throw new WalletError('unsupported_operation', 'Device pairing requires the native Groot app.');
+  }
+  async completePairingOnMobile(
+    _frames: string[],
+    _credential: string
+  ): ReturnType<WalletPort['completePairingOnMobile']> {
+    throw new WalletError('unsupported_operation', 'Device pairing requires the native Groot app.');
+  }
+  async mobileRecoveryRecord(): ReturnType<WalletPort['mobileRecoveryRecord']> {
+    throw new WalletError('unsupported_operation', 'Phone recovery requires the native Groot app.');
+  }
+  async inspectMobileRecoveryRecord(
+    _frames: string[]
+  ): ReturnType<WalletPort['inspectMobileRecoveryRecord']> {
+    throw new WalletError('unsupported_operation', 'Phone recovery requires the native Groot app.');
+  }
+  async recoverMobileSigner(
+    _frames: string[],
+    _credential: string
+  ): ReturnType<WalletPort['recoverMobileSigner']> {
+    throw new WalletError('unsupported_operation', 'Phone recovery requires the native Groot app.');
+  }
+  async reviewMobilePsbt(_psbt: string): ReturnType<WalletPort['reviewMobilePsbt']> {
+    throw new WalletError('unsupported_operation', 'Mobile signing requires the native Groot app.');
+  }
+  async checkMobileSigner(_credential: string): ReturnType<WalletPort['checkMobileSigner']> {
+    throw new WalletError(
+      'unsupported_operation',
+      'Phone key checks require the native Groot app.'
+    );
+  }
+  async signMobilePsbt(
+    _reviewedPsbt: string,
+    _revisionId: string,
+    _credential: string
+  ): ReturnType<WalletPort['signMobilePsbt']> {
+    throw new WalletError('unsupported_operation', 'Mobile signing requires the native Groot app.');
   }
   async verifyMultisigAddress(deviceId: string, addressId: number) {
     const rejectReview =
@@ -2623,6 +2865,22 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
   }
   async revealSavedFile(_revealToken: string) {}
 
+  #dummyMultisigQuorum(proposal: MultisigProposal): boolean {
+    if (proposal.signed < proposal.required) return false;
+    const template = this._multisig?.recoveryTemplate;
+    if (template?.type !== 'family_continuity_v1' || proposal.spendingPathDetails?.index !== 1)
+      return true;
+    const signedIds = new Set(
+      this._multisig?.cosigners
+        .filter((key) => proposal.signedFingerprints.includes(key.fingerprint))
+        .map((key) => key.id)
+    );
+    return (
+      template.parents.signerIds.some((id) => signedIds.has(id)) &&
+      template.childAssistance.signerIds.some((id) => signedIds.has(id))
+    );
+  }
+
   #addDummySignature(proposalId: string, fingerprint?: string) {
     const proposal = this._multisigProposals.get(proposalId);
     if (!proposal || !this._multisig)
@@ -2650,7 +2908,7 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
       );
     proposal.signedFingerprints.push(next.fingerprint);
     proposal.signed = proposal.signedFingerprints.length;
-    proposal.canFinalize = proposal.signed >= proposal.required;
+    proposal.canFinalize = this.#dummyMultisigQuorum(proposal);
     proposal.status = proposal.canFinalize ? 'ready' : 'collecting';
     return structuredClone(proposal);
   }

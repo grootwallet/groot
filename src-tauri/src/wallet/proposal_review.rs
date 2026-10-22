@@ -77,7 +77,7 @@ pub(super) fn validate_release_spend(
     } else {
         crate::release_policy::validate_final_spend(network(), 1, amount, fee)
     };
-    policy.map_err(|_| api_error("invalid_amount", "This spend is blocked by release policy."))
+    policy.map_err(release_spend_api_error)
 }
 
 pub(super) fn validate_cpfp_output_ownership(

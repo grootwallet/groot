@@ -220,3 +220,165 @@
       </div>{/if}
   </dl>
 </details>
+
+<style>
+  /* Keep the original cascade weight while constraining these rules to this owner. */
+
+  :global(.self-transfer-notice):where(.self-transfer-notice) {
+    display: grid;
+    gap: 3px;
+    margin: 10px 0;
+    padding: 10px 12px;
+    border: 1px solid color-mix(in srgb, var(--success) 35%, var(--border));
+    border-radius: var(--radius-control);
+    color: var(--text);
+    background: color-mix(in srgb, var(--success) 8%, var(--surface-inset));
+    font-size: var(--font-size-meta);
+    line-height: 1.45;
+  }
+  :global(.self-transfer-notice):where(.self-transfer-notice) > :global(strong) {
+    font-size: var(--font-size-meta);
+  }
+  :global(.transaction-review-insight):where(.transaction-review-insight),
+  :global(.self-transfer-consolidating):where(.self-transfer-consolidating) > :global(span) {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  :global(.self-transfer-notice):where(.self-transfer-notice) > :global(span) {
+    color: var(--muted);
+  }
+  :global(.self-transfer-consolidating):where(.self-transfer-consolidating) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 42%);
+    align-items: center;
+    gap: 12px;
+    margin-top: 6px;
+    padding-top: 8px;
+    border-top: 1px solid color-mix(in srgb, var(--success) 25%, var(--border));
+  }
+  :global(.self-transfer-consolidating):where(.self-transfer-consolidating) > :global(span) {
+    min-width: 0;
+  }
+  :global(.self-transfer-consolidating):where(.self-transfer-consolidating) :global(strong) {
+    font-size: var(--font-size-meta);
+  }
+  :global(.self-transfer-consolidating):where(.self-transfer-consolidating) :global(small) {
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+    line-height: 1.4;
+  }
+  :global(.self-transfer-consolidating):where(.self-transfer-consolidating) > :global(:last-child) {
+    min-width: 0;
+    max-width: 100%;
+    justify-self: end;
+    font-weight: 700;
+    text-align: right;
+    white-space: nowrap;
+  }
+  :global(.acceleration-review-summary):where(.acceleration-review-summary) {
+    display: grid;
+    justify-items: center;
+    gap: 5px;
+    margin: 4px 0 16px;
+    padding: 18px;
+    border: 1px solid color-mix(in srgb, var(--success) 30%, var(--border));
+    border-radius: var(--radius-inset);
+    background: color-mix(in srgb, var(--success) 7%, var(--surface-inset));
+    text-align: center;
+  }
+  :global(.acceleration-review-summary):where(.acceleration-review-summary) > :global(span) {
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+  }
+  :global(.acceleration-review-summary):where(.acceleration-review-summary)
+    > :global(.formatted-amount) {
+    color: var(--text);
+    font-size: 25px;
+  }
+  :global(.acceleration-review-summary):where(.acceleration-review-summary)
+    > :global(.formatted-amount small) {
+    font-size: 13px;
+  }
+  :global(.acceleration-review-summary):where(.acceleration-review-summary) > :global(small) {
+    margin: 0;
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+    line-height: 1.45;
+  }
+  :global(.acceleration-review-summary):where(.acceleration-review-summary) {
+    margin: 10px 0;
+    padding: 14px;
+  }
+  :global(.hardware-review-details):where(.hardware-review-details) {
+    margin-top: 0;
+    border-top: 0;
+  }
+  :global(.hardware-review-details):where(.hardware-review-details) :global(summary) {
+    min-height: 43px;
+    display: list-item;
+    box-sizing: border-box;
+    padding: 14px 0;
+    width: fit-content;
+    color: var(--link);
+    font-size: var(--font-size-meta);
+    font-weight: 700;
+    cursor: pointer;
+  }
+  :global(.hardware-review-details[open]):where(.hardware-review-details) > :global(summary) {
+    margin-bottom: 0;
+  }
+  :global(.hardware-review-details):where(.hardware-review-details) > :global(dl) {
+    margin: 0;
+    border-top: 0;
+  }
+  :global(.hardware-review-details):where(.hardware-review-details) > :global(dl > div:last-child) {
+    border-bottom: 0;
+  }
+  :global(.hardware-review-details):where(.hardware-review-details) > :global(dl > div) {
+    min-height: 43px;
+    gap: 18px;
+  }
+  :global(.hardware-review-details):where(.hardware-review-details)
+    > :global(dl > .transaction-review-path-row) {
+    padding-block: 12px;
+    align-items: center;
+  }
+  :global(.hardware-review-details):where(.hardware-review-details) :global(dt),
+  :global(.hardware-review-details):where(.hardware-review-details) :global(dd) {
+    margin: 0;
+    font-size: var(--font-size-meta);
+  }
+  :global(.hardware-review-details):where(.hardware-review-details) :global(dt) {
+    color: var(--muted);
+  }
+  :global(.hardware-review-details):where(.hardware-review-details) :global(dd) {
+    color: var(--text);
+    text-align: right;
+  }
+  :global(.derivation-paths):where(.derivation-paths) {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 5px;
+    line-height: 1.5;
+  }
+  :global(.derivation-paths):where(.derivation-paths) :global(code) {
+    color: inherit;
+    font-size: 1em;
+    font-weight: inherit;
+    line-height: inherit;
+  }
+  :global(.transaction-review-input-total):where(.transaction-review-input-total) {
+    display: inline-flex;
+    align-items: baseline;
+    justify-content: flex-end;
+    gap: 5px;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+  }
+  :global(.hardware-review-details):where(.hardware-review-details)
+    > :global(.transaction-review-funding) {
+    margin-top: 12px;
+  }
+</style>

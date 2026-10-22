@@ -1,8 +1,9 @@
+import { readUiStyles } from '../testing/ui-styles';
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { copyCatalog } from '$lib/i18n-catalog';
 
-const appCss = readFileSync(new URL('../../app.css', import.meta.url), 'utf8');
+const appCss = readUiStyles();
 const sharedButton = readFileSync(new URL('./Button.svelte', import.meta.url), 'utf8');
 const emptyState = readFileSync(
   new URL('./HardwareDeviceEmptyState.svelte', import.meta.url),
@@ -121,7 +122,7 @@ describe('hardware receive verification UI', () => {
     expect(hardwareSetup).toContain(
       "import WarningNotice from '$lib/components/WarningNotice.svelte'"
     );
-    expect(hardwareSetup.match(/<WarningNotice/g)).toHaveLength(2);
+    expect(hardwareSetup).not.toMatch(/<(?:p|small)[^>]*class="form-error"/);
     expect(hardwareSetup).not.toContain('class="hardware-inline-error"');
   });
 
@@ -307,6 +308,8 @@ describe('hardware receive verification UI', () => {
     expect(multisigSetup).toContain(
       "{#if templateKind === 'standard'}<button onclick={scanHardware}"
     );
+    expect(multisigSetup).toContain('Jade/Jade Plus, BitBox02, and BitBox02 Nova');
+    expect(multisigSetup).toContain("if (templateKind !== 'standard')");
     expect(multisigReceive).toContain(
       '{#if !wallet?.recoveryTemplate}<HardwareReceiveVerification'
     );
@@ -331,6 +334,20 @@ describe('hardware receive verification UI', () => {
     expect(multisigPolicy).toContain('lockedDeviceForHealthCheck');
     expect(multisigPolicy).toContain('<TrezorPinModal');
     expect(multisigPolicy).toContain('Resuming the signer health check.');
+    expect(multisigPolicy).toContain("if (device.action === 'prompt_pin' && !unlockedDevice)");
+    expect(multisigPolicy).toContain('await startHealthPin(device)');
+  });
+
+  it('keeps the Trezor standard-wallet decision concise in both onboarding flows', () => {
+    for (const source of [hardwareSetup, multisigSetup]) {
+      expect(source).toContain(
+        "'This selects the seed-derived wallet with no hardware passphrase.'"
+      );
+      expect(source).toContain("'Your hidden wallet is unchanged.'");
+      expect(source).toContain("'Confirm this standard wallet to continue.'");
+      expect(source).not.toContain('Review the imported public identity in the next step.');
+      expect(source).not.toContain('Choose this only if you intentionally want the Trezor');
+    }
   });
 
   it('redeems a detected unlock capability without starting another scan', () => {
@@ -361,6 +378,19 @@ describe('hardware receive verification UI', () => {
     expect(deviceDetails).toContain("'Signer matches this wallet.'");
   });
 
+  it('distinguishes phone-local and desktop-managed signers without inventing mobile certification', () => {
+    expect(multisigPolicy).toContain("coordination?.role !== 'mobile_cosigner'");
+    expect(multisigPolicy).toContain("'Available on this phone'");
+    expect(multisigPolicy).toContain("'Managed on desktop'");
+    expect(multisigPolicy).toContain('deviceContext={selectedSigner');
+    expect(deviceDetails).toContain('deviceContext?: CoordinationSignerContext | null');
+    expect(deviceDetails).toContain('{#if deviceContext !== DESKTOP_MANAGED_SIGNER_CONTEXT}');
+    expect(deviceDetails).toContain("return 'Phone key'");
+    expect(deviceDetails).toContain("'Check phone key'");
+    expect(multisigPolicy).toContain('walletService.checkMobileSigner(phoneCheckCredential)');
+    expect(deviceDetails).toContain("translate($locale, 'Device type')");
+  });
+
   it('uses a deliberate retry status instead of an unstyled empty-list paragraph', () => {
     expect(emptyState).toContain('class="hardware-device-empty" role="status"');
     expect(emptyState).toContain('onclick={onretry}');
@@ -381,7 +411,8 @@ describe('hardware receive verification UI', () => {
   });
 
   it('makes hardware policy review the verification step and uses the shared alert treatment', () => {
-    expect(policyReview).toContain('class="hardware-inline-error" role="alert" aria-live="polite"');
+    expect(policyReview).toContain('<WarningNotice');
+    expect(policyReview).toContain('ariaLive="polite"');
     expect(policyReview).toContain("translate($locale, 'Device needs attention')");
     expect(policyReview).not.toContain('<p class="form-error" role="alert">{error}</p>');
     expect(policyReview).not.toContain('bind:checked={acknowledged}');
@@ -583,7 +614,7 @@ describe('hardware receive verification UI', () => {
 
   it('opens a new hardware wallet in automatic full-history scan mode', () => {
     expect(hardwareSetup).toContain("await goto('/?initial=full')");
-    const createStart = hardwareCommands.indexOf('pub fn external_signer_create(');
+    const createStart = hardwareCommands.indexOf('pub async fn external_signer_create(');
     const createEnd = hardwareCommands.indexOf(
       '#[tauri::command]\npub async fn external_signer_wallet',
       createStart

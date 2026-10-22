@@ -127,6 +127,18 @@ pub async fn wallet_pin_change(
                 "A software wallet passphrase cannot be changed.",
             ));
         }
+        // The existing two-file rollback journal cannot rotate a third signer
+        // envelope atomically. Keep that credential intact until supported.
+        if profile_directory(&app, profile.id)?
+            .join("mobile-signer.json")
+            .try_exists()
+            .map_err(internal)?
+        {
+            return Err(api_error(
+                "unsupported_operation",
+                "PIN changes for phone signers are not available yet.",
+            ));
+        }
         validate_credential(new_pin.as_str())?;
         if current_pin.as_str() == new_pin.as_str() {
             return Err(api_error(

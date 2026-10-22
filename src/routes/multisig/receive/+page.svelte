@@ -72,6 +72,7 @@
   let awaiting = $derived(awaitingPaymentAddresses(addresses));
   let history = $derived(addresses.filter((address) => address.status !== 'awaiting'));
   let wallet = $state<MultisigWallet | null>(null);
+  let receiveOnDesktop = $state(false);
   let supportsHardwareVerification = $derived(wallet !== null && !wallet.recoveryTemplate);
   let eligibleDeviceTypes = $derived([
     ...new Set(
@@ -111,16 +112,19 @@
           await goto('/receive', { replaceState: true });
           return;
         }
-        const [, savedWallet] = await Promise.all([
-          walletService.multisigSnapshot().then((state) => {
-            if (!active) return;
-            applyAddresses(state.receiveAddresses);
-            labelSuggestions = state.labelSuggestions;
-          }),
-          walletService.multisigWallet()
+        const [state, savedWallet, coordination, runtime] = await Promise.all([
+          walletService.multisigSnapshot(),
+          walletService.multisigWallet(),
+          walletService.coordinationStatus(),
+          walletService.runtimePlatform()
         ]);
         if (!active) return;
         wallet = savedWallet;
+        receiveOnDesktop =
+          coordination.role === 'mobile_cosigner' ||
+          (runtime.mobile && runtime.platform !== 'browser');
+        applyAddresses(state.receiveAddresses);
+        labelSuggestions = state.labelSuggestions;
         ready = true;
       } catch (cause) {
         if (!active) return;
@@ -307,13 +311,27 @@
       />
     </div>
   {/if}
-  {#if loadError}<section class="empty-state" role="alert">
-      <h2>{translate($locale, 'Could not load wallet')}</h2>
-      <p>{loadError}</p>
+  {#if loadError}<WarningNotice
+      tone="danger"
+      icon
+      role="alert"
+      class="inline-action"
+      title={translate($locale, 'Could not load wallet')}
+      body={loadError}
+    >
       <Button variant="secondary" onclick={() => window.location.reload()}
         >{translate($locale, 'Try again')}</Button
       >
-    </section>
+    </WarningNotice>
+  {:else if receiveOnDesktop}<WarningNotice
+      role="note"
+      icon
+      title={translate($locale, 'Receive on desktop')}
+      body={translate(
+        $locale,
+        'Create receive requests on desktop for paired and watch-only wallets. This avoids allocating the same address on two devices.'
+      )}
+    />
   {:else if current}<section class="receive-card">
       <button
         class="qr-placeholder qr-button"
@@ -653,3 +671,23 @@
     : 'Native SegWit · standard multisig'}
   onclose={() => (detailAddress = null)}
 />
+
+<style>
+  /* Keep the original cascade weight while constraining these rules to this owner. */
+
+  :global(.policy-next-step):where(.policy-next-step) {
+    margin-top: 16px;
+  }
+  :global(.policy-next-step):where(.policy-next-step) :global(.instruction-card) {
+    border-color: var(--link);
+    background: var(--surface-control);
+  }
+  :global(.policy-next-step):where(.policy-next-step) :global(.instruction-card p) {
+    margin: 0;
+    color: var(--text-soft);
+    font-size: var(--font-size-meta);
+  }
+  :global(.policy-next-step):where(.policy-next-step) :global(.button) {
+    justify-self: start;
+  }
+</style>
