@@ -178,3 +178,40 @@ Every change that introduces an asset, trust boundary, parser, signer, backend, 
 ## Unified continuity rehearsal boundary
 
 ADR 0100 enables fixed-template coordination on test networks only. Hostile PSBT sequences cannot select a different delay; proposal identity, verified descriptors, eligible roles and fresh input maturity are native authorization inputs. Family assistance requires both role groups. Reorgs invalidate premature saved proposals. Existing primary/delayed storage and descriptor backups remain unchanged. Direct USB Miniscript and phone enrollment into continuity are blocked; standard phone signing and Coldcard rehearsal retain their existing controls. Independent review and physical acceptance remain pending; this is not Mainnet continuity authorization.
+
+## Proposed 5.3 Mainnet HWI operation-session boundary
+
+Status: threat-model input for independent review, **not** Mainnet approval.
+ADR 0103 proposes extending the sealed, extracted HWI 3.2.0 one-client
+operation session from Testnet4 to Mainnet. ADR 0104 limits the associated 5.3
+GA scope to existing BIP84 and standard BIP48 desktop wallets; phone and fixed
+Continuity remain test-network previews. The owner has verified that the seven
+existing Mainnet wallets are visible in an isolated RC profile, but that does
+not exercise or authorize the proposed Mainnet hardware path.
+
+The new trust boundary would pass a Mainnet request from Rust to a bundled
+Python worker and the selected USB signer, then return public identity,
+display or signature results to Rust. The worker, its extracted modules,
+framing, device response and USB path must be treated as hostile even when the
+outer app package is signed. The speed improvement comes from avoiding repeated
+HWI startup and device reopening _within one request_, not from retaining
+signer authority across requests.
+
+| Threat                                                                       | Required control                                                                                                                                                                                     | Adversarial evidence before Mainnet use                                                                                                             |
+| ---------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Testnet selector, xpub or BIP84/BIP48 account path used for a Mainnet wallet | Bind compiled active chain, worker selector, coin type, xpub version, descriptor and PSBT network before opening or acting on a device; use HWI's explicit Mainnet selector                          | Wrong-chain, wrong-path, wrong-xpub-version and cross-network saved-signer cases must fail before display or signing on all supported request types |
+| A different, locked, reconnected or stale signer inherits authority          | Read full fresh fingerprint and account xpub on the same connection as the one action; match the exact selected saved signer and current wallet policy; never cache unlock, identity or policy state | Zero, multiple, ambiguous and mismatched candidates; lock, disconnect, reconnect and repeated-action sequences on every exact model                 |
+| A substituted or partially extracted HWI runtime changes commands or results | Verify pinned original HWI digest, extracted manifest, launcher/worker seal and outer app signature before each operation; fail closed, with no fallback to an unverified helper                     | Missing, mutated, unsigned and swapped runtime/worker fixtures; no device action and no automatic replay                                            |
+| A valid identity result is reused to display or sign a changed transaction   | Permit at most one action per process; Rust rechecks current wallet/proposal context, policy authorization, actual address or exact reviewed PSBT, and returned signature before merge               | Changed recipient, fee, inputs, sighash, policy, wallet selection, cancellation and post-review mutation fixtures                                   |
+| A timeout, malformed response or worker crash triggers duplicate action      | Bound stdin/stdout, time, child process group and cleanup; discard arbitrary vendor error text; terminal failure requires a fresh explicit user request                                              | Oversized/duplicate-key/malformed responses, timeout, kill/reap, cancellation and no-replay tests                                                   |
+
+The Testnet4 Jade shared-test selector must never be accepted on Mainnet.
+Coldcard external policy-file acknowledgement is not live device verification.
+No host benchmark proves trusted display or signature correctness. The exact
+Mainnet RC needs device-free runtime integrity tests, native wrong-network and
+wrong-device tests, release-source pin review, and owner-observed trials of
+all seven model/firmware combinations: identity, health, address/policy,
+transaction presentation, signature return, rejection, lock/disconnect,
+restart and recovery. Independent reviewers must inspect this model and the
+exact enabling diff; AI-assisted or local automated checks are supporting
+evidence only. Until then, Mainnet continues to use the existing HWI path.

@@ -1,0 +1,42 @@
+# ADR 0104: 5.3 desktop GA scope and test-network previews
+
+- Status: release scope accepted by the owner; GA authorization pending
+- Date: 2026-10-22
+- Extends: ADRs 0069, 0099, 0100 and 0103
+
+## Decision
+
+The owner wants one 5.3.0 macOS desktop GA candidate for the existing
+restart-bound Regtest, Testnet4 and Mainnet app. Mainnet scope is the existing
+BIP84 and standard BIP48 wallet classes, including Coldcard Mk4, Ledger Nano S
+Plus, original BitBox02, BitBox02 Nova, Jade Classic, Trezor Safe 3 and Trezor
+Model One, with the application-level 0.01 BTC spend ceiling removed.
+The final-PSBT fee guard, exact transaction review, network separation,
+credential protection, hardware identity, recovery and release checks remain.
+The Testnet4 performance result does not certify a Mainnet hardware path.
+
+Partner and Family Continuity may remain available as explicitly experimental
+test-network templates. The existing iOS phone key, pairing and standard-
+multisig QR signing candidate may likewise remain an internal Testnet4 preview;
+its iOS binary is not part of the macOS GA distribution. Neither preview is a
+Mainnet product claim or a condition for saying Mainnet users can use those
+flows. Mainnet Continuity creation, phone signing, phone enrollment
+into Continuity, direct USB Miniscript signing and Android key operations
+remain disabled. Release notes and UI must not imply that a partial preview is
+fully certified. Unsafe or misleading preview behavior must fail closed or be
+disabled before the exact GA package is approved.
+
+This scope decision does not authorize public distribution. The faster HWI
+operation session may be enabled for Mainnet only after ADR 0103's dedicated
+threat-model, source-policy, exact-artifact and physical gates are closed.
+Those gates include all seven models on the same Mainnet candidate. A later
+release decision must bind the exact commit, signed package, evidence and tag.
+
+## Compatibility and standards
+
+This decision changes no persisted wallet, registry, backup, proposal or
+credential format. It does not expand BIP support: Partner/Family BIP68/112
+coordination remains test-network-only and standard BIP84/BIP48 Mainnet support
+retains its existing boundaries. Existing Mainnet wallets stay in the canonical
+multi-network app namespace; the isolated RC snapshot in ADR 0103 is test data,
+not a GA migration.
