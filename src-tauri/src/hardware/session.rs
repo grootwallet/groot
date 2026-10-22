@@ -281,6 +281,7 @@ mod tests {
         ));
         assert!(!valid_session_account(HwiChain::Main, "m/84'/0'/0'", &[]));
     }
+    #[cfg(target_os = "macos")]
     #[test]
     fn prepared_mainnet_scope_does_not_enable_the_operation_session() {
         let hwi = HwiCli {
