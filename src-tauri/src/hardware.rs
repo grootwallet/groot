@@ -1193,6 +1193,8 @@ fn run_program_in_operation(
     home: Option<&Path>,
     extra_input: Option<&[u8]>,
 ) -> Result<Vec<u8>, HardwareError> {
+    #[cfg(not(target_os = "macos"))]
+    let _ = active_chain;
     operation.remaining()?;
     if !program.is_absolute() {
         return Err(HardwareError::Unavailable);
