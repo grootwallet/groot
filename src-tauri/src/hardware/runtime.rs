@@ -1,4 +1,4 @@
-//! ADRs 0098/0102/0103: app-sealed internal HWI payload; Mainnet route remains disabled.
+//! ADRs 0098/0102/0103: app-sealed internal HWI payload for explicit network scopes.
 use super::{HardwareError, HwiChain, HwiSource, MAINNET_FAST_ENABLED};
 use bdk_wallet::bitcoin::hashes::{sha256, Hash};
 use serde::Deserialize;
@@ -316,7 +316,7 @@ mod tests {
             }
         }
         assert!(!selected_fast_internal(&[], HwiChain::Testnet4, false));
-        assert!(!selected_fast_internal(
+        assert!(selected_fast_internal(
             &["--chain", "main", "--device-type", "jade"].map(str::to_owned),
             HwiChain::Main,
             MAINNET_FAST_ENABLED

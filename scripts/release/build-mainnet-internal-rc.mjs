@@ -100,8 +100,8 @@ try {
   chmodSync(stagedHwi, 0o755);
   if (digest(stagedHwi) !== manifest.artifact.sha256) fail('staged HWI changed during copy');
 
-  // Internal multi-network RCs only. The native selector additionally limits
-  // this payload to reviewed Testnet4 families; production keeps HWI.
+  // Internal multi-network RCs only. Native routing binds this payload to the
+  // active Mainnet or Testnet4 chain and approved signer families.
   const runtime =
     buildTarget === 'multi'
       ? prepareHwiRuntime(
@@ -217,13 +217,7 @@ try {
     'compiled_signing_requirement=REHEARSAL_ONLY',
     `hwi_version=${result.version}`,
     `hwi_sha256=${result.sha256}`,
-    ...(runtime
-      ? [
-          `testnet4_hwi_runtime_sha256=${runtime.sha256}`,
-          `testnet4_runtime_sha256=${runtime.sha256}`,
-          'hwi_session_protocol=1'
-        ]
-      : []),
+    ...(runtime ? [`hwi_runtime_sha256=${runtime.sha256}`, 'hwi_session_protocol=1'] : []),
     `executable_sha256=${digest(executable)}`,
     ''
   ].join('\n');

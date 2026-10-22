@@ -90,8 +90,7 @@ fn validated_response(
     ))
 }
 
-// Mainnet validation is prepared for review. The native session selector below
-// continues to admit Testnet4 only, so this scope is not active in an RC yet.
+// Bind each operation to the active network, account coin type, and xpub kind.
 #[cfg(any(target_os = "macos", test))]
 fn session_scope(
     chain: HwiChain,
@@ -283,7 +282,7 @@ mod tests {
     }
     #[cfg(target_os = "macos")]
     #[test]
-    fn prepared_mainnet_scope_does_not_enable_the_operation_session() {
+    fn mainnet_session_requires_the_packaged_protocol() {
         let hwi = HwiCli {
             program: PathBuf::from("/unused/hwi"),
             chain: HwiChain::Main,
@@ -293,7 +292,10 @@ mod tests {
             },
         };
         for family in ["coldcard", "ledger", "bitbox02", "trezor", "jade"] {
-            assert!(!hwi.supports_operation_session(family));
+            assert_eq!(
+                hwi.supports_operation_session(family),
+                option_env!("GROOT_HWI_SESSION_PROTOCOL") == Some("1")
+            );
         }
     }
     #[cfg(target_os = "macos")]

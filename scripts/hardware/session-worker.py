@@ -1,9 +1,8 @@
 """One client, one fresh full-account proof, at most one authorized action.
 
-Native routing currently admits Testnet4 only. Mainnet request validation is
-prepared for review but cannot be reached from Groot until its separate gate is
-approved. No state survives process exit. Rust authenticates the whole runtime
-before spawn and independently checks identity/result afterward.
+Native routing admits only the active Testnet4 or Mainnet scope in the internal
+multi-network app. No state survives process exit. Rust authenticates the whole
+runtime before spawn and independently checks identity/result afterward.
 """
 import contextlib
 import json

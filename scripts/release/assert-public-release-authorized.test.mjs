@@ -54,7 +54,7 @@ test('the existing public approval stays bound to v5.2.0 and rejects 5.3 candida
     );
     writeFileSync(join(root, 'package.json'), '{"version":"5.2.0"}\n');
     assert.doesNotThrow(() => verifyPublicReleaseAuthorization({ repoRoot: root, commit }));
-    for (const version of ['5.3.0-rc1', '5.3.0-rc2', '5.3.0']) {
+    for (const version of ['5.3.0-rc1', '5.3.0-rc2', '5.3.0-rc16', '5.3.0']) {
       writeFileSync(join(root, 'package.json'), JSON.stringify({ version }));
       assert.throws(
         () => verifyPublicReleaseAuthorization({ repoRoot: root, commit }),

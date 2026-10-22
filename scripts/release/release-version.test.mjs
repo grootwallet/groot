@@ -10,7 +10,7 @@ test('owner naming admits the approved release lines and numbered 5.3 candidates
     '5.2.0-rc03',
     '5.3.0-rc1',
     '5.3.0-rc2',
-    '5.3.0-rc15'
+    '5.3.0-rc16'
   ])
     assert.equal(isAcceptedReleaseVersion(version), true, version);
   for (const version of [

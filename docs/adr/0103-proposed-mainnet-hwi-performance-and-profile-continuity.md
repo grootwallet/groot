@@ -1,6 +1,6 @@
 # ADR 0103: Proposed Mainnet HWI performance and profile continuity
 
-- Status: proposed; implementation and Mainnet use require independent review
+- Status: accepted for unsigned internal rehearsal; GA evidence pending
 - Date: 2026-10-22
 - Extends: ADRs 0069, 0098, 0101 and 0102
 
@@ -101,9 +101,10 @@ The operation worker now has a Mainnet request validator for the explicit HWI
 Mainnet chain, BIP84 `m/84'/0'/0'` or standard BIP48 `m/48'/0'/0'/2'` account,
 and `xpub` public-account identity. It rejects Testnet4 paths and `tpub` keys
 before opening a device. Rust has the matching account/network validator and
-device-free tests. The native session and extracted-runtime selectors now
-express the exact Mainnet branch for review, but both use the shared
-`MAINNET_FAST_ENABLED = false` compile-time gate. No internal builder enables
-the Mainnet fast path. This is a reviewable draft, not
-Mainnet signing authorization or a Mainnet speed candidate. The enabling diff,
-source-policy snapshot and exact package remain subject to the review above.
+device-free tests. The native session and extracted-runtime selectors require
+the active Mainnet chain and explicit HWI `main` selector. The owner attested
+that the independent review is complete and authorized an unsigned internal
+Mainnet speed candidate. Its faster path is enabled only in the sealed
+multi-network internal build with `GROOT_HWI_SESSION_PROTOCOL=1`; the fixed
+Mainnet builder does not include that runtime. The source-policy snapshot,
+exact package, and physical results still need verification before GA.

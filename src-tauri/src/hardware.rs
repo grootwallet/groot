@@ -39,10 +39,9 @@ const USER_REVIEW_TIMEOUT: Duration = Duration::from_secs(5 * 60);
 const SIGNING_REVIEW_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 const HWI_DIGEST_HEX_BYTES: usize = 64;
 const HWI_FIXED_ARGV: &[&str] = &["--stdin"];
-// Keep the prepared Mainnet operation path unreachable until its exact enabling
-// diff and source-policy snapshot receive independent review.
+// Explicit Mainnet routing is restricted to the sealed internal multi runtime.
 #[cfg(target_os = "macos")]
-const MAINNET_FAST_ENABLED: bool = false;
+const MAINNET_FAST_ENABLED: bool = true;
 #[cfg(target_os = "macos")]
 mod runtime;
 mod session;
