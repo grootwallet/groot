@@ -238,7 +238,7 @@ const pinnedPolicySources = new Map([
     '366fd1d3069c8609e0860dde4465aa496c25bbdfa66678b1ee31c8b6bc68b4e0'
   ],
   ['src/lib/app-updates.ts', 'f274f7614fb278b403acbc61f849912fea20437c0614b999898b2f85e0500c70'],
-  ['src/lib/release-notes.ts', 'c88e87b7da978739ffe70a9f3f5075d87f009e9d85ebedade6b68fb29559315d'],
+  ['src/lib/release-notes.ts', '8bec2b43be592b654b1d6837b0b871028bf88d66e340425269c0ca22bf3434dc'],
   [
     'src/lib/wallet/live-sync.ts',
     '978773bb0b99dcdb15ebbd1146ea0852cacb761ae756ebf00734ac4d85e22814'

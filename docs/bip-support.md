@@ -116,3 +116,5 @@ The Model One repeated-action routing follow-up has **no BIP or persisted-format
 The sealed internal Mainnet HWI session path has **no BIP or persisted-format impact**. It checks existing BIP84 and standard BIP48 account paths, `xpub` network identity and the explicit HWI Mainnet selector; it changes no descriptor, PSBT, signature, key, wallet file or supported standard. The RC17 scan-progress and hardware-error presentation fixes also have no BIP or persisted-format impact. Public Mainnet packaging remains separately gated.
 
 RC18's canonical-identity owner package and release notes have **no BIP or persisted-format impact**. The app identity reuses the existing network-isolated profile location; key derivation, descriptors, PSBTs, signatures and wallet files are unchanged.
+
+The revised in-app 5.3 notes and longer real-Core test RPC timeout have **no BIP or persisted-format impact**. They change presentation and test tolerance only; no network, descriptor, script, transaction, key or wallet behavior changes.

@@ -141,18 +141,30 @@ fn regtest_dir() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../.regtest"))
 }
 
-fn rpc() -> Client {
+fn rpc_at_wallet(wallet: Option<&str>) -> Client {
     let port = std::env::var("GROOT_RPC_PORT").unwrap_or_else(|_| "18443".to_owned());
+    let url = match wallet {
+        Some(name) => format!("http://127.0.0.1:{port}/wallet/{name}"),
+        None => format!("http://127.0.0.1:{port}"),
+    };
     let (username, password) = Auth::CookieFile(regtest_dir().join("regtest/.cookie"))
         .get_user_pass()
         .expect("read regtest cookie");
+    // The preceding continuity test can leave Core indexing over 50,000 mined
+    // blocks; loading its wallet may exceed the transport's 15-second default
+    // on a shared CI runner without indicating a wallet failure.
     let mut builder = jsonrpc::minreq_http::MinreqHttpTransport::builder()
-        .url(&format!("http://127.0.0.1:{port}"))
-        .expect("regtest RPC URL");
+        .url(&url)
+        .expect("regtest RPC URL")
+        .timeout(std::time::Duration::from_secs(120));
     if let Some(username) = username {
         builder = builder.basic_auth(username, password);
     }
     Client::from_jsonrpc(jsonrpc::Client::with_transport(builder.build()))
+}
+
+fn rpc() -> Client {
+    rpc_at_wallet(None)
 }
 
 fn sync(wallet: &mut PersistedWallet<Connection>, db: &mut Connection, rpc: Arc<Client>) {
@@ -1752,14 +1764,7 @@ fn funded_continuity_descriptors_restore_history_in_core() {
             .call("loadwallet", &[serde_json::json!(funding_name)])
             .unwrap();
     }
-    let wallet_rpc = |name: &str| {
-        let port = std::env::var("GROOT_RPC_PORT").unwrap_or_else(|_| "18443".to_owned());
-        Client::new(
-            &format!("http://127.0.0.1:{port}/wallet/{name}"),
-            Auth::CookieFile(regtest_dir().join("regtest/.cookie")),
-        )
-        .unwrap()
-    };
+    let wallet_rpc = |name: &str| rpc_at_wallet(Some(name));
     let funder = wallet_rpc(&funding_name);
     let mining = funder
         .get_new_address(None, None)

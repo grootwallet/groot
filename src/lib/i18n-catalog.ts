@@ -101,26 +101,31 @@ export const copyCatalog = {
     es: 'Falló la descarga de actualización'
   },
   'Groot v{version}': { fr: 'Groot v{version}', es: 'Groot v{version}' },
-  'Component-scoped styles with desktop and mobile layout checks in both themes.': {
-    fr: 'Styles propres aux composants, avec vérification des mises en page ordinateur et mobile dans les deux thèmes.',
-    es: 'Estilos por componente, con comprobaciones de escritorio y móvil en ambos temas.'
+  'Seven hardware signers now connect, identify, verify addresses and sign much faster.': {
+    fr: 'Sept appareils de signature matériels se connectent, s’identifient, vérifient les adresses et signent beaucoup plus vite.',
+    es: 'Siete dispositivos de firma se conectan, se identifican, verifican direcciones y firman mucho más rápido.'
   },
-  'Clearer activity pagination, tooltips and QR scan errors.': {
-    fr: 'Pagination de l’activité, infobulles et erreurs de lecture QR plus claires.',
-    es: 'Paginación de actividad, ayudas y errores de lectura QR más claros.'
+  'A simpler start page helps you create, connect or recover a wallet.': {
+    fr: 'Une page d’accueil plus simple vous aide à créer, connecter ou restaurer un portefeuille.',
+    es: 'Una página de inicio más sencilla te ayuda a crear, conectar o recuperar un monedero.'
   },
-  'Accepted broadcasts keep their successful result when local recording needs a retry.': {
-    fr: 'Les diffusions acceptées conservent leur résultat réussi si l’enregistrement local doit être réessayé.',
-    es: 'Los envíos aceptados conservan su resultado correcto si hay que reintentar el registro local.'
+  'Mainnet payments no longer have a 0.01 BTC app limit; transaction and fee checks still apply.': {
+    fr: 'Sur Mainnet, les paiements ne sont plus limités à 0,01 BTC par l’application ; les contrôles des transactions et des frais restent en place.',
+    es: 'En Mainnet, los pagos ya no tienen el límite de 0,01 BTC de la aplicación; siguen las comprobaciones de transacciones y comisiones.'
   },
-  'Wallet operations run off the UI thread and recheck wallet selection before changing data.': {
-    fr: 'Les opérations s’exécutent hors du fil de l’interface et revérifient le portefeuille sélectionné avant de modifier les données.',
-    es: 'Las operaciones se ejecutan fuera del hilo de la interfaz y comprueban el monedero seleccionado antes de modificar datos.'
+  'Wallet scans show progress sooner, with clearer activity, errors and payment results.': {
+    fr: 'Les analyses de portefeuille affichent leur progression plus tôt, avec une activité, des erreurs et des résultats de paiement plus clairs.',
+    es: 'Los análisis del monedero muestran antes su progreso, con actividad, errores y resultados de pago más claros.'
   },
-  'Testnet4 iPhone software wallets and QR multisig signing with native recovery and device-authorized key access.':
+  'Testnet4 preview: pair an iPhone key and sign multisig transactions by QR; unavailable on Mainnet.':
     {
-      fr: 'Portefeuilles logiciels iPhone Testnet4 et signature multisig par QR, avec récupération native et accès aux clés autorisé sur l’appareil.',
-      es: 'Carteras de software de iPhone Testnet4 y firma multifirma por QR, con recuperación nativa y acceso a las claves autorizado en el dispositivo.'
+      fr: 'Aperçu Testnet4 : associez une clé iPhone et signez des transactions multisig par QR ; indisponible sur Mainnet.',
+      es: 'Vista previa de Testnet4: vincula una clave de iPhone y firma transacciones multifirma por QR; no disponible en Mainnet.'
+    },
+  'Test-network preview: Partner and Family Continuity wallets with Miniscript recovery paths; unavailable on Mainnet.':
+    {
+      fr: 'Aperçu sur les réseaux de test : portefeuilles Continuité Partenaire et Famille avec voies de récupération Miniscript ; indisponibles sur Mainnet.',
+      es: 'Vista previa en redes de prueba: monederos de Continuidad de Pareja y Familia con rutas de recuperación Miniscript; no disponibles en Mainnet.'
     },
   'Testnet4 iPhone development UI; mobile key creation, recovery, signing and broadcast remain unavailable.':
     {

@@ -51,3 +51,14 @@ scope without another preview campaign before desktop GA. RC18 is an ad-hoc,
 unnotarized candidate using the canonical desktop app identity so existing
 Mainnet wallets can be exercised. This does not authorize public GA packaging
 or replace the production-signing and exact-artifact gates above.
+
+## RC18 owner result
+
+The owner reports that existing Mainnet wallets appeared, all seven named
+hardware signers completed the tested health, identity, address and signing
+steps quickly (Coldcard Mk4 was also acceptable), network switching kept the
+wallet lists separate, and first-scan and signer-error checks passed. This
+closes the requested ad-hoc owner smoke test. It does not certify the future
+Developer ID-signed executable or authorize public GA distribution. The final
+in-app notes must lead with user-facing changes and mark phone-key and
+Continuity/Miniscript flows as test-network previews.
