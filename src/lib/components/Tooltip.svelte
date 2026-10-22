@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Snippet } from 'svelte';
+  import { onDestroy, type Snippet } from 'svelte';
 
   let {
     text,
@@ -17,23 +17,30 @@
   let left = $state(0);
   let top = $state(0);
   let below = $state(false);
+  let positionFrame: number | null = null;
 
   function portal(node: HTMLElement) {
     document.body.append(node);
     return { destroy: () => node.remove() };
   }
 
-  function show() {
+  function hide() {
+    if (positionFrame !== null) cancelAnimationFrame(positionFrame);
+    positionFrame = null;
+    open = false;
+  }
+
+  function position() {
     const target = truncatedSelector ? root.querySelector<HTMLElement>(truncatedSelector) : root;
     if (!target || (truncatedSelector && target.scrollWidth <= target.clientWidth)) {
-      open = false;
+      hide();
       return;
     }
     const positionTarget = positionSelector
       ? root.querySelector<HTMLElement>(positionSelector)
       : target;
     if (!positionTarget) {
-      open = false;
+      hide();
       return;
     }
     const rect = positionTarget.getBoundingClientRect();
@@ -42,6 +49,34 @@
     top = below ? rect.bottom + 8 : rect.top - 8;
     open = true;
   }
+
+  function show() {
+    if (positionFrame !== null) cancelAnimationFrame(positionFrame);
+    // Focus can scroll a mobile page. Measure after that scroll settles.
+    positionFrame = requestAnimationFrame(() => {
+      positionFrame = null;
+      position();
+    });
+  }
+
+  $effect(() => {
+    if (!open) return;
+    const refresh = () => {
+      if (positionFrame !== null) cancelAnimationFrame(positionFrame);
+      positionFrame = requestAnimationFrame(() => {
+        positionFrame = null;
+        position();
+      });
+    };
+    window.addEventListener('scroll', refresh, true);
+    window.addEventListener('resize', refresh);
+    return () => {
+      window.removeEventListener('scroll', refresh, true);
+      window.removeEventListener('resize', refresh);
+    };
+  });
+
+  onDestroy(hide);
 </script>
 
 <span
@@ -49,9 +84,9 @@
   role="group"
   bind:this={root}
   onpointerenter={show}
-  onpointerleave={() => (open = false)}
+  onpointerleave={hide}
   onfocusin={show}
-  onfocusout={() => (open = false)}
+  onfocusout={hide}
 >
   {@render children()}
   {#if open}<span

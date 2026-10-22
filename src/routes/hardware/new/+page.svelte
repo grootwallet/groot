@@ -193,7 +193,24 @@
         return;
       }
       if (errorCode === 'hardware_wrong_network') errorTitle = 'Jade is on a different network';
-      error = localizedError(cause, $locale, 'Could not import the public account key.');
+      error =
+        device.model === 'jade' &&
+        ['hardware_command_failed', 'hardware_unavailable'].includes(errorCode)
+          ? translate(
+              $locale,
+              'Jade may be on another Bitcoin network. Check that it is unlocked and set to {network}, then try again.',
+              {
+                network:
+                  defaultConfig.network === 'mainnet'
+                    ? 'Mainnet'
+                    : defaultConfig.network === 'testnet4'
+                      ? 'Testnet4'
+                      : defaultConfig.network === 'signet'
+                        ? 'Signet'
+                        : 'Regtest'
+              }
+            )
+          : localizedError(cause, $locale, 'Could not import the public account key.');
     } finally {
       busy = false;
     }
@@ -755,35 +772,37 @@
       detailedStatus
       showRescan
     />{/if}
-  {#if error}<WarningNotice
-      tone="danger"
-      icon
-      role="alert"
-      ariaLive="polite"
-      title={translate($locale, errorTitle)}
-      body={error}
-      ><Button
-        variant="secondary"
-        size="small"
-        onclick={() => {
-          if (errorCode === 'hardware_wrong_network') {
-            closeHardwareScan();
-          } else if (errorTitle === 'Could not read the account key' && lastAttemptedDevice) {
-            useDevice(lastAttemptedDevice, lastAttemptAllowedEmptyPassphrase);
-          } else {
-            scan();
-          }
-        }}
-        >{translate(
-          $locale,
-          errorCode === 'hardware_wrong_network'
-            ? 'Close'
-            : errorTitle === 'Could not read the account key' && lastAttemptedDevice
-              ? 'Try this signer again'
-              : 'Scan again'
-        )}</Button
-      >
-    </WarningNotice>{/if}
+  {#if error}<div class="hardware-scan-error">
+      <WarningNotice
+        tone="danger"
+        icon
+        role="alert"
+        ariaLive="polite"
+        title={translate($locale, errorTitle)}
+        body={error}
+        ><Button
+          variant="secondary"
+          size="small"
+          onclick={() => {
+            if (errorCode === 'hardware_wrong_network') {
+              closeHardwareScan();
+            } else if (errorTitle === 'Could not read the account key' && lastAttemptedDevice) {
+              useDevice(lastAttemptedDevice, lastAttemptAllowedEmptyPassphrase);
+            } else {
+              scan();
+            }
+          }}
+          >{translate(
+            $locale,
+            errorCode === 'hardware_wrong_network'
+              ? 'Close'
+              : errorTitle === 'Could not read the account key' && lastAttemptedDevice
+                ? 'Try this signer again'
+                : 'Scan again'
+          )}</Button
+        >
+      </WarningNotice>
+    </div>{/if}
 </Modal>
 <Modal
   open={standardWalletOpen}
@@ -903,6 +922,9 @@
 </Modal>
 
 <style>
+  .hardware-scan-error {
+    margin-top: 14px;
+  }
   /* Keep the original cascade weight while constraining these rules to this owner. */
 
   :global(.hardware-setup-page):where(.hardware-setup-page) :global(.page-header) {

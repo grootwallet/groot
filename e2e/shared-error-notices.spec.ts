@@ -15,6 +15,11 @@ for (const theme of ['light', 'dark']) {
     await expect(scan.getByRole('alert')).toContainText(
       'Unlock the signer and quit other wallet apps'
     );
+    const rescanBox = await scan.getByRole('button', { name: /Rescan devices/ }).boundingBox();
+    const noticeBox = await scan.getByRole('alert').boundingBox();
+    expect(
+      rescanBox && noticeBox && noticeBox.y - (rescanBox.y + rescanBox.height)
+    ).toBeGreaterThanOrEqual(12);
     await scan.getByRole('button', { name: 'Close', exact: true }).click();
     await expect(scan).toHaveCount(0);
     const error = page.getByRole('alert');
@@ -37,6 +42,33 @@ for (const theme of ['light', 'dark']) {
     await expect(page.getByRole('alert')).toHaveCount(0);
   });
 }
+
+test('Jade import failure suggests checking the selected network and keeps retry separated', async ({
+  page
+}) => {
+  await page.goto('/hardware/new?fixture-jade-network-error=1');
+  await page.getByRole('button', { name: /Connect with cable/ }).click();
+  const scan = page.getByRole('dialog', { name: 'Connect hardware signer' });
+  await scan.getByRole('button', { name: /Virtual Jade/ }).click();
+  const error = scan.getByRole('alert');
+  await expect(error).toContainText('Jade may be on another Bitcoin network');
+  await expect(error).toContainText('Regtest');
+  const rescanBox = await scan.getByRole('button', { name: /Rescan devices/ }).boundingBox();
+  const noticeBox = await error.boundingBox();
+  expect(
+    rescanBox && noticeBox && noticeBox.y - (rescanBox.y + rescanBox.height)
+  ).toBeGreaterThanOrEqual(12);
+  await error.getByRole('button', { name: 'Try this signer again' }).click();
+  await expect(error).toContainText('Jade may be on another Bitcoin network');
+  await page.evaluate(() => {
+    const url = new URL(location.href);
+    url.searchParams.delete('fixture-jade-network-error');
+    history.replaceState({}, '', url);
+  });
+  await scan.getByRole('button', { name: /Rescan devices/ }).click();
+  await scan.getByRole('button', { name: /Virtual Coldcard/ }).click();
+  await expect(page.getByText('PUBLIC DATA REVIEW')).toBeVisible();
+});
 
 for (const theme of ['light', 'dark']) {
   test(`${theme} shared load retry and credential errors stay readable and reachable`, async ({

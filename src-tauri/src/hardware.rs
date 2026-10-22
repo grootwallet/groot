@@ -1967,10 +1967,11 @@ mod tests {
 
     #[test]
     fn reports_failure_timeout_and_missing_executable_without_output_leaks() {
+        let failure = test_script("failure", "IFS= read -r command\nexit 1");
         for _ in 0..64 {
             assert_eq!(
                 run_program(
-                    Path::new("/usr/bin/false"),
+                    &failure,
                     &HwiSource::External,
                     &["test".to_owned()],
                     Duration::from_secs(1),
@@ -1979,6 +1980,7 @@ mod tests {
                 Err(HardwareError::CommandFailed(None))
             );
         }
+        std::fs::remove_file(failure).unwrap();
         let slow = test_script("slow", "IFS= read -r command\n/bin/sleep 1");
         assert_eq!(
             run_program(

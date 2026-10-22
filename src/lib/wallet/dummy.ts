@@ -1293,6 +1293,21 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
   async listHardwareDevices() {
     await new Promise((resolve) => setTimeout(resolve, 200));
     return [
+      ...(typeof location !== 'undefined' &&
+      new URLSearchParams(location.search).has('fixture-jade-network-error')
+        ? [
+            {
+              id: 'virtual-jade-network',
+              label: 'Virtual Jade',
+              model: 'jade',
+              fingerprint: null,
+              connected: true,
+              status: 'ready' as const,
+              message: 'Ready to import the public account key.',
+              action: 'import' as const
+            }
+          ]
+        : []),
       {
         id: 'virtual-coldcard',
         label: 'Virtual Coldcard',
@@ -1612,6 +1627,8 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     allowEmptyPassphrase = false
   ): Promise<ExternalSigner> {
     await new Promise((resolve) => setTimeout(resolve, 200));
+    if (deviceId === 'virtual-jade-network')
+      throw new WalletError('hardware_unavailable', 'The signer could not be opened.');
     if (
       typeof sessionStorage !== 'undefined' &&
       sessionStorage.getItem('fixture-hardware-external-import-failure') === '1'

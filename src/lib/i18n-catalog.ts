@@ -967,6 +967,14 @@ export const copyCatalog = {
     fr: 'Synchronisation · {percent} %',
     es: 'Sincronizando · {percent}%'
   },
+  'Starting wallet-history scan…': {
+    fr: 'Démarrage de l’analyse de l’historique…',
+    es: 'Iniciando el escaneo del historial…'
+  },
+  'Balance and activity will appear after the scan completes.': {
+    fr: 'Le solde et l’activité apparaîtront une fois l’analyse terminée.',
+    es: 'El saldo y la actividad aparecerán cuando termine el escaneo.'
+  },
   'Start at the current chain tip. Fastest, but it will not find older payments.': {
     fr: 'Commencer à la pointe actuelle de la chaîne. C’est le plus rapide, mais les anciens paiements ne seront pas trouvés.',
     es: 'Empezar en la punta actual de la cadena. Es lo más rápido, pero no encontrará pagos anteriores.'

@@ -82,6 +82,19 @@ test('initial scan waits for the exact privacy disclosure before approval', asyn
   await expect(modal.getByRole('button', { name: 'Approve and scan' })).toBeEnabled();
 });
 
+test('approved first scan shows progress instead of another approval request', async ({ page }) => {
+  await page.goto('/?fixture-initial-history-required=1&fixture-hold-first-recovery-scan=1');
+  const approval = page.getByRole('dialog', { name: 'Approve wallet-history scan' });
+  await approval.getByRole('button', { name: 'Approve and scan' }).click();
+  await expect(approval).toBeHidden();
+  await expect(page.getByText('Syncing · 0%')).toBeVisible();
+  await expect(page.getByRole('progressbar', { name: 'Recovery scan progress' })).toBeVisible();
+  await expect(page.getByText('Approve wallet-history scan', { exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Scan settings' })).toHaveCount(0);
+  await expect(page.getByText('Never synced')).toHaveCount(0);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
 test('initial scan keeps approval blocked until a failed privacy check is retried', async ({
   page
 }) => {

@@ -17,6 +17,11 @@ export const hardwareCopy = {
   },
   'Ledger Nano S Plus': { fr: 'Ledger Nano S Plus', es: 'Ledger Nano S Plus' },
   'Coldcard Mk4': { fr: 'Coldcard Mk4', es: 'Coldcard Mk4' },
+  'Jade may be on another Bitcoin network. Check that it is unlocked and set to {network}, then try again.':
+    {
+      fr: 'Jade utilise peut-être un autre réseau Bitcoin. Vérifiez qu’elle est déverrouillée et réglée sur {network}, puis réessayez.',
+      es: 'Es posible que Jade use otra red Bitcoin. Comprueba que esté desbloqueado y configurado en {network}, y vuelve a intentarlo.'
+    },
   'Coldcard fee limit': {
     fr: 'Limite de frais Coldcard',
     es: 'Límite de comisión de Coldcard'

@@ -1,6 +1,6 @@
 export const SUPPORTED_NETWORKS = ['signet', 'testnet4', 'regtest', 'mainnet'] as const;
 export const SWITCHABLE_NETWORKS = ['regtest', 'testnet4', 'mainnet'] as const;
-export const APP_VERSION = '5.3.0-rc16';
+export const APP_VERSION = '5.3.0-rc17';
 export type SupportedNetwork = (typeof SUPPORTED_NETWORKS)[number];
 export type SwitchableNetwork = (typeof SWITCHABLE_NETWORKS)[number];
 

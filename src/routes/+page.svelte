@@ -67,7 +67,6 @@
   import { isContinuityPolicyType, policyMaturitySummary } from '$lib/wallet/policy';
   import { onDestroy, onMount } from 'svelte';
   import { goto } from '$app/navigation';
-  import { page } from '$app/state';
   import { discreetMode, setDiscreetMode } from '$lib/privacy';
   import MobileWalletSwitcher from '$lib/components/MobileWalletSwitcher.svelte';
   import OverflowMenuButton from '$lib/components/OverflowMenuButton.svelte';
@@ -159,19 +158,21 @@
   let initialHistoryRequired = $derived(
     syncSource?.type === 'bitcoin_core' && Boolean(snapshot) && !snapshot?.syncedAt
   );
+  let shellInitialScanRunning = $derived(
+    Boolean(selectedProfile && walletShell.initialHistoryScanRunning(selectedProfile.id))
+  );
   let savedRecoveryCanResume = $derived(
     initialHistoryRequired &&
       recoveryStatus.processedBlocks > 0 &&
       ['interrupted', 'failed'].includes(recoveryStatus.status)
   );
   let walletAwaitingAutomaticScan = $derived(
-    page.url.searchParams.has('initial') &&
-      automaticInitialScanPending &&
-      initialHistoryRequired &&
-      !recoveryScanIsActive(recoveryStatus) &&
-      !savedRecoveryCanResume
+    initialHistoryRequired &&
+      (automaticInitialScanPending || shellInitialScanRunning) &&
+      !recoveryScanIsActive(recoveryStatus)
   );
   let automaticInitialScanActive = $derived(recoveryScanIsActive(recoveryStatus));
+  let initialScanInFlight = $derived(walletAwaitingAutomaticScan || automaticInitialScanActive);
   let scanCredentialLabel = $derived(
     selectedProfile?.kind === 'single_key'
       ? translate($locale, 'Wallet passphrase')
@@ -362,6 +363,19 @@
     activeProposal ? ($discreetMode ? 'Label hidden' : activeProposal.label) : ''
   );
   onMount(loadSnapshot);
+
+  let scanPollingForWalletId: string | null = null;
+  $effect(() => {
+    const walletId = selectedProfile?.id;
+    if (!walletId || !initialHistoryRequired || !walletShell.initialHistoryScanRunning(walletId)) {
+      scanPollingForWalletId = null;
+      return;
+    }
+    if (scanPollingForWalletId === walletId) return;
+    scanPollingForWalletId = walletId;
+    automaticInitialScanPending = true;
+    startRecoveryStatusPolling(true);
+  });
 
   onDestroy(() => {
     verifyCredential = '';
@@ -648,6 +662,9 @@
       if (recoveryScanIsActive(status)) {
         automaticInitialScanPending = false;
         startRecoveryStatusPolling();
+      } else if (selectedProfile && walletShell.initialHistoryScanRunning(selectedProfile.id)) {
+        automaticInitialScanPending = true;
+        startRecoveryStatusPolling(true);
       } else if (!snapshot?.syncedAt && nodeReady) {
         automaticInitialScanPending = false;
         walletShell.requestInitialHistoryApproval();
@@ -903,42 +920,46 @@
         ></WarningNotice
       >
     </div>{/if}
-  {#if initialHistoryRequired && !mobileSyncSetupRequired && !walletAwaitingAutomaticScan && !automaticInitialScanActive}
+  {#if initialHistoryRequired && !mobileSyncSetupRequired}
     <section class="initial-history-scan" aria-live="polite">
       <div>
         <strong
           >{translate(
             $locale,
-            recoveryScanIsActive(recoveryStatus)
+            automaticInitialScanActive
               ? 'Syncing · {percent}%'
-              : savedRecoveryCanResume
-                ? 'Wallet-history scan paused'
-                : nodeReady
-                  ? 'Approve wallet-history scan'
-                  : 'Connect Bitcoin Core',
+              : walletAwaitingAutomaticScan
+                ? 'Starting wallet-history scan…'
+                : savedRecoveryCanResume
+                  ? 'Wallet-history scan paused'
+                  : nodeReady
+                    ? 'Approve wallet-history scan'
+                    : 'Connect Bitcoin Core',
             { percent: recoveryPercent }
           )}</strong
         ><small
-          >{recoveryScanIsActive(recoveryStatus) || savedRecoveryCanResume
+          >{automaticInitialScanActive || savedRecoveryCanResume
             ? translate($locale, '{processed} / {total} blocks', {
                 processed: formatInteger(recoveryStatus.processedBlocks, $locale),
                 total: formatInteger(recoveryStatus.totalBlocks, $locale)
               })
-            : nodeReady
-              ? translate(
-                  $locale,
-                  'Scan the complete wallet history, or choose a private connection in Settings.'
-                )
-              : translate($locale, 'This wallet has not completed a sync yet.')}</small
+            : walletAwaitingAutomaticScan
+              ? translate($locale, 'Balance and activity will appear after the scan completes.')
+              : nodeReady
+                ? translate(
+                    $locale,
+                    'Scan the complete wallet history, or choose a private connection in Settings.'
+                  )
+                : translate($locale, 'This wallet has not completed a sync yet.')}</small
         >
       </div>
-      {#if recoveryScanIsActive(recoveryStatus)}
+      {#if automaticInitialScanActive}
         <progress
           max="100"
           value={recoveryPercent}
           aria-label={translate($locale, 'Recovery scan progress')}
         ></progress>
-      {:else}
+      {:else if !walletAwaitingAutomaticScan}
         <Button
           size="small"
           variant="secondary"
@@ -1118,7 +1139,7 @@
       description={loadError}
       onretry={networkSetupRequired ? openNetworkSetup : loadSnapshot}
     />
-  {:else if snapshot && !initialDataLoading && !walletAwaitingAutomaticScan}
+  {:else if snapshot && !initialDataLoading && !initialScanInFlight}
     <section class="balance-card content-reveal">
       <div class="balance-top">
         <span>{translate($locale, 'Total balance')}</span><button
@@ -1351,7 +1372,7 @@
         <div><h2>{translate($locale, 'Recent activity')}</h2></div>
         <a href="/activity">{translate($locale, 'View all')}</a>
       </div>
-      {#if initialDataLoading}
+      {#if initialDataLoading || initialScanInFlight}
         <TxList items={[]} loading />
       {:else if initialHistoryRequired}
         <EmptyState

@@ -15,9 +15,9 @@ const pinnedPolicySources = new Map([
   ['src-tauri/src/session.rs', '61cf28ce44dd7262c0c3567d1d9bc456f1861520effaf00cbda501657ad1193e'],
   ['.env.mainnet', '1623f3f97de588daea2bbeae1f9c56ebc896b6bc2c22ac238563b46b688ced85'],
   ['.env.multi', '33fc3d5022968d9eaa25bfe749c0b01691c0570611a65255100718d2c50df723'],
-  ['package.json', '8e083a40e312704fd633f32aff473ec2d20aad84d28af3f694f250c4c3b19a20'],
-  ['src-tauri/Cargo.toml', '8d583ce7ba54ef7fdb85ee8a31402a89a021a66f20af71b702eaaacfaf67d480'],
-  ['src-tauri/tauri.conf.json', '54b2994bdf81d8432aec6bacd61f8c674440d30dacba569d4d764196cd3b0070'],
+  ['package.json', '9d44585cb5c5b4eedc8bfff5ea5acd26604dab45c25a03d541f4b18f6578c969'],
+  ['src-tauri/Cargo.toml', 'f5a5ae55c1294e2926375fcdd385b88ba38c02e669c3b9ce993841f09e38fb98'],
+  ['src-tauri/tauri.conf.json', '50c9c6303b3f7a3957105d056ebe2b958110ce255504bcde0bd0562f44afc196'],
   ['LICENSE', 'c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4'],
   ['NOTICE', '4689769c203e1aa8bbc76f0864388cb5f406e4b05b26888df20576c57fa9c3ab'],
   ['THIRD_PARTY_NOTICES.md', 'a181753f36eb3e475cddf31a69d2e75f01a86a79c70de252abb1e73a059407db'],
@@ -48,7 +48,7 @@ const pinnedPolicySources = new Map([
     'scripts/network/check-native-builds.sh',
     '3a984ab7ef5f0d7c29d689d2ab39e114d61f1db0efd29a632cea980d7284bef4'
   ],
-  ['src/lib/config.ts', '85ac672da6d548c26f58f7ac518de195032211132aa66dc347ad732e44b61906'],
+  ['src/lib/config.ts', 'bc24c7ee3666c7c47d711d73b1793c29659bc170f4a172de5571873a1344ea6b'],
   ['src-tauri/build.rs', '972650724376f7c5ac32325cf09425cd887e41f6c155b5199626dffccac37215'],
   [
     'src-tauri/src/release_policy.rs',
@@ -66,7 +66,7 @@ const pinnedPolicySources = new Map([
     'src-tauri/src/external_signer.rs',
     '5d280e028554b943f1d3c9e9addd0fe552ef30a80aaf1693f3728d0c8619a369'
   ],
-  ['src-tauri/src/hardware.rs', 'b63bdc4bbe90f7417d4205cd9b5f1f4de5d83bcd13c572c1ab580a52c6c78cbc'],
+  ['src-tauri/src/hardware.rs', '8374f33b800870ef344478e43e7cf492eec539b75d278ce2c8f265eb128474d3'],
   ['src-tauri/src/multisig.rs', '202d20d12b7df47a3c797045b4b73865813cfe547240d0bb104e9b29ebfc115e'],
   [
     'src-tauri/src/payjoin_support.rs',
@@ -235,7 +235,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src/lib/components/AppShell.svelte',
-    '350ca2a20898c7f1e94ac9c5cd6dea7980665ea376e029c5fbb1c2a9c447c9b9'
+    '366fd1d3069c8609e0860dde4465aa496c25bbdfa66678b1ee31c8b6bc68b4e0'
   ],
   ['src/lib/app-updates.ts', 'f274f7614fb278b403acbc61f849912fea20437c0614b999898b2f85e0500c70'],
   ['src/lib/release-notes.ts', 'c88e87b7da978739ffe70a9f3f5075d87f009e9d85ebedade6b68fb29559315d'],
@@ -272,7 +272,7 @@ const pinnedPolicySources = new Map([
     'src/routes/unlock/+page.svelte',
     'e66cccaab2e968ba0cd53b8a9922e633aed0798e404aebb4ecde162f54266ee4'
   ],
-  ['src/routes/+page.svelte', '0c3ec38396821ad568bac1f8704dd072875f084a829c858241add831563e639d'],
+  ['src/routes/+page.svelte', 'ae2e668a3e133e3765418eda3d73d1a379ec2df6fdfef83bf6124cf77a3fe64d'],
   [
     'src/routes/activity/+page.svelte',
     '799ae3af27673e22b6903663eec3478984150b82b7fabbc3a26fd272febad754'
@@ -315,7 +315,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src/routes/hardware/new/+page.svelte',
-    '7dde54d704fe38212a862b82e1141c62b5f507380ece52c1561e63974bfb4d44'
+    '9721f96c61a103fa7a94d78f991d206c1d53637fe65d533d06e4b94b76955c0b'
   ],
   [
     'src/routes/multisig/new/+page.svelte',

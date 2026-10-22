@@ -256,6 +256,7 @@
   );
   let initialApprovalWalletId = $state<string | null>(null);
   let initialApprovalBusy = $state(false);
+  let initialHistoryScanWalletId = $state<string | null>(null);
   let initialApprovalError = $state('');
   let initialApprovalBackend = $state<
     'loading' | 'managed' | 'private' | 'setup_required' | 'error'
@@ -317,6 +318,7 @@
       const settings = await walletService.recoveryScanSettings();
       await walletService.saveRecoveryScanSettings(0, settings.gapLimit, '', id);
       declinedInitialScans.delete(id);
+      initialHistoryScanWalletId = id;
       const scan = walletService.fullRescan('', id);
       scanStarted = true;
       initialApprovalWalletId = null;
@@ -336,9 +338,13 @@
             tone: 'danger'
           });
         })
-        .finally(() => resumeAutomaticSync())
+        .finally(() => {
+          if (initialHistoryScanWalletId === id) initialHistoryScanWalletId = null;
+          resumeAutomaticSync();
+        })
         .catch(() => undefined);
     } catch (cause) {
+      if (initialHistoryScanWalletId === id) initialHistoryScanWalletId = null;
       initialApprovalError = localizedError(
         cause,
         $locale,
@@ -673,6 +679,7 @@
     beginHardwareReview,
     requestUnlockSync,
     requestInitialHistoryApproval,
+    initialHistoryScanRunning: (walletId) => initialHistoryScanWalletId === walletId,
     consumeUnlockSync,
     pauseAutomaticSync,
     resumeAutomaticSync
