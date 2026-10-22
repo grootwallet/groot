@@ -18,14 +18,30 @@ candidate was a scope error.
 
 ## Proposed decision
 
-Prepare one 5.3 multi-network candidate using the canonical `app.groot.wallet`
-identity and its existing network-isolated data root, with no automatic
-migration, registry copy or format change. Before any candidate opens an
-existing profile, make an owner-only, independently verified backup while all
-Groot processes are closed. Check that the exact existing Mainnet registry and
-wallet files remain unchanged by backup creation. Any recovery/import to an
-isolated profile must use Groot's supported backup flow and explicit owner
-action; never copy a partial wallet directory or merge registries.
+Prepare one 5.3 multi-network GA candidate using the canonical
+`app.groot.wallet` identity and its existing network-isolated data root, with
+no automatic migration, registry copy or format change. Before any candidate
+opens an existing profile, make an owner-only, independently verified backup
+while all Groot processes are closed. Check that the exact existing Mainnet
+registry and wallet files remain unchanged by backup creation.
+
+For the isolated internal RC only, the owner has authorized a complete,
+one-way snapshot of the released app's `networks/mainnet` namespace into the
+otherwise empty `app.groot.wallet.internal/networks/mainnet` namespace. This
+requires a verified independent backup, closed Groot processes, absent target,
+private permissions, full tree comparison and an atomic rename into place.
+Keep the source untouched. The snapshot is disposable test data, not a wallet
+format migration or a GA profile move. Never merge registries or copy a
+partial wallet directory. A future GA build should read the canonical profile
+directly.
+
+The owner closed Groot on 2026-10-22. A private, complete Mainnet namespace
+backup was made and verified before copying it into the empty internal RC
+namespace. Each tree contains seven registry entries and 51 regular files,
+with no symlinks; their path-and-content SHA-256 digest is
+`389b6a637fd04cd01bf3c65dca6b524dce6b878df4a5dc2785da610256c4a354`.
+The released app's source tree still matches that digest. This verifies the
+snapshot, not wallet unlock, node access, app display or transaction safety.
 
 For the internal performance candidate, extend the sealed, digest-verified
 HWI 3.2.0 operation runtime to the explicit Mainnet chain and BIP84/BIP48
@@ -72,6 +88,9 @@ owner must independently verify actual transaction details on each signer.
 
 No BIP, wallet format, descriptor, backup, proposal, registry, credential or
 network-selector change is proposed. Existing 5.2 wallets remain in their
-current namespace. The proposed HWI path changes how a request is executed,
-not which wallet or transaction may be authorized. Mainnet performance and
-profile continuity remain unimplemented until the gates above close.
+current namespace. The owner-authorized RC snapshot copies the complete
+namespace without changing its format. The proposed HWI path changes how a
+request is executed, not which wallet or transaction may be authorized.
+Mainnet performance remains unimplemented until the gates above close.
+The snapshot has no BIP impact because it changes neither data encoding nor
+wallet behavior.
