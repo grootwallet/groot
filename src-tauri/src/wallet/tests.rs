@@ -7321,3 +7321,219 @@ fn fee_estimates_preserve_each_available_target_without_filling_missing_targets(
     assert_eq!(result.economy, None);
     assert_eq!(result.priority, Some(5.0));
 }
+
+#[test]
+fn manual_coin_preview_uses_the_actual_wallet_utxo_and_refuses_frozen_or_foreign_coins() {
+    let (wallet, _, _, txid) = anchor_reconciliation_wallet(81, 82, 83);
+    let db = Connection::open_in_memory().unwrap();
+    init_app_schema(&db).unwrap();
+    let outpoint = OutPoint { txid, vout: 0 };
+    let selected = vec![outpoint.to_string()];
+    let preview = manual_selection_preview(&db, &wallet, &selected, 10_000).unwrap();
+    assert_eq!(preview.selected_amount, 20_000);
+    assert_eq!(preview.selected_input_count, 1);
+    assert!(preview.estimated_input_weight > 0);
+    assert!(preview.has_unknown_provenance);
+
+    let foreign = vec![format!("{}:0", Txid::from_byte_array([84; 32]))];
+    assert_eq!(
+        manual_selection_preview(&db, &wallet, &foreign, 10_000)
+            .err()
+            .unwrap()
+            .code,
+        "coin_unavailable"
+    );
+    db.execute(
+        "INSERT INTO groot_frozen_coins(outpoint,frozen_at) VALUES(?1,1)",
+        [outpoint.to_string()],
+    )
+    .unwrap();
+    assert_eq!(
+        manual_selection_preview(&db, &wallet, &selected, 10_000)
+            .err()
+            .unwrap()
+            .code,
+        "coin_unavailable"
+    );
+}
+
+#[test]
+fn qr_command_bridge_round_trips_a_psbt_and_rejects_the_wrong_payload_type() {
+    let (wallet, _, _, txid) = anchor_reconciliation_wallet(85, 86, 87);
+    let transaction = wallet.get_tx(txid).unwrap().tx_node.tx.as_ref().clone();
+    let encoded = encode_psbt(&Psbt::from_unsigned_tx(transaction).unwrap());
+    let frames = ur_encode_psbt(encoded.clone(), 400).unwrap();
+    assert_eq!(ur_decode_psbt(frames).unwrap(), encoded);
+    assert_eq!(
+        ur_decode_psbt(vec!["ur:crypto-seed/invalid".to_owned()])
+            .err()
+            .unwrap()
+            .code,
+        "invalid_ur"
+    );
+}
+
+#[test]
+fn wallet_boundary_errors_keep_network_backup_qr_and_recovery_guidance() {
+    use crate::bsms::BsmsError;
+    use crate::network::NetworkConfigError;
+    use crate::recovery::RecoveryError;
+    use crate::ur_transport::UrTransportError;
+
+    let compact = compact_filter_unavailable();
+    assert_eq!(compact.code, "network_unavailable");
+    assert!(compact.message.contains("configured Bitcoin peers"));
+    for (reason, phrase) in [
+        (NetworkConfigError::InsecureRemote, "HTTPS"),
+        (NetworkConfigError::CredentialsInUrl, "protected credential"),
+        (NetworkConfigError::ProxyDnsLeak, "DNS leaks"),
+        (NetworkConfigError::UnsupportedSyncSource, "Bitcoin Core"),
+    ] {
+        let error = network_config_api_error(reason);
+        assert_eq!(error.code, "invalid_node_config");
+        assert!(error.message.contains(phrase));
+    }
+    let malformed = url::Url::parse("not a URL").unwrap_err();
+    assert_eq!(
+        network_config_api_error_from_url(malformed).code,
+        "invalid_node_config"
+    );
+    let private = bsms_api_error(BsmsError::PrivateMaterial);
+    assert_eq!(private.code, "private_material_rejected");
+    assert!(private.message.contains("private key material"));
+    let qr = ur_api_error(UrTransportError::WrongType);
+    assert_eq!(qr.code, "invalid_ur");
+    assert!(qr.message.contains("crypto-psbt"));
+    let recovery = recovery_api_error(RecoveryError::ImmaturePath);
+    assert_eq!(recovery.code, "immature_spending_path");
+    let cancelled = recovery_scan_error(api_error("sync_cancelled", "Cancelled"));
+    assert_eq!(cancelled.code, "scan_cancelled");
+    assert!(cancelled.message.contains("Start a new scan"));
+    assert_eq!(
+        recovery_scan_error(api_error("network_unavailable", "Offline")).message,
+        "Offline"
+    );
+}
+
+#[test]
+fn wallet_context_and_diagnostics_keep_sensitive_domains_distinct() {
+    use crate::network::WalletSyncSource;
+    use crate::privacy_selection::AutomaticSelectionStrategy;
+    use crate::release_policy::ReleasePolicyError;
+
+    let id = Uuid::new_v4();
+    assert_ne!(node_auth_context(id), wallet_secret_context(id));
+    assert_eq!(
+        database_admission_error(ReleasePolicyError::BackendAdmissionRequired).code,
+        "node_admission_required"
+    );
+    assert_eq!(
+        database_admission_error(ReleasePolicyError::MainnetDisabled).code,
+        "internal_error"
+    );
+    let mnemonic = Mnemonic::from_entropy(&[88; 32]).unwrap();
+    assert_eq!(
+        parse_mnemonic_bytes(Zeroizing::new(mnemonic.to_string().into_bytes())).unwrap(),
+        mnemonic
+    );
+    assert!(parse_mnemonic_bytes(Zeroizing::new(vec![0xff])).is_err());
+    assert_eq!(
+        CoinSelectionInput::Auto {
+            strategy: AutomaticSelectionStrategy::Private
+        }
+        .strategy_name(),
+        "private"
+    );
+    assert_eq!(
+        CoinSelectionInput::Manual { outpoints: vec![] }.strategy_name(),
+        "manual"
+    );
+    assert_eq!(
+        serde_json::to_value(diagnostics::wallet_kind(WalletKind::WatchOnly)).unwrap(),
+        "hardware"
+    );
+    assert_eq!(
+        serde_json::to_value(diagnostics::sync_source(&WalletSyncSource::BitcoinCore)).unwrap(),
+        "bitcoin_core"
+    );
+}
+
+#[test]
+fn payment_metadata_and_release_guards_report_exact_user_visible_results() {
+    let db = Connection::open_in_memory().unwrap();
+    db.execute_batch(
+        "CREATE TABLE groot_addresses (idx INTEGER PRIMARY KEY, address TEXT, label TEXT);
+         CREATE TABLE groot_notifications (txid TEXT, kind TEXT, created_at INTEGER);",
+    )
+    .unwrap();
+    db.execute(
+        "INSERT INTO groot_addresses(idx,address,label) VALUES(7,'bc1qexample','Rent')",
+        [],
+    )
+    .unwrap();
+    db.execute(
+        "INSERT INTO groot_notifications(txid,kind,created_at) VALUES('tx','payment_received',42)",
+        [],
+    )
+    .unwrap();
+    assert_eq!(
+        address_metadata(&db, 7),
+        Some(("bc1qexample".into(), "Rent".into()))
+    );
+    assert_eq!(address_metadata(&db, 8), None);
+    assert_eq!(transaction_observed_at(&db, "tx").unwrap(), Some(42));
+    assert_eq!(transaction_observed_at(&db, "other").unwrap(), None);
+    assert_eq!(transaction_kind(false, false), "self_spend");
+    assert_eq!(transaction_kind(false, true), "payment");
+    assert_eq!(transaction_kind(true, false), "payment");
+    assert_eq!(AccelerationMethod::Rbf.as_str(), "rbf");
+    assert_eq!(AccelerationMethod::Cpfp.as_str(), "cpfp");
+    assert_eq!(fee_difference(200, Some(150)).unwrap(), Some(50));
+    assert_eq!(fee_difference(200, None).unwrap(), None);
+    assert!(fee_difference(u64::MAX, Some(1)).is_err());
+    assert!(validate_regtest_reset_confirmation_for(true, "RESET REGTEST").is_ok());
+    assert_eq!(
+        validate_regtest_reset_confirmation_for(true, "reset regtest")
+            .unwrap_err()
+            .code,
+        "confirmation_mismatch"
+    );
+    assert_eq!(
+        validate_regtest_reset_confirmation_for(false, "RESET REGTEST")
+            .unwrap_err()
+            .code,
+        "wrong_network"
+    );
+}
+
+#[test]
+fn observed_receive_output_marks_its_permanent_address_without_touching_others() {
+    let (wallet, _, _, _) = anchor_reconciliation_wallet(91, 92, 93);
+    let db = Connection::open_in_memory().unwrap();
+    init_app_schema(&db).unwrap();
+    for index in [0, 1] {
+        db.execute(
+            "INSERT INTO groot_addresses(idx,address,label,created_at,state,observed)
+             VALUES(?1,?2,'request',1,'awaiting',0)",
+            params![index, format!("address-{index}")],
+        )
+        .unwrap();
+    }
+    mark_observed_addresses(&wallet, &db).unwrap();
+    let marked: (String, i64) = db
+        .query_row(
+            "SELECT state,observed FROM groot_addresses WHERE idx=0",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .unwrap();
+    assert_eq!(marked, ("used".to_owned(), 1));
+    let untouched: (String, i64) = db
+        .query_row(
+            "SELECT state,observed FROM groot_addresses WHERE idx=1",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .unwrap();
+    assert_eq!(untouched, ("awaiting".to_owned(), 0));
+}
