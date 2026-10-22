@@ -1,11 +1,14 @@
-//! ADRs 0101/0102: one fresh full identity and one action on one isolated client.
+//! ADRs 0101/0102/0103: one fresh full identity and one action on one isolated client.
 use super::*;
-#[cfg(target_os = "macos")]
-use bdk_wallet::bitcoin::bip32::{Fingerprint, Xpub};
+#[cfg(any(target_os = "macos", test))]
+use bdk_wallet::bitcoin::{
+    bip32::{Fingerprint, Xpub},
+    NetworkKind,
+};
 #[cfg(any(target_os = "macos", test))]
 use serde::Deserialize;
 use serde::Serialize;
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", test))]
 use std::str::FromStr;
 
 #[derive(Clone, Serialize)]
@@ -87,12 +90,50 @@ fn validated_response(
     ))
 }
 
+// Mainnet validation is prepared for review. The native session selector below
+// continues to admit Testnet4 only, so this scope is not active in an RC yet.
+#[cfg(any(target_os = "macos", test))]
+fn session_scope(
+    chain: HwiChain,
+) -> Option<(&'static str, &'static str, &'static str, NetworkKind)> {
+    match chain {
+        HwiChain::Testnet4 => Some((
+            "testnet4",
+            "m/48'/1'/0'/2'",
+            "m/84'/1'/0'",
+            NetworkKind::Test,
+        )),
+        HwiChain::Main => Some(("main", "m/48'/0'/0'/2'", "m/84'/0'/0'", NetworkKind::Main)),
+        _ => None,
+    }
+}
+
+#[cfg(any(target_os = "macos", test))]
+fn valid_session_account(
+    chain: HwiChain,
+    account_path: &str,
+    expected: &[HwiSessionExpected],
+) -> bool {
+    let Some((_, multisig_path, singlesig_path, network)) = session_scope(chain) else {
+        return false;
+    };
+    (account_path == multisig_path || account_path == singlesig_path)
+        && !expected.is_empty()
+        && expected.len() <= 16
+        && expected.iter().all(|item| {
+            Fingerprint::from_str(&item.fingerprint).is_ok()
+                && item.fingerprint == item.fingerprint.to_ascii_lowercase()
+                && Xpub::from_str(&item.xpub).is_ok_and(|key| key.network == network)
+        })
+}
+
 impl HwiCli {
     pub(crate) fn supports_operation_session(&self, device_type: &str) -> bool {
         #[cfg(target_os = "macos")]
         {
             option_env!("GROOT_HWI_SESSION_PROTOCOL") == Some("1")
-                && self.chain == HwiChain::Testnet4
+                && (self.chain == HwiChain::Testnet4
+                    || (MAINNET_FAST_ENABLED && self.chain == HwiChain::Main))
                 && matches!(
                     device_type,
                     "coldcard" | "ledger" | "bitbox02" | "trezor" | "jade"
@@ -139,25 +180,12 @@ impl HwiCli {
             }
             operation.remaining()?;
             validate_selected_device_path(device_path)?;
-            if !matches!(account_path, "m/48'/1'/0'/2'" | "m/84'/1'/0'")
-                || expected.is_empty()
-                || expected.len() > 16
-            {
+            if !valid_session_account(self.chain, account_path, expected) {
                 return Err(HardwareError::InvalidArgument);
             }
-            for item in expected {
-                if Fingerprint::from_str(&item.fingerprint).is_err()
-                    || item.fingerprint != item.fingerprint.to_ascii_lowercase()
-                    || Xpub::from_str(&item.xpub).map_or(true, |key| {
-                        key.network != bdk_wallet::bitcoin::NetworkKind::Test
-                    })
-                {
-                    return Err(HardwareError::InvalidArgument);
-                }
-            }
+            let (chain, _, _, _) = session_scope(self.chain).ok_or(HardwareError::WrongNetwork)?;
             let _original = trusted_executable(&self.program, &self.source)?;
-            let arguments =
-                ["--chain", "testnet4", "--device-type", device_type].map(str::to_owned);
+            let arguments = ["--chain", chain, "--device-type", device_type].map(str::to_owned);
             let root = runtime::for_operation(&self.source, &arguments, self.chain)?
                 .ok_or(HardwareError::Unavailable)?;
             let helper = root.join("groot-hwi-session");
@@ -167,7 +195,7 @@ impl HwiCli {
             let mut input = Zeroizing::new(
                 serde_json::to_vec(&Request {
                     version: 1,
-                    chain: "testnet4",
+                    chain,
                     device_type,
                     device_path,
                     account_path,
@@ -195,11 +223,76 @@ impl HwiCli {
 #[cfg(test)]
 mod tests {
     use super::*;
+    const MAIN_XPUB: &str = "xpub6FA5rfxJc94K1kNtxRby1hoHwi7YDyTWwx1KUR3FwskaF6HzCbZMz3zQwGnCqdiFeMTPV3YneTGS2YQPiuNYsSvtggWWMQpEJD4jXU7ZzEh";
     fn expected() -> HwiSessionExpected {
         HwiSessionExpected {
             fingerprint: "12345678".to_owned(),
             xpub: "public-account".to_owned(),
             allow_action: true,
+        }
+    }
+    #[test]
+    fn session_account_scope_rejects_cross_network_paths_and_keys() {
+        let mut main = expected();
+        main.xpub = MAIN_XPUB.to_owned();
+        let mut test = main.clone();
+        let mut test_key = Xpub::from_str(MAIN_XPUB).unwrap();
+        test_key.network = NetworkKind::Test;
+        test.xpub = test_key.to_string();
+        assert!(valid_session_account(
+            HwiChain::Main,
+            "m/48'/0'/0'/2'",
+            std::slice::from_ref(&main)
+        ));
+        assert!(valid_session_account(
+            HwiChain::Main,
+            "m/84'/0'/0'",
+            std::slice::from_ref(&main)
+        ));
+        assert!(valid_session_account(
+            HwiChain::Testnet4,
+            "m/48'/1'/0'/2'",
+            std::slice::from_ref(&test)
+        ));
+        assert!(valid_session_account(
+            HwiChain::Testnet4,
+            "m/84'/1'/0'",
+            std::slice::from_ref(&test)
+        ));
+        assert!(!valid_session_account(
+            HwiChain::Main,
+            "m/48'/1'/0'/2'",
+            std::slice::from_ref(&main)
+        ));
+        assert!(!valid_session_account(
+            HwiChain::Main,
+            "m/84'/0'/0'",
+            std::slice::from_ref(&test)
+        ));
+        assert!(!valid_session_account(
+            HwiChain::Testnet4,
+            "m/48'/1'/0'/2'",
+            std::slice::from_ref(&main)
+        ));
+        assert!(!valid_session_account(
+            HwiChain::Test,
+            "m/84'/1'/0'",
+            std::slice::from_ref(&test)
+        ));
+        assert!(!valid_session_account(HwiChain::Main, "m/84'/0'/0'", &[]));
+    }
+    #[test]
+    fn prepared_mainnet_scope_does_not_enable_the_operation_session() {
+        let hwi = HwiCli {
+            program: PathBuf::from("/unused/hwi"),
+            chain: HwiChain::Main,
+            home: None,
+            source: HwiSource::Bundled {
+                bundle_root: PathBuf::from("/unused/Groot.app"),
+            },
+        };
+        for family in ["coldcard", "ledger", "bitbox02", "trezor", "jade"] {
+            assert!(!hwi.supports_operation_session(family));
         }
     }
     #[cfg(target_os = "macos")]

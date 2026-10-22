@@ -215,3 +215,8 @@ transaction presentation, signature return, rejection, lock/disconnect,
 restart and recovery. Independent reviewers must inspect this model and the
 exact enabling diff; AI-assisted or local automated checks are supporting
 evidence only. Until then, Mainnet continues to use the existing HWI path.
+
+The 2026-10-22 preparatory diff adds explicit Mainnet worker and Rust account
+validation, with device-free wrong-network tests. Native routing remains
+Testnet4-only. These tests show request-shape isolation, not Mainnet device
+behavior or approval to use the faster signing path.

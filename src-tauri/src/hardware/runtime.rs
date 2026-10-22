@@ -1,5 +1,5 @@
-//! ADRs 0098/0102: immutable, app-sealed Python payload for internal Testnet4 signers.
-use super::{HardwareError, HwiChain, HwiSource};
+//! ADRs 0098/0102/0103: app-sealed internal HWI payload; Mainnet route remains disabled.
+use super::{HardwareError, HwiChain, HwiSource, MAINNET_FAST_ENABLED};
 use bdk_wallet::bitcoin::hashes::{sha256, Hash};
 use serde::Deserialize;
 use std::{
@@ -206,21 +206,34 @@ fn verify_runtime(
     Ok(root.to_path_buf())
 }
 
-fn selected_fast_testnet4(arguments: &[String], active_chain: HwiChain) -> bool {
-    if active_chain != HwiChain::Testnet4
-        || arguments.first().map(String::as_str) != Some("--chain")
+fn selected_fast_internal(
+    arguments: &[String],
+    active_chain: HwiChain,
+    mainnet_enabled: bool,
+) -> bool {
+    if arguments.first().map(String::as_str) != Some("--chain")
         || arguments.get(2).map(String::as_str) != Some("--device-type")
     {
         return false;
     }
     match (
+        active_chain,
         arguments.get(1).map(String::as_str),
         arguments.get(3).map(String::as_str),
     ) {
-        (Some("testnet4"), Some("coldcard" | "ledger" | "bitbox02" | "trezor" | "jade")) => true,
+        (
+            HwiChain::Testnet4,
+            Some("testnet4"),
+            Some("coldcard" | "ledger" | "bitbox02" | "trezor" | "jade"),
+        ) => true,
         // HWI 3.2.0's Jade driver requires its shared test-network selector.
         // The explicit native chain prevents this from admitting Testnet3.
-        (Some("test"), Some("jade")) => true,
+        (HwiChain::Testnet4, Some("test"), Some("jade")) => true,
+        (
+            HwiChain::Main,
+            Some("main"),
+            Some("coldcard" | "ledger" | "bitbox02" | "trezor" | "jade"),
+        ) if mainnet_enabled => true,
         _ => false,
     }
 }
@@ -235,7 +248,7 @@ pub(super) fn for_operation(
     let Some(expected) = option_env!("GROOT_HWI_RUNTIME_SHA256") else {
         return Ok(None);
     };
-    if !selected_fast_testnet4(arguments, active_chain) {
+    if !selected_fast_internal(arguments, active_chain, MAINNET_FAST_ENABLED) {
         return Ok(None);
     }
     if !cfg!(groot_network = "multi")
@@ -278,7 +291,7 @@ mod tests {
     }
 
     #[test]
-    fn runtime_selection_excludes_every_other_network_and_device() {
+    fn runtime_selection_binds_mainnet_to_explicit_main_only_when_enabled() {
         for active_chain in [
             HwiChain::Main,
             HwiChain::Test,
@@ -289,18 +302,25 @@ mod tests {
             for selector in ["main", "test", "signet", "regtest", "testnet4"] {
                 for device in ["coldcard", "trezor", "bitbox02", "ledger", "jade"] {
                     let args = ["--chain", selector, "--device-type", device].map(str::to_owned);
-                    let accepted = active_chain == HwiChain::Testnet4
-                        && ((selector == "testnet4"
-                            && matches!(
-                                device,
-                                "coldcard" | "ledger" | "bitbox02" | "trezor" | "jade"
-                            ))
-                            || (selector == "test" && device == "jade"));
-                    assert_eq!(selected_fast_testnet4(&args, active_chain), accepted);
+                    for mainnet_enabled in [false, true] {
+                        let testnet4 = active_chain == HwiChain::Testnet4
+                            && (selector == "testnet4" || (selector == "test" && device == "jade"));
+                        let mainnet =
+                            mainnet_enabled && active_chain == HwiChain::Main && selector == "main";
+                        assert_eq!(
+                            selected_fast_internal(&args, active_chain, mainnet_enabled),
+                            testnet4 || mainnet
+                        );
+                    }
                 }
             }
         }
-        assert!(!selected_fast_testnet4(&[], HwiChain::Testnet4));
+        assert!(!selected_fast_internal(&[], HwiChain::Testnet4, false));
+        assert!(!selected_fast_internal(
+            &["--chain", "main", "--device-type", "jade"].map(str::to_owned),
+            HwiChain::Main,
+            MAINNET_FAST_ENABLED
+        ));
     }
 
     #[test]

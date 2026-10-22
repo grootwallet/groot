@@ -94,3 +94,16 @@ request is executed, not which wallet or transaction may be authorized.
 Mainnet performance remains unimplemented until the gates above close.
 The snapshot has no BIP impact because it changes neither data encoding nor
 wallet behavior.
+
+## Preparatory review diff, 2026-10-22
+
+The operation worker now has a Mainnet request validator for the explicit HWI
+Mainnet chain, BIP84 `m/84'/0'/0'` or standard BIP48 `m/48'/0'/0'/2'` account,
+and `xpub` public-account identity. It rejects Testnet4 paths and `tpub` keys
+before opening a device. Rust has the matching account/network validator and
+device-free tests. The native session and extracted-runtime selectors now
+express the exact Mainnet branch for review, but both use the shared
+`MAINNET_FAST_ENABLED = false` compile-time gate. No internal builder enables
+the Mainnet fast path. This is a reviewable draft, not
+Mainnet signing authorization or a Mainnet speed candidate. The enabling diff,
+source-policy snapshot and exact package remain subject to the review above.

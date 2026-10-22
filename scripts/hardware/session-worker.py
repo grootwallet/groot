@@ -1,7 +1,9 @@
 """One client, one fresh full-account proof, at most one authorized action.
 
-Internal Testnet4 only. No state survives process exit. Rust authenticates the
-whole runtime before spawn and independently checks identity/result afterward.
+Native routing currently admits Testnet4 only. Mainnet request validation is
+prepared for review but cannot be reached from Groot until its separate gate is
+approved. No state survives process exit. Rust authenticates the whole runtime
+before spawn and independently checks identity/result afterward.
 """
 import contextlib
 import json
@@ -12,18 +14,23 @@ MAX_INPUT = 402432
 MAX_VALUE = 393216
 SUPPORTED = {"coldcard", "ledger", "bitbox02", "trezor", "jade"}
 KEYS = {"version", "chain", "deviceType", "devicePath", "accountPath", "expected", "action", "value"}
+ACCOUNT_SCOPE = {
+    "testnet4": ("m/48'/1'/0'/2'", "m/84'/1'/0'", "tpub"),
+    "main": ("m/48'/0'/0'/2'", "m/84'/0'/0'", "xpub"),
+}
 
 def validate(request):
     if not isinstance(request, dict) or set(request) != KEYS:
         raise ValueError("request")
-    if type(request["version"]) is not int or request["version"] != 1 or request["chain"] != "testnet4":
+    if type(request["version"]) is not int or request["version"] != 1 or request["chain"] not in ACCOUNT_SCOPE:
         raise ValueError("scope")
+    multisig_path, singlesig_path, xpub_prefix = ACCOUNT_SCOPE[request["chain"]]
     if request["deviceType"] not in SUPPORTED:
         raise ValueError("device")
     path = request["devicePath"]
     if not isinstance(path, str) or not 0 < len(path) <= 4096 or any(ord(c) < 32 for c in path):
         raise ValueError("path")
-    if request["accountPath"] not in ("m/48'/1'/0'/2'", "m/84'/1'/0'"):
+    if request["accountPath"] not in (multisig_path, singlesig_path):
         raise ValueError("account")
     action, value = request["action"], request["value"]
     if action not in ("identity", "display", "sign", "probe"):
@@ -41,7 +48,7 @@ def validate(request):
             raise ValueError("identity")
         if not isinstance(item["fingerprint"], str) or not re.fullmatch("[0-9a-f]{8}", item["fingerprint"]):
             raise ValueError("fingerprint")
-        if not isinstance(item["xpub"], str) or not re.fullmatch("tpub[1-9A-HJ-NP-Za-km-z]{100,120}", item["xpub"]):
+        if not isinstance(item["xpub"], str) or not re.fullmatch(xpub_prefix + "[1-9A-HJ-NP-Za-km-z]{100,120}", item["xpub"]):
             raise ValueError("xpub")
         if type(item["allowAction"]) is not bool:
             raise ValueError("authorization")
@@ -66,6 +73,8 @@ def safe_error(error):
     return {"error": message, "code": code}
 
 def vendor_chain(request, chain_enum):
+    if request["chain"] == "main":
+        return chain_enum.MAIN
     # HWI's Jade adapter has no TESTNET4 entry; its `testnet` network is shared.
     return chain_enum.TEST if request["deviceType"] == "jade" else chain_enum.TESTNET4
 

@@ -25,10 +25,72 @@ class SessionTests(unittest.TestCase):
     def run_request(self, request=None):
         return worker.execute(self.request if request is None else request, self.open, "explicit-testnet4", self.display, self.sign)
     def test_only_jade_uses_hwi_shared_test_network(self):
-        chains = SimpleNamespace(TEST="hwi-test", TESTNET4="hwi-testnet4")
+        chains = SimpleNamespace(MAIN="hwi-main", TEST="hwi-test", TESTNET4="hwi-testnet4")
         for family in ("coldcard", "ledger", "bitbox02", "trezor", "jade"):
             self.request["deviceType"] = family
             self.assertEqual(worker.vendor_chain(self.request, chains), "hwi-test" if family == "jade" else "hwi-testnet4")
+
+    def test_mainnet_scope_uses_explicit_main_for_every_family(self):
+        chains = SimpleNamespace(MAIN="hwi-main", TEST="hwi-test", TESTNET4="hwi-testnet4")
+        for family in ("coldcard", "ledger", "bitbox02", "trezor", "jade"):
+            with self.subTest(family=family):
+                self.setUp()
+                self.request.update(chain="main", deviceType=family, accountPath="m/48'/0'/0'/2'")
+                self.request["expected"][0]["xpub"] = "xpub" + "1" * 107
+                self.client.get_pubkey_at_path.return_value.to_string.return_value = self.request["expected"][0]["xpub"]
+                self.assertEqual(worker.vendor_chain(self.request, chains), "hwi-main")
+                result = worker.execute(self.request, self.open, "hwi-main", self.display, self.sign)
+                self.open.assert_called_once_with(family, "selected-path", chain="hwi-main")
+                self.client.get_master_fingerprint.assert_called_once_with()
+                self.client.get_pubkey_at_path.assert_called_once_with("m/48'/0'/0'/2'")
+                self.sign.assert_called_once_with(self.client, psbt="reviewed-psbt")
+                self.client.close.assert_called_once_with()
+                self.assertEqual(result["result"], dict(psbt="signed-psbt"))
+
+    def test_mainnet_request_rejects_test_paths_keys_and_other_chains_before_open(self):
+        self.request.update(chain="main", accountPath="m/84'/0'/0'")
+        self.request["expected"][0]["xpub"] = "xpub" + "1" * 107
+        for change in (
+            dict(chain="testnet4"),
+            dict(chain="test"),
+            dict(chain="signet"),
+            dict(accountPath="m/84'/1'/0'"),
+            dict(expected=[dict(fingerprint="12345678", xpub=self.key, allowAction=True)]),
+        ):
+            with self.subTest(change=change):
+                request = copy.deepcopy(self.request)
+                request.update(change)
+                with self.assertRaises((ValueError, TypeError)):
+                    self.run_request(request)
+        self.open.assert_not_called()
+
+    def test_mainnet_identity_and_address_display_still_require_fresh_full_proof(self):
+        self.request.update(chain="main", accountPath="m/84'/0'/0'", action="identity", value=None)
+        self.request["expected"][0]["xpub"] = "xpub" + "1" * 107
+        self.client.get_pubkey_at_path.return_value.to_string.return_value = self.request["expected"][0]["xpub"]
+        result = worker.execute(self.request, self.open, "hwi-main", self.display, self.sign)
+        self.assertIsNone(result["result"])
+        self.sign.assert_not_called()
+        self.display.assert_not_called()
+        self.client.close.assert_called_once_with()
+
+        self.setUp()
+        self.request.update(chain="main", accountPath="m/84'/0'/0'", action="display", value="reviewed-descriptor")
+        self.request["expected"][0]["xpub"] = "xpub" + "1" * 107
+        self.client.get_pubkey_at_path.return_value.to_string.return_value = "xpub" + "2" * 107
+        result = worker.execute(self.request, self.open, "hwi-main", self.display, self.sign)
+        self.assertEqual(result, dict(error="identity_mismatch", code=-100))
+        self.display.assert_not_called()
+        self.client.close.assert_called_once_with()
+
+        self.setUp()
+        self.request.update(chain="main", accountPath="m/84'/0'/0'", action="display", value="reviewed-descriptor")
+        self.request["expected"][0]["xpub"] = "xpub" + "1" * 107
+        self.client.get_pubkey_at_path.return_value.to_string.return_value = self.request["expected"][0]["xpub"]
+        result = worker.execute(self.request, self.open, "hwi-main", self.display, self.sign)
+        self.assertEqual(result["result"], dict(address="test-address"))
+        self.display.assert_called_once_with(self.client, desc="reviewed-descriptor")
+        self.client.close.assert_called_once_with()
 
     def test_one_connection_full_proof_then_one_action_on_all_five_families(self):
         for family in ("coldcard", "ledger", "bitbox02", "trezor", "jade"):
