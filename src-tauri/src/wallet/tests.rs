@@ -258,6 +258,263 @@ fn anchor_reconciliation_wallet(
     (wallet, sparse_tip, block, txid)
 }
 
+#[test]
+fn acceleration_review_is_derived_from_the_actual_psbt_for_external_and_self_spends() {
+    let (mut wallet, _, _, funding_txid) = anchor_reconciliation_wallet(50, 22, 32);
+    let db = Connection::open_in_memory().unwrap();
+    init_app_schema(&db).unwrap();
+    let selected = OutPoint {
+        txid: funding_txid,
+        vout: 0,
+    };
+    let fee_rate = FeeRate::from_sat_per_vb(1).unwrap();
+
+    let other_mnemonic = Mnemonic::from_entropy(&[51; 32]).unwrap();
+    let other_master = root_key(&other_mnemonic, "external recipient fixture").unwrap();
+    let mut other_wallet = Wallet::create(
+        Bip84(other_master, KeychainKind::External),
+        Bip84(other_master, KeychainKind::Internal),
+    )
+    .network(Network::Regtest)
+    .create_wallet_no_persist()
+    .unwrap();
+    let external = other_wallet
+        .reveal_next_address(KeychainKind::External)
+        .address;
+    let mut external_builder = wallet.build_tx();
+    external_builder
+        .add_utxo(selected)
+        .unwrap()
+        .manually_selected_only()
+        .add_recipient(external.script_pubkey(), Amount::from_sat(5_000))
+        .fee_rate(fee_rate);
+    let external_psbt = external_builder.finish().unwrap();
+    let external_review = summarize_payment_psbt(
+        &db,
+        &wallet,
+        &external_psbt,
+        1.0,
+        false,
+        "Original payment".to_owned(),
+    )
+    .unwrap();
+    assert_eq!(external_review.recipient, external.to_string());
+    assert_eq!(external_review.amount, 5_000);
+    assert_eq!(external_review.total, 5_000 + external_review.fee);
+    assert_eq!(
+        external_review.selected_outpoints,
+        vec![selected.to_string()]
+    );
+    assert!(!external_review.recipient_is_wallet_owned);
+    assert!(!external_review.review_binding.is_empty());
+
+    // A saved hardware-only proposal must reconstruct the same transaction
+    // review before the signer is offered the PSBT.
+    let hardware_row = (
+        "saved-hardware-review".to_owned(),
+        external.to_string(),
+        "Original payment".to_owned(),
+        5_000,
+        external_psbt.fee_amount().unwrap().to_sat(),
+        1.0,
+        encode_psbt(&external_psbt),
+        "collecting".to_owned(),
+        123_u64,
+        "manual".to_owned(),
+        None,
+    );
+    let signer_master = root_key(
+        &Mnemonic::from_entropy(&[50; 32]).unwrap(),
+        "anchor reconciliation fixture",
+    )
+    .unwrap();
+    let hardware_review = external_proposal_dto(
+        hardware_row,
+        &signer_master.fingerprint(&Secp256k1::new()).to_string(),
+        &wallet,
+        &db,
+    )
+    .unwrap();
+    assert_eq!(hardware_review.recipient, external.to_string());
+    assert_eq!(hardware_review.amount, 5_000);
+    assert_eq!(hardware_review.required, 1);
+    assert_eq!(
+        hardware_review.selected_outpoints,
+        vec![selected.to_string()]
+    );
+
+    let self_address = wallet.reveal_next_address(KeychainKind::Internal).address;
+    let mut self_builder = wallet.build_tx();
+    self_builder
+        .add_utxo(selected)
+        .unwrap()
+        .manually_selected_only()
+        .drain_to(self_address.script_pubkey())
+        .fee_rate(fee_rate);
+    let self_psbt = self_builder.finish().unwrap();
+    assert!(matches!(
+        summarize_payment_psbt(&db, &wallet, &self_psbt, 1.0, false, "Sweep".to_owned()),
+        Err(ApiError {
+            code: "acceleration_unavailable",
+            ..
+        })
+    ));
+    let self_review =
+        summarize_payment_psbt(&db, &wallet, &self_psbt, 1.0, true, "Sweep".to_owned()).unwrap();
+    assert_eq!(self_review.amount, 0);
+    assert_eq!(self_review.recipient, self_address.to_string());
+    assert_eq!(self_review.total, self_review.fee);
+    assert!(self_review.recipient_is_wallet_owned);
+}
+
+#[test]
+fn multisig_proposal_review_reconstructs_signers_and_payment_from_saved_psbt() {
+    let metadata = descriptor_backup_with_signers(3).wallet;
+    let mut wallet = Wallet::create(
+        metadata.external_descriptor.clone(),
+        metadata.internal_descriptor.clone(),
+    )
+    .network(Network::Regtest)
+    .create_wallet_no_persist()
+    .unwrap();
+    let receive = wallet.reveal_next_address(KeychainKind::External).address;
+    let funding = Transaction {
+        version: Version::TWO,
+        lock_time: LockTime::ZERO,
+        input: vec![TxIn {
+            previous_output: OutPoint::new(Txid::from_byte_array([53; 32]), 0),
+            script_sig: ScriptBuf::new(),
+            sequence: Sequence::ENABLE_RBF_NO_LOCKTIME,
+            witness: Witness::new(),
+        }],
+        output: vec![TxOut {
+            value: Amount::from_sat(50_000),
+            script_pubkey: receive.script_pubkey(),
+        }],
+    };
+    let funding_outpoint = OutPoint::new(funding.compute_txid(), 0);
+    wallet.apply_unconfirmed_txs([(funding, 1)]);
+
+    let other_mnemonic = Mnemonic::from_entropy(&[54; 32]).unwrap();
+    let other_master = root_key(&other_mnemonic, "multisig recipient fixture").unwrap();
+    let mut other_wallet = Wallet::create(
+        Bip84(other_master, KeychainKind::External),
+        Bip84(other_master, KeychainKind::Internal),
+    )
+    .network(Network::Regtest)
+    .create_wallet_no_persist()
+    .unwrap();
+    let recipient = other_wallet
+        .reveal_next_address(KeychainKind::External)
+        .address;
+    let mut builder = wallet.build_tx();
+    builder
+        .add_utxo(funding_outpoint)
+        .unwrap()
+        .manually_selected_only()
+        .add_recipient(recipient.script_pubkey(), Amount::from_sat(12_000))
+        .fee_rate(FeeRate::from_sat_per_vb(1).unwrap())
+        .add_global_xpubs();
+    let psbt = builder.finish().unwrap();
+    let fee = psbt.fee_amount().unwrap().to_sat();
+    let proposal_id = "saved-multisig-review".to_owned();
+    let encoded = encode_psbt(&psbt);
+    let db = Connection::open_in_memory().unwrap();
+    init_app_schema(&db).unwrap();
+    let row = (
+        proposal_id,
+        recipient.to_string(),
+        "Family payment".to_owned(),
+        12_000,
+        fee,
+        1.0,
+        encoded,
+        "collecting".to_owned(),
+        123_u64,
+        "manual".to_owned(),
+        None,
+    );
+    let review = proposal_dto(row, &metadata, &wallet, &db).unwrap();
+    assert_eq!(review.recipient, recipient.to_string());
+    assert_eq!(review.amount, 12_000);
+    assert_eq!(review.total, 12_000 + fee);
+    assert_eq!(review.required, 2);
+    assert_eq!(review.signed, 0);
+    assert!(!review.can_finalize);
+    assert_eq!(review.eligible_signer_fingerprints.len(), 3);
+    assert_eq!(
+        review.selected_outpoints,
+        vec![funding_outpoint.to_string()]
+    );
+    assert!(review.inputs_available);
+}
+
+#[test]
+fn public_multisig_recovery_accepts_bsms_and_descriptor_pair_without_private_keys() {
+    let metadata = descriptor_backup_with_signers(3).wallet;
+    let first = first_multisig_address(&metadata).unwrap();
+    let bsms = DescriptorRecord::from_descriptor_pair(
+        &metadata.external_descriptor,
+        &metadata.internal_descriptor,
+        &first,
+    )
+    .unwrap()
+    .encode();
+    let parsed_bsms = multisig_setup_commands::parse_public_descriptor_record(&bsms).unwrap();
+    assert_eq!(parsed_bsms.first_address, first);
+
+    let descriptors = format!(
+        "{}\n{}\n",
+        metadata.external_descriptor, metadata.internal_descriptor
+    );
+    let parsed_pair =
+        multisig_setup_commands::parse_public_descriptor_record(&descriptors).unwrap();
+    assert_eq!(parsed_pair.first_address, first);
+    assert!(parsed_pair
+        .matches_descriptor_pair(&metadata.external_descriptor, &metadata.internal_descriptor)
+        .unwrap());
+    assert!(multisig_setup_commands::parse_public_descriptor_record("wsh(tprv-secret)").is_err());
+}
+
+#[test]
+fn multisig_setup_commands_preview_only_public_signers_and_fixed_continuity_paths() {
+    let standard = descriptor_backup_with_signers(3).wallet;
+    let preview = multisig_setup_commands::multisig_preview(PolicyInput {
+        name: standard.name.clone(),
+        threshold: standard.threshold,
+        cosigners: standard.cosigners.clone(),
+    })
+    .unwrap();
+    assert_eq!(preview.external_descriptor, standard.external_descriptor);
+    assert_eq!(preview.internal_descriptor, standard.internal_descriptor);
+
+    for family in [false, true] {
+        let metadata = continuity_test_metadata(family);
+        let analysis = multisig_setup_commands::recovery_policy_analyze(
+            metadata.recovery_template.clone().unwrap(),
+            metadata.cosigners.clone(),
+        )
+        .unwrap();
+        assert_eq!(analysis.external_descriptor, metadata.external_descriptor);
+        assert_eq!(analysis.internal_descriptor, metadata.internal_descriptor);
+        assert_eq!(analysis.paths, metadata.spending_paths);
+    }
+
+    let mut invalid = standard.cosigners;
+    invalid[0].label = "Signer\u{e0020}hidden".to_owned();
+    assert!(matches!(
+        multisig_setup_commands::multisig_preview(PolicyInput {
+            name: "Invalid signer".to_owned(),
+            threshold: 2,
+            cosigners: invalid,
+        }),
+        Err(ApiError {
+            code: "invalid_label",
+            ..
+        })
+    ));
+}
+
 fn canonical_prevout_psbt(wallet: &Wallet, txid: Txid) -> Psbt {
     let previous = wallet.get_tx(txid).unwrap().tx_node.tx.as_ref().clone();
     let transaction = Transaction {
