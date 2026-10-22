@@ -40,3 +40,14 @@ coordination remains test-network-only and standard BIP84/BIP48 Mainnet support
 retains its existing boundaries. Existing Mainnet wallets stay in the canonical
 multi-network app namespace; the isolated RC snapshot in ADR 0103 is test data,
 not a GA migration.
+
+## RC18 owner test boundary
+
+The owner reports that all seven supported signers were fast in the RC16 Mainnet
+rehearsal and that the three RC17 follow-up checks passed: Coldcard and Jade
+error spacing, Jade's network hint, and initial managed-node scan progress.
+The owner accepts the Regtest/Testnet4-only Partner/Family and phone-key preview
+scope without another preview campaign before desktop GA. RC18 is an ad-hoc,
+unnotarized candidate using the canonical desktop app identity so existing
+Mainnet wallets can be exercised. This does not authorize public GA packaging
+or replace the production-signing and exact-artifact gates above.

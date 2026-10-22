@@ -38,11 +38,19 @@ const buildIdentity = {
     identifier: 'app.groot.wallet.internal',
     config: 'src-tauri/tauri.multi.conf.json',
     outputDirectory: 'multi-network-internal-rc'
+  },
+  'ga-candidate': {
+    appName: 'Groot.app',
+    productName: 'Groot',
+    identifier: 'app.groot.wallet',
+    config: 'src-tauri/tauri.multi.conf.json',
+    outputDirectory: 'multi-network-ga-candidate'
   }
 }[buildTarget];
 if (!buildIdentity) {
-  throw new Error('Internal RC build target must be exactly mainnet or multi');
+  throw new Error('Internal RC build target must be exactly mainnet, multi, or ga-candidate');
 }
+const buildNetwork = buildTarget === 'mainnet' ? 'mainnet' : 'multi';
 const source = resolve(process.env.GROOT_HWI_SOURCE ?? '/opt/homebrew/bin/hwi');
 const cargoMetadata = JSON.parse(
   execFileSync(
@@ -103,7 +111,7 @@ try {
   // Internal multi-network RCs only. Native routing binds this payload to the
   // active Mainnet or Testnet4 chain and approved signer families.
   const runtime =
-    buildTarget === 'multi'
+    buildNetwork === 'multi'
       ? prepareHwiRuntime(
           stagedHwi,
           join(stageDirectory, 'hwi-runtime'),
@@ -133,7 +141,7 @@ try {
       env: {
         ...process.env,
         GROOT_BUILD_COMMIT: commit,
-        GROOT_BUILD_NETWORK: buildTarget,
+        GROOT_BUILD_NETWORK: buildNetwork,
         GROOT_BUNDLED_HWI_RESOURCE: 'hwi',
         GROOT_HWI_SHA256: manifest.artifact.sha256,
         ...(runtime
@@ -212,7 +220,8 @@ try {
   const executable = join(outputApp, 'Contents', 'MacOS', 'Groot');
   const buildInfo = [
     `commit=${commit}`,
-    `compiled_network=${buildTarget}`,
+    `compiled_network=${buildNetwork}`,
+    `bundle_identifier=${buildIdentity.identifier}`,
     'signing=ad-hoc-internal-only',
     'compiled_signing_requirement=REHEARSAL_ONLY',
     `hwi_version=${result.version}`,

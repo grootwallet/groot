@@ -1,7 +1,7 @@
 {
   "name": "groot-wallet",
   "private": true,
-  "version": "5.3.0-rc17",
+  "version": "5.3.0-rc18",
   "license": "Apache-2.0",
   "author": "Rochal Holdings",
   "repository": {
@@ -29,6 +29,7 @@
     "build:multi": "vite build --mode multi",
     "build:native:multi": "GROOT_BUILD_NETWORK=multi tauri build --config src-tauri/tauri.multi.conf.json",
     "build:native:multi:internal": "node scripts/release/build-mainnet-internal-rc.mjs multi",
+    "build:native:multi:ga-candidate": "node scripts/release/build-mainnet-internal-rc.mjs ga-candidate",
     "build:native:signet": "node scripts/release/build-signet.mjs",
     "build:native:testnet4": "node scripts/release/build-testnet4-portable.mjs",
     "build:native:mainnet:internal": "node scripts/release/build-mainnet-internal-rc.mjs",

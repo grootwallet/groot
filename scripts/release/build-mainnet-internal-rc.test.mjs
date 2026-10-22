@@ -10,10 +10,11 @@ const multiConfig = JSON.parse(
   readFileSync(new URL('../../src-tauri/tauri.multi.conf.json', import.meta.url), 'utf8')
 );
 
-test('internal RC permits only the reviewed fixed-mainnet and multi-network targets', () => {
+test('internal RC permits fixed-mainnet, isolated multi, and canonical-identity test targets', () => {
   assert.match(source, /const buildTarget = process\.argv\[2\] \?\? 'mainnet'/);
-  assert.match(source, /Internal RC build target must be exactly mainnet or multi/);
-  assert.match(source, /GROOT_BUILD_NETWORK: buildTarget/);
+  assert.match(source, /Internal RC build target must be exactly mainnet, multi, or ga-candidate/);
+  assert.match(source, /GROOT_BUILD_NETWORK: buildNetwork/);
+  assert.match(source, /bundle_identifier=\$\{buildIdentity\.identifier\}/);
   assert.match(source, /GROOT_MACOS_SIGNING_TEAM_ID: 'REHEARSAL_ONLY'/);
   assert.match(source, /validateCompiledTeamId\([\s\S]*'REHEARSAL_ONLY'/);
   assert.match(source, /requireProductionSigning: false/);
@@ -29,6 +30,11 @@ test('internal multi-network RC uses the HWI-sealed multi configuration', () => 
   assert.equal(multiConfig.identifier, 'app.groot.wallet');
   assert.equal(multiConfig.build.beforeBuildCommand, 'pnpm build:multi');
   assert.equal(multiConfig.bundle.resources['.release-stage/hwi'], 'hwi');
+  assert.equal(
+    packageJson.scripts['build:native:multi:ga-candidate'],
+    'node scripts/release/build-mainnet-internal-rc.mjs ga-candidate'
+  );
+  assert.match(source, /'ga-candidate': \{[\s\S]*identifier: 'app\.groot\.wallet'/);
 });
 
 test('internal RC creates the same branded drag-to-Applications DMG used by production', () => {
@@ -38,7 +44,7 @@ test('internal RC creates the same branded drag-to-Applications DMG used by prod
 });
 
 test('one-operation worker is enabled only with the sealed internal multi runtime', () => {
-  assert.match(source, /buildTarget === 'multi'[\s\S]*prepareHwiRuntime/);
+  assert.match(source, /buildNetwork === 'multi'[\s\S]*prepareHwiRuntime/);
   assert.match(source, /GROOT_HWI_SESSION_PROTOCOL: '1'/);
   assert.match(source, /hwi_session_protocol=1/);
 });

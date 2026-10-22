@@ -15,9 +15,9 @@ const pinnedPolicySources = new Map([
   ['src-tauri/src/session.rs', '61cf28ce44dd7262c0c3567d1d9bc456f1861520effaf00cbda501657ad1193e'],
   ['.env.mainnet', '1623f3f97de588daea2bbeae1f9c56ebc896b6bc2c22ac238563b46b688ced85'],
   ['.env.multi', '33fc3d5022968d9eaa25bfe749c0b01691c0570611a65255100718d2c50df723'],
-  ['package.json', '9d44585cb5c5b4eedc8bfff5ea5acd26604dab45c25a03d541f4b18f6578c969'],
-  ['src-tauri/Cargo.toml', 'f5a5ae55c1294e2926375fcdd385b88ba38c02e669c3b9ce993841f09e38fb98'],
-  ['src-tauri/tauri.conf.json', '50c9c6303b3f7a3957105d056ebe2b958110ce255504bcde0bd0562f44afc196'],
+  ['package.json', '141180699703095cbb316435d7f5919e6e576eea7a7f21285b3579f74931ce82'],
+  ['src-tauri/Cargo.toml', '0e7b770b8a5cba5cc8d0b9ef3e40461db8d03f2c927e80675828d406f86d3fc7'],
+  ['src-tauri/tauri.conf.json', 'b83ed0d2833991dacb235c04fa05c3aa2c395df253b636f3b3755977607b94a7'],
   ['LICENSE', 'c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4'],
   ['NOTICE', '4689769c203e1aa8bbc76f0864388cb5f406e4b05b26888df20576c57fa9c3ab'],
   ['THIRD_PARTY_NOTICES.md', 'a181753f36eb3e475cddf31a69d2e75f01a86a79c70de252abb1e73a059407db'],
@@ -48,7 +48,7 @@ const pinnedPolicySources = new Map([
     'scripts/network/check-native-builds.sh',
     '3a984ab7ef5f0d7c29d689d2ab39e114d61f1db0efd29a632cea980d7284bef4'
   ],
-  ['src/lib/config.ts', 'bc24c7ee3666c7c47d711d73b1793c29659bc170f4a172de5571873a1344ea6b'],
+  ['src/lib/config.ts', '8106bf8b09151d1d3740600d7857c40af0e5002568dd0dce00fdbcb1bf5a012f'],
   ['src-tauri/build.rs', '972650724376f7c5ac32325cf09425cd887e41f6c155b5199626dffccac37215'],
   [
     'src-tauri/src/release_policy.rs',
@@ -347,7 +347,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'scripts/release/build-mainnet-internal-rc.mjs',
-    '0b6f951c53c9af08a1e4ec2225a7f0744cd8f2923e2902d22b07b749f1709c52'
+    '0276c1b3b7ba7ea6c090cf256e1ff686408b825a525ca73e75b954b29c54ca3b'
   ],
   [
     'docs/adr/0068-restart-bound-multi-network-settings.md',
