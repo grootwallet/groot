@@ -4,7 +4,7 @@ Groot can discover stable GitHub releases and prepare verified installers throug
 
 ## Produce and verify
 
-1. Build from the exact reviewed commit and compare unsigned hashes on two clean machines. For v5.2.0 only, ADR 0088 permits two clean source checkouts with separate fresh Cargo homes, targets and pnpm stores on the same Mac; label the evidence same-machine reproduction and do not claim host independence.
+1. Build from the exact reviewed commit and compare unsigned hashes on two clean machines. For v5.2.0 and v5.3.0 only, ADRs 0088 and 0105 respectively permit two clean source checkouts with separate fresh Cargo homes, targets and pnpm stores on the same Mac; label the evidence same-machine reproduction and do not claim host independence.
 2. Sign/notarize the platform package and retain its freshly generated SBOM and provenance attestation. The SBOM must name the exact commit and lockfile digests and embed the packaged executable's SHA-256; it is release evidence, not a committed source file.
 3. Create the bounded schema-v1 JSON manifest accepted by `verify-update-bundle.mjs`. It binds product, stable channel, exact semantic version, full commit, artifact basename, SHA-256, minimum supported version, and explicit rollback allowlist.
 4. Sign the exact manifest bytes with the offline Ed25519 release key. Publish the artifact, manifest and detached signature through authenticated release infrastructure. Verify the public key independently and pin it in source before building the client; never trust a public key fetched beside its artifact.

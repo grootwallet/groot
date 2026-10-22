@@ -1,6 +1,6 @@
 # Product behavior
 
-Canonical desktop behavior from the shipped 5.2.0 baseline, with the gated 5.3 mobile development boundary below. [Current status](implementation-status.md) separates implementation from release certification. ADR 0088 conditionally authorizes v5.2.0 only when the final source, annotated tag, fresh remote main, reproduced evidence and signed/notarized published package all bind to one reviewed commit.
+Canonical desktop behavior from the shipped 5.2.0 baseline, with the gated 5.3 mobile development boundary below. [Current status](implementation-status.md) separates implementation from release certification. ADR 0088 authorized v5.2.0; ADR 0105 authorizes the exact v5.3.0 release campaign. The final source, annotated tag, fresh remote main, reproduced evidence and signed/notarized package must bind to one reviewed commit, and the owner must test that package before public publication.
 
 ## Mobile development boundary
 
