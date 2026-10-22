@@ -49,7 +49,7 @@ const pinnedPolicySources = new Map([
     '3a984ab7ef5f0d7c29d689d2ab39e114d61f1db0efd29a632cea980d7284bef4'
   ],
   ['src/lib/config.ts', '8106bf8b09151d1d3740600d7857c40af0e5002568dd0dce00fdbcb1bf5a012f'],
-  ['src-tauri/build.rs', '972650724376f7c5ac32325cf09425cd887e41f6c155b5199626dffccac37215'],
+  ['src-tauri/build.rs', '56ca931ade8a14d585b02fe942a514923d876b3d27ccb6815ee2fd0f6d1523fd'],
   [
     'src-tauri/src/release_policy.rs',
     '4875793e572f074b6fa9785ea4438a0ca868603b975dba5073c2c50604114eac'
@@ -159,7 +159,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'scripts/release/build-unsigned-multi.sh',
-    '45ea9a423449298d8bcd6fc32349ccfa6b5605a5f18d09ceabdb00d98802c8eb'
+    '77d3fb115f94b7e0536f4c4d67882dfeae1cbd75566dd0e85ae178e5a9edd562'
   ],
   [
     'scripts/release/verify-native-frontend-output.mjs',
@@ -175,7 +175,11 @@ const pinnedPolicySources = new Map([
   ],
   [
     'scripts/release/package-macos-ga.mjs',
-    '3fd43a61e515ace8eaf29b292187f52cd0fdfaa40c3ac013e8f0a671bfca238d'
+    'b9724118fa141cbf9972a7f7eebcaa6f3b1ca9bd4db11811b725fb78599d2e2c'
+  ],
+  [
+    'scripts/release/signed-hwi-runtime.mjs',
+    'fd0c772d97f25bc3065afa2bbb171435c4c5a820acc93bf676d34753c6abdb15'
   ],
   [
     'scripts/release/assert-public-release-authorized.mjs',
@@ -359,7 +363,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src-tauri/src/hardware/runtime.rs',
-    '49c54d49f64d05d285215fd4b6443ff7bbc920cd641d3c40f98c040a62bfff8b'
+    '00f5cc4e999fe97ef36daf7e023e37865593eecc5c35620d52dbf2470bafcadb'
   ],
   [
     'scripts/hardware/session-launcher.c',
@@ -375,7 +379,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'scripts/release/prepare-hwi-runtime.mjs',
-    '69a70e38f490c9476172fc277cefc07e3fec18c70dafe0627a8b691db7e1eff0'
+    '1fa748019240341760069d9b471947adc13aa01f98b1bd758d89c49504b30b7a'
   ]
 ]);
 

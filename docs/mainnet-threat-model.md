@@ -179,17 +179,18 @@ Every change that introduces an asset, trust boundary, parser, signer, backend, 
 
 ADR 0100 enables fixed-template coordination on test networks only. Hostile PSBT sequences cannot select a different delay; proposal identity, verified descriptors, eligible roles and fresh input maturity are native authorization inputs. Family assistance requires both role groups. Reorgs invalidate premature saved proposals. Existing primary/delayed storage and descriptor backups remain unchanged. Direct USB Miniscript and phone enrollment into continuity are blocked; standard phone signing and Coldcard rehearsal retain their existing controls. Independent review and physical acceptance remain pending; this is not Mainnet continuity authorization.
 
-## Proposed 5.3 Mainnet HWI operation-session boundary
+## 5.3 Mainnet HWI operation-session boundary
 
-Status: threat-model input for independent review, **not** Mainnet approval.
-ADR 0103 proposes extending the sealed, extracted HWI 3.2.0 one-client
+Status: owner-authorized implementation; signed GA certification pending.
+ADR 0103 extends the sealed, extracted HWI 3.2.0 one-client
 operation session from Testnet4 to Mainnet. ADR 0104 limits the associated 5.3
 GA scope to existing BIP84 and standard BIP48 desktop wallets; phone and fixed
-Continuity remain test-network previews. The owner has verified that the seven
-existing Mainnet wallets are visible in an isolated RC profile, but that does
-not exercise or authorize the proposed Mainnet hardware path.
+Continuity remain test-network previews. The owner tested all seven Mainnet
+signer models on the ad-hoc RC18 package and explicitly authorized the
+Developer ID-signed fast runtime. That does not certify the future signed
+package or authorize public GA distribution.
 
-The new trust boundary would pass a Mainnet request from Rust to a bundled
+The trust boundary passes a Mainnet request from Rust to a bundled
 Python worker and the selected USB signer, then return public identity,
 display or signature results to Rust. The worker, its extracted modules,
 framing, device response and USB path must be treated as hostile even when the
@@ -207,16 +208,21 @@ signer authority across requests.
 
 The Testnet4 Jade shared-test selector must never be accepted on Mainnet.
 Coldcard external policy-file acknowledgement is not live device verification.
-No host benchmark proves trusted display or signature correctness. The exact
-Mainnet RC needs device-free runtime integrity tests, native wrong-network and
-wrong-device tests, release-source pin review, and owner-observed trials of
-all seven model/firmware combinations: identity, health, address/policy,
-transaction presentation, signature return, rejection, lock/disconnect,
-restart and recovery. Independent reviewers must inspect this model and the
-exact enabling diff; AI-assisted or local automated checks are supporting
-evidence only. Until then, Mainnet continues to use the existing HWI path.
+No host benchmark proves trusted display or signature correctness. The 5.3.0
+release also faces a package-substitution threat: a separately extracted
+runtime could differ from the source HWI or from the runtime digest compiled
+into Groot. Production preparation signs every extracted Mach-O and the Python
+framework with the approved Developer ID team, hardened runtime and timestamp
+before freezing the manifest. The two unsigned builds and final packager must
+bind and verify that same manifest, then check it again inside the outer signed
+app. Wrong-team, unsigned, changed-module and mismatched-evidence inputs must
+fail before distribution. A notarized exact app and physical signer check remain
+required evidence.
 
-The 2026-10-22 preparatory diff adds explicit Mainnet worker and Rust account
-validation, with device-free wrong-network tests. Native routing remains
-Testnet4-only. These tests show request-shape isolation, not Mainnet device
-behavior or approval to use the faster signing path.
+The owner reports RC18 Mainnet identity, health, address and signing success on
+all seven models. Device-free runtime integrity and wrong-network tests, source
+pin review, and the signed-worker startup probes support the implementation.
+Those results apply to the ad-hoc package or the isolated worker. The final
+Developer ID-signed app must still be checked with the same signer models and
+release inputs; the already released app retains its existing HWI path until
+that exact 5.3.0 package is approved and published.

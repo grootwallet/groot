@@ -118,3 +118,5 @@ The sealed internal Mainnet HWI session path has **no BIP or persisted-format im
 RC18's canonical-identity owner package and release notes have **no BIP or persisted-format impact**. The app identity reuses the existing network-isolated profile location; key derivation, descriptors, PSBTs, signatures and wallet files are unchanged.
 
 The revised in-app 5.3 notes and longer real-Core test RPC timeout have **no BIP or persisted-format impact**. They change presentation and test tolerance only; no network, descriptor, script, transaction, key or wallet behavior changes.
+
+The approved Developer ID 5.3.0 fast-runtime packaging has **no BIP or persisted-format impact**. It uses the already validated Mainnet BIP84 and standard BIP48 requests through the same HWI 3.2.0 operation protocol. It changes release input/signature binding and startup latency, not paths, descriptors, PSBT interpretation, signatures, keys, network selection, wallet data, or standards scope.

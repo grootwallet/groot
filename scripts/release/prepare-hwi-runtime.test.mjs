@@ -8,6 +8,7 @@ import {
   copyHwiRuntime,
   readHwiRuntimeArchive,
   runtimeInventory,
+  validateProductionRuntimeSignature,
   verifyHwiRuntime
 } from './prepare-hwi-runtime.mjs';
 
@@ -115,5 +116,23 @@ test('session extraction adds only the fixed original bootstrap modules and PYZ'
   ]) {
     const bytes = archive(name, kind, 'original-code');
     assert.equal(readHwiRuntimeArchive(bytes, digest(bytes), true).length, 1);
+  }
+});
+
+test('production runtime code requires the exact Developer ID team and hardened timestamped signature', () => {
+  const valid = [
+    'flags=0x10000(runtime)',
+    'Authority=Developer ID Application: Groot (6Z85HGDUU7)',
+    'Timestamp=22 Oct 2026 at 13:00:00',
+    'TeamIdentifier=6Z85HGDUU7'
+  ].join('\n');
+  assert.doesNotThrow(() => validateProductionRuntimeSignature(valid, '6Z85HGDUU7'));
+  for (const invalid of [
+    valid.replace('TeamIdentifier=6Z85HGDUU7', 'TeamIdentifier=OTHERTEAM1'),
+    valid.replace('runtime', ''),
+    valid.replace('Timestamp=22 Oct 2026 at 13:00:00', 'Timestamp=none'),
+    valid.replace('Developer ID Application', 'Apple Development')
+  ]) {
+    assert.throws(() => validateProductionRuntimeSignature(invalid, '6Z85HGDUU7'));
   }
 });

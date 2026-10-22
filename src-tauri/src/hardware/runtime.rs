@@ -1,4 +1,4 @@
-//! ADRs 0098/0102/0103: app-sealed internal HWI payload for explicit network scopes.
+//! ADRs 0098/0102/0103/0104: app-sealed HWI payload for explicit network scopes.
 use super::{HardwareError, HwiChain, HwiSource, MAINNET_FAST_ENABLED};
 use bdk_wallet::bitcoin::hashes::{sha256, Hash};
 use serde::Deserialize;
@@ -238,6 +238,15 @@ fn selected_fast_internal(
     }
 }
 
+fn approved_runtime_scope(network_is_multi: bool, team: Option<&str>, version: &str) -> bool {
+    network_is_multi
+        && match team {
+            Some("REHEARSAL_ONLY") => true,
+            Some("6Z85HGDUU7") => version == "5.3.0",
+            _ => false,
+        }
+}
+
 // Called only after the existing full app/helper signature and HWI digest checks.
 // An enabled but invalid runtime fails closed; it never falls back after a request.
 pub(super) fn for_operation(
@@ -251,9 +260,11 @@ pub(super) fn for_operation(
     if !selected_fast_internal(arguments, active_chain, MAINNET_FAST_ENABLED) {
         return Ok(None);
     }
-    if !cfg!(groot_network = "multi")
-        || option_env!("GROOT_MACOS_SIGNING_TEAM_ID") != Some("REHEARSAL_ONLY")
-    {
+    if !approved_runtime_scope(
+        cfg!(groot_network = "multi"),
+        option_env!("GROOT_MACOS_SIGNING_TEAM_ID"),
+        env!("CARGO_PKG_VERSION"),
+    ) {
         return Err(HardwareError::Unavailable);
     }
     let HwiSource::Bundled { bundle_root } = source else {
@@ -273,6 +284,25 @@ mod tests {
     use super::*;
     use serde_json::json;
     use std::os::unix::fs::symlink;
+
+    #[test]
+    fn production_runtime_scope_is_exactly_the_approved_team_version_and_network() {
+        assert!(approved_runtime_scope(
+            true,
+            Some("REHEARSAL_ONLY"),
+            "5.3.0-rc18"
+        ));
+        assert!(approved_runtime_scope(true, Some("6Z85HGDUU7"), "5.3.0"));
+        for (network, team, version) in [
+            (false, Some("6Z85HGDUU7"), "5.3.0"),
+            (true, Some("6Z85HGDUU7"), "5.3.0-rc18"),
+            (true, Some("6Z85HGDUU7"), "5.3.1"),
+            (true, Some("OTHERTEAM1"), "5.3.0"),
+            (true, None, "5.3.0"),
+        ] {
+            assert!(!approved_runtime_scope(network, team, version));
+        }
+    }
 
     fn fixture() -> (PathBuf, String) {
         let root = std::env::temp_dir().join(format!("groot-hwi-runtime-{}", uuid::Uuid::new_v4()));

@@ -1,6 +1,6 @@
-// ADR 0098: internal Coldcard Testnet4 packaging experiment. No vendor code changes.
+// ADRs 0098/0104: sealed HWI runtime; no vendor code changes.
 import { createHash } from 'node:crypto';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { inflateSync } from 'node:zlib';
 import {
   cpSync,
@@ -149,7 +149,47 @@ export function runtimeInventory(root) {
   };
 }
 
-export function prepareHwiRuntime(source, output, expectedDigest, session = false) {
+const machoMagic = new Set(['cffaedfe', 'feedfacf', 'cafebabe', 'bebafeca']);
+
+function runtimeMachOPaths(root) {
+  return runtimeInventory(root)
+    .files.filter(({ path }) =>
+      machoMagic.has(readFileSync(join(root, path)).subarray(0, 4).toString('hex'))
+    )
+    .map(({ path }) => path);
+}
+
+function signProductionRuntime(root, identity) {
+  if (!identity || /[\r\n]/.test(identity)) fail();
+  const binaries = runtimeMachOPaths(root);
+  if (
+    !binaries.includes('groot-hwi-session') ||
+    !binaries.includes('Python.framework/Versions/3.9/Python')
+  )
+    fail();
+  for (const path of binaries.filter((path) => !path.startsWith('Python.framework/'))) {
+    execFileSync(
+      '/usr/bin/codesign',
+      ['--force', '--sign', identity, '--options', 'runtime', '--timestamp', join(root, path)],
+      { stdio: 'pipe' }
+    );
+  }
+  execFileSync(
+    '/usr/bin/codesign',
+    [
+      '--force',
+      '--sign',
+      identity,
+      '--options',
+      'runtime',
+      '--timestamp',
+      join(root, 'Python.framework')
+    ],
+    { stdio: 'pipe' }
+  );
+}
+
+export function prepareHwiRuntime(source, output, expectedDigest, session = false, identity) {
   if (
     process.platform !== 'darwin' ||
     process.arch !== 'arm64' ||
@@ -173,16 +213,19 @@ export function prepareHwiRuntime(source, output, expectedDigest, session = fals
     mkdirSync(dirname(path), { recursive: true, mode: 0o755 });
     symlinkSync(target, path);
   }
-  // The one-file payload omits the framework resource seal. Re-seal only this
-  // extracted framework for the ad-hoc internal app; Python code is unchanged.
-  execFileSync(
-    '/usr/bin/codesign',
-    ['--force', '--sign', '-', '--timestamp=none', join(output, 'Python.framework')],
-    { stdio: 'pipe' }
-  );
-  execFileSync('/usr/bin/codesign', ['--verify', '--strict', join(output, 'Python.framework')], {
-    stdio: 'pipe'
-  });
+  // The one-file payload omits the framework resource seal. Internal RCs
+  // restore it ad hoc; production signs every extracted Mach-O with the
+  // reviewed Developer ID before the runtime manifest is frozen.
+  if (!identity) {
+    execFileSync(
+      '/usr/bin/codesign',
+      ['--force', '--sign', '-', '--timestamp=none', join(output, 'Python.framework')],
+      { stdio: 'pipe' }
+    );
+    execFileSync('/usr/bin/codesign', ['--verify', '--strict', join(output, 'Python.framework')], {
+      stdio: 'pipe'
+    });
+  }
   if (session) {
     for (const name of [
       'struct',
@@ -217,14 +260,24 @@ export function prepareHwiRuntime(source, output, expectedDigest, session = fals
       { stdio: 'pipe' }
     );
     chmodSync(join(output, 'groot-hwi-session'), 0o755);
-    execFileSync(
-      '/usr/bin/codesign',
-      ['--force', '--sign', '-', '--timestamp=none', join(output, 'groot-hwi-session')],
-      { stdio: 'pipe' }
-    );
-    execFileSync('/usr/bin/codesign', ['--verify', '--strict', join(output, 'groot-hwi-session')], {
-      stdio: 'pipe'
-    });
+    if (!identity) {
+      execFileSync(
+        '/usr/bin/codesign',
+        ['--force', '--sign', '-', '--timestamp=none', join(output, 'groot-hwi-session')],
+        { stdio: 'pipe' }
+      );
+      execFileSync(
+        '/usr/bin/codesign',
+        ['--verify', '--strict', join(output, 'groot-hwi-session')],
+        {
+          stdio: 'pipe'
+        }
+      );
+    }
+  }
+  if (identity) {
+    if (!session) fail();
+    signProductionRuntime(output, identity);
   }
   const manifest = { schemaVersion: 1, sourceSha256: expectedDigest, ...runtimeInventory(output) };
   const bytes = Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`);
@@ -251,6 +304,46 @@ export function verifyHwiRuntime(root, expectedDigest, sourceDigest) {
   )
     fail();
   return { fileCount: inventory.files.length, linkCount: inventory.links.length };
+}
+
+export function verifyProductionHwiRuntime(root, expectedDigest, sourceDigest, teamId) {
+  if (!/^[A-Z0-9]{10}$/.test(teamId ?? '') || teamId !== '6Z85HGDUU7') fail();
+  const result = verifyHwiRuntime(root, expectedDigest, sourceDigest);
+  const binaries = runtimeMachOPaths(root);
+  if (
+    !binaries.includes('groot-hwi-session') ||
+    !binaries.includes('Python.framework/Versions/3.9/Python')
+  )
+    fail();
+  for (const path of binaries) {
+    const absolute = join(root, path);
+    execFileSync('/usr/bin/codesign', ['--verify', '--strict', absolute], { stdio: 'pipe' });
+    const inspection = spawnSync('/usr/bin/codesign', ['--display', '--verbose=4', absolute], {
+      encoding: 'utf8'
+    });
+    if (inspection.status !== 0) fail();
+    const details = `${inspection.stdout ?? ''}\n${inspection.stderr ?? ''}`;
+    validateProductionRuntimeSignature(details, teamId);
+  }
+  execFileSync(
+    '/usr/bin/codesign',
+    ['--verify', '--deep', '--strict', join(root, 'Python.framework')],
+    {
+      stdio: 'pipe'
+    }
+  );
+  return result;
+}
+
+export function validateProductionRuntimeSignature(details, teamId) {
+  if (
+    !/^[A-Z0-9]{10}$/.test(teamId ?? '') ||
+    !new RegExp(`^TeamIdentifier=${teamId}$`, 'm').test(details) ||
+    !/^Authority=Developer ID Application:.+$/m.test(details) ||
+    !/^Timestamp=(?!none$).+/m.test(details) ||
+    !/flags=.*\bruntime\b/.test(details)
+  )
+    fail();
 }
 
 export function copyHwiRuntime(source, output, expectedDigest, sourceDigest) {

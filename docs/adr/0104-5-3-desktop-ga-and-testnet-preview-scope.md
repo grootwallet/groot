@@ -62,3 +62,21 @@ closes the requested ad-hoc owner smoke test. It does not certify the future
 Developer ID-signed executable or authorize public GA distribution. The final
 in-app notes must lead with user-facing changes and mark phone-key and
 Continuity/Miniscript flows as test-network previews.
+
+## Developer ID fast-runtime authorization
+
+On 2026-10-22 the owner explicitly approved enabling the sealed fast HWI
+runtime for the Developer ID-signed 5.3.0 Mainnet build. The implementation is
+limited to the canonical multi-network macOS app, signing team `6Z85HGDUU7`,
+the seven tested models, and existing BIP84/standard BIP48 actions. It keeps
+per-operation live fingerprint/xpub proof, exact chain and device selection,
+policy and PSBT authorization, HWI and runtime digests, app code-signature
+checks, and native returned-signature verification. The production runtime is
+signed and frozen as a separate release input before compilation; independent
+unsigned builds and the signed package must bind the same runtime manifest.
+Fixed-network builds and other versions or signing teams cannot enable it.
+
+This authorizes the Mainnet signing-path implementation, not publication of an
+unverified artifact. The exact 5.3.0 source, reproducible executable, signed
+runtime, notarized app/DMG, owner smoke test of that signed package, and final
+version/tag release authorization remain separate gates.

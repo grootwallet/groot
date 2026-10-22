@@ -19,6 +19,7 @@ import { isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { verifyPackagedHwi } from './verify-packaged-hwi.mjs';
 import { verifySignedHwiArtifact } from './verify-signed-hwi.mjs';
+import { copyHwiRuntime, verifyProductionHwiRuntime } from './prepare-hwi-runtime.mjs';
 import { verifyPublicReleaseAuthorization } from './assert-public-release-authorized.mjs';
 
 const repoRoot = resolve(fileURLToPath(new URL('../../', import.meta.url)));
@@ -87,14 +88,15 @@ function submitForNotarization(path, profile) {
 if (process.platform !== 'darwin' || process.arch !== 'arm64') {
   fail('packaging requires macOS Apple silicon');
 }
-const [evidenceArgument, hwiArgument, hwiManifestArgument, outputArgument] = process.argv.slice(2);
+const [evidenceArgument, hwiArgument, hwiManifestArgument, runtimeArgument, outputArgument] =
+  process.argv.slice(2);
 if (
-  [evidenceArgument, hwiArgument, hwiManifestArgument, outputArgument].some(
+  [evidenceArgument, hwiArgument, hwiManifestArgument, runtimeArgument, outputArgument].some(
     (value) => !value || !isAbsolute(value)
   )
 ) {
   fail(
-    'usage: package-macos-ga.mjs /absolute/evidence /absolute/hwi /absolute/signed-hwi-manifest.json /new/absolute/output'
+    'usage: package-macos-ga.mjs /absolute/evidence /absolute/hwi /absolute/signed-hwi-manifest.json /absolute/signed-hwi-runtime /new/absolute/output'
   );
 }
 const identity = process.env.GROOT_MACOS_SIGNING_IDENTITY;
@@ -110,6 +112,7 @@ if (!isAbsolute(process.env.CARGO_TARGET_DIR ?? '')) {
 const evidence = resolve(evidenceArgument);
 const signedHwi = resolve(hwiArgument);
 const signedHwiManifest = resolve(hwiManifestArgument);
+const signedHwiRuntime = resolve(runtimeArgument);
 const output = resolve(outputArgument);
 if (existsSync(output)) fail(`output already exists: ${output}`);
 if (!lstatSync(evidence).isDirectory() || lstatSync(evidence).isSymbolicLink()) {
@@ -169,11 +172,20 @@ if (
   fail('evidence is not the frozen multi-network release input');
 }
 const hwiVerification = verifySignedHwiArtifact(signedHwi, signedHwiManifest, teamId);
+const runtimeDigest = digest(join(signedHwiRuntime, 'runtime-manifest.json'));
+const runtimeVerification = verifyProductionHwiRuntime(
+  signedHwiRuntime,
+  runtimeDigest,
+  hwiVerification.manifest.artifact.sha256,
+  teamId
+);
 if (
   buildInfo.hwi_sha256 !== hwiVerification.manifest.artifact.sha256 ||
-  buildInfo.signed_hwi_manifest_sha256 !== digest(signedHwiManifest)
+  buildInfo.signed_hwi_manifest_sha256 !== digest(signedHwiManifest) ||
+  buildInfo.hwi_runtime_sha256 !== runtimeDigest ||
+  buildInfo.hwi_session_protocol !== '1'
 ) {
-  fail('evidence is not bound to the supplied signed HWI input');
+  fail('evidence is not bound to the supplied signed HWI and fast runtime inputs');
 }
 
 const stageDirectory = join(repoRoot, 'src-tauri/.release-stage');
@@ -199,6 +211,8 @@ try {
     GROOT_BUILD_NETWORK: 'multi',
     GROOT_BUNDLED_HWI_RESOURCE: 'hwi',
     GROOT_HWI_SHA256: hwiVerification.manifest.artifact.sha256,
+    GROOT_HWI_RUNTIME_SHA256: runtimeDigest,
+    GROOT_HWI_SESSION_PROTOCOL: '1',
     GROOT_MACOS_SIGNING_TEAM_ID: teamId
   };
   delete buildEnvironment.APPLE_SIGNING_IDENTITY;
@@ -215,6 +229,18 @@ try {
   if (digest(join(builtApp, 'Contents/Resources/hwi')) !== digest(signedHwi)) {
     fail('packaged HWI differs from the frozen signed HWI input');
   }
+  copyHwiRuntime(
+    signedHwiRuntime,
+    join(builtApp, 'Contents/Resources/hwi-runtime'),
+    runtimeDigest,
+    hwiVerification.manifest.artifact.sha256
+  );
+  verifyProductionHwiRuntime(
+    join(builtApp, 'Contents/Resources/hwi-runtime'),
+    runtimeDigest,
+    hwiVerification.manifest.artifact.sha256,
+    teamId
+  );
 
   run('codesign', ['--force', '--sign', identity, '--options', 'runtime', '--timestamp', builtApp]);
   verifyPackagedHwi(builtApp, {
@@ -222,11 +248,21 @@ try {
     expectedTeamId: teamId,
     requireProductionSigning: true
   });
+  verifyProductionHwiRuntime(
+    join(builtApp, 'Contents/Resources/hwi-runtime'),
+    runtimeDigest,
+    hwiVerification.manifest.artifact.sha256,
+    teamId
+  );
   run('codesign', ['--verify', '--deep', '--strict', '--verbose=2', builtApp]);
 
   mkdirSync(output, { recursive: false, mode: 0o700 });
   const outputApp = join(output, 'Groot.app');
-  cpSync(builtApp, outputApp, { recursive: true, preserveTimestamps: true });
+  cpSync(builtApp, outputApp, {
+    recursive: true,
+    preserveTimestamps: true,
+    verbatimSymlinks: true
+  });
   const submissionZip = join(output, '.notarization-submission.zip');
   run('ditto', ['-c', '-k', '--keepParent', outputApp, submissionZip]);
   const appNotarization = submitForNotarization(submissionZip, notaryProfile);
@@ -238,6 +274,12 @@ try {
     expectedTeamId: teamId,
     requireProductionSigning: true
   });
+  verifyProductionHwiRuntime(
+    join(outputApp, 'Contents/Resources/hwi-runtime'),
+    runtimeDigest,
+    hwiVerification.manifest.artifact.sha256,
+    teamId
+  );
   run('bash', ['scripts/release/verify-macos-package.sh', outputApp]);
 
   const zip = join(output, `Groot-${packageMetadata.version}-macos-arm64.zip`);
@@ -280,6 +322,11 @@ try {
     signedHwi: {
       sha256: digest(signedHwi),
       manifestSha256: digest(signedHwiManifest)
+    },
+    signedHwiRuntime: {
+      manifestSha256: runtimeDigest,
+      files: runtimeVerification.fileCount,
+      links: runtimeVerification.linkCount
     },
     signedPackage: {
       executableSha256: digest(signedExecutable),
