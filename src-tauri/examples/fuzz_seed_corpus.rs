@@ -105,6 +105,8 @@ fn main() {
             .collect::<Vec<_>>()
             .join(",");
         format!("wsh(sortedmulti(2,{key_text}))")
+            .parse::<bdk_wallet::descriptor::Descriptor<bdk_wallet::descriptor::DescriptorPublicKey>>()
+            .unwrap().to_string()
     };
     let external = descriptor_for(0);
     let internal = descriptor_for(1);
