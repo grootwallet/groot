@@ -16,7 +16,27 @@ fuzz_target!(|data: &[u8]| {
     // Raw/base64 PSBT seeds bypass the transport checksum barrier, then traverse
     // the real encoder/decoder. Controlled corruptions must be rejected even if
     // the verifier accidentally becomes an always-successful stub.
-    if let Ok(psbt) = decode_psbt(text) {
+    if let Ok(mut psbt) = decode_psbt(text) {
+        // Construct one authenticated input from the supplied full transaction.
+        // This positive oracle also catches an always-rejecting verifier.
+        let constructed = psbt
+            .inputs
+            .first()
+            .and_then(|input| input.non_witness_utxo.as_ref())
+            .and_then(|previous| {
+                previous
+                    .output
+                    .first()
+                    .map(|output| (previous.compute_txid(), output.clone()))
+            });
+        if let Some((txid, output)) = constructed {
+            psbt.inputs.truncate(1);
+            psbt.unsigned_tx.input.truncate(1);
+            psbt.unsigned_tx.input[0].previous_output.txid = txid;
+            psbt.unsigned_tx.input[0].previous_output.vout = 0;
+            psbt.inputs[0].witness_utxo = Some(output);
+            groot_lib::proposal::prevouts::authenticate_prevouts(&psbt).unwrap();
+        }
         let encoded = encode_psbt(&psbt);
         if let Ok(frames) = ur_transport::encode_psbt(&encoded, 4096) {
             let decoded = decode_psbt(&ur_transport::decode_psbt(&frames).unwrap()).unwrap();

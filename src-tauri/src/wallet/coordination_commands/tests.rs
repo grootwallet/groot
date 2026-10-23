@@ -1357,9 +1357,9 @@ fn mobile_completion_faults_reconcile_against_reopened_registry_without_key_loss
                     .unwrap();
                 if failure == "after_rename" {
                     registry::save_atomic_failing_directory_sync(&registry_path, &registry)
-                        .map_err(internal)
+                        .map_err(registry_api_error)
                 } else {
-                    registry::save_atomic(&registry_path, &registry).map_err(internal)
+                    registry::save_atomic(&registry_path, &registry).map_err(registry_api_error)
                 }
             },
             |_| Err(api_error("internal_error", "Injected cleanup failure")),
