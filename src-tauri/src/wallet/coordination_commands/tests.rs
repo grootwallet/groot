@@ -1417,3 +1417,100 @@ fn mobile_completion_faults_reconcile_against_reopened_registry_without_key_loss
         }
     }
 }
+
+#[test]
+fn mobile_review_accepts_recipient_only_payment_and_signs_the_reviewed_fee() {
+    let (mnemonic, metadata, coordination, mut psbt) = mobile_signing_fixture();
+    let recipient = psbt
+        .outputs
+        .iter()
+        .position(|output| output.bip32_derivation.is_empty())
+        .unwrap();
+    psbt.unsigned_tx.output = vec![psbt.unsigned_tx.output[recipient].clone()];
+    psbt.outputs = vec![psbt.outputs[recipient].clone()];
+    psbt.unsigned_tx.output[0].value = Amount::from_sat(149_000);
+    let encoded = encode_psbt(&psbt);
+    let review = review_mobile_psbt_for(&metadata, &coordination, &encoded).unwrap();
+    assert_eq!(review.recipients.len(), 1);
+    assert_eq!(review.recipients[0].amount_sats, 149_000);
+    assert!(review.change.is_empty());
+    assert_eq!(review.fee_sats, 1_000);
+    let signed = sign_mobile_psbt_for(&metadata, &mnemonic, &encoded, review.revision_id).unwrap();
+    let returned = decode_psbt(&signed.signed_psbt).unwrap();
+    assert_eq!(returned.unsigned_tx, psbt.unsigned_tx);
+    assert_eq!(returned.inputs[0].partial_sigs.len(), 1);
+    assert_eq!(encode_psbt(&psbt), encoded);
+}
+
+#[test]
+fn mobile_review_rejects_change_only_payment() {
+    let (_, metadata, coordination, mut psbt) = mobile_signing_fixture();
+    let change = psbt
+        .outputs
+        .iter()
+        .position(|output| !output.bip32_derivation.is_empty())
+        .unwrap();
+    psbt.unsigned_tx.output = vec![psbt.unsigned_tx.output[change].clone()];
+    psbt.outputs = vec![psbt.outputs[change].clone()];
+    psbt.unsigned_tx.output[0].value = Amount::from_sat(149_000);
+    let encoded = encode_psbt(&psbt);
+    let error = review_mobile_psbt_for(&metadata, &coordination, &encoded).unwrap_err();
+    assert_eq!(error.code, "proposal_mismatch");
+    assert_eq!(
+        error.message,
+        "The PSBT contains no independently reviewable recipient output."
+    );
+    assert!(psbt
+        .inputs
+        .iter()
+        .all(|input| input.partial_sigs.is_empty()));
+    assert_eq!(encode_psbt(&psbt), encoded);
+}
+
+#[test]
+fn mobile_review_rejects_authenticated_amount_overflow_and_negative_fee() {
+    let (_, metadata, coordination, original) = mobile_signing_fixture();
+    assert_eq!(original.inputs.len(), 1);
+    assert_eq!(original.outputs.len(), 2);
+    let mut input_overflow = original.clone();
+    let mut previous = original.inputs[0].non_witness_utxo.clone().unwrap();
+    let referenced = original.unsigned_tx.input[0].previous_output.vout as usize;
+    previous.output = vec![previous.output[referenced].clone(); 2];
+    previous.output[0].value = Amount::from_sat(u64::MAX);
+    previous.output[1].value = Amount::from_sat(1);
+    input_overflow.inputs = vec![original.inputs[0].clone(); 2];
+    input_overflow.unsigned_tx.input = vec![original.unsigned_tx.input[0].clone(); 2];
+    for index in 0..2 {
+        input_overflow.unsigned_tx.input[index].previous_output =
+            bdk_wallet::bitcoin::OutPoint::new(previous.compute_txid(), index as u32);
+        input_overflow.inputs[index].non_witness_utxo = Some(previous.clone());
+        input_overflow.inputs[index].witness_utxo = Some(previous.output[index].clone());
+    }
+    let mut output_overflow = original.clone();
+    output_overflow.unsigned_tx.output[0].value = Amount::from_sat(u64::MAX);
+    output_overflow.unsigned_tx.output[1].value = Amount::from_sat(1);
+    let mut negative_fee = original.clone();
+    negative_fee.unsigned_tx.output[0].value = Amount::from_sat(150_001);
+    negative_fee.unsigned_tx.output[1].value = Amount::ZERO;
+    for (psbt, message) in [
+        (input_overflow, "The PSBT input total overflowed."),
+        (output_overflow, "The PSBT output total overflowed."),
+        (
+            negative_fee,
+            "The PSBT outputs exceed its authenticated input values.",
+        ),
+    ] {
+        // The deliberately impossible monetary values must reach checked arithmetic,
+        // rather than pass this regression through unrelated prevout rejection.
+        authenticate_mobile_prevouts(&psbt).unwrap();
+        let encoded = encode_psbt(&psbt);
+        let error = review_mobile_psbt_for(&metadata, &coordination, &encoded).unwrap_err();
+        assert_eq!(error.code, "malformed_psbt");
+        assert_eq!(error.message, message);
+        assert!(psbt
+            .inputs
+            .iter()
+            .all(|input| input.partial_sigs.is_empty()));
+        assert_eq!(encode_psbt(&psbt), encoded);
+    }
+}
