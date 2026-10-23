@@ -1415,6 +1415,7 @@ fn sign_mobile_psbt_for(
             "The PSBT changed after review. Scan it again before signing.",
         ));
     }
+    validate_mobile_psbt_work_budget(&reviewed, wallet)?;
     authenticate_mobile_prevouts(&reviewed)?;
     let (fingerprint, account, account_xpub) =
         derive_mobile_account(mnemonic).map_err(coordination_api_error)?;
@@ -1434,7 +1435,8 @@ fn sign_mobile_psbt_for(
     sign_mobile_inputs(&mut returned, &account, fingerprint)?;
     let signed = hardware_signature_response(&reviewed, returned).map_err(proposal_api_error)?;
     let signed_psbt = encode_psbt(&signed);
-    let frames = ur_transport::encode_psbt(&signed_psbt, 220).map_err(ur_api_error)?;
+    let frames = ur_transport::encode_psbt(&signed_psbt, MOBILE_REPLY_FRAGMENT_BYTES)
+        .map_err(ur_api_error)?;
     Ok(SignedMobilePsbtDto {
         revision_id,
         signer_fingerprint: fingerprint.to_string(),
@@ -1542,6 +1544,43 @@ fn review_mobile_psbt(app: &AppHandle, encoded: &str) -> ApiResult<MobilePsbtRev
 // Offline phone review cannot trust a coordinator's claimed input values.
 // Full previous transactions authenticate every value together, preventing fee
 // ambiguity across separately reviewed Segwit-v0 signing attempts. No mutation.
+// The reply uses 220-byte fragments and emits two frames per fountain part.
+// Reserve the five-byte CBOR envelope plus one maximum-length compressed-key
+// ECDSA partial-signature entry per input (35-byte key + 74-byte value).
+const MOBILE_REPLY_FRAGMENT_BYTES: usize = 220;
+const MOBILE_REPLY_PSBT_BYTES: usize =
+    MOBILE_REPLY_FRAGMENT_BYTES * (ur_transport::MAX_UR_FRAMES / 2) - 5;
+const MOBILE_SIGNATURE_ENTRY_BYTES: usize = 109;
+
+fn validate_mobile_psbt_work_budget(psbt: &Psbt, wallet: &MultisigWalletDto) -> ApiResult<()> {
+    // Pairing admits standard 3..=8-key policies. Reject expanded metadata
+    // before signature verification/derivation or access to signing material.
+    let signer_count = wallet.cosigners.len();
+    if wallet.policy_type != "standard" || !(3..=8).contains(&signer_count) {
+        return Err(api_error(
+            "signing_unavailable",
+            "Phone signing requires a supported standard multisig policy.",
+        ));
+    }
+    let projected_bytes = psbt
+        .inputs
+        .len()
+        .checked_mul(MOBILE_SIGNATURE_ENTRY_BYTES)
+        .and_then(|growth| psbt.serialize().len().checked_add(growth));
+    if projected_bytes.is_none_or(|bytes| bytes > MOBILE_REPLY_PSBT_BYTES)
+        || psbt.inputs.iter().any(|input| {
+            input.bip32_derivation.len() > signer_count || input.partial_sigs.len() > signer_count
+        })
+        || psbt
+            .outputs
+            .iter()
+            .any(|output| output.bip32_derivation.len() > signer_count)
+    {
+        return Err(api_error("psbt_too_large", "This PSBT exceeds the phone signing work or QR reply budget. Use a smaller transaction; full previous transactions remain required."));
+    }
+    Ok(())
+}
+
 fn authenticate_mobile_prevouts(psbt: &Psbt) -> ApiResult<()> {
     if psbt.inputs.is_empty() || psbt.inputs.len() != psbt.unsigned_tx.input.len() {
         return Err(api_error(
@@ -1600,6 +1639,7 @@ fn review_mobile_psbt_for(
         ));
     }
     let psbt = decode_psbt(encoded).map_err(proposal_api_error)?;
+    validate_mobile_psbt_work_budget(&psbt, metadata)?;
     authenticate_mobile_prevouts(&psbt)?;
     if psbt.inputs.iter().any(|input| {
         input.final_script_sig.is_some()

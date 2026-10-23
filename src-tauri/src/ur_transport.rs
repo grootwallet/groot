@@ -341,6 +341,28 @@ mod tests {
     }
 
     #[test]
+    fn desktop_request_and_phone_response_have_exact_encoder_capacity() {
+        for fragment in [180, 220] {
+            // At these sizes the canonical CBOR byte string has a five-byte header.
+            let raw_limit = fragment * (MAX_UR_FRAMES / 2) - 5;
+            let overhead = fixture_psbt(70_000).len() - 70_000;
+            for delta in [-1_isize, 0, 1] {
+                let raw = fixture_psbt((raw_limit as isize + delta) as usize - overhead);
+                assert_eq!(raw.len(), (raw_limit as isize + delta) as usize);
+                let encoded = BASE64.encode(&raw);
+                let result = encode_psbt(&encoded, fragment);
+                if delta > 0 {
+                    assert_eq!(result, Err(UrTransportError::TooManyFrames));
+                } else {
+                    let frames = result.unwrap();
+                    assert_eq!(frames.len(), MAX_UR_FRAMES);
+                    assert_eq!(decode_psbt(&frames).unwrap(), encoded);
+                }
+            }
+        }
+    }
+
+    #[test]
     fn canonical_cbor_boundaries_round_trip() {
         for length in [5, 23, 24, 255, 256, 65_535, 65_536] {
             let payload = vec![7; length];

@@ -1078,3 +1078,80 @@ fn mobile_review_and_signing_authenticate_all_prevouts_without_mutation() {
     }
     assert_eq!(encode_psbt(&original), encoded);
 }
+
+#[test]
+fn mobile_prevout_authentication_rejects_empty_and_mismatched_input_maps() {
+    use bdk_wallet::bitcoin::{absolute::LockTime, transaction::Version, Transaction, TxIn};
+    let mut empty = Psbt::from_unsigned_tx(Transaction {
+        version: Version::TWO,
+        lock_time: LockTime::ZERO,
+        input: vec![],
+        output: vec![],
+    })
+    .unwrap();
+    assert_eq!(
+        authenticate_mobile_prevouts(&empty).unwrap_err().code,
+        "malformed_psbt"
+    );
+    empty.unsigned_tx.input.push(TxIn::default());
+    let before = empty.clone();
+    assert_eq!(
+        authenticate_mobile_prevouts(&empty).unwrap_err().code,
+        "malformed_psbt"
+    );
+    assert_eq!(empty, before);
+    empty.inputs.resize(2, Default::default());
+    let before = empty.clone();
+    assert_eq!(
+        authenticate_mobile_prevouts(&empty).unwrap_err().code,
+        "malformed_psbt"
+    );
+    assert_eq!(empty, before);
+}
+
+#[test]
+fn mobile_reply_budget_reserves_signature_growth_before_secret_access() {
+    use bdk_wallet::bitcoin::{
+        absolute::LockTime, psbt::raw, transaction::Version, Transaction, TxIn,
+    };
+    let (_, _, wallet, _) = coordinated_wallet();
+    let mut psbt = Psbt::from_unsigned_tx(Transaction {
+        version: Version::TWO,
+        lock_time: LockTime::ZERO,
+        input: vec![TxIn::default()],
+        output: vec![],
+    })
+    .unwrap();
+    let key = raw::Key {
+        type_value: 0x50,
+        key: vec![1],
+    };
+    psbt.unknown.insert(key.clone(), vec![0; 70_000]);
+    let overhead = psbt.serialize().len() - 70_000;
+    for delta in [-1_isize, 0, 1] {
+        let length = (MOBILE_REPLY_PSBT_BYTES as isize + delta) as usize
+            - overhead
+            - MOBILE_SIGNATURE_ENTRY_BYTES;
+        psbt.unknown.insert(key.clone(), vec![0; length]);
+        let before = psbt.clone();
+        let result = validate_mobile_psbt_work_budget(&psbt, &wallet);
+        if delta > 0 {
+            assert_eq!(result.unwrap_err().code, "psbt_too_large");
+        } else {
+            result.unwrap();
+        }
+        assert_eq!(psbt, before);
+    }
+    let source = include_str!("../coordination_commands.rs");
+    let signing = source
+        .split("fn mobile_sign_psbt_inner(")
+        .nth(1)
+        .unwrap()
+        .split("fn sign_mobile_psbt_for(")
+        .next()
+        .unwrap();
+    assert!(
+        signing.find("review_mobile_psbt_for").unwrap()
+            < signing.find("secure_store::load").unwrap()
+    );
+}
