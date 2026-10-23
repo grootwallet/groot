@@ -21,16 +21,16 @@ unsafe extern "C" fn count_snapshot_statement(
 
 #[test]
 #[ignore = "synthetic snapshot benchmark; run alone with --ignored --nocapture"]
-fn snapshot_history_benchmark() {
-    assert!(
-        !cfg!(debug_assertions),
-        "Use the production profile for timing"
-    );
+fn snapshot_history_benchmark() -> Result<(), &'static str> {
+    if cfg!(debug_assertions) {
+        return Err("Use the production profile for timing");
+    }
     snapshot_history_fixture(
         benchmark_size("GROOT_BENCH_TRANSACTIONS", 100).min(1_000),
         105,
         true,
     );
+    Ok(())
 }
 
 #[test]
@@ -235,9 +235,11 @@ fn latest_signer_evidence_query_benchmark() {
 
 #[test]
 #[ignore = "opt-in production-profile queue and durable registry measurements"]
-fn measure_operation_lock_and_registry_save() {
+fn measure_operation_lock_and_registry_save() -> Result<(), &'static str> {
     assert_eq!(std::env::var("GROOT_MEASURE_NATIVE").as_deref(), Ok("1"));
-    assert!(!cfg!(debug_assertions), "Use cargo test --release");
+    if cfg!(debug_assertions) {
+        return Err("Use cargo test --release");
+    }
     let directory = std::env::temp_dir().join(format!("groot-measure-registry-{}", Uuid::new_v4()));
     fs::create_dir_all(&directory).unwrap();
     let state = AppState::default();
@@ -273,4 +275,5 @@ fn measure_operation_lock_and_registry_save() {
             "warmups":5, "samples":100, "min":values[0], "median":values[49], "p95":values[94], "max":values[99], "result":"ok"})
         );
     }
+    Ok(())
 }

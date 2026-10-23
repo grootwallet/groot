@@ -1163,9 +1163,11 @@ fn mobile_reply_budget_reserves_signature_growth_before_secret_access() {
 
 #[test]
 #[ignore = "opt-in production-profile timing with synthetic wallet data"]
-fn measure_mobile_review_and_signing() {
+fn measure_mobile_review_and_signing() -> Result<(), &'static str> {
     assert_eq!(std::env::var("GROOT_MEASURE_NATIVE").as_deref(), Ok("1"));
-    assert!(!cfg!(debug_assertions), "Measure with cargo test --release");
+    if cfg!(debug_assertions) {
+        return Err("Measure with cargo test --release");
+    }
     let (mnemonic, metadata, coordination, psbt) = mobile_signing_fixture();
     let encoded = encode_psbt(&psbt);
     let mut review_us = Vec::new();
@@ -1197,6 +1199,7 @@ fn measure_mobile_review_and_signing() {
             "signers":metadata.cosigners.len(), "result":"ok"})
         );
     }
+    Ok(())
 }
 
 #[test]
