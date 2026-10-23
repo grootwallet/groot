@@ -463,6 +463,7 @@
     error = '';
   }
   let walletLoadActive = true;
+  let walletLoadGeneration = 0;
   let walletLoading = $state(true);
   let walletLoadError = $state('');
   onDestroy(() => {
@@ -534,20 +535,26 @@
     hardwareCancelRequested = true;
   }
   async function loadWallet() {
+    const generation = ++walletLoadGeneration;
+    const walletId = walletShell.selectedWalletId();
+    const current = () =>
+      walletLoadActive &&
+      generation === walletLoadGeneration &&
+      walletId === walletShell.selectedWalletId();
     walletLoading = true;
     walletLoadError = '';
     if (accelerationRequest) accelerationQuoteFailed = false;
     try {
       const [loadedWallet, snapshot, proposals, registry] = await Promise.all([
         walletService.multisigWallet().then((value) => {
-          if (walletLoadActive) wallet = value;
+          if (current()) wallet = value;
           return value;
         }),
         walletService.multisigSnapshot(),
         walletService.multisigProposals(),
         walletService.profiles()
       ]);
-      if (!walletLoadActive) return;
+      if (!current()) return;
       wallet = loadedWallet;
       const selectedProfile = registry.wallets.find(
         (profile) => profile.id === registry.selectedWalletId
@@ -557,11 +564,15 @@
       labelSuggestions = snapshot.labelSuggestions;
       void walletService
         .multisigSignerPolicyVerifications()
-        .then((verifications) => (policyVerifications = verifications))
+        .then((verifications) => {
+          if (current()) policyVerifications = verifications;
+        })
         .catch(() => undefined);
       void walletService
         .multisigPolicyVerificationAddress()
-        .then((verificationAddress) => (policyAddress = verificationAddress))
+        .then((verificationAddress) => {
+          if (current()) policyAddress = verificationAddress;
+        })
         .catch(() => undefined);
       const url = new URL(window.location.href),
         requested = url.searchParams.get('coins')?.split(',').filter(Boolean) ?? [],
@@ -614,7 +625,9 @@
         ) {
           delayedSpendMode = true;
           delayedSpendCoin = candidate;
-          namedPaths = await walletService.multisigSpendingPaths(candidate.outpoint);
+          const nextnamedPaths = await walletService.multisigSpendingPaths(candidate.outpoint);
+          if (!current()) return;
+          namedPaths = nextnamedPaths;
           namedPathIndex = namedPaths.find((path) => path.index > 0 && path.available)?.index ?? 1;
         } else {
           toast({
@@ -635,6 +648,7 @@
           : latestActiveProposal(proposals);
         if (proposal) {
           if (draftWalletId) await walletService.clearPaymentDraft();
+          if (!current()) return;
           address = proposal.recipient;
           selectedLabels = proposal.labels ?? [proposal.label];
           label = '';
@@ -654,6 +668,7 @@
       }
       if (!proposal && !renewalMode && !delayedSpendMode && !accelerationRequest && draftWalletId) {
         const savedDraft = await walletService.paymentDraft();
+        if (!current()) return;
         if (savedDraft?.kind === 'multisig') {
           restoredPaymentDraft = true;
           hasPaymentDraft = true;
@@ -673,9 +688,12 @@
       }
       updateAvailable();
       try {
-        estimates = await walletService.estimateFees();
+        const nextestimates = await walletService.estimateFees();
+        if (!current()) return;
+        estimates = nextestimates;
         if (!restoredPaymentDraft) selectedRate = Number(estimates.standard);
       } catch (cause) {
+        if (!current()) return;
         feeEstimateError = localizedError(
           cause,
           $locale,
@@ -690,11 +708,15 @@
       if (txid && (method === 'rbf' || method === 'cpfp')) {
         accelerationRequest = { txid, method };
         if (method === 'rbf') {
-          rbfQuote = await walletService.quoteRbf(txid);
+          const nextrbfQuote = await walletService.quoteRbf(txid);
+          if (!current()) return;
+          rbfQuote = nextrbfQuote;
           selectedRate = Number(rbfQuote.targetFeeRate);
           accelerationQuoteFailed = false;
         } else if (estimates) {
-          cpfpQuote = await walletService.quoteCpfp(txid);
+          const nextcpfpQuote = await walletService.quoteCpfp(txid);
+          if (!current()) return;
+          cpfpQuote = nextcpfpQuote;
           selectedRate = Number(cpfpQuote.targetFeeRate);
           accelerationQuoteFailed = false;
         } else {
@@ -702,6 +724,7 @@
         }
       }
     } catch (cause) {
+      if (!current()) return;
       if (accelerationRequest) {
         accelerationQuoteFailed = true;
         if (accelerationRequest.method === 'rbf' && !rbfQuote) selectedRate = '';
@@ -712,8 +735,10 @@
         );
       } else walletLoadError = localizedError(cause, $locale, 'Could not load wallet.');
     } finally {
-      accelerationLoading = false;
-      walletLoading = false;
+      if (current()) {
+        accelerationLoading = false;
+        walletLoading = false;
+      }
     }
   }
   function submitIntentOnEnter(event: KeyboardEvent) {

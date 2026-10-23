@@ -51,6 +51,7 @@
   import { page } from '$app/state';
   import { onDestroy, onMount } from 'svelte';
   import { useWalletShellContext } from '$lib/wallet/shell-context';
+  import { readSettingsWalletData } from '$lib/wallet/settings-data';
   import { isWalletSyncActive } from '$lib/wallet/live-sync';
   import type {
     CoreNodeConfig,
@@ -347,14 +348,34 @@
     labelInterchangeResult = $state(''),
     labelInterchangeError = $state('');
 
+  const actionVersions = new Map<string, number>();
+  function invalidateAction(name: string) {
+    actionVersions.set(name, (actionVersions.get(name) ?? 0) + 1);
+  }
+  function settingsAction(name: string) {
+    invalidateAction(name);
+    const version = actionVersions.get(name);
+    const generation = profileReadGeneration;
+    const walletId = walletShell.selectedWalletId();
+    return () =>
+      !destroyed &&
+      generation === profileReadGeneration &&
+      version === actionVersions.get(name) &&
+      walletId === walletShell.selectedWalletId();
+  }
+
   async function pollSyncStatus() {
     if (destroyed || !walletUnlocked) return;
+    const current = settingsAction('syncPoll');
     try {
-      syncStatus = await walletService.syncStatus();
+      const next = await walletService.syncStatus();
+      if (!current()) return;
+      syncStatus = next;
     } catch {
+      if (!current()) return;
       syncStatus = null;
     }
-    if (!destroyed) syncStatusPoll = setTimeout(pollSyncStatus, settingsSyncActive ? 500 : 2_000);
+    if (current()) syncStatusPoll = setTimeout(pollSyncStatus, settingsSyncActive ? 500 : 2_000);
   }
 
   onMount(async () => {
@@ -370,35 +391,41 @@
       walletService.runtimePlatform(),
       walletService.profiles()
     ]);
-    if (generation !== profileReadGeneration) return;
+    if (destroyed || generation !== profileReadGeneration) return;
     runtime = nextRuntime;
     mobileRuntime = nextRuntime.mobile;
     profiles = registry.wallets;
     selectedWalletId = registry.selectedWalletId;
     const session = registry.selectedWalletId ? await walletService.session() : null;
-    if (generation !== profileReadGeneration) return;
+    if (destroyed || generation !== profileReadGeneration) return;
     walletUnlocked = session?.unlocked ?? false;
     if (walletUnlocked) void pollSyncStatus();
     inactivityTimeoutMinutes = registry.inactivityTimeoutMinutes;
     const activeProfile = registry.wallets.find(
       (wallet) => wallet.id === registry.selectedWalletId
     );
-    if (walletUnlocked && activeProfile?.kind === 'watch_only') {
-      hardwareSignerWallet = await walletService.externalSignerWallet();
-      setHardwareHealthChecks(await walletService.hardwareHealthChecks());
-    } else {
-      setHardwareHealthChecks([]);
-    }
     if (walletUnlocked) {
-      [node, syncSource, networkSetupSources] = await Promise.all([
-        walletService.nodeConfig(),
-        walletService.syncSource(),
-        walletService.networkSetupSources()
-      ]);
+      const walletId = selectedWalletId;
+      const current = () =>
+        !destroyed &&
+        generation === profileReadGeneration &&
+        walletId === selectedWalletId &&
+        walletId === walletShell.selectedWalletId();
+      const data = await readSettingsWalletData(
+        walletService,
+        activeProfile?.kind === 'watch_only',
+        current
+      );
+      if (!data) return;
+      hardwareSignerWallet = data.signer;
+      setHardwareHealthChecks(data.health);
+      node = data.node;
+      syncSource = data.syncSource;
+      networkSetupSources = data.networkSetupSources;
       nodeMode = isManagedNodeConfig(node) ? 'managed' : node.torProxy ? 'tor' : node.backend.type;
-      scan = await walletService.recoveryScanSettings();
+      scan = data.scan;
       scanDraft = { ...scan };
-      scanStatus = await walletService.recoveryScanStatus();
+      scanStatus = data.scanStatus;
       if (page.url.searchParams.get('nodeConnection') === '1') {
         openNodeSettings();
         replaceState('/settings', {});
@@ -443,10 +470,12 @@
   }
 
   async function exportLabels() {
+    const current = settingsAction('labels');
     labelInterchangeBusy = true;
     labelInterchangeError = '';
     try {
       const result = await walletService.exportLabels();
+      if (!current()) return;
       if (!result.saved) return;
       labelInterchangeResult = translate($locale, 'Saved {count} BIP329 label records.', {
         count: result.recordCount
@@ -462,7 +491,9 @@
                 run: async () => {
                   try {
                     await walletService.revealSavedFile(result.revealToken!);
+                    if (!current()) return;
                   } catch (cause) {
+                    if (!current()) return;
                     toast({
                       title: 'Could not show saved labels',
                       description: localizedError(cause, $locale),
@@ -474,6 +505,7 @@
             : undefined
       });
     } catch (cause) {
+      if (!current()) return;
       labelInterchangeError = localizedError(cause, $locale, 'Could not export wallet labels.');
       toast({
         title: 'Could not export labels',
@@ -481,15 +513,19 @@
         tone: 'danger'
       });
     } finally {
-      labelInterchangeBusy = false;
+      if (current()) {
+        labelInterchangeBusy = false;
+      }
     }
   }
 
   async function importLabels() {
+    const current = settingsAction('labels');
     labelInterchangeBusy = true;
     labelInterchangeError = '';
     try {
       const result = await walletService.importLabels();
+      if (!current()) return;
       if (!result) return;
       labelInterchangeResult = translate(
         $locale,
@@ -521,6 +557,7 @@
           });
       toast({ title: 'Labels imported', description: labelInterchangeResult, tone: 'success' });
     } catch (cause) {
+      if (!current()) return;
       labelInterchangeError = localizedError(cause, $locale, 'Could not import wallet labels.');
       toast({
         title: 'Could not import labels',
@@ -528,11 +565,14 @@
         tone: 'danger'
       });
     } finally {
-      labelInterchangeBusy = false;
+      if (current()) {
+        labelInterchangeBusy = false;
+      }
     }
   }
   onDestroy(() => {
     destroyed = true;
+    ++profileReadGeneration;
     currentPin = newPin = confirmPin = '';
     deleteCredential = '';
     confirmText = '';
@@ -579,9 +619,11 @@
       : `${Math.round(bytes / 1_000_000)} MB`;
   }
   async function checkConnection() {
+    const current = settingsAction('connection');
     checking = true;
     try {
       const result = await walletService.testNodeConnection();
+      if (!current()) return;
       connected = true;
       nodeStatus = result;
       toast({
@@ -604,6 +646,7 @@
         tone: 'success'
       });
     } catch (cause) {
+      if (!current()) return;
       connected = false;
       toast({
         title: 'Node unavailable',
@@ -611,7 +654,9 @@
         tone: 'danger'
       });
     } finally {
-      checking = false;
+      if (current()) {
+        checking = false;
+      }
     }
   }
   function setNodeLocation(type: 'managed' | 'local_core' | 'remote_core' | 'tor') {
@@ -632,12 +677,16 @@
     nodeError = '';
   }
   function openNodeSettings() {
+    invalidateAction('node');
+    busy = false;
     clearNodeCredentials();
     nodeMode = isManagedNodeConfig(node) ? 'managed' : node.torProxy ? 'tor' : node.backend.type;
     if (mobileRuntime && nodeMode === 'local_core') setNodeLocation('remote_core');
     nodeOpen = true;
   }
   function closeNodeSettings() {
+    invalidateAction('node');
+    busy = false;
     clearNodeCredentials();
     nodeOpen = false;
   }
@@ -653,10 +702,12 @@
     );
   }
   async function saveNode() {
+    const current = settingsAction('node');
     busy = true;
     nodeError = '';
     try {
       const result = await walletService.saveNodeConfig(node, nodePassword, walletCredential);
+      if (!current()) return;
       connected = true;
       nodeStatus = result;
       nodeOpen = false;
@@ -674,20 +725,25 @@
         tone: 'success'
       });
     } catch (cause) {
+      if (!current()) return;
       connected = false;
       nodeError = localizedError(cause, $locale, 'Could not save this node.');
     } finally {
-      nodePassword = '';
-      walletCredential = '';
-      busy = false;
+      if (current()) {
+        nodePassword = '';
+        walletCredential = '';
+        busy = false;
+      }
     }
   }
   async function configureManagedNode() {
+    const current = settingsAction('node');
     busy = true;
     nodeError = '';
     const renewing = managedNodeConfigured;
     try {
       const result = await walletService.configureManagedNode(walletCredential);
+      if (!current()) return;
       node = result.backend;
       nodeMode = 'managed';
       connected = true;
@@ -700,14 +756,19 @@
         tone: 'success'
       });
     } catch (cause) {
+      if (!current()) return;
       connected = false;
       nodeError = localizedError(cause, $locale, 'Could not provision Groot managed-node access.');
     } finally {
-      walletCredential = '';
-      busy = false;
+      if (current()) {
+        walletCredential = '';
+        busy = false;
+      }
     }
   }
   function openNetworkReuse() {
+    invalidateAction('reuse');
+    networkReusing = false;
     networkReuseSourceId =
       reusableNetworkSetups.find((source) => source.ready)?.walletId ??
       reusableNetworkSetups[0]?.walletId ??
@@ -717,6 +778,7 @@
     networkReuseOpen = true;
   }
   async function reuseNetworkSetup() {
+    const current = settingsAction('reuse');
     if (!networkReuseSourceId || !networkReuseCredential) return;
     networkReusing = true;
     networkReuseError = '';
@@ -728,8 +790,12 @@
         networkReuseSourceId,
         networkReuseCredential
       );
+      if (!current()) return;
       node = result.backend;
-      syncSource = await walletService.syncSource();
+      const savedSyncSource = await walletService.syncSource();
+      if (!current()) return;
+      if (!current()) return;
+      syncSource = savedSyncSource;
       connected = true;
       nodeStatus = result;
       networkReuseCredential = '';
@@ -742,13 +808,18 @@
         tone: 'success'
       });
     } catch (cause) {
+      if (!current()) return;
       networkReuseError = localizedError(cause, $locale, 'Could not reuse this setup.');
     } finally {
-      networkReuseCredential = '';
-      networkReusing = false;
+      if (current()) {
+        networkReuseCredential = '';
+        networkReusing = false;
+      }
     }
   }
   function openSyncSource() {
+    invalidateAction('sync');
+    syncSaving = false;
     syncSourceType =
       mobileRuntime || defaultConfig.network === 'mainnet' ? 'bitcoin_core' : syncSource.type;
     if (syncSource.type === 'compact_filters') {
@@ -767,6 +838,7 @@
     syncOpen = true;
   }
   async function saveSyncSource() {
+    const current = settingsAction('sync');
     syncSaving = true;
     syncError = '';
     const source: WalletSyncSource =
@@ -783,7 +855,10 @@
             torProxy: syncTorProxy.trim() || null
           };
     try {
-      syncSource = await walletService.saveSyncSource(source, syncCredential);
+      const saved = await walletService.saveSyncSource(source, syncCredential);
+      if (!current()) return;
+      if (!current()) return;
+      syncSource = saved;
       syncCredential = '';
       syncOpen = false;
       toast({
@@ -798,10 +873,13 @@
         tone: 'success'
       });
     } catch (cause) {
+      if (!current()) return;
       syncError = localizedError(cause, $locale, 'Could not save the wallet sync source.');
     } finally {
-      syncCredential = '';
-      syncSaving = false;
+      if (current()) {
+        syncCredential = '';
+        syncSaving = false;
+      }
     }
   }
   async function lockNow() {
@@ -869,15 +947,19 @@
     items[next]?.focus();
   }
   function openRename() {
+    invalidateAction('rename');
+    renaming = false;
     renameDraft = selectedProfile?.name ?? '';
     renameError = '';
     renameOpen = true;
   }
   async function renameWallet() {
+    const current = settingsAction('rename');
     renaming = true;
     renameError = '';
     try {
       const renamed = await walletService.renameWallet(renameDraft);
+      if (!current()) return;
       profiles = profiles.map((profile) => (profile.id === renamed.id ? renamed : profile));
       renameDraft = '';
       renameOpen = false;
@@ -889,21 +971,30 @@
         tone: 'success'
       });
     } catch (cause) {
+      if (!current()) return;
       renameError = localizedError(cause, $locale, 'Could not rename this wallet.');
     } finally {
-      renaming = false;
+      if (current()) {
+        renaming = false;
+      }
     }
   }
   function openSignerRename() {
+    invalidateAction('signerRename');
+    signerRenaming = false;
     signerRenameDraft = hardwareSignerWallet?.signer.label ?? '';
     signerRenameError = '';
     signerRenameOpen = true;
   }
   async function renameHardwareSigner() {
+    const current = settingsAction('signerRename');
     signerRenaming = true;
     signerRenameError = '';
     try {
-      hardwareSignerWallet = await walletService.renameExternalSigner(signerRenameDraft);
+      const renamed = await walletService.renameExternalSigner(signerRenameDraft);
+      if (!current()) return;
+      if (!current()) return;
+      hardwareSignerWallet = renamed;
       signerRenameDraft = '';
       signerRenameOpen = false;
       toast({
@@ -912,12 +1003,16 @@
         tone: 'success'
       });
     } catch (cause) {
+      if (!current()) return;
       signerRenameError = localizedError(cause, $locale, 'Could not rename this hardware signer.');
     } finally {
-      signerRenaming = false;
+      if (current()) {
+        signerRenaming = false;
+      }
     }
   }
   async function runExternalSignerHealthCheck() {
+    const current = settingsAction('health');
     if (!hardwareSignerWallet || checkingSignerHealth) return;
     const signer = hardwareSignerWallet.signer;
     checkingSignerHealth = true;
@@ -928,7 +1023,9 @@
           'This saved signer has no USB device type. Re-import its public account backup.'
         );
       const device = await walletService.findSavedHardwareDevice(signer);
+      if (!current()) return;
       const result = await walletService.checkHardwareExternalSigner(signer, device.id);
+      if (!current()) return;
       await saveHardwareHealthCheck(signer.fingerprint, result);
       toast({
         title: 'Signer verified',
@@ -938,6 +1035,7 @@
         tone: 'success'
       });
     } catch (cause) {
+      if (!current()) return;
       const result: CosignerHealthCheck = {
         checkedAt: new Date().toISOString(),
         summary: localizedError(cause, $locale, 'The device could not be verified.'),
@@ -946,7 +1044,9 @@
       await saveHardwareHealthCheck(signer.fingerprint, result);
       toast({ title: 'Health check needs attention', description: result.summary, tone: 'danger' });
     } finally {
-      checkingSignerHealth = false;
+      if (current()) {
+        checkingSignerHealth = false;
+      }
     }
   }
   async function saveHardwareHealthCheck(fingerprint: string, check: CosignerHealthCheck) {
@@ -1150,10 +1250,12 @@
     }
   }
   async function verifyBackup() {
+    const current = settingsAction('backup');
     verifying = true;
     verifyError = '';
     try {
       const verified = await walletService.verifyBackup(verifyCredential);
+      if (!current()) return;
       verifyCredential = '';
       verifyOpen = false;
       if (!verified) {
@@ -1172,17 +1274,22 @@
         tone: 'success'
       });
     } catch (cause) {
+      if (!current()) return;
       verifyError = localizedError(cause, $locale, 'Could not verify this recovery backup.');
     } finally {
-      verifyCredential = '';
-      verifying = false;
+      if (current()) {
+        verifyCredential = '';
+        verifying = false;
+      }
     }
   }
   async function revealAndVerifyBackup() {
+    const current = settingsAction('backup');
     revealingBackup = true;
     verifyError = '';
     try {
       const verified = await walletService.revealAndVerifyBackup(verifyCredential);
+      if (!current()) return;
       if (!verified) {
         toast({
           title: 'Backup still unverified',
@@ -1200,23 +1307,30 @@
         tone: 'success'
       });
     } catch (cause) {
+      if (!current()) return;
       verifyError = localizedError(cause, $locale, 'Could not reveal this recovery backup.');
     } finally {
-      verifyCredential = '';
-      revealingBackup = false;
+      if (current()) {
+        verifyCredential = '';
+        revealingBackup = false;
+      }
     }
   }
   async function prepareHardwareBackup() {
+    const current = settingsAction('hardwareBackup');
     exportingHardwareBackup = true;
     hardwareBackupError = '';
     try {
       const backup = await walletService.exportExternalSignerDescriptor(hardwareBackupPin);
+      if (!current()) return;
       hardwareBackup = backup.descriptor;
       hardwareBackupContent = backup.content;
-      hardwareBackupFrames =
+      const nextFrames =
         defaultConfig.network === 'mainnet'
           ? []
           : await walletService.encodeWatchOnlyQr(backup.content);
+      if (!current()) return;
+      hardwareBackupFrames = nextFrames;
       hardwareBackupPin = '';
       toast({
         title: 'Public descriptor ready',
@@ -1224,14 +1338,17 @@
         tone: 'success'
       });
     } catch (cause) {
+      if (!current()) return;
       hardwareBackupError = localizedError(
         cause,
         $locale,
         'Could not prepare the public descriptor.'
       );
     } finally {
-      hardwareBackupPin = '';
-      exportingHardwareBackup = false;
+      if (current()) {
+        hardwareBackupPin = '';
+        exportingHardwareBackup = false;
+      }
     }
   }
   async function saveHardwareBackup() {
@@ -1450,6 +1567,8 @@
             class="wallet-context-row backup-needs-verification"
             onclick={() => {
               verifyError = '';
+              invalidateAction('backup');
+              verifying = false;
               verifyOpen = true;
             }}
             ><span class="setting-icon"><KeyRound size={18} /></span><span
@@ -1496,6 +1615,8 @@
             ><ChevronRight size={16} /></button
           >{:else if selectedProfile?.kind === 'watch_only'}<button
             onclick={() => {
+              invalidateAction('hardwareBackup');
+              exportingHardwareBackup = false;
               hardwareBackupOpen = true;
               hardwareBackup = '';
               hardwareBackupContent = '';
@@ -1918,6 +2039,8 @@
   title={translate($locale, 'Rename wallet')}
   description={translate($locale, 'Change how this wallet is identified inside Groot.')}
   onclose={() => {
+    invalidateAction('rename');
+    renaming = false;
     renameOpen = false;
     renameDraft = '';
     renameError = '';
@@ -1949,6 +2072,8 @@
     <Button
       variant="secondary"
       onclick={() => {
+        invalidateAction('rename');
+        renaming = false;
         renameOpen = false;
         renameDraft = '';
         renameError = '';
@@ -1977,6 +2102,8 @@
   title={translate($locale, 'Rename hardware signer')}
   description={translate($locale, 'Change the local name shown when this signing key is required.')}
   onclose={() => {
+    invalidateAction('signerRename');
+    signerRenaming = false;
     signerRenameOpen = false;
     signerRenameDraft = '';
     signerRenameError = '';
@@ -2008,6 +2135,8 @@
     <Button
       variant="secondary"
       onclick={() => {
+        invalidateAction('signerRename');
+        signerRenaming = false;
         signerRenameOpen = false;
         signerRenameDraft = '';
         signerRenameError = '';
@@ -2041,6 +2170,8 @@
       variant="secondary"
       onclick={() => {
         closeDeleteWallet();
+        invalidateAction('backup');
+        verifying = false;
         verifyOpen = true;
       }}>{translate($locale, 'Verify now')}</Button
     >{/if}
@@ -2104,6 +2235,8 @@
     'Use your written 24 words for a private native proof, or reveal them securely first if you still need to make the backup.'
   )}
   onclose={() => {
+    invalidateAction('backup');
+    verifying = false;
     verifyOpen = false;
     verifyCredential = '';
     verifyError = '';
@@ -2149,6 +2282,8 @@
       variant="secondary"
       disabled={verifying || revealingBackup}
       onclick={() => {
+        invalidateAction('backup');
+        verifying = false;
         verifyOpen = false;
         verifyCredential = '';
         verifyError = '';
@@ -2169,6 +2304,8 @@
     'Recover this watch-only wallet without exposing the Ledger seed.'
   )}
   onclose={() => {
+    invalidateAction('hardwareBackup');
+    exportingHardwareBackup = false;
     hardwareBackupOpen = false;
     hardwareBackupPin = '';
     hardwareBackupError = '';
@@ -2204,6 +2341,8 @@
       <Button
         variant="secondary"
         onclick={() => {
+          invalidateAction('hardwareBackup');
+          exportingHardwareBackup = false;
           hardwareBackupOpen = false;
           hardwareBackupPin = '';
         }}>{translate($locale, 'Cancel')}</Button
@@ -2249,6 +2388,8 @@
       <Button
         variant="secondary"
         onclick={() => {
+          invalidateAction('hardwareBackup');
+          exportingHardwareBackup = false;
           hardwareBackupOpen = false;
           descriptorDetailsOpen = true;
         }}><Eye size={15} />{translate($locale, 'View descriptor')}</Button
@@ -2269,6 +2410,8 @@
   label={translate($locale, 'Descriptor')}
   onclose={() => {
     descriptorDetailsOpen = false;
+    invalidateAction('hardwareBackup');
+    exportingHardwareBackup = false;
     hardwareBackupOpen = true;
   }}
 />
@@ -2278,6 +2421,8 @@
   description={translate($locale, 'Choose where this wallet gets transaction activity.')}
   onclose={() => {
     if (syncSaving) return;
+    invalidateAction('sync');
+    syncSaving = false;
     syncOpen = false;
     syncCredential = '';
     syncError = '';
@@ -2397,6 +2542,8 @@
     <Button
       variant="secondary"
       onclick={() => {
+        invalidateAction('sync');
+        syncSaving = false;
         syncOpen = false;
         syncCredential = '';
       }}>{translate($locale, 'Cancel')}</Button
@@ -2631,6 +2778,8 @@
     if (networkReusing) return;
     networkReuseCredential = '';
     networkReuseError = '';
+    invalidateAction('reuse');
+    networkReusing = false;
     networkReuseOpen = false;
   }}
 >
@@ -2678,6 +2827,8 @@
       disabled={networkReusing}
       onclick={() => {
         networkReuseCredential = '';
+        invalidateAction('reuse');
+        networkReusing = false;
         networkReuseOpen = false;
       }}>{translate($locale, 'Cancel')}</Button
     ><Button
