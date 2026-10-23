@@ -2206,6 +2206,13 @@ test('receive label suggestions expose aligned tooltips only when truncated', as
   const suggestion = page.getByRole('button', {
     name: 'Reuse A deliberately long reusable label'
   });
+  // focus() does not wait for geometric stability like hover(). Measure the
+  // tooltip only after the dialog's opening animation has completed.
+  await page.getByRole('dialog').evaluate(async (dialog) => {
+    await Promise.all(
+      dialog.getAnimations({ subtree: true }).map((animation) => animation.finished)
+    );
+  });
   if ((page.viewportSize()?.width ?? 1180) <= 760) await suggestion.focus();
   else await suggestion.hover();
   const tooltip = page.getByRole('tooltip');

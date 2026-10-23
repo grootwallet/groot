@@ -1,6 +1,9 @@
 import { defineConfig, devices } from '@playwright/test';
 
 const port = process.env.E2E_PORT ?? '5196';
+const build = process.env.GROOT_MEASUREMENT_BUILD ?? 'build';
+if (!/^[a-zA-Z0-9_./-]+$/.test(build)) throw new Error('Use a simple static-build path.');
+if (!/^\d+$/.test(port)) throw new Error('Use a numeric preview port.');
 export default defineConfig({
   testDir: './e2e',
   testMatch: 'maintenance-performance.spec.ts',
@@ -10,7 +13,7 @@ export default defineConfig({
   reporter: [['list']],
   use: { baseURL: `http://127.0.0.1:${port}` },
   webServer: {
-    command: `pnpm exec vite preview --host 127.0.0.1 --port ${port} --strictPort`,
+    command: `pnpm exec vite preview --config scripts/quality/performance-vite.config.ts --outDir '${build}' --host 127.0.0.1 --port ${port} --strictPort`,
     url: `http://127.0.0.1:${port}`,
     reuseExistingServer: false
   },
