@@ -113,18 +113,25 @@ pub fn save_atomic(path: &Path, registry: &WalletRegistry) -> Result<(), Registr
         registry,
         |file, encoded| file.write_all(encoded).map_err(|_| RegistryError::Io),
         || Ok(()),
+        |parent| {
+            File::open(parent)
+                .and_then(|directory| directory.sync_all())
+                .map_err(|_| RegistryError::Io)
+        },
     )
 }
 
-fn save_atomic_with<W, B>(
+fn save_atomic_with<W, B, D>(
     path: &Path,
     registry: &WalletRegistry,
     write: W,
     before_rename: B,
+    sync_directory: D,
 ) -> Result<(), RegistryError>
 where
     W: FnOnce(&mut File, &[u8]) -> Result<(), RegistryError>,
     B: FnOnce() -> Result<(), RegistryError>,
+    D: FnOnce(&Path) -> Result<(), RegistryError>,
 {
     registry.validate()?;
     let parent = path.parent().ok_or(RegistryError::Io)?;
@@ -144,9 +151,7 @@ where
         file.sync_all().map_err(|_| RegistryError::Io)?;
         before_rename()?;
         fs::rename(&temporary, path).map_err(|_| RegistryError::Io)?;
-        File::open(parent)
-            .and_then(|directory| directory.sync_all())
-            .map_err(|_| RegistryError::Io)?;
+        sync_directory(parent)?;
         Ok(())
     })();
     if result.is_err() {
@@ -419,6 +424,7 @@ mod tests {
                 Err(RegistryError::Io)
             },
             || Ok(()),
+            |_| Ok(()),
         );
         assert_eq!(partial, Err(RegistryError::Io));
         assert_eq!(load(&path).unwrap(), original);
@@ -428,9 +434,36 @@ mod tests {
             &replacement,
             |file, encoded| file.write_all(encoded).map_err(|_| RegistryError::Io),
             || Err(RegistryError::Io),
+            |_| Ok(()),
         );
         assert_eq!(disk_full_before_commit, Err(RegistryError::Io));
         assert_eq!(load(&path).unwrap(), original);
+        assert_eq!(fs::read_dir(&dir).unwrap().count(), 1);
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn directory_sync_failure_reports_error_but_preserves_visible_commit_for_recovery() {
+        let dir = test_dir();
+        let path = dir.join("registry.json");
+        let original = WalletRegistry::default();
+        save_atomic(&path, &original).unwrap();
+        let mut replacement = original.clone();
+        replacement.add(p(Uuid::new_v4())).unwrap();
+        assert_eq!(
+            save_atomic_with(
+                &path,
+                &replacement,
+                |file, bytes| file.write_all(bytes).map_err(|_| RegistryError::Io),
+                || Ok(()),
+                |_| Err(RegistryError::Io)
+            ),
+            Err(RegistryError::Io)
+        );
+        // A returned error is not a rollback guarantee after rename.
+        assert_eq!(load(&path).unwrap(), replacement);
+        save_atomic(&path, &replacement).unwrap();
+        assert_eq!(load(&path).unwrap(), replacement);
         assert_eq!(fs::read_dir(&dir).unwrap().count(), 1);
         fs::remove_dir_all(dir).unwrap();
     }

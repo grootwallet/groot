@@ -390,6 +390,30 @@ pub(super) fn commit_multisig_profile(
 }
 
 pub(super) fn cleanup_failed_profile(dir: &Path) -> ApiResult<()> {
+    // A registry rename can become visible before its directory fsync fails.
+    // Never infer "unregistered" from the caller's error alone: deleting such
+    // a profile would leave a committed registry pointing at missing secrets.
+    let wallet_id = dir
+        .file_name()
+        .and_then(|value| value.to_str())
+        .and_then(|value| Uuid::parse_str(value).ok())
+        .ok_or_else(|| internal("Invalid failed-profile storage identity."))?;
+    let wallets = dir
+        .parent()
+        .filter(|parent| parent.file_name().is_some_and(|name| name == "wallets"))
+        .ok_or_else(|| internal("Invalid failed-profile storage root."))?;
+    let root = wallets
+        .parent()
+        .ok_or_else(|| internal("Missing profile storage root."))?;
+    let registry =
+        registry::load(&root.join("wallet-registry.json")).map_err(registry_api_error)?;
+    if registry
+        .wallets
+        .iter()
+        .any(|profile| profile.id == wallet_id)
+    {
+        return Err(internal("Wallet registration is visible. Local files were preserved; reopen the wallet before retrying."));
+    }
     match fs::remove_dir_all(dir) {
         Ok(()) => Ok(()),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),

@@ -7041,13 +7041,18 @@ fn sync_reconciles_only_exact_observed_proposals_atomically_and_after_reopen() {
     )
     .unwrap();
     db.execute("INSERT INTO groot_accelerations (proposal_id, method, original_txid, original_kind, original_direction, original_amount, original_date, original_label, created_at) VALUES('accepted','rbf',?1,'payment','sent',1,'1','Synthetic',1)", [Txid::from_byte_array([77;32]).to_string()]).unwrap();
+    db.execute_batch("CREATE TRIGGER fail_notification BEFORE INSERT ON groot_notifications BEGIN SELECT RAISE(ABORT, 'synthetic write failure'); END;").unwrap();
     {
         let transaction = db.transaction().unwrap();
         let repaired = reconcile_broadcast_proposals(&wallet, &transaction).unwrap();
         assert_eq!(repaired, [txid]);
-        enqueue_reconciled_broadcasts(&transaction, &repaired, 0).unwrap();
-        // Dropping the transaction simulates a failed local commit.
+        assert!(enqueue_reconciled_broadcasts(&transaction, &repaired, 0).is_err());
+        // The actual notification write failed after proposal/label changes.
+        // Drop and reopen before retry, preserving the accepted transaction.
     }
+    drop(db);
+    let mut db = Connection::open(&path).unwrap();
+    db.execute_batch("DROP TRIGGER fail_notification;").unwrap();
     assert_eq!(
         db.query_row(
             "SELECT status FROM groot_proposals WHERE proposal_id='accepted'",
@@ -7536,4 +7541,43 @@ fn observed_receive_output_marks_its_permanent_address_without_touching_others()
         )
         .unwrap();
     assert_eq!(untouched, ("awaiting".to_owned(), 0));
+}
+
+#[test]
+fn failed_profile_cleanup_preserves_a_visible_registry_commit() {
+    let root = std::env::temp_dir().join(format!("groot-profile-commit-{}", Uuid::new_v4()));
+    let id = Uuid::new_v4();
+    let directory = root.join("wallets").join(id.to_string());
+    fs::create_dir_all(&directory).unwrap();
+    fs::write(directory.join("synthetic-state"), b"preserve").unwrap();
+    let mut registry = WalletRegistry::default();
+    registry
+        .add(WalletProfile {
+            id,
+            name: "Synthetic".into(),
+            network: network_name().into(),
+            kind: WalletKind::Multisig,
+            descriptor_checksum: "12345678".into(),
+            created_at: 1,
+            backup_verified: true,
+        })
+        .unwrap();
+    registry::save_atomic(&root.join("wallet-registry.json"), &registry).unwrap();
+    assert!(cleanup_failed_profile(&directory).is_err());
+    assert_eq!(
+        fs::read(directory.join("synthetic-state")).unwrap(),
+        b"preserve"
+    );
+    // Uncertain/corrupt registry state also forbids destructive cleanup.
+    fs::write(root.join("wallet-registry.json"), b"truncated").unwrap();
+    assert!(cleanup_failed_profile(&directory).is_err());
+    assert!(directory.exists());
+    registry::save_atomic(
+        &root.join("wallet-registry.json"),
+        &WalletRegistry::default(),
+    )
+    .unwrap();
+    cleanup_failed_profile(&directory).unwrap();
+    assert!(!directory.exists());
+    fs::remove_dir_all(root).unwrap();
 }
