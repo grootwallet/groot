@@ -94,11 +94,11 @@ test('failed wallet switch keeps Settings actions and polling alive', async ({ p
     walletService.selectWallet = async () => {
       throw new Error('synthetic selection failure');
     };
+    const connectionStatus = await walletService.testNodeConnection();
     walletService.testNodeConnection = () =>
       new Promise((resolve) => {
         Object.assign(window, {
-          finishConnection: () =>
-            resolve({ connected: true, blocks: 123, pruned: false, pruneHeight: null })
+          finishConnection: () => resolve(connectionStatus)
         });
       });
   });
