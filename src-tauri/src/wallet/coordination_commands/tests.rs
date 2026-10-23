@@ -960,3 +960,121 @@ fn phone_key_health_check_is_bound_to_the_saved_wallet_identity() {
     local.xpub = foreign_xpub;
     assert!(!mobile_signer_matches_wallet(&wallet, expected, &mnemonic).unwrap());
 }
+
+#[test]
+fn mobile_review_and_signing_authenticate_all_prevouts_without_mutation() {
+    use bdk_wallet::bitcoin::{
+        absolute::LockTime, hashes::Hash, transaction::Version, OutPoint, ScriptBuf, Sequence,
+        Transaction, TxIn, TxOut, Witness,
+    };
+    let (mnemonic, hardware, metadata, coordination) = coordinated_wallet();
+    let mut coordinator = Wallet::create(
+        metadata.external_descriptor.clone(),
+        metadata.internal_descriptor.clone(),
+    )
+    .network(Network::Regtest)
+    .create_wallet_no_persist()
+    .unwrap();
+    let receive = coordinator.reveal_next_address(KeychainKind::External);
+    let funding = Transaction {
+        version: Version::TWO,
+        lock_time: LockTime::ZERO,
+        input: vec![TxIn {
+            previous_output: OutPoint::new(Txid::from_byte_array([93; 32]), 0),
+            script_sig: ScriptBuf::new(),
+            sequence: Sequence::MAX,
+            witness: Witness::new(),
+        }],
+        output: vec![
+            TxOut {
+                value: Amount::from_sat(100_000),
+                script_pubkey: receive.address.script_pubkey()
+            };
+            2
+        ],
+    };
+    let outpoints = [
+        OutPoint::new(funding.compute_txid(), 0),
+        OutPoint::new(funding.compute_txid(), 1),
+    ];
+    coordinator.apply_unconfirmed_txs([(funding, 1)]);
+    let secp = Secp256k1::new();
+    let key = hardware[0]
+        .account_private
+        .derive_priv(&secp, &DerivationPath::from_str("m/0/7").unwrap())
+        .unwrap();
+    let destination = Address::p2wpkh(
+        &bdk_wallet::bitcoin::CompressedPublicKey(key.private_key.public_key(&secp)),
+        Network::Regtest,
+    );
+    let mut builder = coordinator.build_tx();
+    builder
+        .add_utxos(&outpoints)
+        .unwrap()
+        .manually_selected_only()
+        .add_recipient(destination.script_pubkey(), Amount::from_sat(100_000))
+        .fee_rate(FeeRate::from_sat_per_vb(2).unwrap());
+    let original = builder.finish().unwrap();
+    assert_eq!(original.inputs.len(), 2);
+    let encoded = encode_psbt(&original);
+    let review = review_mobile_psbt_for(&metadata, &coordination, &encoded).unwrap();
+    assert!(sign_mobile_psbt_for(&metadata, &mnemonic, &encoded, review.revision_id).is_ok());
+    // A fresh revision for each retry must not allow alternate claimed input values.
+    for index in 0..2 {
+        let mut altered = original.clone();
+        altered.inputs[index].witness_utxo.as_mut().unwrap().value = Amount::from_sat(99_900);
+        let encoded = encode_psbt(&altered);
+        assert_eq!(
+            review_mobile_psbt_for(&metadata, &coordination, &encoded)
+                .unwrap_err()
+                .code,
+            "proposal_mismatch"
+        );
+        assert_eq!(
+            sign_mobile_psbt_for(&metadata, &mnemonic, &encoded, psbt_revision(&altered))
+                .unwrap_err()
+                .code,
+            "proposal_mismatch"
+        );
+        assert!(altered
+            .inputs
+            .iter()
+            .all(|input| input.partial_sigs.is_empty()));
+    }
+    let mut variants = Vec::new();
+    let mut missing = original.clone();
+    missing.inputs[0].non_witness_utxo = None;
+    variants.push((missing, "malformed_psbt"));
+    let mut missing = original.clone();
+    missing.inputs[0].witness_utxo = None;
+    variants.push((missing, "malformed_psbt"));
+    let mut wrong = original.clone();
+    wrong.inputs[0].non_witness_utxo.as_mut().unwrap().lock_time = LockTime::from_consensus(1);
+    variants.push((wrong, "proposal_mismatch"));
+    let mut outside = original.clone();
+    outside.unsigned_tx.input[0].previous_output.vout = u32::MAX;
+    variants.push((outside, "proposal_mismatch"));
+    let mut duplicate = original.clone();
+    duplicate.unsigned_tx.input[1].previous_output = duplicate.unsigned_tx.input[0].previous_output;
+    variants.push((duplicate, "proposal_mismatch"));
+    let mut wrong = original.clone();
+    wrong.inputs[0].witness_utxo.as_mut().unwrap().script_pubkey = destination.script_pubkey();
+    variants.push((wrong, "proposal_mismatch"));
+    for (variant, code) in variants {
+        let before = encode_psbt(&variant);
+        assert_eq!(
+            review_mobile_psbt_for(&metadata, &coordination, &before)
+                .unwrap_err()
+                .code,
+            code
+        );
+        assert_eq!(
+            sign_mobile_psbt_for(&metadata, &mnemonic, &before, psbt_revision(&variant))
+                .unwrap_err()
+                .code,
+            code
+        );
+        assert_eq!(encode_psbt(&variant), before);
+    }
+    assert_eq!(encode_psbt(&original), encoded);
+}

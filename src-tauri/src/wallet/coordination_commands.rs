@@ -1415,6 +1415,7 @@ fn sign_mobile_psbt_for(
             "The PSBT changed after review. Scan it again before signing.",
         ));
     }
+    authenticate_mobile_prevouts(&reviewed)?;
     let (fingerprint, account, account_xpub) =
         derive_mobile_account(mnemonic).map_err(coordination_api_error)?;
     let signer = wallet
@@ -1538,6 +1539,55 @@ fn review_mobile_psbt(app: &AppHandle, encoded: &str) -> ApiResult<MobilePsbtRev
     review_mobile_psbt_for(&metadata, &coordination, encoded)
 }
 
+// Offline phone review cannot trust a coordinator's claimed input values.
+// Full previous transactions authenticate every value together, preventing fee
+// ambiguity across separately reviewed Segwit-v0 signing attempts. No mutation.
+fn authenticate_mobile_prevouts(psbt: &Psbt) -> ApiResult<()> {
+    if psbt.inputs.is_empty() || psbt.inputs.len() != psbt.unsigned_tx.input.len() {
+        return Err(api_error(
+            "malformed_psbt",
+            "The PSBT has no signable inputs.",
+        ));
+    }
+    let mut seen = HashSet::new();
+    for (txin, input) in psbt.unsigned_tx.input.iter().zip(&psbt.inputs) {
+        if !seen.insert(txin.previous_output) {
+            return Err(api_error("proposal_mismatch", "The PSBT repeats an input."));
+        }
+        let previous = input.non_witness_utxo.as_ref().ok_or_else(|| api_error(
+            "malformed_psbt", "Mobile signing requires the complete previous transaction for every input. Export the full PSBT from the coordinator."
+        ))?;
+        if previous.compute_txid() != txin.previous_output.txid {
+            return Err(api_error(
+                "proposal_mismatch",
+                "A PSBT input does not match its previous transaction.",
+            ));
+        }
+        let output = previous
+            .output
+            .get(txin.previous_output.vout as usize)
+            .ok_or_else(|| {
+                api_error(
+                    "proposal_mismatch",
+                    "A PSBT input points outside its previous transaction.",
+                )
+            })?;
+        let witness = input.witness_utxo.as_ref().ok_or_else(|| {
+            api_error(
+                "malformed_psbt",
+                "Every mobile-signing input must include its witness UTXO.",
+            )
+        })?;
+        if output != witness {
+            return Err(api_error(
+                "proposal_mismatch",
+                "A PSBT input does not match its authenticated previous output.",
+            ));
+        }
+    }
+    Ok(())
+}
+
 fn review_mobile_psbt_for(
     metadata: &MultisigWalletDto,
     coordination: &CoordinationMetadata,
@@ -1550,12 +1600,7 @@ fn review_mobile_psbt_for(
         ));
     }
     let psbt = decode_psbt(encoded).map_err(proposal_api_error)?;
-    if psbt.inputs.is_empty() || psbt.inputs.len() != psbt.unsigned_tx.input.len() {
-        return Err(api_error(
-            "malformed_psbt",
-            "The PSBT has no signable inputs.",
-        ));
-    }
+    authenticate_mobile_prevouts(&psbt)?;
     if psbt.inputs.iter().any(|input| {
         input.final_script_sig.is_some()
             || input.final_script_witness.is_some()
