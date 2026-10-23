@@ -22,9 +22,13 @@ unsafe extern "C" fn count_snapshot_statement(
 #[test]
 #[ignore = "synthetic snapshot benchmark; run alone with --ignored --nocapture"]
 fn snapshot_history_benchmark() {
+    assert!(
+        !cfg!(debug_assertions),
+        "Use the production profile for timing"
+    );
     snapshot_history_fixture(
         benchmark_size("GROOT_BENCH_TRANSACTIONS", 100).min(1_000),
-        4,
+        105,
         true,
     );
 }
@@ -124,7 +128,7 @@ fn snapshot_history_fixture(rows: usize, samples: usize, report: bool) {
             activity_statements <= 13 * rows as u64 + 10,
             "independent receive page exceeded SQL budget: {activity_statements} for {rows}"
         );
-        if report {
+        if report && sample >= 5 {
             let _ = writeln!(std::io::stderr(),
             "snapshot_history rows={rows} sample={sample} elapsed_us={} statements={statements}",
             elapsed.as_micros());
@@ -227,4 +231,46 @@ fn latest_signer_evidence_query_benchmark() {
         elapsed.as_millis(),
         elapsed.as_nanos() / signers as u128
     );
+}
+
+#[test]
+#[ignore = "opt-in production-profile queue and durable registry measurements"]
+fn measure_operation_lock_and_registry_save() {
+    assert_eq!(std::env::var("GROOT_MEASURE_NATIVE").as_deref(), Ok("1"));
+    assert!(!cfg!(debug_assertions), "Use cargo test --release");
+    let directory = std::env::temp_dir().join(format!("groot-measure-registry-{}", Uuid::new_v4()));
+    fs::create_dir_all(&directory).unwrap();
+    let state = AppState::default();
+    let registry = WalletRegistry::default();
+    let mut lock_ns = Vec::new();
+    let mut save_us = Vec::new();
+    for sample in 0..105 {
+        let started = Instant::now();
+        let guard = operation_guard(&state).unwrap();
+        let acquired = started.elapsed().as_nanos();
+        let started = Instant::now();
+        registry::save_atomic(&directory.join("registry.json"), &registry).unwrap();
+        let saved = started.elapsed().as_micros();
+        drop(guard);
+        if sample >= 5 {
+            lock_ns.push(acquired);
+            save_us.push(saved);
+        }
+    }
+    assert_eq!(
+        registry::load(&directory.join("registry.json")).unwrap(),
+        registry
+    );
+    fs::remove_dir_all(directory).unwrap();
+    for (operation, unit, mut values) in [
+        ("uncontended_operation_lock", "ns", lock_ns),
+        ("empty_registry_atomic_save", "us", save_us),
+    ] {
+        values.sort_unstable();
+        println!(
+            "{}",
+            serde_json::json!({"kind":"synthetic-native-core", "operation":operation, "unit":unit,
+            "warmups":5, "samples":100, "min":values[0], "median":values[49], "p95":values[94], "max":values[99], "result":"ok"})
+        );
+    }
 }
