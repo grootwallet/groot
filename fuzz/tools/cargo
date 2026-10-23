@@ -1,4 +1,8 @@
 #!/usr/bin/env sh
-# cargo-fuzz 0.13.2 does not forward --locked. Enforce it on its Cargo calls.
+# cargo-fuzz 0.13.2 does not forward --locked. Keep it before cargo run's --.
 set -eu
-exec rustup run nightly-2026-10-22 cargo "$@" --locked
+case "${1:-}" in
+  build|run) subcommand="$1"; shift ;;
+  *) echo 'The fuzz Cargo wrapper accepts only build and run.' >&2; exit 2 ;;
+esac
+exec rustup run nightly-2026-10-22 cargo "$subcommand" --locked "$@"

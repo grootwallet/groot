@@ -16,6 +16,9 @@ jobs:
   parsers:
     runs-on: macos-14
     timeout-minutes: 60
+    env:
+      GROOT_FUZZ_TARGET_DIR: ${{ runner.temp }}/groot-fuzz-target
+      GROOT_FUZZ_CORPUS_DIR: ${{ runner.temp }}/groot-fuzz-corpus
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
