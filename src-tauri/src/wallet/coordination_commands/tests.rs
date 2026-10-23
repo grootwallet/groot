@@ -1514,3 +1514,194 @@ fn mobile_review_rejects_authenticated_amount_overflow_and_negative_fee() {
         assert_eq!(encode_psbt(&psbt), encoded);
     }
 }
+
+#[test]
+fn pairing_storage_entrypoints_reject_untrusted_session_paths_before_io() {
+    let missing = std::env::temp_dir().join(format!("groot-missing-pairing-{}", Uuid::new_v4()));
+    let session = Uuid::new_v4();
+    let wallet = Uuid::new_v4();
+    assert_eq!(staging_session_uuid(&session.to_string()).unwrap(), session);
+    for invalid in ["", "../outside", "/absolute", "not-a-uuid"] {
+        assert_eq!(
+            staging_session_uuid(invalid).unwrap_err().code,
+            "invalid_coordination_payload"
+        );
+        assert_eq!(
+            pending_mobile_secret_path_in(&missing, invalid)
+                .unwrap_err()
+                .code,
+            "invalid_coordination_payload"
+        );
+        assert_eq!(
+            consuming_mobile_secret_path_in(&missing, invalid, wallet)
+                .unwrap_err()
+                .code,
+            "invalid_coordination_payload"
+        );
+        assert_eq!(
+            consuming_mobile_secret_paths_for_session(&missing, invalid)
+                .unwrap_err()
+                .code,
+            "invalid_coordination_payload"
+        );
+    }
+    assert!(!missing.exists());
+}
+
+#[test]
+fn watch_only_commands_validate_the_complete_qr_import_path() {
+    let secp = Secp256k1::new();
+    let path = crate::external_signer::singlesig_account_path();
+    let master = Xpriv::new_master(NetworkKind::Test, &[42; 32]).unwrap();
+    let account = master
+        .derive_priv(&secp, &DerivationPath::from_str(path).unwrap())
+        .unwrap();
+    let signer = crate::external_signer::ExternalSignerInput {
+        label: "Synthetic hardware".into(),
+        fingerprint: master.fingerprint(&secp).to_string(),
+        xpub: Xpub::from_priv(&secp, &account).to_string(),
+        derivation_path: path.into(),
+        source: crate::external_signer::SignerSource::Qr,
+        device_type: None,
+    };
+    let (content, _) = crate::external_signer::descriptors(&signer).unwrap();
+    let frames = coordination_watch_only_encode(content.clone()).unwrap();
+    assert_eq!(coordination_watch_only_decode(frames).unwrap(), content);
+    for invalid in [
+        "not a public export",
+        "{\"seed\":\"synthetic forbidden material\"}",
+    ] {
+        assert!(coordination_watch_only_encode(invalid.into()).is_err());
+        let frames = encode_coordination(CoordinationUrType::Wallet, invalid.as_bytes()).unwrap();
+        assert!(coordination_watch_only_decode(frames).is_err());
+    }
+    let private = r#"{"seed":"synthetic forbidden material"}"#;
+    assert_eq!(
+        coordination_watch_only_encode(private.into())
+            .unwrap_err()
+            .code,
+        "private_material_rejected"
+    );
+    let private_frames =
+        encode_coordination(CoordinationUrType::Wallet, private.as_bytes()).unwrap();
+    assert_eq!(
+        coordination_watch_only_decode(private_frames)
+            .unwrap_err()
+            .code,
+        "private_material_rejected"
+    );
+    let wrong_type =
+        encode_coordination(CoordinationUrType::Invitation, content.as_bytes()).unwrap();
+    assert!(coordination_watch_only_decode(wrong_type).is_err());
+    let frames = encode_coordination(CoordinationUrType::Wallet, &[0xff]).unwrap();
+    assert_eq!(
+        coordination_watch_only_decode(frames).unwrap_err().code,
+        "invalid_coordination_payload"
+    );
+    assert!(coordination_watch_only_decode(vec!["ur:crypto-psbt/invalid".into()]).is_err());
+}
+
+#[test]
+fn phone_recovery_inspection_validates_qr_policy_and_exact_mobile_manifest() {
+    let (_, _, wallet, _) = coordinated_wallet();
+    let record = mobile_public_wallet_record(&wallet);
+    let inspect = |public: &PublicWalletRecord| {
+        mobile_recovery_inspect_inner(
+            encode_coordination(
+                CoordinationUrType::Wallet,
+                &serde_json::to_vec(public).unwrap(),
+            )
+            .unwrap(),
+        )
+    };
+    let result = inspect(&record).unwrap();
+    assert_eq!(result.wallet_name, wallet.name);
+    assert_eq!(result.threshold, wallet.threshold);
+    assert_eq!(result.signer_count, wallet.cosigners.len());
+    assert_eq!(
+        Some(result.mobile_signer_fingerprint),
+        record.mobile_signer_fingerprint
+    );
+    let mut wrong = record.clone();
+    wrong.role = DeviceRole::DesktopCoordinator;
+    assert!(inspect(&wrong).is_err());
+    let mut wrong = record.clone();
+    wrong.mobile_signer_fingerprint = None;
+    assert!(inspect(&wrong).is_err());
+    let mut wrong = record.clone();
+    wrong.signers[0].xpub = wrong.signers[1].xpub.clone();
+    assert!(inspect(&wrong).is_err());
+    let mut wrong = record.clone();
+    wrong
+        .signers
+        .iter_mut()
+        .for_each(|signer| signer.device_type = None);
+    assert!(inspect(&wrong).is_err());
+    let mut wrong = record;
+    wrong
+        .signers
+        .iter_mut()
+        .for_each(|signer| signer.device_type = Some(MOBILE_DEVICE_TYPE.into()));
+    assert!(inspect(&wrong).is_err());
+    let malformed = encode_coordination(CoordinationUrType::Wallet, b"{truncated").unwrap();
+    assert!(mobile_recovery_inspect_inner(malformed).is_err());
+}
+
+#[test]
+fn pairing_rejects_malformed_qr_records_without_consuming_the_pending_session() {
+    let current_time = 1_000;
+    let expected = invitation(current_time + 60);
+    let session_id = expected.session_id.clone();
+    let valid_frames = response_frames(&expected);
+    let mut sessions = HashMap::from([(
+        session_id.clone(),
+        PendingDesktopPairing {
+            invitation: expected,
+            accepted_signer: None,
+        },
+    )]);
+    for payload in [
+        b"{truncated".as_slice(),
+        br#"{"version":1}"#.as_slice(),
+        br#"{"version":2,"sessionId":"invalid","encryptedRecord":"invalid"}"#.as_slice(),
+    ] {
+        let frames = encode_coordination(CoordinationUrType::Bsms, payload).unwrap();
+        assert_eq!(
+            accept_desktop_response(&mut sessions, &frames, current_time)
+                .unwrap_err()
+                .code,
+            "invalid_coordination_payload"
+        );
+        assert_eq!(sessions.len(), 1);
+        assert!(sessions[&session_id].accepted_signer.is_none());
+    }
+    // Malformed input must not make a legitimate retry impossible.
+    let signer = accept_desktop_response(&mut sessions, &valid_frames, current_time).unwrap();
+    assert_eq!(
+        sessions[&session_id].accepted_signer.as_ref(),
+        Some(&signer)
+    );
+    assert_eq!(
+        accept_desktop_response(&mut sessions, &valid_frames, current_time)
+            .unwrap_err()
+            .code,
+        "pairing_replay"
+    );
+
+    let malformed_invitation =
+        encode_coordination(CoordinationUrType::Invitation, b"{truncated").unwrap();
+    assert_eq!(
+        coordination_decode_invitation(malformed_invitation)
+            .unwrap_err()
+            .code,
+        "invalid_coordination_payload"
+    );
+    let malformed_wallet =
+        encode_coordination(CoordinationUrType::Wallet, br#"{"version":2}"#).unwrap();
+    assert_eq!(
+        mobile_recovery_inspect_inner(malformed_wallet)
+            .unwrap_err()
+            .code,
+        "invalid_coordination_payload"
+    );
+}

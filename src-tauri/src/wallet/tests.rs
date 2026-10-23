@@ -7581,3 +7581,204 @@ fn failed_profile_cleanup_preserves_a_visible_registry_commit() {
     assert!(!directory.exists());
     fs::remove_dir_all(root).unwrap();
 }
+
+#[test]
+fn persisted_profile_identity_reopens_all_wallet_kinds_and_rejects_metadata_substitution() {
+    let root = std::env::temp_dir().join(format!("groot-profile-identity-{}", Uuid::new_v4()));
+    let mnemonic = Mnemonic::parse(WORDS).unwrap();
+    let software = software_wallet_descriptors(&mnemonic, "synthetic passphrase").unwrap();
+    let multisig = descriptor_backup().wallet;
+    let secp = Secp256k1::new();
+    let master = Xpriv::new_master(NetworkKind::Test, &[42; 32]).unwrap();
+    let account = master
+        .derive_priv(
+            &secp,
+            &DerivationPath::from_str(singlesig_account_path()).unwrap(),
+        )
+        .unwrap();
+    let signer = ExternalSignerInput {
+        label: "Synthetic signer".into(),
+        fingerprint: master.fingerprint(&secp).to_string(),
+        xpub: Xpub::from_priv(&secp, &account).to_string(),
+        derivation_path: singlesig_account_path().into(),
+        source: SignerSource::Qr,
+        device_type: None,
+    };
+    let hardware_pair = external_signer::descriptors(&signer).unwrap();
+    let hardware = ExternalSignerWallet {
+        version: 1,
+        name: "Synthetic hardware".into(),
+        signer,
+        external_descriptor: hardware_pair.0.clone(),
+        internal_descriptor: hardware_pair.1.clone(),
+    };
+    for (kind, pair, metadata, expected_name) in [
+        (WalletKind::SingleKey, software, None, "Primary wallet"),
+        (
+            WalletKind::Multisig,
+            (
+                multisig.external_descriptor.clone(),
+                multisig.internal_descriptor.clone(),
+            ),
+            Some(serde_json::to_value(&multisig).unwrap()),
+            multisig.name.as_str(),
+        ),
+        (
+            WalletKind::WatchOnly,
+            hardware_pair,
+            Some(serde_json::to_value(&hardware).unwrap()),
+            hardware.name.as_str(),
+        ),
+    ] {
+        let id = Uuid::new_v4();
+        let directory = root.join(id.to_string());
+        ensure_private_directory(&directory).unwrap();
+        let db_path = directory.join("wallet.sqlite");
+        let mut db = Connection::open(&db_path).unwrap();
+        init_app_schema(&db).unwrap();
+        Wallet::create(pair.0.clone(), pair.1.clone())
+            .network(network())
+            .create_wallet(&mut db)
+            .unwrap();
+        drop(db);
+        if let Some(value) = &metadata {
+            fs::write(
+                directory.join("wallet.json"),
+                serde_json::to_vec(value).unwrap(),
+            )
+            .unwrap();
+        }
+        let profile = profile_from_directory(&directory, id, kind.clone()).unwrap();
+        assert_eq!(profile.id, id);
+        assert_eq!(profile.name, expected_name);
+        assert_eq!(profile.kind, kind);
+        assert_eq!(profile.network, network_name());
+        assert!(profile.backup_verified);
+        assert_eq!(
+            descriptor_pair_from_directory(&directory, &profile).unwrap(),
+            pair
+        );
+        let before = fs::read(&db_path).unwrap();
+        let mut wrong_identity = profile.clone();
+        wrong_identity.descriptor_checksum = "00000000".into();
+        assert_eq!(
+            descriptor_pair_from_directory(&directory, &wrong_identity)
+                .unwrap_err()
+                .code,
+            "wallet_corrupt"
+        );
+        if let Some(mut value) = metadata {
+            value["internalDescriptor"] = serde_json::Value::String(pair.0.clone());
+            fs::write(
+                directory.join("wallet.json"),
+                serde_json::to_vec(&value).unwrap(),
+            )
+            .unwrap();
+            assert_eq!(
+                descriptor_pair_from_directory(&directory, &profile)
+                    .unwrap_err()
+                    .code,
+                "wallet_corrupt"
+            );
+            fs::write(directory.join("wallet.json"), b"truncated").unwrap();
+            assert!(descriptor_pair_from_directory(&directory, &profile).is_err());
+        }
+        assert_eq!(
+            fs::read(&db_path).unwrap(),
+            before,
+            "identity inspection must not rewrite the database"
+        );
+    }
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn profile_attempt_cleanup_clears_only_failed_auth_and_preserves_uncertain_commits() {
+    let root = std::env::temp_dir().join(format!("groot-profile-attempt-{}", Uuid::new_v4()));
+    let id = Uuid::new_v4();
+    let other = Uuid::new_v4();
+    let directory = root.join("wallets").join(id.to_string());
+    ensure_private_directory(&directory).unwrap();
+    fs::write(directory.join("synthetic-state"), b"preserve").unwrap();
+    let state = AppState::default();
+    for wallet_id in [id, other] {
+        state.node_auth.lock().unwrap().insert(
+            wallet_id,
+            NodeAuthSession {
+                config: CoreNodeConfig {
+                    backend: ChainBackend::LocalCore {
+                        url: "http://127.0.0.1:18443".into(),
+                    },
+                    auth: RpcAuthMode::UserPass,
+                    username: Some("synthetic".into()),
+                    tor_proxy: None,
+                },
+                password: Zeroizing::new("synthetic credential".into()),
+                mainnet_node_verified: false,
+            },
+        );
+    }
+    finish_new_profile_attempt(&state, id, &directory, true).unwrap();
+    assert!(directory.exists());
+    assert_eq!(state.node_auth.lock().unwrap().len(), 2);
+    fs::write(root.join("wallet-registry.json"), b"truncated").unwrap();
+    assert!(finish_new_profile_attempt(&state, id, &directory, false).is_err());
+    assert_eq!(
+        fs::read(directory.join("synthetic-state")).unwrap(),
+        b"preserve"
+    );
+    let sessions = state.node_auth.lock().unwrap();
+    assert!(!sessions.contains_key(&id));
+    assert!(sessions.contains_key(&other));
+    drop(sessions);
+    registry::save_atomic(
+        &root.join("wallet-registry.json"),
+        &WalletRegistry::default(),
+    )
+    .unwrap();
+    finish_new_profile_attempt(&state, id, &directory, false).unwrap();
+    assert!(!directory.exists());
+    // Cleanup is idempotent, but never guesses at malformed ownership paths.
+    finish_new_profile_attempt(&state, id, &directory, false).unwrap();
+    for invalid in [
+        root.join("wallets/not-a-uuid"),
+        root.join("other").join(id.to_string()),
+    ] {
+        ensure_private_directory(&invalid).unwrap();
+        fs::write(invalid.join("synthetic-state"), b"preserve").unwrap();
+        assert!(cleanup_failed_profile(&invalid).is_err());
+        assert_eq!(
+            fs::read(invalid.join("synthetic-state")).unwrap(),
+            b"preserve"
+        );
+    }
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[cfg(unix)]
+#[test]
+fn private_profile_storage_rejects_links_and_restores_owner_only_permissions() {
+    use std::os::unix::{fs::symlink, fs::PermissionsExt};
+    let root = std::env::temp_dir().join(format!("groot-private-directory-{}", Uuid::new_v4()));
+    let directory = root.join("regular");
+    ensure_private_directory(&directory).unwrap();
+    fs::set_permissions(&directory, fs::Permissions::from_mode(0o755)).unwrap();
+    ensure_private_directory(&directory).unwrap();
+    assert_eq!(
+        fs::metadata(&directory).unwrap().permissions().mode() & 0o777,
+        0o700
+    );
+    let file = directory.join("record.json");
+    fs::write(&file, b"public synthetic record").unwrap();
+    let dir_link = root.join("directory-link");
+    symlink(&directory, &dir_link).unwrap();
+    assert!(ensure_private_directory(&dir_link).is_err());
+    assert!(ensure_private_directory(&file).is_err());
+    let file_link = root.join("file-link");
+    symlink(&file, &file_link).unwrap();
+    assert!(read_private_text(&file_link).is_err());
+    assert!(read_private_text(&directory).is_err());
+    assert_eq!(read_private_text(&file).unwrap(), "public synthetic record");
+    assert_eq!(fs::read(&file).unwrap(), b"public synthetic record");
+    fs::remove_dir_all(root).unwrap();
+}
