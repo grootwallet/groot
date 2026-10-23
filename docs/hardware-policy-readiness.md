@@ -1,6 +1,8 @@
 # Hardware wallet policy readiness
 
-Latest setup progress: [2026-09-26 A/B/C checkpoint](hardware-certification-mainnet-2026-09-12.md#2026-09-26-abc-setup-checkpoint). All three groups now exist; these owner-reported setup results do not establish transaction, recovery, exact-firmware, or GA certification.
+The macOS Apple-silicon [v5.3.0 release](https://github.com/grootwallet/groot/releases/tag/v5.3.0), published 2026-10-23, retains standard BIP84/BIP48 support for the seven models in ADR 0104. This does not certify delayed-policy signing. The matrix below separates implemented policy behavior from exact-candidate physical evidence.
+
+Historical setup checkpoint: [2026-09-26 A/B/C checkpoint](hardware-certification-mainnet-2026-09-12.md#2026-09-26-abc-setup-checkpoint). All three groups now exist; these owner-reported setup results do not establish transaction, recovery, exact-firmware, or GA certification.
 
 The 2026-09-12 Mainnet checkpoint on older internal build `27f821be` passed
 policy registration for a Coldcard Mk4 + Ledger Nano S Plus + BitBox02 Nova
@@ -45,6 +47,8 @@ Policy registration is optional while creating a watch-only coordinator. If any 
 | Coldcard         | Supported for standard policy-file setup subject to exact-model evidence | **Unsupported** by the reviewed HWI/firmware path.                                                                                                        |
 | Trezor           | Supported for standard multisig subject to exact-model evidence          | **Unsupported** by the reviewed HWI/firmware path.                                                                                                        |
 | Other families   | Unsupported until separately reviewed and certified                      | **Unsupported** until separately reviewed and certified.                                                                                                  |
+
+The desktop v5.3.0 release does not expand delayed-policy hardware support. Partner/Family continuity is experimental on Regtest/Testnet4. Phone pairing supports standard multisig only; it cannot enroll into Continuity. Offline file/QR exchange is not certification of any model or descriptor.
 
 For delayed wallets, Groot permits bounded public-key import and offline PSBT exchange but blocks USB enrollment, policy registration, trusted address display, and signing before any device interaction. “Firmware candidate” is deliberately not a support or certification claim. See ADR 0044.
 

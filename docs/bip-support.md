@@ -120,3 +120,7 @@ RC18's canonical-identity owner package and release notes have **no BIP or persi
 The revised in-app 5.3 notes and longer real-Core test RPC timeout have **no BIP or persisted-format impact**. They change presentation and test tolerance only; no network, descriptor, script, transaction, key or wallet behavior changes.
 
 The approved Developer ID 5.3.0 fast-runtime packaging has **no BIP or persisted-format impact**. It uses the already validated Mainnet BIP84 and standard BIP48 requests through the same HWI 3.2.0 operation protocol. It changes release input/signature binding and startup latency, not paths, descriptors, PSBT interpretation, signatures, keys, network selection, wallet data, or standards scope.
+
+## Post-5.3 maintenance assessment
+
+Refs #121. Refactoring presentation and native ownership has no BIP wire-format or wallet-format impact. BIP174 evidence expands with phone review/signing checks that bind every full previous transaction to its outpoint and complete witness output, plus deterministic bounded PSBT/UR/BSMS mutation coverage. Witness-only mobile input imports now fail closed; export a full PSBT without changing wallet descriptors or stored proposals. Existing size limits, BIP48 standard-only phone enrollment, test-network BIP68/112 Continuity boundaries, and lack of certified direct USB Miniscript support remain unchanged. See [maintenance evidence](testing/post-5.3-maintenance.md).

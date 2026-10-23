@@ -1531,7 +1531,7 @@
             title={translate($locale, 'Miniscript signer compatibility')}
             body={translate(
               $locale,
-              'Recovery and inheritance are not enabled yet. Ledger, Jade/Jade Plus and BitBox02 models are candidates only; no direct USB Miniscript workflow is certified in Groot. Standard multisig and phone pairing keep their existing support.'
+              'Partner and Family continuity are experimental on Regtest and Testnet4. Ledger, Jade/Jade Plus, BitBox02 and BitBox02 Nova are Miniscript candidates only; no direct USB Miniscript workflow is certified in Groot. Coldcard and Trezor are unsupported for delayed policies through this integration. Phone pairing supports standard multisig only.'
             )}
           />
           <div class="policy-choice-insight">

@@ -5,10 +5,10 @@ export const multisigCopy = {
     fr: 'Compatibilité des signataires Miniscript',
     es: 'Compatibilidad de firmantes Miniscript'
   },
-  'Recovery and inheritance are not enabled yet. Ledger, Jade/Jade Plus and BitBox02 models are candidates only; no direct USB Miniscript workflow is certified in Groot. Standard multisig and phone pairing keep their existing support.':
+  'Partner and Family continuity are experimental on Regtest and Testnet4. Ledger, Jade/Jade Plus, BitBox02 and BitBox02 Nova are Miniscript candidates only; no direct USB Miniscript workflow is certified in Groot. Coldcard and Trezor are unsupported for delayed policies through this integration. Phone pairing supports standard multisig only.':
     {
-      fr: 'La récupération et la succession ne sont pas encore activées. Ledger, Jade/Jade Plus et les modèles BitBox02 sont seulement candidats ; aucun flux USB Miniscript direct n’est certifié dans Groot. Le multisig standard et l’association du téléphone conservent leur prise en charge actuelle.',
-      es: 'La recuperación y la herencia aún no están habilitadas. Ledger, Jade/Jade Plus y los modelos BitBox02 son solo candidatos; ningún flujo USB Miniscript directo está certificado en Groot. El multisig estándar y el emparejamiento del teléfono mantienen su compatibilidad actual.'
+      fr: 'Les modèles de continuité Partenaire et Famille sont expérimentaux sur Regtest et Testnet4. Ledger, Jade/Jade Plus, BitBox02 et BitBox02 Nova sont uniquement des candidats Miniscript ; aucun flux USB Miniscript direct n’est certifié dans Groot. Coldcard et Trezor ne sont pas pris en charge pour les politiques différées via cette intégration. Le jumelage du téléphone prend en charge uniquement le multisig standard.',
+      es: 'Las plantillas de continuidad Pareja y Familia son experimentales en Regtest y Testnet4. Ledger, Jade/Jade Plus, BitBox02 y BitBox02 Nova son solo candidatos Miniscript; ningún flujo USB Miniscript directo está certificado en Groot. Coldcard y Trezor no son compatibles con políticas diferidas mediante esta integración. El emparejamiento del teléfono solo admite multisig estándar.'
     },
   '{walletName} Review': {
     fr: 'Vérification de {walletName}',
