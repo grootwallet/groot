@@ -10,7 +10,7 @@ export function prepareIosProject(source, identity) {
   if (
     identity.identifier !== 'app.groot.wallet.mobile.testnet4.dev' ||
     !source.includes(`PRODUCT_BUNDLE_IDENTIFIER: ${identity.identifier}`) ||
-    !/^5\.3\.0-rc[1-9][0-9]*$/.test(identity.version) ||
+    !/^5\.3\.0(?:-rc[1-9][0-9]*)?$/.test(identity.version) ||
     !/^[0-9]+$/.test(identity.bundleVersion)
   ) {
     throw new Error('Unexpected iOS development identity; generated project was not changed.');

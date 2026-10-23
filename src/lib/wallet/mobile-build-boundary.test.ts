@@ -57,23 +57,54 @@ describe('actual iOS linked network verification', () => {
     }
   });
 
-  it('prepares only the isolated project, keeps its signing settings and is idempotent', () => {
-    const identity = {
-      identifier: mobile.identifier,
-      version: '5.3.0-rc2',
-      bundleVersion: '530002'
-    };
-    const source = `PRODUCT_BUNDLE_IDENTIFIER: ${mobile.identifier}\n      - path: Externals\n      - sdk: Security.framework\nCFBundleShortVersionString: 5.2.0\nCFBundleVersion: "5.2.0"\nCODE_SIGN_STYLE: Automatic\n`;
-    const prepared = prepareIosProject(source, identity);
-    expect(prepareIosProject(prepared, identity)).toBe(prepared);
-    expect(prepared).toContain('excludes: ["**/*.a"]');
-    expect(prepared).toContain('LocalAuthentication.framework');
-    expect(prepared).toContain('CFBundleVersion: "530002"');
-    expect(prepared).toContain('CODE_SIGN_STYLE: Automatic');
+  it.each(['5.3.0-rc2', '5.3.0'])(
+    'prepares isolated %s metadata without changing signing and is idempotent',
+    (version) => {
+      const identity = {
+        identifier: mobile.identifier,
+        version,
+        bundleVersion: '530002'
+      };
+      const source = `PRODUCT_BUNDLE_IDENTIFIER: ${mobile.identifier}\n      - path: Externals\n      - sdk: Security.framework\nCFBundleShortVersionString: 5.2.0\nCFBundleVersion: "5.2.0"\nCODE_SIGN_STYLE: Automatic\n`;
+      const prepared = prepareIosProject(source, identity);
+      expect(prepareIosProject(prepared, identity)).toBe(prepared);
+      expect(prepared).toContain('excludes: ["**/*.a"]');
+      expect(prepared).toContain('LocalAuthentication.framework');
+      expect(prepared).toContain('CFBundleVersion: "530002"');
+      expect(prepared).toContain('CFBundleShortVersionString: 5.3.0');
+      expect(prepared).toContain('CODE_SIGN_STYLE: Automatic');
+      expect(() =>
+        prepareIosProject(source.replace(mobile.identifier, desktop.identifier), identity)
+      ).toThrow('not changed');
+    }
+  );
+
+  it.each([
+    '5.2.0',
+    '5.3.1',
+    '5.4.0',
+    '5.3.0-rc0',
+    '5.3.0-rc01',
+    '5.3.0-beta1',
+    '5.3.0+build',
+    '5.3.0-rc2-extra'
+  ])('rejects unapproved development version %s before preparing metadata', (version) => {
+    const source = `PRODUCT_BUNDLE_IDENTIFIER: ${mobile.identifier}\n`;
     expect(() =>
-      prepareIosProject(source.replace(mobile.identifier, desktop.identifier), identity)
-    ).toThrow('not changed');
+      prepareIosProject(source, { identifier: mobile.identifier, version, bundleVersion: '530012' })
+    ).toThrow('Unexpected iOS development identity');
   });
+
+  it('rejects a different identity even when the generated source matches it', () => {
+    expect(() =>
+      prepareIosProject(`PRODUCT_BUNDLE_IDENTIFIER: ${desktop.identifier}\n`, {
+        identifier: desktop.identifier,
+        version: '5.3.0',
+        bundleVersion: '530012'
+      })
+    ).toThrow('Unexpected iOS development identity');
+  });
+
   it.each([
     ['testnet4', 'same', true],
     ['regtest', 'same', false],
