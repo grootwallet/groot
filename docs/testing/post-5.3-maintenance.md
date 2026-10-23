@@ -6,7 +6,9 @@ Refs #121. Baseline: released v5.3.0, `6a39bf50b2a6a042354b43369765a9af2174d061`
 
 No profile, registry, wallet database, credential, pairing envelope, backup or proposal format changes or migration. Native profile/notification/recovery extraction preserves existing guard and transaction order. Public WalletPort commands and DTOs are unchanged. Phone review/signing now requires complete previous transactions and rejects missing or inconsistent prevout data before accepting input amounts. The current desktop builders supply this data, verified by native and real-Core phone round trips; witness-only third-party inputs must be re-exported in full. PSBT and UR caps remain unchanged and oversized transfers fail explicitly.
 
-## Verification
+## Historical verification at c5bfc275
+
+For the later implementation and current acceptance limits, see [the execution record](post-5.3-execution.md), [operation ownership](post-5.3-operation-ownership.md) and [independent review](post-5.3-independent-review.md). The counts below describe the earlier maintenance source and are retained as historical evidence.
 
 Executed on 2026-10-23 with Node 24.19.0, pnpm 11.13.1, Rust 1.97.1 and Bitcoin Core 31.1.0:
 
@@ -27,7 +29,7 @@ A scoped independent security review of the released baseline found a phone inpu
 ## Maintainer physical acceptance
 
 1. Use the same exact candidate on desktop and the isolated Testnet4 iPhone build. Create/verify backup, pair and compare policy/first address, reject then retry a signing request, restart between signatures, merge/broadcast/confirm, and reopen the same proposal/history.
-2. Test invitation expiry/replay, mismatched comparison, wrong network/policy, stale revision, QR cancellation, credential rejection, background/lock, revoke/re-pair and lost-phone threshold recovery. No secrets or wallet identifiers belong in evidence.
+2. Test invitation expiry/replay, mismatched comparison, wrong network/policy, stale revision, QR cancellation, credential rejection, background/lock, pending-pair cancellation/replay, re-pairing and lost-phone threshold recovery. Completed-pair key revocation is not implemented; deleting a profile cannot revoke a retained Bitcoin signing key. No secrets or wallet identifiers belong in evidence.
 3. Phone signing requires complete input transactions. Verify a normal desktop QR round trip and a bounded too-large transfer. Re-export witness-only inputs with full previous transactions; do not bypass validation to make a scan work.
 4. Use isolated Regtest for every fixed Continuity stage before/at/after maturity, reorg/reconfirmation, differently aged coins, primary renewal and clean descriptor restoration. Keep exact named path and partial signatures across restart.
 5. Use Testnet4 for physical interoperability with the exact externally supported descriptor/model/firmware/transport. Ledger, Jade/Jade Plus and BitBox02 families remain candidates only; direct USB Miniscript and phone Continuity enrollment remain blocked. Coldcard/Trezor delayed policies are unsupported through the current integration. Do not infer long-delay acceptance from a short Testnet4 session.

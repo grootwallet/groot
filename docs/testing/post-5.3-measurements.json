@@ -1,0 +1,952 @@
+{
+  "schemaVersion": 1,
+  "kind": "synthetic-post53-maintenance-measurement-summary",
+  "runtimeSourceCommit": "da7b81731173233b3576a17c020e468238f99566",
+  "queryReuse": {
+    "sourceBefore": "4b8504bed0110efb6bcc26434df2a205e5d527c3",
+    "sourceAfter": "da7b81731173233b3576a17c020e468238f99566",
+    "method": "Before, after, after repeat, before repeat; 5 warmups then 100 samples; release profile; same 1000 independent synthetic receives; no owned build/fuzz/coverage process during measurement. Unrelated background processes remain untouched.",
+    "runs": {
+      "before": {
+        "operations": {
+          "snapshot_history": {
+            "samples": 100,
+            "medianUs": 123669.0,
+            "p95Us": 130933,
+            "minUs": 120488,
+            "maxUs": 191295,
+            "statements": [20007],
+            "bytes": {}
+          },
+          "history_page": {
+            "samples": 100,
+            "medianUs": 83650.0,
+            "p95Us": 87020,
+            "minUs": 82061,
+            "maxUs": 154244,
+            "statements": [13003],
+            "bytes": {
+              "full_bytes": [1186143],
+              "overview_bytes": [558117],
+              "page_bytes": [31700]
+            }
+          }
+        },
+        "maximum resident set size": 30883840,
+        "peak memory footprint": 16843232,
+        "logSha256": "4dc6c3e1fffd72e781b29425c3ec1777e488bd4b77ea47c5d801308b18212eee"
+      },
+      "after": {
+        "operations": {
+          "snapshot_history": {
+            "samples": 100,
+            "medianUs": 85833.0,
+            "p95Us": 89567,
+            "minUs": 83052,
+            "maxUs": 130821,
+            "statements": [20007],
+            "bytes": {}
+          },
+          "history_page": {
+            "samples": 100,
+            "medianUs": 58640.5,
+            "p95Us": 60846,
+            "minUs": 56656,
+            "maxUs": 136837,
+            "statements": [13003],
+            "bytes": {
+              "full_bytes": [1186143],
+              "overview_bytes": [558117],
+              "page_bytes": [31700]
+            }
+          }
+        },
+        "maximum resident set size": 31309824,
+        "peak memory footprint": 17269216,
+        "logSha256": "41e5d728f430a28428bfada36e2a426fffa47454ce4ad7d42b7571b7fb57d157"
+      },
+      "after-repeat": {
+        "operations": {
+          "snapshot_history": {
+            "samples": 100,
+            "medianUs": 85530.5,
+            "p95Us": 89232,
+            "minUs": 82953,
+            "maxUs": 160934,
+            "statements": [20007],
+            "bytes": {}
+          },
+          "history_page": {
+            "samples": 100,
+            "medianUs": 58482.5,
+            "p95Us": 61392,
+            "minUs": 56765,
+            "maxUs": 72394,
+            "statements": [13003],
+            "bytes": {
+              "full_bytes": [1186143],
+              "overview_bytes": [558117],
+              "page_bytes": [31700]
+            }
+          }
+        },
+        "maximum resident set size": 29851648,
+        "peak memory footprint": 15794632,
+        "logSha256": "04b2727fbc2253116375e9b6dd47ab352e311b836d6e3a384228feaa27da3661"
+      },
+      "before-repeat": {
+        "operations": {
+          "snapshot_history": {
+            "samples": 100,
+            "medianUs": 123819.0,
+            "p95Us": 128194,
+            "minUs": 120541,
+            "maxUs": 129279,
+            "statements": [20007],
+            "bytes": {}
+          },
+          "history_page": {
+            "samples": 100,
+            "medianUs": 83984.5,
+            "p95Us": 86482,
+            "minUs": 81822,
+            "maxUs": 132252,
+            "statements": [13003],
+            "bytes": {
+              "full_bytes": [1186143],
+              "overview_bytes": [558117],
+              "page_bytes": [31700]
+            }
+          }
+        },
+        "maximum resident set size": 30818304,
+        "peak memory footprint": 16761312,
+        "logSha256": "df6a14035f14bb451dd359bb89e3dc87e46a84b5c6e5f5586441ae6608c99424"
+      }
+    },
+    "executables": {
+      "groot-candidate-native-bench": "bd44159f8f096a08921d3ecee9028855b1d4e4e1b31df1f961a14378680d3973",
+      "groot-query-reuse-native-bench": "316f6d8f4e73896a7cb7ed8b2d6b720b199180cfbec78c6f90b4449fd7424008"
+    }
+  },
+  "initialPairedNative": {
+    "baseline": [
+      {
+        "inputs": 1,
+        "kind": "synthetic-native-core",
+        "max_us": 9725,
+        "median_us": 9195,
+        "min_us": 9008,
+        "operation": "phone_review",
+        "p95_us": 9498,
+        "result": "ok",
+        "samples": 100,
+        "signers": 3,
+        "warmups": 5
+      },
+      {
+        "inputs": 1,
+        "kind": "synthetic-native-core",
+        "max_us": 1897,
+        "median_us": 1753,
+        "min_us": 1732,
+        "operation": "phone_sign_and_encode",
+        "p95_us": 1841,
+        "result": "ok",
+        "samples": 100,
+        "signers": 3,
+        "warmups": 5
+      },
+      {
+        "operation": "measure_mobile_review_and_signing",
+        "peakProcessRssBytes": 17072128
+      },
+      {
+        "kind": "synthetic-native-core",
+        "max": 1875,
+        "median": 542,
+        "min": 41,
+        "operation": "uncontended_operation_lock",
+        "p95": 1375,
+        "result": "ok",
+        "samples": 100,
+        "unit": "ns",
+        "warmups": 5
+      },
+      {
+        "kind": "synthetic-native-core",
+        "max": 28071,
+        "median": 11918,
+        "min": 9015,
+        "operation": "empty_registry_atomic_save",
+        "p95": 16207,
+        "result": "ok",
+        "samples": 100,
+        "unit": "us",
+        "warmups": 5
+      },
+      {
+        "operation": "measure_operation_lock_and_registry_save",
+        "peakProcessRssBytes": 11681792
+      },
+      {
+        "operation": "snapshot_history",
+        "unit": "us",
+        "samples": 100,
+        "median": 122564.5,
+        "p95": 126056,
+        "min": 120040,
+        "max": 127875,
+        "statements": [20007],
+        "rows": 1000,
+        "bytes": {}
+      },
+      {
+        "operation": "history_page",
+        "unit": "us",
+        "samples": 100,
+        "median": 83294.0,
+        "p95": 85702,
+        "min": 81233,
+        "max": 87616,
+        "statements": [13003],
+        "rows": 1000,
+        "bytes": {
+          "full_bytes": [1186143],
+          "overview_bytes": [558117],
+          "page_bytes": [31700]
+        }
+      },
+      {
+        "operation": "snapshot_history_benchmark",
+        "peakProcessRssBytes": 28114944
+      }
+    ],
+    "candidate": [
+      {
+        "inputs": 1,
+        "kind": "synthetic-native-core",
+        "max_us": 9499,
+        "median_us": 9157,
+        "min_us": 9013,
+        "operation": "phone_review",
+        "p95_us": 9382,
+        "result": "ok",
+        "samples": 100,
+        "signers": 3,
+        "warmups": 5
+      },
+      {
+        "inputs": 1,
+        "kind": "synthetic-native-core",
+        "max_us": 1896,
+        "median_us": 1756,
+        "min_us": 1736,
+        "operation": "phone_sign_and_encode",
+        "p95_us": 1824,
+        "result": "ok",
+        "samples": 100,
+        "signers": 3,
+        "warmups": 5
+      },
+      {
+        "operation": "measure_mobile_review_and_signing",
+        "peakProcessRssBytes": 17137664
+      },
+      {
+        "kind": "synthetic-native-core",
+        "max": 1375,
+        "median": 458,
+        "min": 42,
+        "operation": "uncontended_operation_lock",
+        "p95": 791,
+        "result": "ok",
+        "samples": 100,
+        "unit": "ns",
+        "warmups": 5
+      },
+      {
+        "kind": "synthetic-native-core",
+        "max": 16317,
+        "median": 10832,
+        "min": 8550,
+        "operation": "empty_registry_atomic_save",
+        "p95": 13297,
+        "result": "ok",
+        "samples": 100,
+        "unit": "us",
+        "warmups": 5
+      },
+      {
+        "operation": "measure_operation_lock_and_registry_save",
+        "peakProcessRssBytes": 11698176
+      },
+      {
+        "operation": "snapshot_history",
+        "unit": "us",
+        "samples": 100,
+        "median": 123389.5,
+        "p95": 127555,
+        "min": 119912,
+        "max": 151402,
+        "statements": [20007],
+        "rows": 1000,
+        "bytes": {}
+      },
+      {
+        "operation": "history_page",
+        "unit": "us",
+        "samples": 100,
+        "median": 84040.5,
+        "p95": 86990,
+        "min": 81608,
+        "max": 149731,
+        "statements": [13003],
+        "rows": 1000,
+        "bytes": {
+          "full_bytes": [1186143],
+          "overview_bytes": [558117],
+          "page_bytes": [31700]
+        }
+      },
+      {
+        "operation": "snapshot_history_benchmark",
+        "peakProcessRssBytes": 30326784
+      }
+    ],
+    "baseline-repeat": [
+      {
+        "inputs": 1,
+        "kind": "synthetic-native-core",
+        "max_us": 9914,
+        "median_us": 9128,
+        "min_us": 9020,
+        "operation": "phone_review",
+        "p95_us": 9333,
+        "result": "ok",
+        "samples": 100,
+        "signers": 3,
+        "warmups": 5
+      },
+      {
+        "inputs": 1,
+        "kind": "synthetic-native-core",
+        "max_us": 1865,
+        "median_us": 1751,
+        "min_us": 1732,
+        "operation": "phone_sign_and_encode",
+        "p95_us": 1820,
+        "result": "ok",
+        "samples": 100,
+        "signers": 3,
+        "warmups": 5
+      },
+      {
+        "operation": "measure_mobile_review_and_signing",
+        "peakProcessRssBytes": 17055744
+      },
+      {
+        "kind": "synthetic-native-core",
+        "max": 917,
+        "median": 334,
+        "min": 42,
+        "operation": "uncontended_operation_lock",
+        "p95": 666,
+        "result": "ok",
+        "samples": 100,
+        "unit": "ns",
+        "warmups": 5
+      },
+      {
+        "kind": "synthetic-native-core",
+        "max": 17899,
+        "median": 10079,
+        "min": 7956,
+        "operation": "empty_registry_atomic_save",
+        "p95": 14094,
+        "result": "ok",
+        "samples": 100,
+        "unit": "us",
+        "warmups": 5
+      },
+      {
+        "operation": "measure_operation_lock_and_registry_save",
+        "peakProcessRssBytes": 11681792
+      },
+      {
+        "operation": "snapshot_history",
+        "unit": "us",
+        "samples": 100,
+        "median": 123958.5,
+        "p95": 127902,
+        "min": 120580,
+        "max": 196894,
+        "statements": [20007],
+        "rows": 1000,
+        "bytes": {}
+      },
+      {
+        "operation": "history_page",
+        "unit": "us",
+        "samples": 100,
+        "median": 84226.0,
+        "p95": 86563,
+        "min": 81903,
+        "max": 88053,
+        "statements": [13003],
+        "rows": 1000,
+        "bytes": {
+          "full_bytes": [1186143],
+          "overview_bytes": [558117],
+          "page_bytes": [31700]
+        }
+      },
+      {
+        "operation": "snapshot_history_benchmark",
+        "peakProcessRssBytes": 30015488
+      }
+    ]
+  },
+  "initialPairedBrowser": {
+    "baseline": {
+      "maintenance-performance-re-9a66d--route-readiness-and-assets-mobile": {
+        "sourceCommit": "c5bfc2756752448cac35a05f08c8b0c684779124",
+        "routes": {
+          "/": {
+            "samples": 100,
+            "median": 90.0,
+            "p95": 106,
+            "min": 78,
+            "max": 137
+          },
+          "/send": {
+            "samples": 100,
+            "median": 90.0,
+            "p95": 105,
+            "min": 71,
+            "max": 126
+          },
+          "/multisig/send": {
+            "samples": 100,
+            "median": 115.0,
+            "p95": 132,
+            "min": 107,
+            "max": 189
+          },
+          "/settings": {
+            "samples": 100,
+            "median": 129.0,
+            "p95": 152,
+            "min": 109,
+            "max": 187
+          },
+          "/activity?fixture-large-history=1": {
+            "samples": 100,
+            "median": 175.0,
+            "p95": 192,
+            "min": 164,
+            "max": 222
+          },
+          "/coins": {
+            "samples": 100,
+            "median": 139.5,
+            "p95": 208,
+            "min": 129,
+            "max": 385
+          }
+        }
+      },
+      "maintenance-performance-re-9a66d--route-readiness-and-assets-desktop": {
+        "sourceCommit": "c5bfc2756752448cac35a05f08c8b0c684779124",
+        "routes": {
+          "/": {
+            "samples": 100,
+            "median": 50.60000002384186,
+            "p95": 58.89999997615814,
+            "min": 46.60000002384186,
+            "max": 88.29999995231628
+          },
+          "/send": {
+            "samples": 100,
+            "median": 47.25,
+            "p95": 54.799999952316284,
+            "min": 43.40000009536743,
+            "max": 60.200000047683716
+          },
+          "/multisig/send": {
+            "samples": 100,
+            "median": 53.64999997615814,
+            "p95": 64.60000002384186,
+            "min": 50.5,
+            "max": 73.69999992847443
+          },
+          "/settings": {
+            "samples": 100,
+            "median": 57.250000059604645,
+            "p95": 82.10000002384186,
+            "min": 52.800000071525574,
+            "max": 112.19999992847443
+          },
+          "/activity?fixture-large-history=1": {
+            "samples": 100,
+            "median": 89.89999997615814,
+            "p95": 114.89999997615814,
+            "min": 82.20000004768372,
+            "max": 129.10000002384186
+          },
+          "/coins": {
+            "samples": 100,
+            "median": 83.25,
+            "p95": 94.5,
+            "min": 44.89999997615814,
+            "max": 100.70000004768372
+          }
+        }
+      }
+    },
+    "candidate": {
+      "maintenance-performance-re-9a66d--route-readiness-and-assets-mobile": {
+        "sourceCommit": "4b8504bed0110efb6bcc26434df2a205e5d527c3",
+        "routes": {
+          "/": {
+            "samples": 100,
+            "median": 94.0,
+            "p95": 110,
+            "min": 72,
+            "max": 129
+          },
+          "/send": {
+            "samples": 100,
+            "median": 94.0,
+            "p95": 104,
+            "min": 84,
+            "max": 126
+          },
+          "/multisig/send": {
+            "samples": 100,
+            "median": 114.0,
+            "p95": 136,
+            "min": 105,
+            "max": 157
+          },
+          "/settings": {
+            "samples": 100,
+            "median": 131.0,
+            "p95": 155,
+            "min": 89,
+            "max": 388
+          },
+          "/activity?fixture-large-history=1": {
+            "samples": 100,
+            "median": 181.5,
+            "p95": 199,
+            "min": 165,
+            "max": 212
+          },
+          "/coins": {
+            "samples": 100,
+            "median": 139.0,
+            "p95": 192,
+            "min": 115,
+            "max": 261
+          }
+        }
+      },
+      "maintenance-performance-re-9a66d--route-readiness-and-assets-desktop": {
+        "sourceCommit": "4b8504bed0110efb6bcc26434df2a205e5d527c3",
+        "routes": {
+          "/": {
+            "samples": 100,
+            "median": 50.25,
+            "p95": 57.799999952316284,
+            "min": 47,
+            "max": 73.5
+          },
+          "/send": {
+            "samples": 100,
+            "median": 47.35000002384186,
+            "p95": 57.60000002384186,
+            "min": 44,
+            "max": 64.70000004768372
+          },
+          "/multisig/send": {
+            "samples": 100,
+            "median": 54.39999997615814,
+            "p95": 70.70000004768372,
+            "min": 50.40000009536743,
+            "max": 75.5
+          },
+          "/settings": {
+            "samples": 100,
+            "median": 56.59999996423721,
+            "p95": 78.39999997615814,
+            "min": 53.10000002384186,
+            "max": 83.19999992847443
+          },
+          "/activity?fixture-large-history=1": {
+            "samples": 100,
+            "median": 90.10000002384186,
+            "p95": 113.89999997615814,
+            "min": 80.5,
+            "max": 185.80000007152557
+          },
+          "/coins": {
+            "samples": 100,
+            "median": 75.90000003576279,
+            "p95": 94.60000002384186,
+            "min": 63.5,
+            "max": 99.89999997615814
+          }
+        }
+      }
+    },
+    "baseline-repeat": {
+      "maintenance-performance-re-9a66d--route-readiness-and-assets-mobile": {
+        "sourceCommit": "c5bfc2756752448cac35a05f08c8b0c684779124",
+        "routes": {
+          "/": {
+            "samples": 100,
+            "median": 98.5,
+            "p95": 126,
+            "min": 86,
+            "max": 162
+          },
+          "/send": {
+            "samples": 100,
+            "median": 98.5,
+            "p95": 131,
+            "min": 79,
+            "max": 257
+          },
+          "/multisig/send": {
+            "samples": 100,
+            "median": 121.0,
+            "p95": 162,
+            "min": 97,
+            "max": 260
+          },
+          "/settings": {
+            "samples": 100,
+            "median": 134.0,
+            "p95": 216,
+            "min": 118,
+            "max": 297
+          },
+          "/activity?fixture-large-history=1": {
+            "samples": 100,
+            "median": 184.0,
+            "p95": 223,
+            "min": 168,
+            "max": 242
+          },
+          "/coins": {
+            "samples": 100,
+            "median": 142.0,
+            "p95": 248,
+            "min": 124,
+            "max": 323
+          }
+        }
+      },
+      "maintenance-performance-re-9a66d--route-readiness-and-assets-desktop": {
+        "sourceCommit": "c5bfc2756752448cac35a05f08c8b0c684779124",
+        "routes": {
+          "/": {
+            "samples": 100,
+            "median": 50.34999996423721,
+            "p95": 59.700000047683716,
+            "min": 46.299999952316284,
+            "max": 99.39999997615814
+          },
+          "/send": {
+            "samples": 100,
+            "median": 47.39999997615814,
+            "p95": 56.299999952316284,
+            "min": 43,
+            "max": 67.70000004768372
+          },
+          "/multisig/send": {
+            "samples": 100,
+            "median": 54.5,
+            "p95": 70.69999992847443,
+            "min": 50.300000071525574,
+            "max": 73.5
+          },
+          "/settings": {
+            "samples": 100,
+            "median": 57.30000001192093,
+            "p95": 79.69999992847443,
+            "min": 53.199999928474426,
+            "max": 92.19999992847443
+          },
+          "/activity?fixture-large-history=1": {
+            "samples": 100,
+            "median": 88.75,
+            "p95": 116.5,
+            "min": 81.89999997615814,
+            "max": 123.80000007152557
+          },
+          "/coins": {
+            "samples": 100,
+            "median": 75.94999998807907,
+            "p95": 93.89999997615814,
+            "min": 59.300000071525574,
+            "max": 96.5
+          }
+        }
+      }
+    }
+  },
+  "startup": {
+    "baseline": {
+      "kind": "isolated-regtest-native-startup",
+      "sourceCommit": "c5bfc2756752448cac35a05f08c8b0c684779124",
+      "executableSha256": "c07d9121c588db95405cc7b3bb501d587bc430091ca683cd6302112266b480bd",
+      "method": "10 new processes and empty private profiles; warm OS file cache; native app_started checkpoint after window.show, before verified webview readiness; 5 ms polling; RSS excludes WebKit children",
+      "medianMs": 294.8039585,
+      "minMs": 285.675375,
+      "maxMs": 1329.983583,
+      "samples": [
+        {
+          "sample": 0,
+          "nativeCheckpointMs": 1329.983583,
+          "mainProcessRssKiB": 105616
+        },
+        {
+          "sample": 1,
+          "nativeCheckpointMs": 298.501542,
+          "mainProcessRssKiB": 105632
+        },
+        {
+          "sample": 2,
+          "nativeCheckpointMs": 285.675375,
+          "mainProcessRssKiB": 105440
+        },
+        {
+          "sample": 3,
+          "nativeCheckpointMs": 287.527209,
+          "mainProcessRssKiB": 105856
+        },
+        {
+          "sample": 4,
+          "nativeCheckpointMs": 287.683,
+          "mainProcessRssKiB": 105488
+        },
+        {
+          "sample": 5,
+          "nativeCheckpointMs": 295.852584,
+          "mainProcessRssKiB": 105184
+        },
+        {
+          "sample": 6,
+          "nativeCheckpointMs": 288.424209,
+          "mainProcessRssKiB": 105632
+        },
+        {
+          "sample": 7,
+          "nativeCheckpointMs": 296.307,
+          "mainProcessRssKiB": 105344
+        },
+        {
+          "sample": 8,
+          "nativeCheckpointMs": 296.474583,
+          "mainProcessRssKiB": 105488
+        },
+        {
+          "sample": 9,
+          "nativeCheckpointMs": 293.755333,
+          "mainProcessRssKiB": 105440
+        }
+      ]
+    },
+    "final": {
+      "kind": "isolated-regtest-native-startup",
+      "sourceCommit": "da7b81731173233b3576a17c020e468238f99566",
+      "executableSha256": "f9825b8472de743319b36fbe7e435775cbc2f47cf37e9e30c3620af074ea295e",
+      "method": "10 new processes and empty private profiles; warm OS file cache; native app_started checkpoint after window.show, before verified webview readiness; 5 ms polling; RSS excludes WebKit children",
+      "medianMs": 294.287813,
+      "minMs": 287.763666,
+      "maxMs": 1129.844541,
+      "samples": [
+        {
+          "sample": 0,
+          "nativeCheckpointMs": 1129.844541,
+          "mainProcessRssKiB": 105408
+        },
+        {
+          "sample": 1,
+          "nativeCheckpointMs": 299.401292,
+          "mainProcessRssKiB": 105392
+        },
+        {
+          "sample": 2,
+          "nativeCheckpointMs": 287.763666,
+          "mainProcessRssKiB": 106224
+        },
+        {
+          "sample": 3,
+          "nativeCheckpointMs": 293.057959,
+          "mainProcessRssKiB": 105616
+        },
+        {
+          "sample": 4,
+          "nativeCheckpointMs": 301.504,
+          "mainProcessRssKiB": 105680
+        },
+        {
+          "sample": 5,
+          "nativeCheckpointMs": 290.905209,
+          "mainProcessRssKiB": 105696
+        },
+        {
+          "sample": 6,
+          "nativeCheckpointMs": 290.55275,
+          "mainProcessRssKiB": 105296
+        },
+        {
+          "sample": 7,
+          "nativeCheckpointMs": 295.517667,
+          "mainProcessRssKiB": 105488
+        },
+        {
+          "sample": 8,
+          "nativeCheckpointMs": 296.010292,
+          "mainProcessRssKiB": 105664
+        },
+        {
+          "sample": 9,
+          "nativeCheckpointMs": 290.758541,
+          "mainProcessRssKiB": 105344
+        }
+      ]
+    }
+  },
+  "size": {
+    "isolatedRegtestExecutableBeforeBytes": 21903744,
+    "isolatedRegtestExecutableAfterBytes": 21903824,
+    "releasedPackage": {
+      "schemaVersion": 1,
+      "kind": "macos-package-file-attribution",
+      "method": "regular-file bytes; symlinks excluded; disk allocation and download compression differ",
+      "sourceCommit": "6a39bf50b2a6a042354b43369765a9af2174d061",
+      "totalBytes": 62198319,
+      "totals": {
+        "other-packaged-resources": 34685,
+        "native-executable-including-embedded-assets": 21943792,
+        "licenses-and-notices": 12578,
+        "hardware-signer-runtime": 39967857,
+        "images-and-fonts": 239407
+      },
+      "native": [
+        {
+          "path": "Contents/MacOS/Groot",
+          "category": "native-executable-including-embedded-assets",
+          "bytes": 21943792,
+          "sha256": "897e54bf87e8512d3e5091d4752296d4eea9b3094351e7809f9110ab763ae32b"
+        }
+      ],
+      "fileCount": 98,
+      "symlinkCount": 4,
+      "largest": [
+        {
+          "path": "Contents/MacOS/Groot",
+          "category": "native-executable-including-embedded-assets",
+          "bytes": 21943792
+        },
+        {
+          "path": "Contents/Resources/hwi",
+          "category": "hardware-signer-runtime",
+          "bytes": 11412688
+        },
+        {
+          "path": "Contents/Resources/hwi-runtime/cryptography/hazmat/bindings/_rust.abi3.so",
+          "category": "hardware-signer-runtime",
+          "bytes": 8005664
+        },
+        {
+          "path": "Contents/Resources/hwi-runtime/libcrypto.3.dylib",
+          "category": "hardware-signer-runtime",
+          "bytes": 4193648
+        },
+        {
+          "path": "Contents/Resources/hwi-runtime/Python.framework/Versions/3.9/Python",
+          "category": "hardware-signer-runtime",
+          "bytes": 3758256
+        },
+        {
+          "path": "Contents/Resources/hwi-runtime/PYZ-00.pyz",
+          "category": "hardware-signer-runtime",
+          "bytes": 2266555
+        },
+        {
+          "path": "Contents/Resources/hwi-runtime/lib-dynload/unicodedata.cpython-39-darwin.so",
+          "category": "hardware-signer-runtime",
+          "bytes": 1160320
+        },
+        {
+          "path": "Contents/Resources/hwi-runtime/base_library.zip",
+          "category": "hardware-signer-runtime",
+          "bytes": 849155
+        },
+        {
+          "path": "Contents/Resources/hwi-runtime/libssl.3.dylib",
+          "category": "hardware-signer-runtime",
+          "bytes": 832976
+        },
+        {
+          "path": "Contents/Resources/hwi-runtime/lib-dynload/_decimal.cpython-39-darwin.so",
+          "category": "hardware-signer-runtime",
+          "bytes": 395408
+        },
+        {
+          "path": "Contents/Resources/hwi-runtime/google/_upb/_message.abi3.so",
+          "category": "hardware-signer-runtime",
+          "bytes": 359712
+        },
+        {
+          "path": "Contents/Resources/hwi-runtime/lib-dynload/_codecs_jp.cpython-39-darwin.so",
+          "category": "hardware-signer-runtime",
+          "bytes": 302816
+        },
+        {
+          "path": "Contents/Resources/hwi-runtime/certifi/cacert.pem",
+          "category": "hardware-signer-runtime",
+          "bytes": 290282
+        },
+        {
+          "path": "Contents/Resources/hwi-runtime/lib-dynload/pyexpat.cpython-39-darwin.so",
+          "category": "hardware-signer-runtime",
+          "bytes": 270432
+        },
+        {
+          "path": "Contents/Resources/hwi-runtime/charset_normalizer/md__mypyc.cpython-39-darwin.so",
+          "category": "hardware-signer-runtime",
+          "bytes": 249552
+        }
+      ]
+    }
+  },
+  "limits": [
+    "Synthetic fixture observations on one shared Mac, not whole-app or physical-phone performance.",
+    "Launch checkpoint precedes verified webview readiness; process RSS excludes WebKit children.",
+    "Browser readiness is the first visible DOM marker, not native IPC/data readiness.",
+    "Equal DTO sizes and SQL counts do not establish byte-for-byte equality.",
+    "Released package attribution is not a newly signed candidate comparison."
+  ],
+  "unsignedIosArchive": {
+    "sourceCommit": "5b6535f8ab2c9418f201392c1ed37d5b6b6e7ff1",
+    "identifier": "app.groot.wallet.mobile.testnet4.dev",
+    "shortVersion": "5.3.0",
+    "buildNumber": "530012",
+    "network": "testnet4",
+    "architecture": "arm64",
+    "signed": false,
+    "installed": false,
+    "nativeLibraryMatchesXcode": true,
+    "binarySha256": "a63c75bc457d1fbc02b2964ca6ceb371616056716d229b4ec421e3e1d8ef331e",
+    "binaryBytes": 171440440,
+    "appRegularFileBytes": 171729538,
+    "buildOnlyArchivesInApp": false,
+    "method": "existing debug/no-sign/archive-only workflow, post-build native-network/library match, resource exclusion, debug-section strip, plist and embedded source identity checks"
+  }
+}
