@@ -24,11 +24,13 @@ if [[ ! -d "fuzz/corpus/$target" ]]; then
   echo 'Generate the synthetic seed corpus first (see fuzz/README.md).' >&2; exit 2
 fi
 mkdir -p "$corpus_root/$target"
-cp -R "fuzz/corpus/$target/." "$corpus_root/$target/"
+target_corpus="$(cd "$corpus_root/$target" && pwd -P)"
+case "$target_corpus/" in "$repository_root/"*) echo 'Active target corpus must be outside the repository.' >&2; exit 2;; esac
+cp -R "fuzz/corpus/$target/." "$target_corpus/"
 # cargo-fuzz creates these after its first build; create all before that build
 # so an empty output directory does not cause a second full application rebuild.
 mkdir -p fuzz/artifacts/psbt_roundtrip fuzz/artifacts/ur_composition fuzz/artifacts/pairing_records
-printf 'Active synthetic corpus: %s\n' "$corpus_root/$target" >&2
+printf 'Active synthetic corpus: %s\n' "$target_corpus" >&2
 export PATH="$PWD/fuzz/tools:$PATH"
 # Upstream cfg(fuzzing) changes dependencies and currently breaks nusb 0.2.7.
 # Exercise normal production branches; sanitizer coverage remains enabled.
@@ -38,5 +40,5 @@ if [[ "$(uname -s)" == Darwin ]]; then
   xcrun --find ld-classic >/dev/null
   export RUSTFLAGS="${RUSTFLAGS:-} -Clink-arg=-Wl,-ld_classic"
 fi
-exec cargo-fuzz run "$target" "$corpus_root/$target" --fuzz-dir fuzz --no-cfg-fuzzing --release \
+exec cargo-fuzz run "$target" "$target_corpus" --fuzz-dir fuzz --no-cfg-fuzzing --release \
   --target-dir "$cache_root" -- "$@"

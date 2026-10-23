@@ -5,6 +5,7 @@ on:
       - 'src-tauri/**'
       - 'fuzz/**'
       - 'scripts/quality/fuzz-parsers.sh'
+      - 'scripts/quality/fuzz-cargo-wrapper.test.mjs'
       - '.github/workflows/fuzz.yml'
   workflow_dispatch:
 permissions:
