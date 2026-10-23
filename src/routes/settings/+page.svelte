@@ -27,6 +27,7 @@
     WalletCards
   } from '@lucide/svelte';
   import Button from '$lib/components/Button.svelte';
+  import LoadFailure from '$lib/components/LoadFailure.svelte';
   import AnimatedUrQr from '$lib/components/AnimatedUrQr.svelte';
   import BuildIdentity from '$lib/components/BuildIdentity.svelte';
   import FieldCounter from '$lib/components/FieldCounter.svelte';
@@ -113,6 +114,7 @@
   let syncStatusPoll: ReturnType<typeof setTimeout> | undefined;
   let settingsSyncActive = $derived(isWalletSyncActive(syncStatus));
   let profileReadGeneration = 0;
+  let settingsLoadError = $state('');
   let inactivityTimeoutMinutes = $state(5);
   let savingInactivityTimeout = $state(false);
   let timeoutMenuOpen = $state(false);
@@ -378,7 +380,7 @@
     if (current()) syncStatusPoll = setTimeout(pollSyncStatus, settingsSyncActive ? 500 : 2_000);
   }
 
-  onMount(async () => {
+  async function loadSettings() {
     commandModifier = usesCommandModifier(navigator.platform);
     desktopPlatform = isDesktopPlatform(
       navigator.platform,
@@ -386,55 +388,70 @@
       navigator.maxTouchPoints
     );
     const generation = ++profileReadGeneration;
+    settingsLoadError = '';
+    if (syncStatusPoll) clearTimeout(syncStatusPoll);
     theme = currentTheme();
-    const [nextRuntime, registry] = await Promise.all([
-      walletService.runtimePlatform(),
-      walletService.profiles()
-    ]);
-    if (destroyed || generation !== profileReadGeneration) return;
-    runtime = nextRuntime;
-    mobileRuntime = nextRuntime.mobile;
-    profiles = registry.wallets;
-    selectedWalletId = registry.selectedWalletId;
-    const session = registry.selectedWalletId ? await walletService.session() : null;
-    if (destroyed || generation !== profileReadGeneration) return;
-    walletUnlocked = session?.unlocked ?? false;
-    if (walletUnlocked) void pollSyncStatus();
-    inactivityTimeoutMinutes = registry.inactivityTimeoutMinutes;
-    const activeProfile = registry.wallets.find(
-      (wallet) => wallet.id === registry.selectedWalletId
-    );
-    if (walletUnlocked) {
-      const walletId = selectedWalletId;
-      const current = () =>
-        !destroyed &&
-        generation === profileReadGeneration &&
-        walletId === selectedWalletId &&
-        walletId === walletShell.selectedWalletId();
-      const data = await readSettingsWalletData(
-        walletService,
-        activeProfile?.kind === 'watch_only',
-        current
+    try {
+      const [nextRuntime, registry] = await Promise.all([
+        walletService.runtimePlatform(),
+        walletService.profiles()
+      ]);
+      if (destroyed || generation !== profileReadGeneration) return;
+      runtime = nextRuntime;
+      mobileRuntime = nextRuntime.mobile;
+      profiles = registry.wallets;
+      selectedWalletId = registry.selectedWalletId;
+      const session = registry.selectedWalletId ? await walletService.session() : null;
+      if (destroyed || generation !== profileReadGeneration) return;
+      walletUnlocked = session?.unlocked ?? false;
+      if (walletUnlocked) void pollSyncStatus();
+      inactivityTimeoutMinutes = registry.inactivityTimeoutMinutes;
+      const activeProfile = registry.wallets.find(
+        (wallet) => wallet.id === registry.selectedWalletId
       );
-      if (!data) return;
-      hardwareSignerWallet = data.signer;
-      setHardwareHealthChecks(data.health);
-      node = data.node;
-      syncSource = data.syncSource;
-      networkSetupSources = data.networkSetupSources;
-      nodeMode = isManagedNodeConfig(node) ? 'managed' : node.torProxy ? 'tor' : node.backend.type;
-      scan = data.scan;
-      scanDraft = { ...scan };
-      scanStatus = data.scanStatus;
-      if (page.url.searchParams.get('nodeConnection') === '1') {
-        openNodeSettings();
-        replaceState('/settings', {});
-      } else if (page.url.searchParams.get('networkSetup') === '1') {
-        if (reusableNetworkSetups.length > 0) openNetworkReuse();
-        else openNodeSettings();
-        replaceState('/settings', {});
+      if (walletUnlocked) {
+        const walletId = selectedWalletId;
+        const current = () =>
+          !destroyed &&
+          generation === profileReadGeneration &&
+          walletId === selectedWalletId &&
+          walletId === walletShell.selectedWalletId();
+        const data = await readSettingsWalletData(
+          walletService,
+          activeProfile?.kind === 'watch_only',
+          current
+        );
+        if (!data) return;
+        hardwareSignerWallet = data.signer;
+        setHardwareHealthChecks(data.health);
+        node = data.node;
+        syncSource = data.syncSource;
+        networkSetupSources = data.networkSetupSources;
+        nodeMode = isManagedNodeConfig(node)
+          ? 'managed'
+          : node.torProxy
+            ? 'tor'
+            : node.backend.type;
+        scan = data.scan;
+        scanDraft = { ...scan };
+        scanStatus = data.scanStatus;
+        if (page.url.searchParams.get('nodeConnection') === '1') {
+          openNodeSettings();
+          replaceState('/settings', {});
+        } else if (page.url.searchParams.get('networkSetup') === '1') {
+          if (reusableNetworkSetups.length > 0) openNetworkReuse();
+          else openNodeSettings();
+          replaceState('/settings', {});
+        }
+      }
+    } catch (cause) {
+      if (!destroyed && generation === profileReadGeneration) {
+        settingsLoadError = localizedError(cause, $locale, 'Could not load wallet.');
       }
     }
+  }
+  onMount(() => {
+    void loadSettings();
   });
 
   function openNetworkSwitch(target: SwitchableNetwork) {
@@ -1053,6 +1070,7 @@
     recordHardwareHealthCheck(fingerprint, check);
   }
   async function runFullRescan() {
+    const current = settingsAction('rescan');
     scanning = true;
     scanStatus = runningScanStatus({
       birthdayHeight: Number(scanDraft.birthdayHeight),
@@ -1065,18 +1083,24 @@
     try {
       await walletShell.pauseAutomaticSync();
       automaticSyncPaused = true;
-      scan = await walletService.saveRecoveryScanSettings(
+      if (!current()) return;
+      const savedScan = await walletService.saveRecoveryScanSettings(
         Number(scanDraft.birthdayHeight),
         Number(scanDraft.gapLimit),
         scanCredential
       );
+      if (!current()) return;
+      scan = savedScan;
       scanDraft = { ...scan };
       scanStatus = runningScanStatus(scan);
       const rescan = walletService.fullRescan(scanCredential);
       void pollFullRescan();
       const snapshot = await rescan;
+      if (!current()) return;
       try {
-        scanStatus = await walletService.recoveryScanStatus();
+        const status = await walletService.recoveryScanStatus();
+        if (!current()) return;
+        scanStatus = status;
       } catch {
         // A status refresh is observational. It must not relabel a completed
         // foreground rescan as failed.
@@ -1091,6 +1115,7 @@
         tone: 'success'
       });
     } catch (cause) {
+      if (!current()) return;
       if (cause instanceof WalletError && cause.code === 'scan_cancelled') {
         scanStatus = idleScanStatus();
         scanOpen = false;
@@ -1106,22 +1131,28 @@
       scanErrorDetails = cause instanceof WalletError ? cause.details : null;
       scanStatus = idleScanStatus();
     } finally {
-      if (scanPoll) clearTimeout(scanPoll);
-      scanPoll = undefined;
-      scanCredential = '';
-      scanning = false;
-      cancellingScan = false;
+      if (current()) {
+        invalidateAction('scanPoll');
+        if (scanPoll) clearTimeout(scanPoll);
+        scanPoll = undefined;
+        scanCredential = '';
+        scanning = false;
+        cancellingScan = false;
+      }
       if (automaticSyncPaused) walletShell.resumeAutomaticSync();
     }
   }
   async function pollFullRescan() {
+    if (destroyed || !scanning) return;
+    const current = settingsAction('scanPoll');
     try {
       const status = await walletService.recoveryScanStatus();
+      if (!current() || !scanning) return;
       if (status.status === 'running' || status.status === 'cancelling') scanStatus = status;
     } catch {
       /* The foreground result remains authoritative. */
     } finally {
-      if (scanning && !destroyed) scanPoll = setTimeout(() => void pollFullRescan(), 250);
+      if (scanning && current()) scanPoll = setTimeout(() => void pollFullRescan(), 250);
     }
   }
   async function cancelFullRescan() {
@@ -1137,18 +1168,22 @@
     }
   }
   async function refreshScanTip() {
+    const currentAttempt = settingsAction('scanTip');
     scanTipLoading = true;
     scanNodeStatus = null;
     try {
-      scanTip = (await walletService.publicNetworkStatus().catch(() => null))?.networkTip ?? null;
+      const publicStatus = await walletService.publicNetworkStatus().catch(() => null);
+      if (!currentAttempt()) return;
+      scanTip = publicStatus?.networkTip ?? null;
       const current = await walletService.testNodeConnection();
+      if (!currentAttempt()) return;
       scanTip = current.blocks;
       scanNodeStatus = current;
     } catch {
       // A saved tip is still useful for comparison. Starting the scan performs
       // the authoritative native validation against the live node.
     } finally {
-      scanTipLoading = false;
+      if (currentAttempt()) scanTipLoading = false;
     }
   }
   function openFullRescan() {
@@ -1166,6 +1201,8 @@
   }
   function closeFullRescan() {
     if (scanning) return;
+    invalidateAction('scanTip');
+    scanTipLoading = false;
     scanCredential = '';
     scanError = '';
     scanErrorCode = '';
@@ -1404,6 +1441,13 @@
 </script>
 
 <div class="page narrow-page settings-page">
+  {#if settingsLoadError}
+    <LoadFailure
+      title={translate($locale, 'Wallet details are unavailable')}
+      description={settingsLoadError}
+      onretry={loadSettings}
+    />
+  {/if}
   <header class="page-header">
     <div>
       <h1>
