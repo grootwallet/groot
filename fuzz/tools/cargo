@@ -1,0 +1,4 @@
+#!/usr/bin/env sh
+# cargo-fuzz 0.13.2 does not forward --locked. Enforce it on its Cargo calls.
+set -eu
+exec rustup run nightly-2026-10-22 cargo "$@" --locked

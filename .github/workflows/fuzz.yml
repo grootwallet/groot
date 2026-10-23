@@ -1,0 +1,36 @@
+name: Parser fuzz smoke
+on:
+  pull_request:
+    paths:
+      - 'src-tauri/**'
+      - 'fuzz/**'
+      - 'scripts/quality/fuzz-parsers.sh'
+      - '.github/workflows/fuzz.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: fuzz-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  parsers:
+    runs-on: macos-14
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install isolated test tooling
+        run: |
+          rustup toolchain install nightly-2026-10-22 --profile minimal --no-self-update
+          cargo install cargo-fuzz --version 0.13.2 --locked --root "$RUNNER_TEMP/fuzz-tools"
+          echo "$RUNNER_TEMP/fuzz-tools/bin" >> "$GITHUB_PATH"
+      - name: Fetch locked graph and generate synthetic corpus
+        run: |
+          cargo +nightly-2026-10-22 fetch --manifest-path fuzz/Cargo.toml --locked
+          cargo run --manifest-path src-tauri/Cargo.toml --locked --example fuzz_seed_corpus -- fuzz/corpus
+      - name: Bounded sanitizer campaigns
+        run: |
+          scripts/quality/fuzz-parsers.sh psbt_roundtrip -max_total_time=90 -timeout=2 -rss_limit_mb=512 -max_len=1048577
+          scripts/quality/fuzz-parsers.sh ur_composition -max_total_time=90 -timeout=2 -rss_limit_mb=512 -max_len=4195329
+          scripts/quality/fuzz-parsers.sh pairing_records -max_total_time=90 -timeout=2 -rss_limit_mb=512 -max_len=262145

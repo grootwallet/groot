@@ -1,0 +1,42 @@
+[package]
+name = "groot-parser-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+license = "Apache-2.0"
+
+[package.metadata]
+cargo-fuzz = true
+
+[workspace]
+members = ["."]
+
+[dependencies]
+libfuzzer-sys = "=0.4.13"
+groot = { path = "../src-tauri" }
+base64 = "=0.22.1"
+serde_json = "=1.0.150"
+
+[patch.crates-io]
+security-framework-sys = { path = "../src-tauri/vendor/security-framework-sys" }
+
+[[bin]]
+name = "psbt_roundtrip"
+path = "fuzz_targets/psbt_roundtrip.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "ur_composition"
+path = "fuzz_targets/ur_composition.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "pairing_records"
+path = "fuzz_targets/pairing_records.rs"
+test = false
+doc = false
+bench = false

@@ -692,8 +692,7 @@ fn hardware_sign(wallet: &MultisigWalletDto, key: &HardwareKey, psbt: &Psbt) -> 
     returned
 }
 
-#[test]
-fn mobile_signing_adds_only_the_expected_signatures_without_private_descriptors() {
+fn mobile_signing_fixture() -> (Mnemonic, MultisigWalletDto, CoordinationMetadata, Psbt) {
     use bdk_wallet::bitcoin::{
         absolute::LockTime, hashes::Hash, transaction::Version, OutPoint, ScriptBuf, Sequence,
         Transaction, TxIn, TxOut, Witness,
@@ -738,6 +737,12 @@ fn mobile_signing_adds_only_the_expected_signatures_without_private_descriptors(
         .add_recipient(destination.script_pubkey(), Amount::from_sat(50_000))
         .fee_rate(FeeRate::from_sat_per_vb(2).unwrap());
     let unsigned = builder.finish().unwrap();
+    (mnemonic, metadata, coordination, unsigned)
+}
+
+#[test]
+fn mobile_signing_adds_only_the_expected_signatures_without_private_descriptors() {
+    let (mnemonic, metadata, coordination, unsigned) = mobile_signing_fixture();
     let encoded = encode_psbt(&unsigned);
     let review = review_mobile_psbt_for(&metadata, &coordination, &encoded).unwrap();
 
@@ -1154,4 +1159,42 @@ fn mobile_reply_budget_reserves_signature_growth_before_secret_access() {
         signing.find("review_mobile_psbt_for").unwrap()
             < signing.find("secure_store::load").unwrap()
     );
+}
+
+#[test]
+#[ignore = "opt-in production-profile timing with synthetic wallet data"]
+fn measure_mobile_review_and_signing() {
+    assert_eq!(std::env::var("GROOT_MEASURE_NATIVE").as_deref(), Ok("1"));
+    assert!(!cfg!(debug_assertions), "Measure with cargo test --release");
+    let (mnemonic, metadata, coordination, psbt) = mobile_signing_fixture();
+    let encoded = encode_psbt(&psbt);
+    let mut review_us = Vec::new();
+    let mut signing_us = Vec::new();
+    for repeat in 0..105 {
+        let started = Instant::now();
+        let review = review_mobile_psbt_for(&metadata, &coordination, &encoded).unwrap();
+        let reviewed = started.elapsed().as_micros();
+        let started = Instant::now();
+        let result =
+            sign_mobile_psbt_for(&metadata, &mnemonic, &encoded, review.revision_id).unwrap();
+        let signed = started.elapsed().as_micros();
+        assert!(!result.frames.is_empty());
+        if repeat >= 5 {
+            review_us.push(reviewed);
+            signing_us.push(signed);
+        }
+    }
+    for (operation, mut values) in [
+        ("phone_review", review_us),
+        ("phone_sign_and_encode", signing_us),
+    ] {
+        values.sort_unstable();
+        println!(
+            "{}",
+            serde_json::json!({"kind":"synthetic-native-core", "operation":operation,
+            "samples":values.len(), "warmups":5, "median_us":values[50], "p95_us":values[94],
+            "min_us":values[0], "max_us":values[99], "inputs":psbt.inputs.len(),
+            "signers":metadata.cosigners.len(), "result":"ok"})
+        );
+    }
 }
