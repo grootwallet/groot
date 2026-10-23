@@ -121,6 +121,20 @@ pub fn save_atomic(path: &Path, registry: &WalletRegistry) -> Result<(), Registr
     )
 }
 
+#[cfg(test)]
+pub(crate) fn save_atomic_failing_directory_sync(
+    path: &Path,
+    registry: &WalletRegistry,
+) -> Result<(), RegistryError> {
+    save_atomic_with(
+        path,
+        registry,
+        |file, encoded| file.write_all(encoded).map_err(|_| RegistryError::Io),
+        || Ok(()),
+        |_| Err(RegistryError::Io),
+    )
+}
+
 fn save_atomic_with<W, B, D>(
     path: &Path,
     registry: &WalletRegistry,

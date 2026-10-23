@@ -452,3 +452,27 @@ pub(super) fn parse_coordination_metadata(
     }
     Ok(metadata)
 }
+
+/// Complete the existing persistence transaction and reconcile its outcome.
+/// An error after registry rename is uncertain: never erase a referenced profile.
+pub(super) fn complete_mobile_profile_with(
+    directory: &Path,
+    pairing_directory: &Path,
+    session_id: &str,
+    wallet_id: Uuid,
+    persist: impl FnOnce() -> ApiResult<()>,
+    remove_consuming: impl FnOnce(&Path) -> ApiResult<bool>,
+) -> ApiResult<()> {
+    if let Err(error) = persist() {
+        cleanup_failed_profile(directory)?;
+        restore_consuming_mobile_pairing(pairing_directory, session_id, wallet_id)?;
+        return Err(error);
+    }
+    // The registry is authoritative. A tombstone cleanup failure must not invite
+    // duplicate creation; startup reconciliation completes the cleanup.
+    let consuming = consuming_mobile_secret_path_in(pairing_directory, session_id, wallet_id)?;
+    if let Ok(true) = remove_consuming(&consuming) {
+        let _ = sync_private_directory(pairing_directory);
+    }
+    Ok(())
+}

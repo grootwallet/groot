@@ -1028,7 +1028,7 @@ fn mobile_complete_inner(
     let pairing_session_id = envelope.session_id.clone();
     let pairing_directory = pending_mobile_pairings_directory(&app)?;
     let id = Uuid::new_v4();
-    let consuming_path = transition_mobile_pairing_to_consuming(&app, &pairing_session_id, id)?;
+    transition_mobile_pairing_to_consuming(&app, &pairing_session_id, id)?;
     let dir = match prepare_profile_directory_with_id(&app, id) {
         Ok(path) => path,
         Err(error) => {
@@ -1036,69 +1036,66 @@ fn mobile_complete_inner(
             return Err(error);
         }
     };
-    let result = (|| {
-        let permit = database_open_permit_for_new_wallet(&state)?;
-        let mut db = open_wallet_database(&dir.join("wallet.sqlite"), &permit)?;
-        init_app_schema(&db)?;
-        Wallet::create(
-            wallet.external_descriptor.clone(),
-            wallet.internal_descriptor.clone(),
-        )
-        .network(network())
-        .create_wallet(&mut db)
-        .map_err(internal)?;
-        secure_store::store(
-            &dir.join("secret.json"),
-            format!("groot-multisig:{}", wallet.external_descriptor).as_bytes(),
-            credential.as_str(),
-            wallet_secret_context(id),
-        )
-        .map_err(secure_store_error)?;
-        // The PIN gates this local envelope. It is intentionally not a BIP39 passphrase.
-        secure_store::store(
-            &dir.join("mobile-signer.json"),
-            staged.mnemonic.as_bytes(),
-            credential.as_str(),
-            wallet_secret_context(id),
-        )
-        .map_err(secure_store_error)?;
-        write_private_json(&dir.join("wallet.json"), &wallet)?;
-        write_private_json(
-            &dir.join("coordination.json"),
-            &CoordinationMetadata {
-                version: 1,
-                wallet_id: id.to_string(),
-                role: DeviceRole::MobileCosigner,
-                mobile_signer_fingerprint: Some(fingerprint.to_string()),
-                key_protection: new_mobile_key_protection().to_owned(),
-                paired_at: now(),
-                pairing_session_id: Some(pairing_session_id.clone()),
-            },
-        )?;
-        commit_profile(
-            &app,
-            WalletProfile {
-                id,
-                name: wallet.name.clone(),
-                network: name().to_owned(),
-                kind: WalletKind::Multisig,
-                descriptor_checksum: expected_checksum.clone(),
-                created_at: now(),
-                backup_verified: staged.backup_verified,
-            },
-            &wallet.external_descriptor,
-        )
-    })();
-    if let Err(error) = result {
-        cleanup_failed_profile(&dir)?;
-        restore_consuming_mobile_pairing(&pairing_directory, &pairing_session_id, id)?;
-        return Err(error);
-    }
-    // The registry commit is authoritative. A cleanup failure must not report that wallet
-    // creation failed and invite a duplicate retry; startup reconciliation removes the tombstone.
-    if let Ok(true) = remove_file_if_present(&consuming_path) {
-        let _ = sync_private_directory(&pairing_directory);
-    }
+    complete_mobile_profile_with(
+        &dir,
+        &pairing_directory,
+        &pairing_session_id,
+        id,
+        || {
+            let permit = database_open_permit_for_new_wallet(&state)?;
+            let mut db = open_wallet_database(&dir.join("wallet.sqlite"), &permit)?;
+            init_app_schema(&db)?;
+            Wallet::create(
+                wallet.external_descriptor.clone(),
+                wallet.internal_descriptor.clone(),
+            )
+            .network(network())
+            .create_wallet(&mut db)
+            .map_err(internal)?;
+            secure_store::store(
+                &dir.join("secret.json"),
+                format!("groot-multisig:{}", wallet.external_descriptor).as_bytes(),
+                credential.as_str(),
+                wallet_secret_context(id),
+            )
+            .map_err(secure_store_error)?;
+            // The PIN gates this local envelope. It is intentionally not a BIP39 passphrase.
+            secure_store::store(
+                &dir.join("mobile-signer.json"),
+                staged.mnemonic.as_bytes(),
+                credential.as_str(),
+                wallet_secret_context(id),
+            )
+            .map_err(secure_store_error)?;
+            write_private_json(&dir.join("wallet.json"), &wallet)?;
+            write_private_json(
+                &dir.join("coordination.json"),
+                &CoordinationMetadata {
+                    version: 1,
+                    wallet_id: id.to_string(),
+                    role: DeviceRole::MobileCosigner,
+                    mobile_signer_fingerprint: Some(fingerprint.to_string()),
+                    key_protection: new_mobile_key_protection().to_owned(),
+                    paired_at: now(),
+                    pairing_session_id: Some(pairing_session_id.clone()),
+                },
+            )?;
+            commit_profile(
+                &app,
+                WalletProfile {
+                    id,
+                    name: wallet.name.clone(),
+                    network: name().to_owned(),
+                    kind: WalletKind::Multisig,
+                    descriptor_checksum: expected_checksum.clone(),
+                    created_at: now(),
+                    backup_verified: staged.backup_verified,
+                },
+                &wallet.external_descriptor,
+            )
+        },
+        remove_file_if_present,
+    )?;
     unlock_selected(&app, &state)?;
     reset_auth_throttle(&app, &state)?;
     Ok(wallet)

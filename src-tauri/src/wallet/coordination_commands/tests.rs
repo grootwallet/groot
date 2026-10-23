@@ -1296,3 +1296,121 @@ fn mobile_review_sign_and_qr_roundtrip_at_reply_budget() {
     assert!(decode_psbt(&decoded).unwrap().serialize().len() <= MOBILE_REPLY_PSBT_BYTES);
     assert_eq!(signed.frames.len(), ur_transport::MAX_UR_FRAMES);
 }
+
+#[test]
+fn mobile_completion_faults_reconcile_against_reopened_registry_without_key_loss() {
+    // Exercise the completion helper used by mobile_complete_inner, actual
+    // registry rename, and startup reconciliation. This is storage composition,
+    // not an OS keychain/UI authorization test.
+    for failure in ["before_registry", "after_rename", "cleanup"] {
+        let root = TemporaryPairingDirectory::new();
+        let id = Uuid::new_v4();
+        let session = Uuid::new_v4().to_string();
+        let wallets = root.0.join("wallets");
+        let profile = wallets.join(id.to_string());
+        let pending = root.0.join("pending-mobile-pairings");
+        fs::create_dir_all(&profile).unwrap();
+        fs::create_dir_all(&pending).unwrap();
+        let marker = consuming_mobile_secret_path_in(&pending, &session, id).unwrap();
+        fs::write(&marker, b"synthetic staging envelope").unwrap();
+        let registry_path = root.0.join("wallet-registry.json");
+        registry::save_atomic(&registry_path, &WalletRegistry::default()).unwrap();
+        let result = complete_mobile_profile_with(
+            &profile,
+            &pending,
+            &session,
+            id,
+            || {
+                fs::write(
+                    profile.join("mobile-signer.json"),
+                    b"synthetic encrypted envelope",
+                )
+                .unwrap();
+                fs::write(
+                    profile.join("coordination.json"),
+                    serde_json::to_vec(&CoordinationMetadata {
+                        version: 1,
+                        wallet_id: id.to_string(),
+                        role: DeviceRole::MobileCosigner,
+                        mobile_signer_fingerprint: Some("12345678".into()),
+                        key_protection: "synthetic".into(),
+                        paired_at: 1,
+                        pairing_session_id: Some(session.clone()),
+                    })
+                    .unwrap(),
+                )
+                .unwrap();
+                if failure == "before_registry" {
+                    return Err(api_error("internal_error", "Injected pre-commit failure"));
+                }
+                let mut registry = registry::load(&registry_path).unwrap();
+                registry
+                    .add(WalletProfile {
+                        id,
+                        name: "Synthetic".into(),
+                        network: name().into(),
+                        kind: WalletKind::Multisig,
+                        descriptor_checksum: "12345678".into(),
+                        created_at: 1,
+                        backup_verified: true,
+                    })
+                    .unwrap();
+                if failure == "after_rename" {
+                    registry::save_atomic_failing_directory_sync(&registry_path, &registry)
+                        .map_err(internal)
+                } else {
+                    registry::save_atomic(&registry_path, &registry).map_err(internal)
+                }
+            },
+            |_| Err(api_error("internal_error", "Injected cleanup failure")),
+        );
+        let reopened = registry::load(&registry_path).unwrap();
+        let registered = reopened
+            .wallets
+            .iter()
+            .map(|wallet| wallet.id)
+            .collect::<HashSet<_>>();
+        let committed = reopened
+            .wallets
+            .iter()
+            .map(|wallet| {
+                let metadata: CoordinationMetadata = serde_json::from_slice(
+                    &fs::read(
+                        wallets
+                            .join(wallet.id.to_string())
+                            .join("coordination.json"),
+                    )
+                    .unwrap(),
+                )
+                .unwrap();
+                (metadata.pairing_session_id.unwrap(), wallet.id)
+            })
+            .collect::<HashSet<_>>();
+        reconcile_mobile_pairing_directory(&pending, &wallets, &registered, &committed).unwrap();
+        // Restart reconciliation is idempotent; committed staging cannot replay.
+        reconcile_mobile_pairing_directory(&pending, &wallets, &registered, &committed).unwrap();
+        assert!(!marker.exists());
+        if failure == "before_registry" {
+            assert!(result.is_err());
+            assert!(reopened.wallets.is_empty());
+            assert!(!profile.exists());
+            assert_eq!(
+                active_mobile_pairing_sessions(&pending).unwrap(),
+                vec![session]
+            );
+        } else {
+            assert_eq!(result.is_ok(), failure == "cleanup");
+            assert_eq!(reopened.wallets.len(), 1);
+            assert_eq!(
+                fs::read(profile.join("mobile-signer.json")).unwrap(),
+                b"synthetic encrypted envelope"
+            );
+            assert!(active_mobile_pairing_sessions(&pending).unwrap().is_empty());
+            assert!(
+                consuming_mobile_secret_paths_for_session(&pending, &session)
+                    .unwrap()
+                    .is_empty()
+            );
+        }
+    }
+}
