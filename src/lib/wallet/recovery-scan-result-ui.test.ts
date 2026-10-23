@@ -10,7 +10,7 @@ describe('full rescan result presentation', () => {
   it('keeps the foreground rescan result authoritative over status polling', () => {
     const completion = settings.indexOf('const snapshot = await rescan;');
     const statusRead = settings.indexOf(
-      'scanStatus = await walletService.recoveryScanStatus();',
+      'const status = await walletService.recoveryScanStatus();',
       completion
     );
     const observationalCatch = settings.indexOf('A status refresh is observational.', statusRead);

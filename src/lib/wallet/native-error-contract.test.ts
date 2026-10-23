@@ -15,10 +15,13 @@ function nativeErrorCodes(source: string): string[] {
   for (const call of source.matchAll(/\bapi_error\(\s*([^,\n]+)/g)) {
     // A new computed-code idiom needs explicit coverage instead of silently
     // escaping this declaration check. The third form is the function signature.
-    expect(call[1]).toMatch(/^(?:"[a-z][a-z0-9_]+"|error\.code\(\)|code: &'static str)$/);
+    expect(call[1]).toMatch(/^(?:"[a-z][a-z0-9_]+"|error\.code(?:\(\))?|code: &'static str)$/);
   }
   const codes = [...source.matchAll(/\bapi_error\(\s*"([a-z][a-z0-9_]+)"/g)].map(
     (match) => match[1]
+  );
+  codes.push(
+    ...[...source.matchAll(/\bPrevoutError::new\(\s*"([a-z][a-z0-9_]+)"/g)].map((match) => match[1])
   );
   for (const error of source.matchAll(/\bApiError\s*\{([^{}]*)\}/g)) {
     codes.push(...[...error[1].matchAll(/\bcode:\s*"([a-z][a-z0-9_]+)"/g)].map((m) => m[1]));
@@ -42,6 +45,8 @@ api_error(
 );
 ApiError { code: "struct_failure", message, existing_wallet_id: None }
 Warning { code: "not_an_error" }
+PrevoutError::new("prevout_failure", message);
+api_error(error.code, error.message);
 impl ExampleError {
     pub fn code(self) -> &'static str {
         match self {
@@ -49,7 +54,13 @@ impl ExampleError {
         }
     }
 }`)
-    ).toEqual(['direct_failure', 'multiline_failure', 'struct_failure', 'domain_failure']);
+    ).toEqual([
+      'direct_failure',
+      'multiline_failure',
+      'prevout_failure',
+      'struct_failure',
+      'domain_failure'
+    ]);
   });
 
   it('keeps declared native API errors in the frontend allowlist', () => {

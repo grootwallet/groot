@@ -1432,15 +1432,13 @@
   }
   async function selectWallet(profile: WalletProfile) {
     if (profile.id === selectedWalletId) return;
-    const previousWalletId = selectedWalletId;
     // The shell changes ownership only after native selection succeeds. A
     // rejected switch must leave this screen's reads and cleanup valid.
-    selectedWalletId = profile.id;
     try {
       await walletShell.selectWallet(profile.id);
-      selectedWalletId = walletShell.selectedWalletId();
+      if (!destroyed) selectedWalletId = walletShell.selectedWalletId();
     } catch (cause) {
-      if (selectedWalletId === profile.id) selectedWalletId = previousWalletId;
+      if (destroyed) return;
       toast({
         title: 'Could not open wallet',
         description: localizedError(cause, $locale),

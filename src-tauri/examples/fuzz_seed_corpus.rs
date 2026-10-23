@@ -91,67 +91,55 @@ fn main() {
         encrypt_bip129(token, record.as_bytes()).unwrap(),
     )
     .unwrap();
-    let cosigners = (1_u8..=3)
+    let keys = (1_u8..=3)
         .map(|index| {
             let mnemonic = bip39::Mnemonic::from_entropy(&[index; 32]).unwrap();
             let (fingerprint, _, xpub) = derive_mobile_account(&mnemonic).unwrap();
-            groot_lib::multisig::CosignerInput {
-                id: format!("synthetic-{index}"),
-                label: format!("Synthetic {index}"),
-                fingerprint: fingerprint.to_string(),
-                xpub: xpub.to_string(),
-                derivation_path: groot_lib::multisig::multisig_account_path().into(),
-                source: groot_lib::multisig::CosignerSource::Qr,
-                device_type: None,
-            }
+            (fingerprint, xpub)
         })
         .collect::<Vec<_>>();
-    let preview = groot_lib::multisig::PolicyInput {
-        name: "Synthetic".into(),
-        threshold: 2,
-        cosigners,
-    }
-    .preview()
-    .unwrap();
-    let mut wallet = bdk_wallet::Wallet::create(
-        preview.external_descriptor.clone(),
-        preview.internal_descriptor.clone(),
-    )
-    .network(bdk_wallet::bitcoin::Network::Regtest)
-    .create_wallet_no_persist()
-    .unwrap();
+    let descriptor_for = |branch| {
+        let key_text = keys
+            .iter()
+            .map(|(fingerprint, xpub)| format!("[{fingerprint}/48h/1h/0h/2h]{xpub}/{branch}/*"))
+            .collect::<Vec<_>>()
+            .join(",");
+        format!("wsh(sortedmulti(2,{key_text}))")
+    };
+    let external = descriptor_for(0);
+    let internal = descriptor_for(1);
+    let mut wallet = bdk_wallet::Wallet::create(external.clone(), internal.clone())
+        .network(bdk_wallet::bitcoin::Network::Regtest)
+        .create_wallet_no_persist()
+        .unwrap();
     let address = wallet
         .reveal_next_address(bdk_wallet::KeychainKind::External)
         .address
         .to_string();
-    let descriptor = groot_lib::bsms::DescriptorRecord::from_descriptor_pair(
-        &preview.external_descriptor,
-        &preview.internal_descriptor,
-        &address,
-    )
-    .unwrap();
+    let descriptor =
+        groot_lib::bsms::DescriptorRecord::from_descriptor_pair(&external, &internal, &address)
+            .unwrap();
     fs::write(
         root.join("pairing_records/standard-descriptor"),
         descriptor.encode(),
     )
     .unwrap();
-    let public = groot_lib::coordination::PublicWalletRecord {
-        version: 2,
-        network: "regtest".into(),
-        wallet_id: "synthetic-wallet".into(),
-        wallet_name: "Synthetic".into(),
-        role: groot_lib::coordination::DeviceRole::MobileWatchOnly,
-        descriptor_record: descriptor.encode(),
-        descriptor_checksum: preview
-            .external_descriptor
-            .rsplit_once('#')
-            .unwrap()
-            .1
-            .into(),
-        signers: preview.cosigners,
-        mobile_signer_fingerprint: None,
-        created_at: 1,
-    };
+    let signers = keys
+        .iter()
+        .enumerate()
+        .map(|(index, (fingerprint, xpub))| {
+            serde_json::json!({
+                "id": format!("synthetic-{index}"), "label": format!("Synthetic {index}"),
+                "fingerprint": fingerprint.to_string(), "xpub": xpub.to_string(),
+                "derivationPath": "m/48h/1h/0h/2h", "source": "qr"
+            })
+        })
+        .collect::<Vec<_>>();
+    let public: groot_lib::coordination::PublicWalletRecord = serde_json::from_value(serde_json::json!({
+        "version": 2, "network": "regtest", "walletId": "synthetic-wallet", "walletName": "Synthetic",
+        "role": "mobile_watch_only", "descriptorRecord": descriptor.encode(),
+        "descriptorChecksum": "syntheti", "signers": signers, "mobileSignerFingerprint": null, "createdAt": 1
+    })).unwrap();
     public.validate().unwrap();
     fs::write(
         root.join("pairing_records/standard-public-wallet"),
