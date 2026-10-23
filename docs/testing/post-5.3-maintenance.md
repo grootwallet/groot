@@ -33,3 +33,13 @@ A scoped independent security review of the released baseline found a phone inpu
 5. Use Testnet4 for physical interoperability with the exact externally supported descriptor/model/firmware/transport. Ledger, Jade/Jade Plus and BitBox02 families remain candidates only; direct USB Miniscript and phone Continuity enrollment remain blocked. Coldcard/Trezor delayed policies are unsupported through the current integration. Do not infer long-delay acceptance from a short Testnet4 session.
 
 Physical phone/hardware acceptance and release packaging are not performed by this maintenance change. BIP174 assurance evidence changes; no other BIP support expands.
+
+## Owner-approved branch cleanup — 2026-10-23
+
+After the owner confirmed that main contains the intended baseline, 27 local and 13 GitHub branches were deleted. The two remaining local branches are `main` and `codex/post-53-maintainability`. The only remaining GitHub branch is `main`; the maintenance branch is still local only. Local `main` was advanced to the verified GitHub/released commit `6a39bf50b2a6a042354b43369765a9af2174d061`. Maintenance implementation remains separate and unmerged.
+
+Before deletion, all local/remote branch refs and tags were saved in a self-contained Git bundle, verified successfully. Remote deletions were atomic and guarded by the observed branch-head SHAs. The three attached worktrees using removed branches were detached at their existing HEADs. Their status and tracked-diff digests matched before and after detachment/cleanup, preserving existing uncommitted work. No worktree or working file was removed, no release tag changed, and no historical feature branch was merged as part of cleanup. The original dirty checkout is now detached; continue maintenance in its dedicated worktree rather than resetting that checkout.
+
+Branch deletion included old non-ancestral refs at the owner's instruction; it does not establish that every old change was integrated. The local recovery bundle retains those refs without leaving them as active branches. Historical candidate documents remain historical evidence rather than being rewritten to imply those branches still exist.
+
+This cleanup and documentation update have no BIP, wallet-format, dependency or runtime impact. Formatting, local Markdown references and unchanged tag refs were checked after cleanup. Mandatory `pnpm validate` was attempted again and reached the same frozen-source rejection for `src-tauri/src/lib.rs`; the policy was not changed. This remains a release-review requirement, not a new runtime failure.

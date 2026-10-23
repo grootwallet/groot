@@ -46,3 +46,9 @@ RC6 replaces repeated iOS key-access prompts with Groot credential authorization
 ## Post-release maintenance
 
 Shared acceleration-quote reads retain route-owned revisions, cancellation and teardown; Settings node defaults remain presentation only. Native profile lifecycle, notification delivery and recovery commands have separate owners with unchanged storage and authorization. Phone PSBT review/signing now authenticates complete previous transactions before accepting input amounts; witness-only inputs reject with an actionable re-export requirement. No profile, registry, backup, credential or proposal migration is introduced. The [maintenance evidence](testing/post-5.3-maintenance.md) owns fresh verification and remaining physical work.
+
+## Branch baseline after owner-approved cleanup
+
+On 2026-10-23 the owner designated released `main` as the intended baseline and requested removal of all other branches except `codex/post-53-maintainability`. Local branches are now exactly `main` and `codex/post-53-maintainability`; GitHub has only `main` because the maintenance branch remains unpublished. Local and GitHub `main` both point to `6a39bf50b2a6a042354b43369765a9af2174d061`. No maintenance changes were merged or published by this cleanup.
+
+The cleanup removed 27 local and 13 remote branches, including historical refs whose changes were not all ancestral to main. This is the owner's baseline choice, not a claim that every historical commit was merged. Tags and working files were preserved; three worktrees on removed branches were detached at their existing commits. A verified local Git bundle retains the pre-cleanup refs. See the [maintenance evidence](testing/post-5.3-maintenance.md) for the preservation checks. Historical candidate records describe their original branches and are not current branch inventories.
