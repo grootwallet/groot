@@ -191,92 +191,17 @@ fn decode_cbor_bytes(encoded: &[u8]) -> Result<&[u8], CoordinationUrError> {
 /// closed, so a head accepted here decodes to exactly one value under every
 /// compliant parser and Groot cannot disagree with the downstream `ur` decoder
 /// about what the counterparty declared.
-fn cbor_head(input: &mut &[u8], major: u8) -> Result<u32, CoordinationUrError> {
-    let (&head, rest) = input
-        .split_first()
-        .ok_or(CoordinationUrError::InvalidFrame)?;
-    if head >> 5 != major {
-        return Err(CoordinationUrError::InvalidFrame);
-    }
-    let (value, rest) = match head & 0x1f {
-        info @ 0..=23 => (u32::from(info), rest),
-        24 => {
-            let (&byte, rest) = rest
-                .split_first()
-                .ok_or(CoordinationUrError::InvalidFrame)?;
-            if byte < 24 {
-                return Err(CoordinationUrError::InvalidFrame);
-            }
-            (u32::from(byte), rest)
-        }
-        25 => {
-            let bytes: [u8; 2] = rest
-                .get(..2)
-                .ok_or(CoordinationUrError::InvalidFrame)?
-                .try_into()
-                .map_err(|_| CoordinationUrError::InvalidFrame)?;
-            let value = u16::from_be_bytes(bytes);
-            if value < 256 {
-                return Err(CoordinationUrError::InvalidFrame);
-            }
-            (u32::from(value), &rest[2..])
-        }
-        26 => {
-            let bytes: [u8; 4] = rest
-                .get(..4)
-                .ok_or(CoordinationUrError::InvalidFrame)?
-                .try_into()
-                .map_err(|_| CoordinationUrError::InvalidFrame)?;
-            let value = u32::from_be_bytes(bytes);
-            if value < 65_536 {
-                return Err(CoordinationUrError::InvalidFrame);
-            }
-            (value, &rest[4..])
-        }
-        _ => return Err(CoordinationUrError::InvalidFrame),
-    };
-    *input = rest;
-    Ok(value)
-}
-
-/// Bound the attacker-controlled fountain `Part` header of one multipart frame
-/// before the pinned `ur` decoder adopts it. The decoder trusts the CBOR
-/// `sequence_count`/`message_length` fields and allocates and shuffles vectors
-/// proportional to them on first receive, so one small frame could otherwise
-/// abort or hang the process. Coordination payloads (`MAX_COORDINATION_UR_BYTES`
-/// plus the <= 3-byte envelope) always decode from at most
-/// `MAX_COORDINATION_UR_FRAMES` frames, so larger declared counts can never
-/// complete and fail closed before any allocation. Decode is exposed before
-/// invitation/session authentication, so this boundary must hold
-/// unauthenticated.
-///
-/// Only canonical minimal-length CBOR exactly matching the pinned encoder is
-/// accepted, so no compliant peer's frame can be rejected.
 fn validate_fountain_part(cbor: &[u8]) -> Result<(), CoordinationUrError> {
-    let mut input = cbor;
-    if cbor_head(&mut input, 4)? != 5 {
-        return Err(CoordinationUrError::InvalidFrame);
-    }
-    let sequence = cbor_head(&mut input, 0)?;
-    let sequence_count = cbor_head(&mut input, 0)?;
-    let message_length = cbor_head(&mut input, 0)?;
-    cbor_head(&mut input, 0)?; // checksum: inert for acceptance bounds
-    let fragment_length = cbor_head(&mut input, 2)? as usize;
-    input = input
-        .get(fragment_length..)
-        .ok_or(CoordinationUrError::InvalidFrame)?;
-    if !input.is_empty()
-        || sequence == 0
-        || sequence_count == 0
-        || sequence_count as usize > MAX_COORDINATION_UR_FRAMES
-        || message_length == 0
-        || message_length as usize > MAX_COORDINATION_UR_BYTES + 3
-        || fragment_length == 0
-        || fragment_length > MAX_COORDINATION_UR_FRAME_BYTES
-    {
-        return Err(CoordinationUrError::InvalidFrame);
-    }
-    Ok(())
+    use crate::ur_transport::fountain::{validate_fountain_part, FountainLimits};
+    validate_fountain_part(
+        cbor,
+        FountainLimits {
+            max_parts: MAX_COORDINATION_UR_FRAMES,
+            max_message_bytes: MAX_COORDINATION_UR_BYTES + 3,
+            max_fragment_bytes: MAX_COORDINATION_UR_FRAME_BYTES,
+        },
+    )
+    .map_err(|_| CoordinationUrError::InvalidFrame)
 }
 
 #[cfg(test)]

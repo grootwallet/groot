@@ -3,6 +3,8 @@
 //! The UR library handles Bytewords and fountain coding. This module owns the security-critical
 //! type check, canonical CBOR byte-string envelope, resource bounds, and PSBT validation.
 
+pub(crate) mod fountain;
+
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use bdk_wallet::bitcoin::psbt::Psbt;
 use ur::{ur::Kind, Decoder, Encoder};
@@ -137,91 +139,17 @@ fn validate_psbt(raw: &[u8]) -> Result<(), UrTransportError> {
         .map_err(|_| UrTransportError::InvalidPsbt)
 }
 
-/// Read one canonical minimal-length CBOR head for `major` (0 = unsigned int,
-/// 2 = byte string, 4 = array) and return its value. Anything else — wrong major
-/// type, non-canonical length, indefinite form, overlong form — fails closed.
-/// A head accepted here decodes to exactly one value under every compliant CBOR
-/// parser, so Groot's own checks cannot disagree with the downstream decoder
-/// about what the attacker declared.
-fn cbor_head(input: &mut &[u8], major: u8) -> Result<u32, UrTransportError> {
-    let (&head, rest) = input.split_first().ok_or(UrTransportError::InvalidFrame)?;
-    if head >> 5 != major {
-        return Err(UrTransportError::InvalidFrame);
-    }
-    let (value, rest) = match head & 0x1f {
-        info @ 0..=23 => (u32::from(info), rest),
-        24 => {
-            let (&byte, rest) = rest.split_first().ok_or(UrTransportError::InvalidFrame)?;
-            if byte < 24 {
-                return Err(UrTransportError::InvalidFrame);
-            }
-            (u32::from(byte), rest)
-        }
-        25 => {
-            let bytes: [u8; 2] = rest
-                .get(..2)
-                .ok_or(UrTransportError::InvalidFrame)?
-                .try_into()
-                .map_err(|_| UrTransportError::InvalidFrame)?;
-            let value = u16::from_be_bytes(bytes);
-            if value < 256 {
-                return Err(UrTransportError::InvalidFrame);
-            }
-            (u32::from(value), &rest[2..])
-        }
-        26 => {
-            let bytes: [u8; 4] = rest
-                .get(..4)
-                .ok_or(UrTransportError::InvalidFrame)?
-                .try_into()
-                .map_err(|_| UrTransportError::InvalidFrame)?;
-            let value = u32::from_be_bytes(bytes);
-            if value < 65_536 {
-                return Err(UrTransportError::InvalidFrame);
-            }
-            (value, &rest[4..])
-        }
-        _ => return Err(UrTransportError::InvalidFrame),
-    };
-    *input = rest;
-    Ok(value)
-}
-
-/// Bound the attacker-controlled fountain `Part` header of one multipart frame
-/// before the pinned `ur` decoder adopts it. The decoder trusts the CBOR
-/// `sequence_count`/`message_length` fields and allocates and shuffles vectors
-/// proportional to them on first receive, so a single small frame could
-/// otherwise abort or hang the process. A legitimate `MAX_UR_PAYLOAD_BYTES`
-/// message always decodes from at most `MAX_UR_FRAMES` frames here, so larger
-/// declared counts can never complete and fail closed before any allocation.
-///
-/// Only canonical minimal-length CBOR exactly matching the pinned encoder is
-/// accepted, so no compliant peer's frame can be rejected.
+// Keep crypto-psbt envelope limits distinct from coordination transport.
 fn validate_fountain_part(cbor: &[u8]) -> Result<(), UrTransportError> {
-    let mut input = cbor;
-    if cbor_head(&mut input, 4)? != 5 {
-        return Err(UrTransportError::InvalidFrame);
-    }
-    let sequence = cbor_head(&mut input, 0)?;
-    let sequence_count = cbor_head(&mut input, 0)?;
-    let message_length = cbor_head(&mut input, 0)?;
-    cbor_head(&mut input, 0)?; // checksum: inert for acceptance bounds
-    let fragment_length = cbor_head(&mut input, 2)? as usize;
-    input = input
-        .get(fragment_length..)
-        .ok_or(UrTransportError::InvalidFrame)?;
-    if !input.is_empty()
-        || sequence == 0
-        || sequence_count == 0
-        || sequence_count as usize > MAX_UR_FRAMES
-        || message_length == 0
-        || message_length as usize > MAX_UR_PAYLOAD_BYTES + 5
-        || fragment_length == 0
-        || fragment_length > MAX_UR_FRAME_BYTES
-    {
-        return Err(UrTransportError::InvalidFrame);
-    }
-    Ok(())
+    fountain::validate_fountain_part(
+        cbor,
+        fountain::FountainLimits {
+            max_parts: MAX_UR_FRAMES,
+            max_message_bytes: MAX_UR_PAYLOAD_BYTES + 5,
+            max_fragment_bytes: MAX_UR_FRAME_BYTES,
+        },
+    )
+    .map_err(|_| UrTransportError::InvalidFrame)
 }
 
 fn encode_cbor_bytes(payload: &[u8]) -> Result<Vec<u8>, UrTransportError> {

@@ -1582,49 +1582,8 @@ fn validate_mobile_psbt_work_budget(psbt: &Psbt, wallet: &MultisigWalletDto) -> 
 }
 
 fn authenticate_mobile_prevouts(psbt: &Psbt) -> ApiResult<()> {
-    if psbt.inputs.is_empty() || psbt.inputs.len() != psbt.unsigned_tx.input.len() {
-        return Err(api_error(
-            "malformed_psbt",
-            "The PSBT has no signable inputs.",
-        ));
-    }
-    let mut seen = HashSet::new();
-    for (txin, input) in psbt.unsigned_tx.input.iter().zip(&psbt.inputs) {
-        if !seen.insert(txin.previous_output) {
-            return Err(api_error("proposal_mismatch", "The PSBT repeats an input."));
-        }
-        let previous = input.non_witness_utxo.as_ref().ok_or_else(|| api_error(
-            "malformed_psbt", "Mobile signing requires the complete previous transaction for every input. Export the full PSBT from the coordinator."
-        ))?;
-        if previous.compute_txid() != txin.previous_output.txid {
-            return Err(api_error(
-                "proposal_mismatch",
-                "A PSBT input does not match its previous transaction.",
-            ));
-        }
-        let output = previous
-            .output
-            .get(txin.previous_output.vout as usize)
-            .ok_or_else(|| {
-                api_error(
-                    "proposal_mismatch",
-                    "A PSBT input points outside its previous transaction.",
-                )
-            })?;
-        let witness = input.witness_utxo.as_ref().ok_or_else(|| {
-            api_error(
-                "malformed_psbt",
-                "Every mobile-signing input must include its witness UTXO.",
-            )
-        })?;
-        if output != witness {
-            return Err(api_error(
-                "proposal_mismatch",
-                "A PSBT input does not match its authenticated previous output.",
-            ));
-        }
-    }
-    Ok(())
+    crate::proposal::prevouts::authenticate_prevouts(psbt)
+        .map_err(|error| api_error(error.code, error.message))
 }
 
 fn review_mobile_psbt_for(
