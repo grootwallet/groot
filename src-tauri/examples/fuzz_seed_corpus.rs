@@ -131,14 +131,14 @@ fn main() {
             serde_json::json!({
                 "id": format!("synthetic-{index}"), "label": format!("Synthetic {index}"),
                 "fingerprint": fingerprint.to_string(), "xpub": xpub.to_string(),
-                "derivationPath": "m/48h/1h/0h/2h", "source": "qr"
+                "derivationPath": "m/48'/1'/0'/2'", "source": "qr"
             })
         })
         .collect::<Vec<_>>();
     let public: groot_lib::coordination::PublicWalletRecord = serde_json::from_value(serde_json::json!({
         "version": 2, "network": "regtest", "walletId": "synthetic-wallet", "walletName": "Synthetic",
         "role": "mobile_watch_only", "descriptorRecord": descriptor.encode(),
-        "descriptorChecksum": "syntheti", "signers": signers, "mobileSignerFingerprint": null, "createdAt": 1
+        "descriptorChecksum": wallet.public_descriptor(bdk_wallet::KeychainKind::External).to_string().rsplit_once('#').unwrap().1, "signers": signers, "mobileSignerFingerprint": null, "createdAt": 1
     })).unwrap();
     public.validate().unwrap();
     fs::write(

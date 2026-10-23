@@ -1198,3 +1198,101 @@ fn measure_mobile_review_and_signing() {
         );
     }
 }
+
+#[test]
+fn mobile_work_budget_checks_policy_and_each_metadata_map_without_mutation() {
+    use bdk_wallet::bitcoin::{secp256k1::SecretKey, PublicKey};
+    let (mnemonic, metadata, coordination, original) = mobile_signing_fixture();
+    for count in [2, 3, 8, 9] {
+        let mut wallet = metadata.clone();
+        wallet
+            .cosigners
+            .resize(count, metadata.cosigners[0].clone());
+        let result = validate_mobile_psbt_work_budget(&original, &wallet);
+        if (3..=8).contains(&count) {
+            result.unwrap();
+        } else {
+            assert_eq!(result.unwrap_err().code, "signing_unavailable");
+        }
+    }
+    let mut unsupported = metadata.clone();
+    unsupported.policy_type = "delayed".into();
+    assert_eq!(
+        validate_mobile_psbt_work_budget(&original, &unsupported)
+            .unwrap_err()
+            .code,
+        "signing_unavailable"
+    );
+    let encoded = encode_psbt(&original);
+    let review = review_mobile_psbt_for(&metadata, &coordination, &encoded).unwrap();
+    let signed = sign_mobile_psbt_for(&metadata, &mnemonic, &encoded, review.revision_id).unwrap();
+    let signed = decode_psbt(&signed.signed_psbt).unwrap();
+    let signature = *signed.inputs[0].partial_sigs.values().next().unwrap();
+    let source = original.inputs[0]
+        .bip32_derivation
+        .values()
+        .next()
+        .unwrap()
+        .clone();
+    let secp = Secp256k1::new();
+    for map in ["input_derivation", "input_signature", "output_derivation"] {
+        for count in [3, 4] {
+            let mut psbt = original.clone();
+            psbt.inputs[0].bip32_derivation.clear();
+            psbt.inputs[0].partial_sigs.clear();
+            psbt.outputs[0].bip32_derivation.clear();
+            for index in 1..=count {
+                let key = SecretKey::from_slice(&[index; 32])
+                    .unwrap()
+                    .public_key(&secp);
+                match map {
+                    "input_derivation" => {
+                        psbt.inputs[0].bip32_derivation.insert(key, source.clone());
+                    }
+                    "input_signature" => {
+                        psbt.inputs[0]
+                            .partial_sigs
+                            .insert(PublicKey::new(key), signature);
+                    }
+                    "output_derivation" => {
+                        psbt.outputs[0].bip32_derivation.insert(key, source.clone());
+                    }
+                    _ => unreachable!(),
+                }
+            }
+            let before = psbt.clone();
+            let result = validate_mobile_psbt_work_budget(&psbt, &metadata);
+            if count == 3 {
+                result.unwrap();
+            } else {
+                assert_eq!(result.unwrap_err().code, "psbt_too_large", "{map}");
+            }
+            assert_eq!(psbt, before);
+        }
+    }
+}
+
+#[test]
+fn mobile_review_sign_and_qr_roundtrip_at_reply_budget() {
+    use bdk_wallet::bitcoin::psbt::raw;
+    let (mnemonic, metadata, coordination, mut psbt) = mobile_signing_fixture();
+    let key = raw::Key {
+        type_value: 0x50,
+        key: vec![1],
+    };
+    psbt.unknown.insert(key.clone(), vec![0; 70_000]);
+    let overhead = psbt.serialize().len() - 70_000;
+    psbt.unknown.insert(
+        key,
+        vec![0; MOBILE_REPLY_PSBT_BYTES - MOBILE_SIGNATURE_ENTRY_BYTES - overhead],
+    );
+    let encoded = encode_psbt(&psbt);
+    let before = psbt.clone();
+    let review = review_mobile_psbt_for(&metadata, &coordination, &encoded).unwrap();
+    let signed = sign_mobile_psbt_for(&metadata, &mnemonic, &encoded, review.revision_id).unwrap();
+    assert_eq!(psbt, before);
+    let decoded = ur_transport::decode_psbt(&signed.frames).unwrap();
+    assert_eq!(decoded, signed.signed_psbt);
+    assert!(decode_psbt(&decoded).unwrap().serialize().len() <= MOBILE_REPLY_PSBT_BYTES);
+    assert_eq!(signed.frames.len(), ur_transport::MAX_UR_FRAMES);
+}
