@@ -47,7 +47,7 @@
     "test:acceptance": "playwright test",
     "test:integration:regtest": "bash scripts/regtest/test.sh",
     "test:regtest": "pnpm test:integration:regtest",
-    "test:release-gate": "node --test scripts/release/assert-public-release-authorized.test.mjs scripts/release/verify-mainnet-source-policy.test.mjs scripts/release/sbom-order.test.mjs scripts/release/production-macos-release.test.mjs && bash scripts/release/check-mainnet-gate.sh",
+    "test:release-gate": "node --test scripts/release/build-source-watch.test.mjs scripts/release/assert-public-release-authorized.test.mjs scripts/release/verify-mainnet-source-policy.test.mjs scripts/release/sbom-order.test.mjs scripts/release/production-macos-release.test.mjs && bash scripts/release/check-mainnet-gate.sh",
     "test:boundaries": "bash scripts/quality/check-boundaries.sh",
     "test:secret-surfaces": "node --test scripts/quality/check-secret-surfaces.test.mjs && node scripts/quality/check-secret-surfaces.mjs",
     "test:supply-chain": "node scripts/quality/check-supply-chain.mjs",

@@ -156,6 +156,7 @@ fn watch_repository_sources() {
         return;
     };
     let output = std::process::Command::new("git")
+        .current_dir(&root)
         .args([
             "ls-files",
             "--cached",
