@@ -129,6 +129,8 @@
   import { latestActiveProposal, proposalInputsUnavailable } from '$lib/wallet/proposal-resume';
   import { useWalletShellContext } from '$lib/wallet/shell-context';
 
+  import { requestAccelerationQuote } from '$lib/wallet/acceleration-quotes';
+
   const walletShell = useWalletShellContext();
   const initialAcceleration: { txid: string; method: 'rbf' | 'cpfp' } | null = (() => {
     const method = page.url.searchParams.get('accelerate');
@@ -978,45 +980,32 @@
   async function refreshAccelerationQuote(revision = ++accelerationQuoteRevision) {
     const request = accelerationRequest;
     if (!request || !customFeeValid) return;
-    try {
-      if (request.method === 'rbf') {
-        const quote = await walletService.quoteRbf(request.txid, feeRate(selectedRateNumber));
-        if (
-          revision !== accelerationQuoteRevision ||
-          accelerationRequest?.txid !== request.txid ||
-          accelerationRequest.method !== request.method
-        )
-          return;
-        rbfQuote = quote;
-        selectedRate = Number(quote.targetFeeRate);
-      } else {
-        const quote = await walletService.quoteCpfp(request.txid, feeRate(selectedRateNumber));
-        if (
-          revision !== accelerationQuoteRevision ||
-          accelerationRequest?.txid !== request.txid ||
-          accelerationRequest.method !== request.method
-        )
-          return;
-        cpfpQuote = quote;
-        selectedRate = Number(quote.targetFeeRate);
-      }
-      feeEstimateError = '';
-      accelerationQuoteFailed = false;
-    } catch (cause) {
-      if (
-        revision !== accelerationQuoteRevision ||
-        accelerationRequest?.txid !== request.txid ||
-        accelerationRequest.method !== request.method
-      )
-        return;
-      if (cause instanceof WalletError && cause.code === 'transaction_confirmed') {
+    const result = await requestAccelerationQuote(
+      walletService,
+      request,
+      feeRate(selectedRateNumber),
+      () =>
+        revision === accelerationQuoteRevision &&
+        accelerationRequest?.txid === request.txid &&
+        accelerationRequest.method === request.method
+    );
+    if (!result) return;
+    if (result.status === 'failed') {
+      if (result.cause instanceof WalletError && result.cause.code === 'transaction_confirmed') {
         markAccelerationConfirmed();
         return;
       }
       accelerationQuoteFailed = true;
-      feeEstimateError = accelerationUnavailableDescription(request.method, cause, $locale);
+      feeEstimateError = accelerationUnavailableDescription(request.method, result.cause, $locale);
+      return;
     }
+    if (result.method === 'rbf') rbfQuote = result.quote;
+    else cpfpQuote = result.quote;
+    selectedRate = Number(result.quote.targetFeeRate);
+    feeEstimateError = '';
+    accelerationQuoteFailed = false;
   }
+
   function scheduleAccelerationQuote() {
     const revision = ++accelerationQuoteRevision;
     if (accelerationQuoteTimer) clearTimeout(accelerationQuoteTimer);

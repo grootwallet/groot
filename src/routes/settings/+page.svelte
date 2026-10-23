@@ -82,6 +82,12 @@
     recordHardwareHealthCheck,
     setHardwareHealthChecks
   } from '$lib/hardware/health-check-state';
+  import {
+    localRpcUrl as rpcUrlForNetwork,
+    localNodeConfig as localNodeConfigForNetwork,
+    isManagedNodeConfig as managedNodeConfig,
+    nodeFormConfig
+  } from '$lib/wallet/node-form';
   const walletShell = useWalletShellContext();
   let deleting = $state(false);
   let confirmText = $state('');
@@ -197,28 +203,10 @@
     networkSwitchTarget = $state<SwitchableNetwork | null>(null),
     networkSwitchError = $state(''),
     networkSwitching = $state(false);
-  const localRpcUrl =
-    defaultConfig.network === 'regtest'
-      ? 'http://127.0.0.1:18443'
-      : defaultConfig.network === 'signet'
-        ? 'http://127.0.0.1:38332'
-        : defaultConfig.network === 'testnet4'
-          ? 'http://127.0.0.1:48332'
-          : 'http://127.0.0.1:8332';
-  const localNodeConfig = (): CoreNodeConfig => ({
-    backend: { type: 'local_core', url: localRpcUrl },
-    auth: defaultConfig.network === 'regtest' ? 'cookie' : 'user_pass',
-    username: null,
-    torProxy: null
-  });
-  const managedNodeUrl = 'https://bitcoin-rpc.usegroot.com/';
+  const localRpcUrl = rpcUrlForNetwork(defaultConfig.network);
+  const localNodeConfig = () => localNodeConfigForNetwork(defaultConfig.network);
   const isManagedNodeConfig = (config: CoreNodeConfig) =>
-    defaultConfig.network === 'mainnet' &&
-    config.backend.type === 'remote_core' &&
-    config.backend.url === managedNodeUrl &&
-    config.auth === 'user_pass' &&
-    /^groot-[0-9a-f]{24}$/.test(config.username ?? '') &&
-    !config.torProxy;
+    managedNodeConfig(config, defaultConfig.network);
   let node = $state<CoreNodeConfig>(localNodeConfig());
   let nodeMode = $state<'managed' | 'local_core' | 'remote_core' | 'tor'>('local_core');
   let managedNodeConfigured = $derived(isManagedNodeConfig(node));
@@ -634,22 +622,7 @@
       nodeError = '';
       return;
     }
-    node =
-      type === 'local_core'
-        ? localNodeConfig()
-        : type === 'tor'
-          ? {
-              backend: { type: 'remote_core', url: 'http://example.onion:8332' },
-              auth: 'user_pass',
-              username: '',
-              torProxy: '127.0.0.1:9050'
-            }
-          : {
-              backend: { type: 'remote_core', url: 'https://' },
-              auth: 'user_pass',
-              username: '',
-              torProxy: null
-            };
+    node = nodeFormConfig(type, defaultConfig.network);
     nodePassword = '';
     nodeError = '';
   }
