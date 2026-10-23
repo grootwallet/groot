@@ -23,3 +23,5 @@ The only new resolved registry packages are libfuzzer-sys 0.4.13, arbitrary 1.5.
 The runner disables cfg(fuzzing) while retaining AddressSanitizer and coverage instrumentation. The pinned nusb 0.2.7 fuzz-only function does not compile; more importantly, production cryptographic branches must remain exercised. No dependency was upgraded to work around this.
 
 Use the explicit release profile: cargo-fuzz’s default target-only debug assertions disagree with Tauri’s host-generated ACL structures. Release keeps the host and target configuration consistent while retaining sanitizer/coverage instrumentation. This does not alter the application build profile.
+
+On macOS the runner uses Xcode’s installed classic linker. The current Apple linker rejected ASan initializer sections while linking Tauri; this selects a compatible linker rather than disabling AddressSanitizer. A missing classic linker is a build failure, not a passing campaign.

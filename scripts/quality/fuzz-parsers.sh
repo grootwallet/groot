@@ -10,5 +10,11 @@ fi
 export PATH="$PWD/fuzz/tools:$PATH"
 # Upstream cfg(fuzzing) changes dependencies and currently breaks nusb 0.2.7.
 # Exercise normal production branches; sanitizer coverage remains enabled.
+# Apple's newer linker rejects ASan initializer sections in this Tauri graph.
+# The Xcode-provided classic linker retains the same sanitizer instrumentation.
+if [[ "$(uname -s)" == Darwin ]]; then
+  xcrun --find ld-classic >/dev/null
+  export RUSTFLAGS="${RUSTFLAGS:-} -Clink-arg=-Wl,-ld_classic"
+fi
 exec cargo-fuzz run "$target" --fuzz-dir fuzz --no-cfg-fuzzing --release \
   --target-dir "${GROOT_FUZZ_TARGET_DIR:-$PWD/fuzz/target}" -- "$@"

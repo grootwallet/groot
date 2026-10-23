@@ -57,16 +57,12 @@ fuzz_target!(|data: &[u8]| {
                     .push(duplicate.unsigned_tx.input[0].clone());
                 for invalid in [missing, mismatch, duplicate] {
                     let encoded = encode_psbt(&invalid);
-                    // Bound the structured path so even duplicated input maps fit the
-                    // real 400-byte fragment / 1,024-frame transport budget.
-                    if psbt.serialize().len() <= 64 * 1024 {
-                        let frames = ur_transport::encode_psbt(&encoded, 400).unwrap();
-                        let decoded =
-                            decode_psbt(&ur_transport::decode_psbt(&frames).unwrap()).unwrap();
-                        assert!(
-                            groot_lib::proposal::prevouts::authenticate_prevouts(&decoded).is_err()
-                        );
-                    }
+                    let frames = ur_transport::encode_psbt(&encoded, 400).unwrap();
+                    let decoded =
+                        decode_psbt(&ur_transport::decode_psbt(&frames).unwrap()).unwrap();
+                    assert!(
+                        groot_lib::proposal::prevouts::authenticate_prevouts(&decoded).is_err()
+                    );
                 }
             }
         }
