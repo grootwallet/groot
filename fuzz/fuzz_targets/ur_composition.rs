@@ -38,7 +38,10 @@ fuzz_target!(|data: &[u8]| {
             groot_lib::proposal::prevouts::authenticate_prevouts(&psbt).unwrap();
         }
         let encoded = encode_psbt(&psbt);
-        if let Ok(frames) = ur_transport::encode_psbt(&encoded, 4096) {
+        // Bound the structured path so even duplicated input maps fit the
+        // real 400-byte fragment / 1,024-frame transport budget.
+        if psbt.serialize().len() <= 64 * 1024 {
+            let frames = ur_transport::encode_psbt(&encoded, 400).unwrap();
             let decoded = decode_psbt(&ur_transport::decode_psbt(&frames).unwrap()).unwrap();
             assert_eq!(decoded, psbt);
             if groot_lib::proposal::prevouts::authenticate_prevouts(&decoded).is_ok() {
@@ -54,7 +57,10 @@ fuzz_target!(|data: &[u8]| {
                     .push(duplicate.unsigned_tx.input[0].clone());
                 for invalid in [missing, mismatch, duplicate] {
                     let encoded = encode_psbt(&invalid);
-                    if let Ok(frames) = ur_transport::encode_psbt(&encoded, 4096) {
+                    // Bound the structured path so even duplicated input maps fit the
+                    // real 400-byte fragment / 1,024-frame transport budget.
+                    if psbt.serialize().len() <= 64 * 1024 {
+                        let frames = ur_transport::encode_psbt(&encoded, 400).unwrap();
                         let decoded =
                             decode_psbt(&ur_transport::decode_psbt(&frames).unwrap()).unwrap();
                         assert!(
