@@ -71,10 +71,15 @@ const hardwareTransport = readFileSync(
   new URL('../../../src-tauri/src/hardware.rs', import.meta.url),
   'utf8'
 );
-const nativeWallet = readFileSync(
-  new URL('../../../src-tauri/src/wallet.rs', import.meta.url),
-  'utf8'
-);
+const nativeWallet =
+  readFileSync(new URL('../../../src-tauri/src/wallet.rs', import.meta.url), 'utf8') +
+  '\n' +
+  readFileSync(new URL('../../../src-tauri/src/wallet/profiles.rs', import.meta.url), 'utf8') +
+  '\n' +
+  readFileSync(
+    new URL('../../../src-tauri/src/wallet/notification_delivery.rs', import.meta.url),
+    'utf8'
+  );
 
 describe('hardware receive verification UI', () => {
   it('catalogs every native hardware device status message', () => {

@@ -3,10 +3,16 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 const appShell = readFileSync(new URL('../components/AppShell.svelte', import.meta.url), 'utf8');
-const profileCommands = readFileSync(
-  new URL('../../../src-tauri/src/wallet/profile_commands.rs', import.meta.url),
-  'utf8'
-);
+const profileCommands =
+  readFileSync(
+    new URL('../../../src-tauri/src/wallet/profile_commands.rs', import.meta.url),
+    'utf8'
+  ) +
+  '\n' +
+  readFileSync(
+    new URL('../../../src-tauri/src/wallet/recovery_commands.rs', import.meta.url),
+    'utf8'
+  );
 const multisigCommands = readFileSync(
   new URL('../../../src-tauri/src/wallet/multisig_setup_commands.rs', import.meta.url),
   'utf8'
@@ -16,10 +22,15 @@ const settings = readFileSync(
   new URL('../../routes/settings/+page.svelte', import.meta.url),
   'utf8'
 );
-const walletCore = readFileSync(
-  new URL('../../../src-tauri/src/wallet.rs', import.meta.url),
-  'utf8'
-);
+const walletCore =
+  readFileSync(new URL('../../../src-tauri/src/wallet.rs', import.meta.url), 'utf8') +
+  '\n' +
+  readFileSync(new URL('../../../src-tauri/src/wallet/profiles.rs', import.meta.url), 'utf8') +
+  '\n' +
+  readFileSync(
+    new URL('../../../src-tauri/src/wallet/notification_delivery.rs', import.meta.url),
+    'utf8'
+  );
 const unlock = readFileSync(new URL('../../routes/unlock/+page.svelte', import.meta.url), 'utf8');
 const activity = readFileSync(
   new URL('../../routes/activity/+page.svelte', import.meta.url),
