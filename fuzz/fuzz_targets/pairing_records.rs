@@ -8,7 +8,7 @@ use groot_lib::{
 use libfuzzer_sys::fuzz_target;
 
 fuzz_target!(|data: &[u8]| {
-    if data.len() > 262_145 {
+    if data.len() > 524_353 {
         return;
     }
     let Ok(text) = std::str::from_utf8(data) else {

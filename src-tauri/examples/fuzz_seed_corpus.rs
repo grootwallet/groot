@@ -50,6 +50,7 @@ fn main() {
     )
     .unwrap();
     fs::write(root.join("psbt_roundtrip/authenticated-base64"), &encoded).unwrap();
+    fs::write(root.join("ur_composition/authenticated-base64"), &encoded).unwrap();
     let frames = ur_transport::encode_psbt(&encoded, 50).unwrap();
     fs::write(
         root.join("ur_composition/authenticated-frames"),
@@ -88,6 +89,73 @@ fn main() {
     fs::write(
         root.join("pairing_records/encrypted-record"),
         encrypt_bip129(token, record.as_bytes()).unwrap(),
+    )
+    .unwrap();
+    let cosigners = (1_u8..=3)
+        .map(|index| {
+            let mnemonic = bip39::Mnemonic::from_entropy(&[index; 32]).unwrap();
+            let (fingerprint, _, xpub) = derive_mobile_account(&mnemonic).unwrap();
+            groot_lib::multisig::CosignerInput {
+                id: format!("synthetic-{index}"),
+                label: format!("Synthetic {index}"),
+                fingerprint: fingerprint.to_string(),
+                xpub: xpub.to_string(),
+                derivation_path: groot_lib::multisig::multisig_account_path().into(),
+                source: groot_lib::multisig::CosignerSource::Qr,
+                device_type: None,
+            }
+        })
+        .collect::<Vec<_>>();
+    let preview = groot_lib::multisig::PolicyInput {
+        name: "Synthetic".into(),
+        threshold: 2,
+        cosigners,
+    }
+    .preview()
+    .unwrap();
+    let mut wallet = bdk_wallet::Wallet::create(
+        preview.external_descriptor.clone(),
+        preview.internal_descriptor.clone(),
+    )
+    .network(bdk_wallet::bitcoin::Network::Regtest)
+    .create_wallet_no_persist()
+    .unwrap();
+    let address = wallet
+        .reveal_next_address(bdk_wallet::KeychainKind::External)
+        .address
+        .to_string();
+    let descriptor = groot_lib::bsms::DescriptorRecord::from_descriptor_pair(
+        &preview.external_descriptor,
+        &preview.internal_descriptor,
+        &address,
+    )
+    .unwrap();
+    fs::write(
+        root.join("pairing_records/standard-descriptor"),
+        descriptor.encode(),
+    )
+    .unwrap();
+    let public = groot_lib::coordination::PublicWalletRecord {
+        version: 2,
+        network: "regtest".into(),
+        wallet_id: "synthetic-wallet".into(),
+        wallet_name: "Synthetic".into(),
+        role: groot_lib::coordination::DeviceRole::MobileWatchOnly,
+        descriptor_record: descriptor.encode(),
+        descriptor_checksum: preview
+            .external_descriptor
+            .rsplit_once('#')
+            .unwrap()
+            .1
+            .into(),
+        signers: preview.cosigners,
+        mobile_signer_fingerprint: None,
+        created_at: 1,
+    };
+    public.validate().unwrap();
+    fs::write(
+        root.join("pairing_records/standard-public-wallet"),
+        serde_json::to_vec(&public).unwrap(),
     )
     .unwrap();
     // A raw/base64 ambiguity seed remains a rejection or exact round trip.

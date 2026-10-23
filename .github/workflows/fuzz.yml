@@ -33,4 +33,4 @@ jobs:
         run: |
           scripts/quality/fuzz-parsers.sh psbt_roundtrip -max_total_time=90 -timeout=2 -rss_limit_mb=512 -max_len=1048577
           scripts/quality/fuzz-parsers.sh ur_composition -max_total_time=90 -timeout=2 -rss_limit_mb=512 -max_len=4195329
-          scripts/quality/fuzz-parsers.sh pairing_records -max_total_time=90 -timeout=2 -rss_limit_mb=512 -max_len=262145
+          scripts/quality/fuzz-parsers.sh pairing_records -max_total_time=90 -timeout=2 -rss_limit_mb=512 -max_len=524353

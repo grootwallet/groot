@@ -13,6 +13,38 @@ fuzz_target!(|data: &[u8]| {
     let Ok(text) = std::str::from_utf8(data) else {
         return;
     };
+    // Raw/base64 PSBT seeds bypass the transport checksum barrier, then traverse
+    // the real encoder/decoder. Controlled corruptions must be rejected even if
+    // the verifier accidentally becomes an always-successful stub.
+    if let Ok(psbt) = decode_psbt(text) {
+        let encoded = encode_psbt(&psbt);
+        if let Ok(frames) = ur_transport::encode_psbt(&encoded, 4096) {
+            let decoded = decode_psbt(&ur_transport::decode_psbt(&frames).unwrap()).unwrap();
+            assert_eq!(decoded, psbt);
+            if groot_lib::proposal::prevouts::authenticate_prevouts(&decoded).is_ok() {
+                let mut missing = decoded.clone();
+                missing.inputs[0].non_witness_utxo = None;
+                let mut mismatch = decoded.clone();
+                mismatch.unsigned_tx.input[0].previous_output.vout = u32::MAX;
+                let mut duplicate = decoded.clone();
+                duplicate.inputs.push(duplicate.inputs[0].clone());
+                duplicate
+                    .unsigned_tx
+                    .input
+                    .push(duplicate.unsigned_tx.input[0].clone());
+                for invalid in [missing, mismatch, duplicate] {
+                    let encoded = encode_psbt(&invalid);
+                    if let Ok(frames) = ur_transport::encode_psbt(&encoded, 4096) {
+                        let decoded =
+                            decode_psbt(&ur_transport::decode_psbt(&frames).unwrap()).unwrap();
+                        assert!(
+                            groot_lib::proposal::prevouts::authenticate_prevouts(&decoded).is_err()
+                        );
+                    }
+                }
+            }
+        }
+    }
     let frames = text
         .split('\n')
         .take(1025)

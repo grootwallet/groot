@@ -11,7 +11,7 @@ Run from this directory with the pinned cargo-fuzz on PATH. The runner wraps eve
 ```sh
 ../scripts/quality/fuzz-parsers.sh psbt_roundtrip -max_total_time=90 -timeout=2 -rss_limit_mb=512 -max_len=1048577
 ../scripts/quality/fuzz-parsers.sh ur_composition -max_total_time=90 -timeout=2 -rss_limit_mb=512 -max_len=4195329
-../scripts/quality/fuzz-parsers.sh pairing_records -max_total_time=90 -timeout=2 -rss_limit_mb=512 -max_len=262145
+../scripts/quality/fuzz-parsers.sh pairing_records -max_total_time=90 -timeout=2 -rss_limit_mb=512 -max_len=524353
 ```
 
 Generate the starting corpus from the repository root with `cargo run --manifest-path src-tauri/Cargo.toml --locked --example fuzz_seed_corpus -- fuzz/corpus`. Use synthetic corpus data only. Keep corpus, crashes and coverage ignored; minimize any finding and preserve a synthetic ordinary regression. Extended runs use 1,800 seconds per parser and 7,200 seconds for composition. Calibrate sanitizer overhead before interpreting timeouts. A quiet campaign is bounded evidence, not a security proof.
@@ -21,3 +21,5 @@ Oracles: accepted PSBT/descriptor encode/decode identity; QR-to-PSBT consistency
 The only new resolved registry packages are libfuzzer-sys 0.4.13, arbitrary 1.5.0 and jobserver 0.1.35. The latter two have no build scripts and MIT/Apache-2.0 licenses; arbitrary supplies byte-input traits, and jobserver bounds cc parallel compilation. All 650 shared registry package checksums match the application lockfile.
 
 The runner disables cfg(fuzzing) while retaining AddressSanitizer and coverage instrumentation. The pinned nusb 0.2.7 fuzz-only function does not compile; more importantly, production cryptographic branches must remain exercised. No dependency was upgraded to work around this.
+
+Use the explicit release profile: cargo-fuzz’s default target-only debug assertions disagree with Tauri’s host-generated ACL structures. Release keeps the host and target configuration consistent while retaining sanitizer/coverage instrumentation. This does not alter the application build profile.

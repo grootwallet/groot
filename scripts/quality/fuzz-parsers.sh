@@ -10,5 +10,5 @@ fi
 export PATH="$PWD/fuzz/tools:$PATH"
 # Upstream cfg(fuzzing) changes dependencies and currently breaks nusb 0.2.7.
 # Exercise normal production branches; sanitizer coverage remains enabled.
-exec cargo-fuzz run "$target" --fuzz-dir fuzz --no-cfg-fuzzing \
+exec cargo-fuzz run "$target" --fuzz-dir fuzz --no-cfg-fuzzing --release \
   --target-dir "${GROOT_FUZZ_TARGET_DIR:-$PWD/fuzz/target}" -- "$@"
