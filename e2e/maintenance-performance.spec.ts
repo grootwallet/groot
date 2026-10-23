@@ -4,13 +4,18 @@ import { writeFile } from 'node:fs/promises';
 // Opt in: timings are observations, not flaky CI pass/fail thresholds.
 test('records repeated browser-fixture route readiness and assets', async ({ page }, info) => {
   test.skip(process.env.GROOT_MEASURE_FRONTEND !== '1', 'Opt-in performance observation');
+  const production = process.env.GROOT_MEASURE_PRODUCTION === '1';
+  const warmups = production ? 5 : 0;
+  const repetitions = production ? 105 : 3;
   const samples = [];
   await page.addInitScript(() => {
     const selectors: Record<string, string> = {
       '/': '.balance-card',
       '/send': '.send-signers',
       '/multisig/send': '.send-page',
-      '/settings': '.settings-group'
+      '/settings': '.settings-group',
+      '/activity': '.tx-row',
+      '/coins': '.coin-row'
     };
     const selector = selectors[location.pathname];
     if (!selector) return;
@@ -26,14 +31,17 @@ test('records repeated browser-fixture route readiness and assets', async ({ pag
     ['/', '.balance-card'],
     ['/send', '.send-signers'],
     ['/multisig/send', '.send-page'],
-    ['/settings', '.settings-group']
+    ['/settings', '.settings-group'],
+    ['/activity?fixture-large-history=1', '.tx-row'],
+    ['/coins', '.coin-row']
   ] as const) {
-    for (let repeat = 0; repeat < 3; repeat++) {
+    for (let repeat = 0; repeat < repetitions; repeat++) {
       await page.goto(route);
       await expect(page.locator(ready).first()).toBeVisible();
       await page.waitForFunction(
         () => performance.getEntriesByName('groot-route-ready').length > 0
       );
+      if (repeat < warmups) continue;
       samples.push({
         route,
         repeat,
@@ -52,7 +60,10 @@ test('records repeated browser-fixture route readiness and assets', async ({ pag
     measurementPath,
     JSON.stringify(
       {
-        kind: 'vite-browser-fixture',
+        kind: production ? 'production-browser-fixture' : 'vite-browser-fixture',
+        warmups,
+        samplesPerRoute: repetitions - warmups,
+        sourceCommit: process.env.GROOT_MEASUREMENT_COMMIT ?? 'unrecorded',
         method:
           'full document navigation; first matching DOM surface, not native data or hardware readiness',
         samples
