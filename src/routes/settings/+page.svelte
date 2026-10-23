@@ -1029,8 +1029,8 @@
     }
   }
   async function runExternalSignerHealthCheck() {
-    const current = settingsAction('health');
     if (!hardwareSignerWallet || checkingSignerHealth) return;
+    const current = settingsAction('health');
     const signer = hardwareSignerWallet.signer;
     checkingSignerHealth = true;
     try {
@@ -1070,7 +1070,9 @@
     recordHardwareHealthCheck(fingerprint, check);
   }
   async function runFullRescan() {
+    if (scanning) return;
     const current = settingsAction('rescan');
+    invalidateAction('cancelScan');
     scanning = true;
     scanStatus = runningScanStatus({
       birthdayHeight: Number(scanDraft.birthdayHeight),
@@ -1105,6 +1107,7 @@
         // A status refresh is observational. It must not relabel a completed
         // foreground rescan as failed.
       }
+      if (!current()) return;
       scanOpen = false;
       toast({
         title: 'Full rescan complete',
@@ -1133,6 +1136,7 @@
     } finally {
       if (current()) {
         invalidateAction('scanPoll');
+        invalidateAction('cancelScan');
         if (scanPoll) clearTimeout(scanPoll);
         scanPoll = undefined;
         scanCredential = '';
@@ -1156,13 +1160,18 @@
     }
   }
   async function cancelFullRescan() {
+    if (!scanning || cancellingScan) return;
+    const current = settingsAction('cancelScan');
     cancellingScan = true;
     scanError = '';
     scanErrorCode = '';
     scanErrorDetails = null;
     try {
-      scanStatus = await walletService.cancelFullRescan();
+      const status = await walletService.cancelFullRescan();
+      if (!current() || !scanning) return;
+      scanStatus = status;
     } catch (cause) {
+      if (!current() || !scanning) return;
       scanError = localizedError(cause, $locale, 'The recovery scan could not be cancelled.');
       cancellingScan = false;
     }
@@ -1424,7 +1433,8 @@
   async function selectWallet(profile: WalletProfile) {
     if (profile.id === selectedWalletId) return;
     const previousWalletId = selectedWalletId;
-    ++profileReadGeneration;
+    // The shell changes ownership only after native selection succeeds. A
+    // rejected switch must leave this screen's reads and cleanup valid.
     selectedWalletId = profile.id;
     try {
       await walletShell.selectWallet(profile.id);
@@ -1613,6 +1623,7 @@
               verifyError = '';
               invalidateAction('backup');
               verifying = false;
+              revealingBackup = false;
               verifyOpen = true;
             }}
             ><span class="setting-icon"><KeyRound size={18} /></span><span
@@ -2216,6 +2227,7 @@
         closeDeleteWallet();
         invalidateAction('backup');
         verifying = false;
+        revealingBackup = false;
         verifyOpen = true;
       }}>{translate($locale, 'Verify now')}</Button
     >{/if}
@@ -2281,6 +2293,7 @@
   onclose={() => {
     invalidateAction('backup');
     verifying = false;
+    revealingBackup = false;
     verifyOpen = false;
     verifyCredential = '';
     verifyError = '';
@@ -2328,6 +2341,7 @@
       onclick={() => {
         invalidateAction('backup');
         verifying = false;
+        revealingBackup = false;
         verifyOpen = false;
         verifyCredential = '';
         verifyError = '';
