@@ -6,15 +6,17 @@ Tooling: cargo-fuzz **0.13.2** (MIT/Apache-2.0), libfuzzer-sys **0.4.13** (MIT/A
 
 Supply-chain review: inspected the published manifests, cargo-fuzz process invocation code and libfuzzer-sys build.rs. cargo-fuzz has no build script; it invokes Cargo/rustc and the chosen fuzz executable with argument arrays. libfuzzer-sys compiles its bundled LLVM C++ sources with cc; no download is performed by its build script. Do not set CUSTOM_LIBFUZZER_PATH or CUSTOM_LIBFUZZER_STD_CXX. Its FFI/unsafe sanitizer runtime is test-only. The isolated lockfile starts from the production graph; compare shared package versions and checksums when resolving it. This is a scoped tooling review, not an audit of LLVM or every transitive crate.
 
-Run from this directory with the pinned cargo-fuzz on PATH. The runner wraps every Cargo subprocess with --locked because cargo-fuzz 0.13.2 has no forwarding flag:
+Run from this directory with the pinned cargo-fuzz on PATH. The runner supports build/run and inserts --locked before the program-argument separator because cargo-fuzz 0.13.2 has no forwarding flag. The argument-order regression is `node --test scripts/quality/fuzz-cargo-wrapper.test.mjs` from the repository root:
 
 ```sh
+export GROOT_FUZZ_TARGET_DIR="$(mktemp -d "${TMPDIR:-/tmp}/groot-fuzz-target.XXXXXX")"
+export GROOT_FUZZ_CORPUS_DIR="$(mktemp -d "${TMPDIR:-/tmp}/groot-fuzz-corpus.XXXXXX")"
 ../scripts/quality/fuzz-parsers.sh psbt_roundtrip -max_total_time=90 -timeout=2 -rss_limit_mb=512 -max_len=1048577
 ../scripts/quality/fuzz-parsers.sh ur_composition -max_total_time=90 -timeout=2 -rss_limit_mb=512 -max_len=4195329
 ../scripts/quality/fuzz-parsers.sh pairing_records -max_total_time=90 -timeout=2 -rss_limit_mb=512 -max_len=524353
 ```
 
-Generate the starting corpus from the repository root with `cargo run --manifest-path src-tauri/Cargo.toml --locked --example fuzz_seed_corpus -- fuzz/corpus`. Use synthetic corpus data only. Keep corpus, crashes and coverage ignored; minimize any finding and preserve a synthetic ordinary regression. Extended runs use 1,800 seconds per parser and 7,200 seconds for composition. Calibrate sanitizer overhead before interpreting timeouts. A quiet campaign is bounded evidence, not a security proof.
+Generate the starting corpus from the repository root with `cargo run --manifest-path src-tauri/Cargo.toml --locked --example fuzz_seed_corpus -- fuzz/corpus`. Use synthetic corpus data only. Reuse the two external directories across targets/campaigns. The runner copies synthetic starting seeds into the external active corpus and keeps evolved inputs there. It rejects build/cache paths inside the repository after canonicalization. It precreates all three ignored artifact directories before compilation; crash evidence remains under `fuzz/artifacts`. This prevents mutable output from repeatedly invalidating the application source-identity watcher without weakening that watcher. If no corpus directory is supplied, the runner creates a private temporary one and prints its location. Keep corpus, crashes and coverage ignored; minimize any finding and preserve a synthetic ordinary regression. Extended runs use 1,800 seconds per parser and 7,200 seconds for composition. Calibrate sanitizer overhead before interpreting timeouts. A quiet campaign is bounded evidence, not a security proof.
 
 Oracles: accepted PSBT/descriptor encode/decode identity; QR-to-PSBT consistency and typed transport round trips; invitation validation, public policy parsing, BIP129 authenticated decryption and re-encryption identity. These targets perform no signing, persistence or network calls. Command authorization and persistence remain native unit/Core coverage; phone full-prevout composition is added through its shared pure owner, not a duplicate verifier.
 
