@@ -121,3 +121,99 @@ test('failed wallet switch keeps Settings actions and polling alive', async ({ p
     .toBeGreaterThan(count);
   await expect(page.getByRole('heading', { name: 'Everyday wallet settings' })).toBeVisible();
 });
+
+for (const success of [true, false]) {
+  test(`rescan final status ${success ? 'success' : 'failure'} stays quiet after leaving`, async ({
+    page
+  }) => {
+    await page.goto('/');
+    await page.evaluate(async () => {
+      const path = '/src/lib/wallet/index.ts';
+      const { walletService } = await import(path);
+      const snapshot = await walletService.snapshot();
+      const status = await walletService.recoveryScanStatus();
+      const reads: Array<(ok: boolean) => void> = [];
+      let completed = false;
+      walletService.fullRescan = () =>
+        new Promise((resolve) => {
+          Object.assign(window, {
+            finishRescan: () => {
+              completed = true;
+              resolve(snapshot);
+            }
+          });
+        });
+      walletService.recoveryScanStatus = () =>
+        completed
+          ? new Promise((resolve, reject) => {
+              reads.push((ok) =>
+                ok ? resolve(status) : reject(new Error('obsolete scan status'))
+              );
+            })
+          : Promise.resolve(status);
+      Object.assign(window, {
+        scanReads: reads,
+        finishScanReads: (ok: boolean) => reads.forEach((finish) => finish(ok))
+      });
+    });
+    await page.locator('a[href="/settings"]:visible').first().click();
+    await page.getByRole('button', { name: /Recovery scan/ }).click();
+    const dialog = page.getByRole('dialog', { name: 'Full wallet rescan' });
+    await dialog.getByLabel('Wallet passphrase', { exact: true }).fill('prototype-passphrase');
+    await dialog.getByRole('button', { name: 'Save & rescan' }).click();
+    await expect
+      .poll(() => page.evaluate(() => typeof (window as any).finishRescan))
+      .toBe('function');
+    await page.evaluate(() => (window as any).finishRescan());
+    await expect
+      .poll(() => page.evaluate(() => (window as any).scanReads.length))
+      .toBeGreaterThan(0);
+    await page.goBack();
+    await expect(page).not.toHaveURL(/\/settings$/);
+    await page.evaluate((ok) => (window as any).finishScanReads(ok), success);
+    await expect(page.getByText('Full rescan complete', { exact: true })).toHaveCount(0);
+    await expect(page.getByText('obsolete scan status', { exact: true })).toHaveCount(0);
+  });
+}
+
+test('pending Settings snapshot survives a rejected selection', async ({ page }, info) => {
+  test.skip(info.project.name !== 'mobile', 'Settings owns the mobile wallet picker');
+  await page.goto('/');
+  await page.evaluate(async () => {
+    const path = '/src/lib/wallet/index.ts';
+    const { walletService } = await import(path);
+    const node = await walletService.nodeConfig();
+    walletService.nodeConfig = () =>
+      new Promise((resolve) => {
+        Object.assign(window, { finishSettingsNode: () => resolve(node) });
+      });
+    walletService.selectWallet = () =>
+      new Promise((_resolve, reject) => {
+        Object.assign(window, {
+          rejectSelection: () => reject(new Error('synthetic rejected switch'))
+        });
+      });
+    const scan = walletService.recoveryScanSettings.bind(walletService);
+    Object.assign(window, { scanSettingsCalls: 0 });
+    walletService.recoveryScanSettings = async () => {
+      (window as any).scanSettingsCalls++;
+      return scan();
+    };
+  });
+  await page.locator('a[href="/settings"]:visible').first().click();
+  await expect
+    .poll(() => page.evaluate(() => typeof (window as any).finishSettingsNode))
+    .toBe('function');
+  await page
+    .locator('.mobile-wallet-manager')
+    .getByRole('button', { name: 'Family wallet', exact: true })
+    .click();
+  await expect
+    .poll(() => page.evaluate(() => typeof (window as any).rejectSelection))
+    .toBe('function');
+  await page.evaluate(() => (window as any).finishSettingsNode());
+  await expect.poll(() => page.evaluate(() => (window as any).scanSettingsCalls)).toBe(1);
+  await page.evaluate(() => (window as any).rejectSelection());
+  await expect(page.getByText('Wallet not switched', { exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Everyday wallet settings' })).toBeVisible();
+});
