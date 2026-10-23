@@ -11,7 +11,7 @@ async function preparePhone(page: Page, phase: Phase) {
   await page.route(/\/qr-scanner\.js(?:\?|$)/, (route) =>
     route.fulfill({
       contentType: 'application/javascript',
-      body: 'export default class { constructor(_video, emit) { window.emitPhoneFrame = () => emit({ data: "ur:crypto-psbt/synthetic" }); } async start() {} stop() {} destroy() {} }'
+      body: 'export default class { constructor(_video, emit) { window.emitPhoneFrame = (data = "ur:crypto-psbt/synthetic") => emit({ data }); } async start() {} stop() {} destroy() {} }'
     })
   );
   await page.goto('/mobile/sign');
@@ -80,15 +80,16 @@ for (const phase of ['decode', 'review', 'sign'] as const) {
       }) => {
         await preparePhone(page, phase);
         if (departure === 'reset') {
-          await page.getByRole('button', { name: 'Scan again', exact: true }).click();
+          if (phase === 'sign') {
+            await page.getByRole('button', { name: 'Scan again', exact: true }).click();
+          } else {
+            // Before review there is no Scan again button. Exercise the scanner's
+            // actual retry/reset path after a rejected oversized camera frame.
+            await page.evaluate(() => (window as any).emitPhoneFrame('x'.repeat(4097)));
+            await page.getByRole('button', { name: 'Try camera again', exact: true }).click();
+          }
         } else {
-          await page.evaluate(() => {
-            const link = document.createElement('a');
-            link.href = '/settings';
-            link.textContent = 'Leave signing test';
-            document.body.append(link);
-          });
-          await page.getByRole('link', { name: 'Leave signing test' }).click();
+          await page.getByRole('link', { name: 'Settings', exact: true }).click();
           await expect(page).toHaveURL(/\/settings$/);
         }
         await page.evaluate((ok) => (window as any).finishPhone(ok), success);
