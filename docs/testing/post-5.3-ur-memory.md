@@ -14,8 +14,16 @@ The first 7,200-second campaign stopped after 4,948 seconds at the 512 MiB libFu
 - Under 512 MiB, saved-input replay passed 10,000 callbacks. Frozen-corpus loading stopped after 2,740 inputs with a 588 MiB reported peak; the failure snapshot showed 31.6 MB live heap and 250.8 MB in ASan quarantine. The mutation attempt also stopped during corpus loading. A prior diagnostic that invoked synchronous `vmmap` while the fuzzer ran was confounded by the two-second timeout and is excluded from the decision.
 - Under the diagnostic 1024 MiB limit, saved-input replay passed 1,000 callbacks; frozen-corpus loading passed 2,769 executions with a 681 MiB libFuzzer peak. A 600-second mutation run passed 1,366,566 executions, adding 246 corpus units. Its peak was 687 MiB. Passive two-second `ps` samples were broadly 637–650 MiB after the initial phase and ended at 650 MiB. The run's allocator statistics report 77,190 MB allocated and 77,145 MB freed, with 85 MB of user bytes in quarantine at exit.
 
-The corpus-loading peak before mutation, large quarantine, and later memory plateau support fuzzer/sanitizer overhead as the dominant reason the 512 MiB campaign stopped. The 600-second result cannot exclude a slower or sequence-dependent parser leak. The 7,200-second ASan campaign with current-RSS telemetry and the full corpus is required to close this item.
+The corpus-loading peak before mutation, large quarantine, and later memory plateau support fuzzer/sanitizer overhead as the dominant reason the 512 MiB campaign stopped.
+
+## Completed extended campaign
+
+The required exact-source rerun completed on `ec940d22b06c5efe71c848801e8cefac1f4341d7` with exit code 0. LibFuzzer executed 10,775,143 cases over 7,201 fuzzing seconds and reported a 727 MiB peak. Passive telemetry recorded 3,533 nonzero samples: 556.5 MiB median, 726.9 MiB maximum and 557.9 MiB median during the final ten minutes (556.2–564.0 MiB). The run found no AddressSanitizer error, timeout, crash or invalid assertion. It ended with 3,705 corpus files.
+
+The campaign wrapper recorded 7,586.927 seconds including build/setup, the same source commit at start and finish, a clean checkout at finish, the rebuilt executable SHA-256 `4b4fa108c1e19689fda372f024e11ad837a4423694f4b3c3377d7874b6d01888`, campaign-log SHA-256 `b524dc68a9eebf8ee0fa15bf9cff8743aa543c56500765e90bf80243e3e69f6c` and telemetry SHA-256 `0eb76c650b48cf0d5209d14dc4e54dfdf0ce662b99f3c3ee3daa163c2f48a84f`.
+
+This closes the extended UR campaign required by the finishing plan. It is bounded fuzz evidence, not proof that every parser input is safe and not physical-camera certification.
 
 ## Review and acceptance
 
-An independent native reviewer checked the executable digest, all frozen-corpus hashes, sanitizer flags, corpus-loading behavior and memory series. They approved the campaign-specific allowance and explicitly did not approve a product change, source hashes or release. The full campaign must report its exact source, command, elapsed time, execution count, corpus, current and peak memory, exit status and any sanitizer finding. If it fails, preserve and investigate the input before considering any further limit change.
+An independent native reviewer checked the executable digest, all frozen-corpus hashes, sanitizer flags, corpus-loading behavior and memory series before approving the campaign-specific allowance. A separate independent outcome review is recorded in [the independent review](post-5.3-independent-review.md). Neither review approves a product change, source hashes, physical hardware or release.

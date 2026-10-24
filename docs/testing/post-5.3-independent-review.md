@@ -76,7 +76,13 @@ The later clean fixed-source campaign at `6a95822a` independently reached the sa
 
 An independent read-only review inspected the original extended UR log, saved input and pinned libFuzzer implementation. On macOS, this libFuzzer version uses historical peak RSS for its limit. The failure snapshot reported 37.3 MB live heap and 66.1 MB quarantined, with dominant live contexts in libFuzzer corpus/features/buffers. The target and shared transport/prevout helpers expose no obvious per-iteration global collection. This evidence favors accumulated fuzzing/sanitizer overhead over a large retained parser allocation, but it does not exclude sequence-dependent parser growth: current RSS/VM attribution was absent and the sampled input may be incidental. The original campaign remains failed. Independent review of the fresh diagnosis and any tooling or parser change is required.
 
-The subsequent [memory calibration](post-5.3-ur-memory.md) and independent review support a 1024 MiB allowance for the extended UR campaign only. The reviewer verified the cached executable and frozen corpus hashes and found a broad current-memory plateau during 1.36 million further callbacks. The full two-hour rerun remains required; source and release approval remain separate.
+The subsequent [memory calibration](post-5.3-ur-memory.md) and independent review supported a 1024 MiB allowance for the extended UR campaign only. The reviewer verified the cached executable and frozen corpus hashes and found a broad current-memory plateau during 1.36 million further callbacks. At that review stage, the full two-hour rerun was still required; its completed review follows.
+
+## Completed UR campaign review
+
+A separate read-only reviewer inspected the completed exact-source campaign for `ec940d22b06c5efe71c848801e8cefac1f4341d7` and approved Phase 2 as complete. The campaign exited zero after 10,775,143 executions and 7,201 fuzzing seconds. ASan, the two-second timeout, 4,195,329-byte input ceiling and parser checks remained enabled; only the previously reviewed extended-campaign memory allowance was 1024 MiB. No sanitizer finding, panic, timeout or memory-limit failure was reported.
+
+The reviewer verified the rebuilt executable, campaign-log and telemetry hashes; all 2,768 starting corpus hashes; the final 3,705-file corpus; the cached build's exact source identity; and the clean, unchanged checkout recorded at completion. Peak RSS was 727 MiB. Current RSS declined after its early peak and ended around 563 MiB, without sustained unbounded growth in the sampled series. This closes the bounded diagnosis and campaign, not proof against every possible parser defect or memory leak. Source, physical-device and release approval remain separate.
 
 ## Final diff follow-up
 
