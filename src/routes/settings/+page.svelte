@@ -357,11 +357,9 @@
   function settingsAction(name: string) {
     invalidateAction(name);
     const version = actionVersions.get(name);
-    const generation = profileReadGeneration;
     const walletId = walletShell.selectedWalletId();
     return () =>
       !destroyed &&
-      generation === profileReadGeneration &&
       version === actionVersions.get(name) &&
       walletId === walletShell.selectedWalletId();
   }
@@ -388,6 +386,7 @@
       navigator.maxTouchPoints
     );
     const generation = ++profileReadGeneration;
+    invalidateAction('syncPoll');
     settingsLoadError = '';
     if (syncStatusPoll) clearTimeout(syncStatusPoll);
     theme = currentTheme();

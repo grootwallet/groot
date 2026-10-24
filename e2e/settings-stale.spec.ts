@@ -123,6 +123,60 @@ test('failed wallet switch keeps Settings actions and polling alive', async ({ p
 });
 
 for (const success of [true, false]) {
+  test(`retrying a failed Settings read preserves a pending connection ${success ? 'success' : 'failure'}`, async ({
+    page
+  }) => {
+    await page.goto('/');
+    await page.evaluate(async () => {
+      const { walletService } = await import('/src/lib/wallet/index.ts');
+      const readNode = walletService.nodeConfig.bind(walletService);
+      let reads = 0;
+      walletService.nodeConfig = async () => {
+        if (window.location.pathname === '/settings' && ++reads === 1)
+          throw new Error('synthetic settings read failure');
+        return readNode();
+      };
+      const result = await walletService.testNodeConnection();
+      const pending: Array<(ok: boolean) => void> = [];
+      walletService.testNodeConnection = () =>
+        new Promise((resolve, reject) => {
+          pending.push((ok) =>
+            ok ? resolve(result) : reject(new Error('synthetic connection failure'))
+          );
+          Object.assign(window, { finishConnectionChecks: pending });
+        });
+    });
+    await page.locator('a[href="/settings"]:visible').first().click();
+    const failure = page.getByRole('alert').filter({ hasText: 'Wallet details are unavailable' });
+    await expect(failure).toBeVisible();
+    const connection = page.getByRole('button', { name: /^Test connection/ });
+    const pendingBeforeClick = await page.evaluate(
+      () => (window as any).finishConnectionChecks?.length ?? 0
+    );
+    await connection.click();
+    await expect
+      .poll(() => page.evaluate(() => (window as any).finishConnectionChecks?.length ?? 0))
+      .toBe(pendingBeforeClick + 1);
+    await failure.getByRole('button', { name: 'Try again' }).click();
+    await expect(failure).not.toBeVisible();
+    await page.evaluate(
+      ({ index, success }) => (window as any).finishConnectionChecks[index](success),
+      { index: pendingBeforeClick, success }
+    );
+    await expect(connection).toBeEnabled();
+    await connection.click();
+    await expect
+      .poll(() => page.evaluate(() => (window as any).finishConnectionChecks.length))
+      .toBe(pendingBeforeClick + 2);
+    await page.evaluate(
+      (index) => (window as any).finishConnectionChecks[index](true),
+      pendingBeforeClick + 1
+    );
+    await expect(connection).toBeEnabled();
+  });
+}
+
+for (const success of [true, false]) {
   test(`rescan final status ${success ? 'success' : 'failure'} stays quiet after leaving`, async ({
     page
   }) => {
