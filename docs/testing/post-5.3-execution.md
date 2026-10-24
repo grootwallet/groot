@@ -31,7 +31,7 @@ The same 1,000 independent synthetic receives were measured before, after, after
 | Full 1,000-transaction snapshot            | 123.669 / 130.933 ms | 85.833 / 89.567 ms | 123.819 / 85.531 ms            |
 | First 50-row history page from that wallet | 83.650 / 87.020 ms   | 58.641 / 60.846 ms | 83.985 / 58.483 ms             |
 
-This is about 30% less time in these native reads, not a 30% speedup of the whole app. SQL statement counts remain 20,007 and 13,003. Serialized full snapshot / overview / page remain 1,186,143 / 558,117 / 31,700 bytes. Process peak RSS overlaps across repeated runs (before 30.82–30.88 MB; after 29.85–31.31 MB). There is no demonstrated memory improvement or material increase in this fixture. Regression tests cover committed writes, rollback, label order, subject/connection isolation and schema failures with caching enabled and disabled.
+This is about 30% less time in these native reads, not a 30% speedup of the whole app. The result is supported by paired medians and the repeated before/after ordering; no formal confidence interval or significance test was calculated. SQL statement counts remain 20,007 and 13,003. Serialized full snapshot / overview / page remain 1,186,143 / 558,117 / 31,700 bytes. Process peak RSS overlaps across repeated runs (before 30.82–30.88 MB; after 29.85–31.31 MB). There is no demonstrated memory improvement or material increase in this fixture. Regression tests cover committed writes, rollback, label order, subject/connection isolation and schema failures with caching enabled and disabled.
 
 ### Other observations
 
