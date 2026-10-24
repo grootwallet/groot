@@ -35,6 +35,7 @@ These files directly influence transaction review, signing inputs, persistence, 
 ### Review but keep outside the production approval map
 
 - Tests and browser fixtures under `e2e/`, `src-tauri/tests/`, Rust `tests.rs` modules and `*.test.ts`. They remain required evidence but are not shipped runtime owners.
+- Acceptance tooling: `scripts/regtest/test.sh` and `scripts/release/build-source-watch.test.mjs`. Review the former's invocation-only optimization settings for the two Core cases and the latter's build-source watcher regression. Both remain required evidence outside the production pin map; this exclusion does not remove either check from acceptance.
 - The isolated `fuzz/` workspace, `.github/workflows/fuzz.yml`, `scripts/quality/fuzz-parsers.sh`, the fuzz Cargo wrapper test and the synthetic corpus generator. They are separately locked/supply-chain reviewed and do not ship in the wallet. Their exact versions and results remain part of the review evidence.
 - Measurement-only scripts/configuration and `src-tauri/src/wallet/performance_tests.rs`. They must not alter production behavior or packaging.
 - Documentation, locale copy and the unsigned development-only iOS preparation helper. Review their claims and boundary tests separately; do not treat them as transaction authority.
