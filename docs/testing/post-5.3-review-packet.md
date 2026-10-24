@@ -73,6 +73,8 @@ bash scripts/quality/fuzz-parsers.sh pairing_records -max_total_time=90 -timeout
 
 The current extended UR result is not a pass. A reviewer should preserve ASan and capture current RSS, peak RSS, corpus size and allocator attribution during a fresh run before recommending a calibrated limit or target change. Quiet fuzzing is evidence only within its tested budget.
 
+The subsequent [UR memory calibration](post-5.3-ur-memory.md) supports a reviewed 1024 MiB allowance for the extended UR campaign only. The 7,200-second rerun and its independent result review remain open; the failed earlier run remains failed.
+
 ## Expected validation limitation
 
 `pnpm validate` should reach the reviewed-source policy and fail because the maintenance branch intentionally does not overwrite v5.3.0 approved hashes. Any earlier failure is a regression. After owner approval, hash updates belong in a separate approval-only commit followed by the full aggregate and packaging/physical gates.
