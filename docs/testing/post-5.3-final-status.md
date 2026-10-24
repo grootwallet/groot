@@ -37,30 +37,30 @@ The 95% code figure covers the planned application changes themselves. It exclud
 
 ## Test status
 
-| Check                                                | Result                                                                                                                                  |
-| ---------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| Rust format and strict all-target/all-feature Clippy | Passed on `6a95822a`                                                                                                                    |
-| Native tests                                         | 619 library tests and six integration cases passed; documented Core-only cases ignored in this command                                  |
-| Clean whole-library coverage                         | 63.68% lines, 59.06% functions, 61.41% regions; unchanged 62/59/59 gates passed                                                         |
-| Disposable Bitcoin Core scenarios                    | All 15 passed, including Continuity maturity/reorg/restart and phone transaction round trip                                             |
-| Frontend units and policy coverage                   | 911 tests passed; policy modules retained 100% statement/branch/function/line coverage                                                  |
-| Browser acceptance                                   | 409 passed, 19 intentional skips; desktop/mobile layouts checked; eight additional French/Spanish view/theme combinations passed        |
-| Extended PSBT fuzzing                                | Passed 30 minutes, 9,163,888 executions                                                                                                 |
-| Extended pairing-record fuzzing                      | Passed two hours, 37,796,445 executions                                                                                                 |
-| Extended UR-composition fuzzing                      | **Unresolved:** stopped after 4,948 seconds at the 512 MiB process cap; no crash or invalid acceptance was reported before the cap      |
-| Dependency review                                    | Frontend production audit found no high-severity advisory; Rust audit retained 12 documented warnings for separate dependency work      |
-| `pnpm validate`                                      | Expected source-policy failure until the owner approves the exact changed source hashes; all other stages must still pass independently |
+| Check                                                | Result                                                                                                                             |
+| ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| Rust format and strict all-target/all-feature Clippy | Passed on `6a95822a`                                                                                                               |
+| Native tests                                         | 619 library tests and six integration cases passed; documented Core-only cases ignored in this command                             |
+| Clean whole-library coverage                         | 63.68% lines, 59.06% functions, 61.41% regions; unchanged 62/59/59 gates passed                                                    |
+| Disposable Bitcoin Core scenarios                    | All 15 passed, including Continuity maturity/reorg/restart and phone transaction round trip                                        |
+| Frontend units and policy coverage                   | 911 tests passed; policy modules retained 100% statement/branch/function/line coverage                                             |
+| Browser acceptance                                   | 409 passed, 19 intentional skips; desktop/mobile layouts checked; eight additional French/Spanish view/theme combinations passed   |
+| Extended PSBT fuzzing                                | Passed 30 minutes, 9,163,888 executions                                                                                            |
+| Extended pairing-record fuzzing                      | Passed two hours, 37,796,445 executions                                                                                            |
+| Extended UR-composition fuzzing                      | **Unresolved:** stopped after 4,948 seconds at the 512 MiB process cap; no crash or invalid acceptance was reported before the cap |
+| Dependency review                                    | Frontend production audit found no high-severity advisory; Rust audit retained 12 documented warnings for separate dependency work |
+| `pnpm validate`                                      | On reporting commit `f14c3acb`, every preceding stage passed and the sole failure was the expected source-policy mismatch          |
+| Downstream validation stages                         | Release update/HWI/compare fixtures, development runtime, type check, 911 units, policy coverage, SBOM and production build passed |
 
 The failed UR campaign is neither hidden nor treated as a product vulnerability. Fixed-input replay did not reproduce a crash and stabilized below the cap, while the failure snapshot was dominated by fuzzer/sanitizer memory. A fresh mutation/corpus run with current-versus-peak memory attribution is required before clearing it.
 
 ## Required before calling the plan 100%
 
 1. Resolve and rerun the extended UR-composition sanitizer campaign without weakening ASan, parser checks or the agreed bound without evidence.
-2. Run the final non-approval validation stages on the reporting commit; only the reviewed source-pin mismatch may remain in `pnpm validate`.
-3. Obtain independent review and owner approval of the exact source, then update source hashes in a separate approval-only commit and rerun the aggregate.
-4. Complete the physical Testnet4 phone-pairing and supported Miniscript hardware matrix in the [physical checklist](post-5.3-maintenance.md#maintainer-physical-acceptance).
-5. Decide whether the absence of a safe size saving closes Step 5 as “measured, no change accepted” or authorizes separately reviewed dependency/runtime work.
-6. Merge and package only after the above acceptance gates. No merge or release is part of this assessment.
+2. Obtain independent review and owner approval of the exact source, then update source hashes in a separate approval-only commit and rerun the aggregate.
+3. Complete the physical Testnet4 phone-pairing and supported Miniscript hardware matrix in the [physical checklist](post-5.3-maintenance.md#maintainer-physical-acceptance).
+4. Decide whether the absence of a safe size saving closes Step 5 as “measured, no change accepted” or authorizes separately reviewed dependency/runtime work.
+5. Merge and package only after the above acceptance gates. No merge or release is part of this assessment.
 
 ## Scope boundaries
 

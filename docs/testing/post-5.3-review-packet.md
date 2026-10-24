@@ -14,7 +14,7 @@ Use this packet to review the implementation and the 81% completion assessment. 
 - Approved plan: [post-5.3-plan.md](post-5.3-plan.md)
 - Completion assessment: [post-5.3-final-status.md](post-5.3-final-status.md)
 
-The candidate after this packet is committed will differ only by reporting documents. Review application behavior against `6a95822a`; separately review the later documentation-only diff for accuracy.
+The first reporting commit is `f14c3acb17bf10f4fae720d9ccd161c0bd17428a`. Review application behavior against `6a95822a`; separately review the later documentation-only diff for accuracy. On `f14c3acb`, every stage before the source-policy check passed, the sole aggregate failure was the expected `package.json` approved-source mismatch, and all independently runnable downstream stages passed.
 
 ## Review questions
 
