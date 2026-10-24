@@ -7,14 +7,14 @@ Use this packet to review the implementation and the 81% completion assessment. 
 - Repository: <https://github.com/grootwallet/groot>
 - Release: <https://github.com/grootwallet/groot/releases/tag/v5.3.0>
 - Released baseline: `6a39bf50b2a6a042354b43369765a9af2174d061`
-- Assessed candidate: `6a95822aae4d7f11960ccb7bfef3af5806b8d9e8`
-- Runtime candidate: `da7b81731173233b3576a17c020e468238f99566`
+- Original assessed candidate: `6a95822aae4d7f11960ccb7bfef3af5806b8d9e8`
+- Current runtime fix: `60bd8238b18f4f17d213cff9a60b917b235d81b6`
 - Branch: <https://github.com/grootwallet/groot/tree/codex/post-53-maintainability>
 - Review diff: <https://github.com/grootwallet/groot/compare/v5.3.0...codex/post-53-maintainability>
 - Approved plan: [post-5.3-plan.md](post-5.3-plan.md)
 - Completion assessment: [post-5.3-final-status.md](post-5.3-final-status.md)
 
-The first reporting commit is `f14c3acb17bf10f4fae720d9ccd161c0bd17428a`. Review application behavior against `6a95822a`; separately review the later documentation-only diff for accuracy. On `f14c3acb`, every stage before the source-policy check passed. The fail-fast verifier then reported `package.json`, the first of nine currently divergent pinned sources; all independently runnable downstream stages passed. See the [source-approval inventory](post-5.3-source-approval-inventory.md) for all nine and the proposed treatment of new owners.
+The first reporting commit is `f14c3acb17bf10f4fae720d9ccd161c0bd17428a`. Review the original application behavior against `6a95822a`, then the subsequent Settings retry fix at `60bd8238`; review the later reporting diff for accuracy. On `f14c3acb`, every stage before the source-policy check passed. The fail-fast verifier then reported `package.json`, the first of nine currently divergent pinned sources; all independently runnable downstream stages passed. See the [source-approval inventory](post-5.3-source-approval-inventory.md) for all nine and the proposed treatment of new owners.
 
 ## Review questions
 

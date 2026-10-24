@@ -2,6 +2,8 @@
 
 This is the pre-approval inventory for the final maintenance candidate. It does not update any approved hash or authorize release. Released baseline: `6a39bf50b2a6a042354b43369765a9af2174d061`. Assessed application/test source: `6a95822aae4d7f11960ccb7bfef3af5806b8d9e8`. Reporting tip before this record: `522ad3048b8505ce8f78b0e865c5370756a08a1c`.
 
+Finishing update: `60bd8238b18f4f17d213cff9a60b917b235d81b6` changes the already-divergent Settings route to fix the read-retry/action race and adds browser regression coverage. Recompute all 115 pin hashes against the final candidate before approval; the nine-path classification below remains the review starting point, not an approval of its new bytes.
+
 ## Nine currently divergent pinned sources
 
 The verifier is fail-fast and reports `package.json` first. That message is the first of nine mismatches, not the complete approval scope.
