@@ -1527,13 +1527,13 @@
                 >{/if}</button
             >
           </div>
-          <WarningNotice
-            title={translate($locale, 'Miniscript signer compatibility')}
-            body={translate(
-              $locale,
-              'Partner and Family continuity are experimental on Regtest and Testnet4. Ledger, Jade/Jade Plus, BitBox02 and BitBox02 Nova are Miniscript candidates only; no direct USB Miniscript workflow is certified in Groot. Coldcard and Trezor are unsupported for delayed policies through this integration. Phone pairing supports standard multisig only.'
-            )}
-          />
+          {#if templateKind !== 'standard'}<WarningNotice
+              title={translate($locale, 'Limited signer support')}
+              body={translate(
+                $locale,
+                'Regtest and Testnet4 only. Offline PSBT only. Candidates pending exact-model certification: Ledger, Jade/Jade Plus, BitBox02, BitBox02 Nova. Unsupported: Coldcard, Trezor, phone signers.'
+              )}
+            />{/if}
           <div class="policy-choice-insight">
             <span>{translate($locale, 'About this plan')}</span><InsightTip
               label={translate(
@@ -1717,10 +1717,10 @@
             </p>
             <div class="recovery-separation">
               <ShieldCheck size={15} /><span
-                ><strong>{translate($locale, 'Fixed, reviewed roles')}</strong><small
+                ><strong>{translate($locale, 'Offline PSBT only')}</strong><small
                   >{translate(
                     $locale,
-                    'Only Ledger, Jade/Jade Plus, BitBox02, and BitBox02 Nova are Miniscript candidates; each exact setup still requires certification.'
+                    'Candidates pending exact-model certification: Ledger, Jade/Jade Plus, BitBox02, BitBox02 Nova. Unsupported: Coldcard, Trezor, phone signers.'
                   )}</small
                 ></span
               >
@@ -2880,6 +2880,37 @@
     .path-visual.continuity-path-visual,
     .path-visual.family-continuity-path {
       grid-template-columns: 1fr;
+      gap: 0;
+      padding: 4px 0 2px 14px;
+      border-left: 2px solid var(--border-strong);
+    }
+    .path-visual.continuity-path-visual > span,
+    .path-visual.family-continuity-path > span,
+    .path-visual.continuity-path-visual > span:last-child,
+    .path-visual.family-continuity-path > span:last-child {
+      position: relative;
+      min-height: 0;
+      padding: 7px 0 15px 17px;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+    }
+    .path-visual.continuity-path-visual > span::before,
+    .path-visual.family-continuity-path > span::before {
+      content: '';
+      position: absolute;
+      top: 11px;
+      left: -20px;
+      width: 8px;
+      height: 8px;
+      border: 2px solid var(--panel);
+      border-radius: 50%;
+      background: var(--fr-blue);
+      box-shadow: 0 0 0 1px var(--border-strong);
+    }
+    .path-visual.continuity-path-visual > i,
+    .path-visual.family-continuity-path > i {
+      display: none;
     }
   }
 

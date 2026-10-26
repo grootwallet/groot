@@ -1367,13 +1367,17 @@ test('offers safe recipes and advanced M-of-N control', async ({ page }, testInf
     await expect(selectedMark).toBeVisible();
     await expect(selectedMark).toHaveCSS('stroke', 'rgb(255, 255, 255)');
   }
-  await expect(page.getByText('Miniscript signer compatibility', { exact: true })).toBeVisible();
-  await expect(page.getByText(/no direct USB Miniscript workflow is certified/)).toBeVisible();
+  await expect(page.getByText('Limited signer support', { exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: /^Partner continuity/ })).toBeEnabled();
   const assistedRecovery = page.getByRole('button', { name: /^Family continuity/ });
   await expect(assistedRecovery).toBeEnabled();
   await expect(assistedRecovery).toContainText('Test networks only');
+  await page.getByRole('button', { name: /^Partner continuity/ }).click();
+  await expect(page.getByText('Limited signer support', { exact: true })).toBeVisible();
+  await expect(page.getByText(/Offline PSBT only/)).toBeVisible();
+  await expect(page.getByText(/Unsupported: Coldcard, Trezor, phone signers/)).toBeVisible();
   await page.getByRole('button', { name: /^Standard/ }).click();
+  await expect(page.getByText('Limited signer support', { exact: true })).toHaveCount(0);
   await revealInsight(page, 'How Standard multisig works', testInfo.project.name === 'mobile');
   await expect(
     page.getByRole('tooltip').filter({ hasText: 'No single key can spend alone' })

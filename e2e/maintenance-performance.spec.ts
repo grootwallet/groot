@@ -78,23 +78,21 @@ test('records repeated browser-fixture route readiness and assets', async ({ pag
   });
 });
 
-test('Miniscript compatibility is visible before setup in both themes', async ({ page }) => {
+test('Miniscript compatibility appears only for continuity wallets in both themes', async ({
+  page
+}) => {
   for (const theme of ['light', 'dark']) {
     await page.goto('/multisig/new');
     await page.evaluate((value) => localStorage.setItem('groot-theme', value), theme);
     await page.reload();
     await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
-    await expect(page.getByText('Miniscript signer compatibility', { exact: true })).toBeVisible();
-    await expect(
-      page.getByText(
-        /Coldcard and Trezor are unsupported for delayed policies through this integration/
-      )
-    ).toBeVisible();
-    await expect(page.getByText(/Phone pairing supports standard multisig only/)).toBeVisible();
+    await expect(page.getByText('Limited signer support', { exact: true })).toHaveCount(0);
+    await page.getByRole('button', { name: /^Partner continuity/ }).click();
+    await expect(page.getByText('Limited signer support', { exact: true })).toBeVisible();
+    await expect(page.getByText(/Offline PSBT only/)).toBeVisible();
+    await expect(page.getByText(/Unsupported: Coldcard, Trezor, phone signers/)).toBeVisible();
     await expect(page.locator('body')).toHaveJSProperty('scrollWidth', page.viewportSize()!.width);
-    await page
-      .getByText('Miniscript signer compatibility', { exact: true })
-      .scrollIntoViewIfNeeded();
+    await page.getByText('Limited signer support', { exact: true }).scrollIntoViewIfNeeded();
     await page.screenshot({
       path: test.info().outputPath(`miniscript-compatibility-${theme}.png`)
     });

@@ -313,7 +313,9 @@ describe('hardware receive verification UI', () => {
     expect(multisigSetup).toContain(
       "{#if templateKind === 'standard'}<button onclick={scanHardware}"
     );
-    expect(multisigSetup).toContain('Jade/Jade Plus, BitBox02, and BitBox02 Nova');
+    expect(multisigSetup).toContain('Limited signer support');
+    expect(multisigSetup).toContain('Offline PSBT only');
+    expect(multisigSetup).toContain('Unsupported: Coldcard, Trezor, phone signers');
     expect(multisigSetup).toContain("if (templateKind !== 'standard')");
     expect(multisigReceive).toContain(
       '{#if !wallet?.recoveryTemplate}<HardwareReceiveVerification'

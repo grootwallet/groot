@@ -5,6 +5,15 @@ export const multisigCopy = {
     fr: 'Compatibilité des signataires Miniscript',
     es: 'Compatibilidad de firmantes Miniscript'
   },
+  'Limited signer support': {
+    fr: 'Prise en charge limitée des signataires',
+    es: 'Compatibilidad limitada con firmantes'
+  },
+  'Regtest and Testnet4 only. Offline PSBT only. Candidates pending exact-model certification: Ledger, Jade/Jade Plus, BitBox02, BitBox02 Nova. Unsupported: Coldcard, Trezor, phone signers.':
+    {
+      fr: 'Regtest et Testnet4 uniquement. PSBT hors ligne uniquement. Candidats en attente de certification du modèle exact : Ledger, Jade/Jade Plus, BitBox02, BitBox02 Nova. Non pris en charge : Coldcard, Trezor, signataires téléphone.',
+      es: 'Solo Regtest y Testnet4. Solo PSBT sin conexión. Candidatos pendientes de certificar el modelo exacto: Ledger, Jade/Jade Plus, BitBox02, BitBox02 Nova. No compatibles: Coldcard, Trezor, firmantes de teléfono.'
+    },
   'Partner and Family continuity are experimental on Regtest and Testnet4. Ledger, Jade/Jade Plus, BitBox02 and BitBox02 Nova are Miniscript candidates only; no direct USB Miniscript workflow is certified in Groot. Coldcard and Trezor are unsupported for delayed policies through this integration. Phone pairing supports standard multisig only.':
     {
       fr: 'Les modèles de continuité Partenaire et Famille sont expérimentaux sur Regtest et Testnet4. Ledger, Jade/Jade Plus, BitBox02 et BitBox02 Nova sont uniquement des candidats Miniscript ; aucun flux USB Miniscript direct n’est certifié dans Groot. Coldcard et Trezor ne sont pas pris en charge pour les politiques différées via cette intégration. Le jumelage du téléphone prend en charge uniquement le multisig standard.',
@@ -1062,6 +1071,15 @@ export const multisigCopy = {
     es: 'Renueva cerca de los seis meses para retrasar de nuevo cada vía.'
   },
   'Fixed, reviewed roles': { fr: 'Rôles fixes et vérifiés', es: 'Roles fijos y revisados' },
+  'Offline PSBT only': {
+    fr: 'PSBT hors ligne uniquement',
+    es: 'Solo PSBT sin conexión'
+  },
+  'Candidates pending exact-model certification: Ledger, Jade/Jade Plus, BitBox02, BitBox02 Nova. Unsupported: Coldcard, Trezor, phone signers.':
+    {
+      fr: 'Candidats en attente de certification du modèle exact : Ledger, Jade/Jade Plus, BitBox02, BitBox02 Nova. Non pris en charge : Coldcard, Trezor, signataires téléphone.',
+      es: 'Candidatos pendientes de certificar el modelo exacto: Ledger, Jade/Jade Plus, BitBox02, BitBox02 Nova. No compatibles: Coldcard, Trezor, firmantes de teléfono.'
+    },
   'Only Ledger, Jade/Jade Plus, BitBox02, and BitBox02 Nova are Miniscript candidates; each exact setup still requires certification.':
     {
       fr: 'Seuls Ledger, Jade/Jade Plus, BitBox02 et BitBox02 Nova sont candidats Miniscript ; chaque configuration exacte doit encore être certifiée.',
