@@ -33,11 +33,9 @@ use bdk_wallet::{
 use bip39::Mnemonic;
 use rand::{rngs::OsRng, RngCore};
 use serde::{Deserialize, Serialize};
-#[cfg(unix)]
-use std::fs::File;
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
-    fs::{self, OpenOptions},
+    fs::{self, File, OpenOptions},
     io::{Read, Write},
     path::{Path, PathBuf},
     str::FromStr,

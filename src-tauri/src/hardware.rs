@@ -1793,13 +1793,23 @@ mod tests {
     }
 
     #[test]
-    fn passive_jade_inventory_uses_only_hwi_ids_and_macos_callout_paths() {
-        let jade = passive_jade_serial_candidate(0x10c4, 0xea60, "/dev/cu.usbserial-1")
-            .expect("approved Jade serial adapter");
+    fn passive_jade_inventory_uses_only_hwi_ids_and_platform_paths() {
+        #[cfg(target_os = "macos")]
+        let approved_path = "/dev/cu.usbserial-1";
+        #[cfg(target_os = "linux")]
+        let approved_path = "/dev/ttyUSB0";
+        #[cfg(target_os = "windows")]
+        let approved_path = "COM7";
+        #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+        let approved_path = "serial-fixture";
+
+        let jade = passive_jade_serial_candidate(0x10c4, 0xea60, approved_path)
+            .expect("approved Jade serial adapter and platform path");
         assert_eq!(jade.device_type, "jade");
-        assert_eq!(jade.path, "/dev/cu.usbserial-1");
+        assert_eq!(jade.path, approved_path);
+        #[cfg(target_os = "macos")]
         assert!(passive_jade_serial_candidate(0x10c4, 0xea60, "/dev/tty.usbserial-1").is_none());
-        assert!(passive_jade_serial_candidate(0xffff, 0xffff, "/dev/cu.usbserial-1").is_none());
+        assert!(passive_jade_serial_candidate(0xffff, 0xffff, approved_path).is_none());
     }
 
     #[test]
