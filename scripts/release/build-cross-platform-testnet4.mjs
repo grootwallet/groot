@@ -149,9 +149,11 @@ try {
       }
     }
   };
+  const buildConfig = join(stage, 'tauri-cross-platform.conf.json');
+  writeFileSync(buildConfig, `${JSON.stringify(config)}\n`);
   execFileSync(
-    'pnpm',
-    ['exec', 'tauri', 'build', '--config', JSON.stringify(config), '--bundles', bundles.join(',')],
+    process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm',
+    ['exec', 'tauri', 'build', '--config', buildConfig, '--bundles', bundles.join(',')],
     {
       cwd: repoRoot,
       env: {
@@ -164,6 +166,7 @@ try {
         GROOT_HWI_SESSION_PROTOCOL: '1',
         GROOT_DESKTOP_CANDIDATE_PLATFORM: platform
       },
+      shell: process.platform === 'win32',
       stdio: 'inherit'
     }
   );
