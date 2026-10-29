@@ -3,15 +3,6 @@ on:
   workflow_dispatch:
   push:
     branches: [codex/post-53-maintainability]
-    paths:
-      - '.github/workflows/experimental-desktop.yml'
-      - 'scripts/hardware/session-*'
-      - 'scripts/release/build-cross-platform-testnet4.mjs'
-      - 'scripts/release/prepare-hwi-runtime.mjs'
-      - 'src-tauri/**'
-      - 'docs/hwi-artifact-manifest-3.2.0-*.json'
-      - 'package.json'
-      - 'pnpm-lock.yaml'
 permissions:
   contents: read
 concurrency:
