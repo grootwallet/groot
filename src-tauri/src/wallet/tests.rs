@@ -5344,7 +5344,7 @@ fn mainnet_node_admission_lifetime_is_monotonic_and_bounded() {
     ));
     assert!(!mainnet_node_admission_is_current_at(
         created_at,
-        created_at - Duration::from_nanos(1)
+        created_at - Duration::from_secs(1)
     ));
 }
 
@@ -6101,6 +6101,7 @@ fn restart_restores_proposals_frozen_coins_and_acknowledged_notifications() {
             .code,
         "malformed_psbt"
     );
+    drop(restarted_db);
     fs::remove_dir_all(directory).unwrap();
 }
 
@@ -6134,6 +6135,7 @@ fn restart_lists_only_active_payment_proposals_newest_first() {
         active_payment_proposal_ids(&restarted_db).unwrap(),
         vec!["newer-active", "older-active"]
     );
+    drop(restarted_db);
     fs::remove_dir_all(directory).unwrap();
 }
 

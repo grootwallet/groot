@@ -30,7 +30,10 @@ type Finalize = unsafe extern "C" fn() -> c_int;
 mod loader {
     use super::*;
     const RTLD_NOW: c_int = 2;
+    #[cfg(target_os = "macos")]
     const RTLD_GLOBAL: c_int = 8;
+    #[cfg(target_os = "linux")]
+    const RTLD_GLOBAL: c_int = 0x100;
     #[cfg_attr(target_os = "macos", link(name = "System"))]
     #[cfg_attr(target_os = "linux", link(name = "dl"))]
     unsafe extern "C" {

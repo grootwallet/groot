@@ -113,11 +113,7 @@ pub fn save_atomic(path: &Path, registry: &WalletRegistry) -> Result<(), Registr
         registry,
         |file, encoded| file.write_all(encoded).map_err(|_| RegistryError::Io),
         || Ok(()),
-        |parent| {
-            File::open(parent)
-                .and_then(|directory| directory.sync_all())
-                .map_err(|_| RegistryError::Io)
-        },
+        |parent| crate::durable_file::sync_parent(parent).map_err(|_| RegistryError::Io),
     )
 }
 
@@ -164,7 +160,7 @@ where
         write(&mut file, &encoded)?;
         file.sync_all().map_err(|_| RegistryError::Io)?;
         before_rename()?;
-        fs::rename(&temporary, path).map_err(|_| RegistryError::Io)?;
+        crate::durable_file::replace(&temporary, path).map_err(|_| RegistryError::Io)?;
         sync_directory(parent)?;
         Ok(())
     })();
@@ -521,6 +517,7 @@ mod tests {
                 .unwrap(),
             1
         );
+        drop(db);
         fs::remove_dir_all(dir).unwrap();
     }
 

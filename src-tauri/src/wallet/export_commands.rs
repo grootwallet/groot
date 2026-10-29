@@ -4,8 +4,6 @@ use super::{
 };
 use crate::proposal::decode_psbt;
 use serde::Serialize;
-#[cfg(unix)]
-use std::fs::File;
 use std::{
     collections::HashMap,
     fs::{self, OpenOptions},
@@ -109,10 +107,8 @@ pub(super) fn write_public_export(path: &Path, content: &[u8]) -> ApiResult<()> 
         let mut file = options.open(&temp).map_err(internal)?;
         file.write_all(content).map_err(internal)?;
         file.sync_all().map_err(internal)?;
-        fs::rename(&temp, path).map_err(internal)?;
-        #[cfg(unix)]
-        File::open(parent)
-            .and_then(|directory| directory.sync_all())
+        crate::durable_file::replace(&temp, path)
+            .and_then(|()| crate::durable_file::sync_parent(parent))
             .map_err(internal)?;
         Ok(())
     })();

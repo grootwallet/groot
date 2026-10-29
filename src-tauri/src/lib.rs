@@ -10,6 +10,7 @@ mod compact_filters;
 pub mod coordination;
 pub mod coordination_transport;
 mod direct_rpc;
+mod durable_file;
 pub mod external_signer;
 mod hardware;
 mod label_provenance;

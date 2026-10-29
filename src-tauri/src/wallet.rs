@@ -6258,10 +6258,8 @@ fn write_private_json(path: &Path, value: &impl Serialize) -> ApiResult<()> {
         let mut file = options.open(&temp).map_err(internal)?;
         file.write_all(&encoded).map_err(internal)?;
         file.sync_all().map_err(internal)?;
-        fs::rename(&temp, path).map_err(internal)?;
-        #[cfg(unix)]
-        File::open(parent)
-            .and_then(|directory| directory.sync_all())
+        crate::durable_file::replace(&temp, path)
+            .and_then(|()| crate::durable_file::sync_parent(parent))
             .map_err(internal)?;
         Ok(())
     })();
