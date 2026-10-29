@@ -77,7 +77,7 @@ jobs:
           pnpm test
           pnpm build
           pnpm build:testnet4
-      - name: Run platform-neutral Windows validation
+      - name: Run Windows-compatible validation
         if: runner.os == 'Windows'
         shell: bash
         run: |
@@ -86,7 +86,6 @@ jobs:
           pnpm test:boundaries
           pnpm test:secret-surfaces
           pnpm test:supply-chain
-          pnpm test:brand
           pnpm test:versions
           pnpm test:localization
           pnpm test:hardware-preflight

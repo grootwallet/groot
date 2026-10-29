@@ -17,9 +17,6 @@ jobs:
   parsers:
     runs-on: macos-14
     timeout-minutes: 60
-    env:
-      GROOT_FUZZ_TARGET_DIR: ${{ runner.temp }}/groot-fuzz-target
-      GROOT_FUZZ_CORPUS_DIR: ${{ runner.temp }}/groot-fuzz-corpus
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -39,6 +36,9 @@ jobs:
           cargo +nightly-2026-10-22 fetch --manifest-path fuzz/Cargo.toml --locked
           cargo run --manifest-path src-tauri/Cargo.toml --locked --example fuzz_seed_corpus -- fuzz/corpus
       - name: Bounded sanitizer campaigns
+        env:
+          GROOT_FUZZ_TARGET_DIR: ${{ runner.temp }}/groot-fuzz-target
+          GROOT_FUZZ_CORPUS_DIR: ${{ runner.temp }}/groot-fuzz-corpus
         run: |
           scripts/quality/fuzz-parsers.sh psbt_roundtrip -max_total_time=90 -timeout=2 -rss_limit_mb=512 -max_len=1048577
           scripts/quality/fuzz-parsers.sh ur_composition -max_total_time=90 -timeout=2 -rss_limit_mb=512 -max_len=4195329
