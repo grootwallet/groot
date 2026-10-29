@@ -24,7 +24,7 @@ const MAX_OUTPUT_BYTES: u64 = 384 * 1024;
 const PIPE_CLEANUP_TIMEOUT: Duration = Duration::from_secs(2);
 const CANCELLATION_CLEANUP_TIMEOUT: Duration = Duration::from_secs(5);
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(90);
-#[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
+#[cfg(target_os = "macos")]
 const PASSIVE_INVENTORY_TIMEOUT: Duration = Duration::from_secs(10);
 // HWI 3.2.0 opens and initializes every BitBox02 client before `enumerate`
 // can return its path-only row. A locked device can therefore ask for its
@@ -110,7 +110,7 @@ fn passive_hid_candidate(
     })
 }
 
-#[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows", test))]
+#[cfg(any(target_os = "macos", target_os = "linux", test))]
 struct PassiveTrezorUsbObservation<'a> {
     device_id: (u16, u16),
     device_version: u16,
@@ -121,7 +121,7 @@ struct PassiveTrezorUsbObservation<'a> {
     port_chain: &'a [u8],
 }
 
-#[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows", test))]
+#[cfg(any(target_os = "macos", target_os = "linux", test))]
 fn passive_trezor_webusb_candidate(
     active_network: Network,
     observation: PassiveTrezorUsbObservation<'_>,
@@ -259,7 +259,6 @@ fn collect_macos_passive_hardware_inventory(
 fn desktop_passive_hardware_inventory(
     active_network: Network,
 ) -> Result<Vec<PassiveHardwareCandidate>, HardwareError> {
-    use nusb::MaybeFuture as _;
     use serialport::SerialPortType;
 
     let hid = hidapi::HidApi::new().map_err(|_| HardwareError::Unavailable)?;
@@ -284,6 +283,8 @@ fn desktop_passive_hardware_inventory(
     // path translation is physically certified.
     #[cfg(target_os = "linux")]
     {
+        use nusb::MaybeFuture as _;
+
         let usb_devices = nusb::list_devices()
             .wait()
             .map_err(|_| HardwareError::Unavailable)?;
@@ -2039,6 +2040,7 @@ mod tests {
         assert!(!std::path::Path::new("/tmp/groot-must-not-exist").exists());
     }
 
+    #[cfg(unix)]
     #[test]
     fn spawned_hwi_process_receives_only_the_fixed_argv() {
         let script = test_script(
@@ -2052,6 +2054,7 @@ mod tests {
         std::fs::remove_file(script).unwrap();
     }
 
+    #[cfg(unix)]
     #[test]
     fn selected_bitbox_display_uses_only_the_exact_device_path() {
         let script = test_script(
@@ -2079,6 +2082,7 @@ mod tests {
         std::fs::remove_file(script).unwrap();
     }
 
+    #[cfg(unix)]
     #[test]
     fn reports_failure_timeout_and_missing_executable_without_output_leaks() {
         let failure = test_script("failure", "IFS= read -r command\nexit 1");
@@ -2339,6 +2343,7 @@ mod tests {
         assert!(!hwi_reports_wrong_network(b"not json"));
     }
 
+    #[cfg(unix)]
     #[test]
     fn failed_hwi_process_returns_the_sanitized_network_mismatch() {
         let script = test_script(
@@ -2471,6 +2476,7 @@ mod tests {
         std::fs::remove_file(script).unwrap();
     }
 
+    #[cfg(unix)]
     #[test]
     fn passes_only_a_validated_home_after_clearing_the_environment() {
         let home = std::env::temp_dir();

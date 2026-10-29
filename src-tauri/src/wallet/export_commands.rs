@@ -4,9 +4,11 @@ use super::{
 };
 use crate::proposal::decode_psbt;
 use serde::Serialize;
+#[cfg(unix)]
+use std::fs::File;
 use std::{
     collections::HashMap,
-    fs::{self, File, OpenOptions},
+    fs::{self, OpenOptions},
     io::Write,
     path::{Path, PathBuf},
     time::{Duration, Instant},

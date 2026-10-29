@@ -400,9 +400,9 @@ pub(super) fn reconcile_mobile_pairing_directory(
     Ok(())
 }
 
-pub(super) fn sync_private_directory(directory: &Path) -> ApiResult<()> {
+pub(super) fn sync_private_directory(_directory: &Path) -> ApiResult<()> {
     #[cfg(unix)]
-    File::open(directory)
+    File::open(_directory)
         .and_then(|value| value.sync_all())
         .map_err(internal)?;
     Ok(())

@@ -33,9 +33,11 @@ use bdk_wallet::{
 use bip39::Mnemonic;
 use rand::{rngs::OsRng, RngCore};
 use serde::{Deserialize, Serialize};
+#[cfg(unix)]
+use std::fs::File;
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
-    fs::{self, File, OpenOptions},
+    fs::{self, OpenOptions},
     io::{Read, Write},
     path::{Path, PathBuf},
     str::FromStr,
@@ -142,13 +144,15 @@ const MAINNET_NODE_ADMISSION_LIFETIME: Duration = Duration::from_secs(15 * 60);
 pub mod diagnostics;
 #[path = "wallet/export_commands.rs"]
 mod export_commands;
+#[cfg(all(test, unix))]
+use export_commands::write_public_export;
 #[cfg(any(target_os = "macos", test))]
 use export_commands::PendingPdfExport;
 use export_commands::SavedFileReveal;
 #[cfg(test)]
 use export_commands::{
     consume_pending_pdf_export, consume_saved_file_token, validate_psbt_filename,
-    validate_public_backup_filename, validate_public_backup_pdf_filename, write_public_export,
+    validate_public_backup_filename, validate_public_backup_pdf_filename,
     PENDING_PDF_EXPORT_TIMEOUT, SAVED_FILE_REVEAL_TIMEOUT,
 };
 pub use export_commands::{PendingPdfExportDto, SavedFileDto};
