@@ -188,11 +188,17 @@ fn run() -> Result<(), ()> {
         set_path(path.as_ptr());
         initialize();
         let runtime = unicode_from_path(library, &root)?;
+        let script = unicode_from_path(library, &root.join("groot-session.py"))?;
         let runtime_name = CString::new("_groot_runtime").map_err(|_| ())?;
-        if runtime.is_null() || set_sys(runtime_name.as_ptr(), runtime) != 0 {
+        let script_name = CString::new("_groot_script").map_err(|_| ())?;
+        if runtime.is_null()
+            || script.is_null()
+            || set_sys(runtime_name.as_ptr(), runtime) != 0
+            || set_sys(script_name.as_ptr(), script) != 0
+        {
             return Err(());
         }
-        let code = CString::new("import sys\np=sys._groot_runtime+'/groot-session.py'\nexec(compile(open(p,'rb').read(),p,'exec'),{'__name__':'__main__'})\n").map_err(|_| ())?;
+        let code = CString::new("import sys\np=sys._groot_script\nexec(compile(open(p,'rb').read(),p,'exec'),{'__name__':'__main__'})\n").map_err(|_| ())?;
         let result = run_string(code.as_ptr(), ptr::null_mut());
         if finalize() < 0 || result != 0 {
             return Err(());
