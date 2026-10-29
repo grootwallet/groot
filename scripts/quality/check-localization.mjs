@@ -1,21 +1,27 @@
-import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { parse } from 'svelte/compiler';
 
-const files = execFileSync(
-  'find',
-  ['src/routes', 'src/lib/components', '-name', '*.svelte', '-type', 'f'],
-  { encoding: 'utf8' }
-)
-  .trim()
-  .split('\n');
+function sourceFiles(root, extension) {
+  const files = [];
+  function visit(directory) {
+    for (const entry of readdirSync(directory, { withFileTypes: true }).sort((left, right) =>
+      left.name.localeCompare(right.name, 'en')
+    )) {
+      const path = `${directory}/${entry.name}`;
+      if (entry.isDirectory()) visit(path);
+      else if (entry.isFile() && entry.name.endsWith(extension)) files.push(path);
+    }
+  }
+  visit(root);
+  return files;
+}
 
-const catalogFiles = [
-  'src/lib/i18n-catalog.ts',
-  ...execFileSync('find', ['src/lib/locales', '-name', '*.ts', '-type', 'f'], { encoding: 'utf8' })
-    .trim()
-    .split('\n')
+const files = [
+  ...sourceFiles('src/routes', '.svelte'),
+  ...sourceFiles('src/lib/components', '.svelte')
 ];
+
+const catalogFiles = ['src/lib/i18n-catalog.ts', ...sourceFiles('src/lib/locales', '.ts')];
 const catalogSource = catalogFiles.map((file) => readFileSync(file, 'utf8')).join('\n');
 const catalogKeys = new Set(
   [...catalogSource.matchAll(/^  (?:(['"])(.*?)\1|([A-Za-z_][A-Za-z0-9_]*)):\s*\{/gm)].map(
