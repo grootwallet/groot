@@ -65,9 +65,9 @@ impl ExampleError {
 
   it('keeps declared native API errors in the frontend allowlist', () => {
     const root = fileURLToPath(new URL('../../../src-tauri/src/', import.meta.url));
-    const files = globSync('**/*.rs', { cwd: root }).filter(
-      (file) => !/(?:^|\/)(?:tests|perf|[^/]*_tests)\.rs$/.test(file)
-    );
+    const files = globSync('**/*.rs', { cwd: root })
+      .map((file) => file.replaceAll('\\', '/'))
+      .filter((file) => !/(?:^|\/)(?:tests|perf|[^/]*_tests)\.rs$/.test(file));
     expect(files).toContain('wallet/explorer_commands.rs');
     expect(files).toContain('wallet/label_interchange.rs');
     const missing = files.flatMap((file) =>

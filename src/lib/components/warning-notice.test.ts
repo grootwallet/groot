@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { parse } from 'svelte/compiler';
 
-const componentsRoot = new URL('./', import.meta.url).pathname;
-const routesRoot = new URL('../../routes', import.meta.url).pathname;
+const componentsRoot = fileURLToPath(new URL('./', import.meta.url));
+const routesRoot = fileURLToPath(new URL('../../routes', import.meta.url));
 const component = readFileSync(new URL('./WarningNotice.svelte', import.meta.url), 'utf8');
 
 function svelteFiles(directory: string): string[] {
