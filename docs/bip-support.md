@@ -2,6 +2,8 @@
 
 **Upstream status** and Groot support are separate: each linked BIP owns its current upstream status. This matrix describes the current source, not universal platform or release certification. Native tests, real-Core evidence and exact-device acceptance are distinct.
 
+The 5.4.0-rc01 Windows/Linux work has no BIP impact. It packages the existing BIP84/BIP48/BIP174 and fixed Miniscript implementation on additional internal Testnet4 hosts; it changes no descriptor, derivation, PSBT, transaction or persisted-wallet semantics. Platform compilation and driver probes are not interoperability certification.
+
 ## Implemented and in-progress BIPs
 
 | BIP                                                                                                                                                                                                               | Groot scope                                                                | Limitation                                                                                                                                                                    |

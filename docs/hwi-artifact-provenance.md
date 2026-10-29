@@ -1,6 +1,6 @@
 # HWI artifact provenance
 
-The reviewed macOS arm64 certification boundary is Bitcoin Core HWI 3.2.0. Its exact executable, source, and license digests are recorded in `hwi-artifact-manifest-3.2.0-mac-arm64.json`. They were checked against the official release API digests and published checksum payload before the physical Trezor Safe 3 campaign. Run the verifier against the extracted official inputs:
+The reviewed macOS arm64 certification boundary is Bitcoin Core HWI 3.2.0. Its exact executable, source, and license digests are recorded in `hwi-artifact-manifest-3.2.0-mac-arm64.json`. They were checked against the official release API digests and published checksum payload before the physical Trezor Safe 3 campaign. The 5.4 internal Testnet4 campaign also pins the official Linux x86-64 and Windows x86-64 archive checksums and release-listed inner executable digests. Those builders extract a manifest-sealed runtime and probe every included driver without opening USB. Unsigned candidates are implementation evidence, not production trust or physical certification. Run the verifier against the extracted official inputs:
 
 ```sh
 node scripts/release/verify-hwi-artifact.mjs \

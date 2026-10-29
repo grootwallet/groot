@@ -234,14 +234,14 @@ pub fn public_backup_pdf_save(
 fn hwi_cli(app: &AppHandle) -> ApiResult<HwiCli> {
     let home = app.path().home_dir().map_err(internal)?;
     let chain = HwiChain::for_network(network());
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
     let cli = if let Some(resource_name) = option_env!("GROOT_BUNDLED_HWI_RESOURCE") {
         let resource_dir = app.path().resource_dir().map_err(internal)?;
         HwiCli::for_bundled_resource(chain, &resource_dir, resource_name)
     } else {
         Ok(HwiCli::for_chain(chain))
     };
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
     let cli = Ok(HwiCli::for_chain(chain));
 
     cli.and_then(|cli| cli.with_home(home))

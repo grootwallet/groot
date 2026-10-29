@@ -24,7 +24,7 @@ const MAX_OUTPUT_BYTES: u64 = 384 * 1024;
 const PIPE_CLEANUP_TIMEOUT: Duration = Duration::from_secs(2);
 const CANCELLATION_CLEANUP_TIMEOUT: Duration = Duration::from_secs(5);
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(90);
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
 const PASSIVE_INVENTORY_TIMEOUT: Duration = Duration::from_secs(10);
 // HWI 3.2.0 opens and initializes every BitBox02 client before `enumerate`
 // can return its path-only row. A locked device can therefore ask for its
@@ -40,9 +40,9 @@ const SIGNING_REVIEW_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 const HWI_DIGEST_HEX_BYTES: usize = 64;
 const HWI_FIXED_ARGV: &[&str] = &["--stdin"];
 // Explicit Mainnet routing is restricted to the sealed internal multi runtime.
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
 const MAINNET_FAST_ENABLED: bool = true;
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
 mod runtime;
 mod session;
 pub(crate) use session::{HwiSessionAction, HwiSessionExpected, HwiSessionInput};
@@ -55,7 +55,7 @@ pub struct PassiveHardwareCandidate {
     pub path: String,
 }
 
-#[cfg(any(target_os = "macos", test))]
+#[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows", test))]
 const JADE_SERIAL_IDS: &[(u16, u16)] = &[
     (0x10c4, 0xea60),
     (0x1a86, 0x55d4),
@@ -65,7 +65,7 @@ const JADE_SERIAL_IDS: &[(u16, u16)] = &[
     (0x303a, 0x1001),
 ];
 
-#[cfg(any(target_os = "macos", test))]
+#[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows", test))]
 fn passive_hid_candidate(
     vendor_id: u16,
     product_id: u16,
@@ -110,7 +110,7 @@ fn passive_hid_candidate(
     })
 }
 
-#[cfg(any(target_os = "macos", test))]
+#[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows", test))]
 struct PassiveTrezorUsbObservation<'a> {
     device_id: (u16, u16),
     device_version: u16,
@@ -121,7 +121,7 @@ struct PassiveTrezorUsbObservation<'a> {
     port_chain: &'a [u8],
 }
 
-#[cfg(any(target_os = "macos", test))]
+#[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows", test))]
 fn passive_trezor_webusb_candidate(
     active_network: Network,
     observation: PassiveTrezorUsbObservation<'_>,
@@ -173,16 +173,17 @@ fn passive_trezor_webusb_candidate(
     })
 }
 
-#[cfg(any(target_os = "macos", test))]
+#[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows", test))]
 fn passive_jade_serial_candidate(
     vendor_id: u16,
     product_id: u16,
     path: &str,
 ) -> Option<PassiveHardwareCandidate> {
-    // pyserial, used by HWI 3.2.0, selects IOCalloutDevice on macOS. The Rust
-    // enumerator reports both callout and dial-in paths, so keep only `/dev/cu.*`
-    // to avoid two capabilities for one Jade and to pass HWI the exact path form.
-    if !JADE_SERIAL_IDS.contains(&(vendor_id, product_id)) || !path.starts_with("/dev/cu.") {
+    if !JADE_SERIAL_IDS.contains(&(vendor_id, product_id)) {
+        return None;
+    }
+    #[cfg(target_os = "macos")]
+    if !path.starts_with("/dev/cu.") {
         return None;
     }
     Some(PassiveHardwareCandidate {
@@ -251,6 +252,78 @@ fn collect_macos_passive_hardware_inventory(
             .then_with(|| left.model.cmp(&right.model))
             .then_with(|| left.path.cmp(&right.path))
     });
+    Ok(candidates)
+}
+
+#[cfg(any(target_os = "linux", target_os = "windows"))]
+fn desktop_passive_hardware_inventory(
+    active_network: Network,
+) -> Result<Vec<PassiveHardwareCandidate>, HardwareError> {
+    use nusb::MaybeFuture as _;
+    use serialport::SerialPortType;
+
+    let hid = hidapi::HidApi::new().map_err(|_| HardwareError::Unavailable)?;
+    let mut candidates = hid
+        .device_list()
+        .filter_map(|device| {
+            passive_hid_candidate(
+                device.vendor_id(),
+                device.product_id(),
+                device.interface_number(),
+                device.usage_page(),
+                device.product_string(),
+                device.path().to_str().ok()?,
+            )
+        })
+        .collect::<Vec<_>>();
+
+    // Trezor's HWI WebUSB selector is the libusb bus number plus the full
+    // physical port chain. Linux exposes the same stable tuple without opening
+    // the device. Windows controller numbering is not equivalent across nusb
+    // and libusb, so Windows safely relies on HID-capable Trezors until an exact
+    // path translation is physically certified.
+    #[cfg(target_os = "linux")]
+    {
+        let usb_devices = nusb::list_devices()
+            .wait()
+            .map_err(|_| HardwareError::Unavailable)?;
+        candidates.extend(usb_devices.filter_map(|device| {
+            let interface_zero_is_vendor_class = device
+                .interfaces()
+                .any(|interface| interface.interface_number() == 0 && interface.class() == 0xff);
+            passive_trezor_webusb_candidate(
+                active_network,
+                PassiveTrezorUsbObservation {
+                    device_id: (device.vendor_id(), device.product_id()),
+                    device_version: device.device_version(),
+                    manufacturer: device.manufacturer_string(),
+                    product: device.product_string(),
+                    interface_zero_is_vendor_class,
+                    bus_number: device.busnum(),
+                    port_chain: device.port_chain(),
+                },
+            )
+        }));
+    }
+    #[cfg(target_os = "windows")]
+    let _ = active_network;
+
+    let serial_ports = serialport::available_ports().map_err(|_| HardwareError::Unavailable)?;
+    candidates.extend(serial_ports.into_iter().filter_map(|port| {
+        let SerialPortType::UsbPort(usb) = port.port_type else {
+            return None;
+        };
+        passive_jade_serial_candidate(usb.vid, usb.pid, &port.port_name)
+    }));
+
+    candidates.sort_by(|left, right| {
+        left.device_type
+            .cmp(&right.device_type)
+            .then_with(|| left.model.cmp(&right.model))
+            .then_with(|| left.path.cmp(&right.path))
+    });
+    candidates
+        .dedup_by(|left, right| left.device_type == right.device_type && left.path == right.path);
     Ok(candidates)
 }
 
@@ -331,7 +404,11 @@ pub fn passive_hardware_inventory(
     {
         macos_passive_hardware_inventory(active_network)
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
+    {
+        desktop_passive_hardware_inventory(active_network)
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
     {
         let _ = active_network;
         Err(HardwareError::Unavailable)
@@ -737,8 +814,9 @@ pub struct HwiCli {
 #[derive(Debug, Clone)]
 enum HwiSource {
     External,
-    #[cfg(target_os = "macos")]
     Bundled {
+        resource_dir: PathBuf,
+        #[cfg(target_os = "macos")]
         bundle_root: PathBuf,
     },
 }
@@ -801,18 +879,28 @@ impl HwiCli {
         }
     }
 
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
     pub fn for_bundled_resource(
         chain: HwiChain,
         resource_dir: &Path,
         resource_name: &str,
     ) -> Result<Self, HardwareError> {
-        let (program, bundle_root) = bundled_hwi_paths(resource_dir, resource_name)?;
+        let (program, resource_dir) = bundled_hwi_paths(resource_dir, resource_name)?;
+        #[cfg(target_os = "macos")]
+        let bundle_root = resource_dir
+            .parent()
+            .and_then(Path::parent)
+            .ok_or(HardwareError::Unavailable)?
+            .to_path_buf();
         Ok(Self {
             program,
             chain,
             home: None,
-            source: HwiSource::Bundled { bundle_root },
+            source: HwiSource::Bundled {
+                resource_dir,
+                #[cfg(target_os = "macos")]
+                bundle_root,
+            },
         })
     }
 
@@ -1094,30 +1182,44 @@ fn trusted_hwi_path() -> PathBuf {
     PathBuf::from("/unsupported-platform/hwi")
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
 fn bundled_hwi_paths(
     resource_dir: &Path,
     resource_name: &str,
 ) -> Result<(PathBuf, PathBuf), HardwareError> {
-    if resource_name != "hwi"
-        || !resource_dir.is_absolute()
-        || resource_dir.file_name().and_then(|name| name.to_str()) != Some("Resources")
+    let expected_name = if cfg!(target_os = "windows") {
+        "hwi.exe"
+    } else {
+        "hwi"
+    };
+    if resource_name != expected_name || !resource_dir.is_absolute() {
+        return Err(HardwareError::Unavailable);
+    }
+    // Keep construction side-effect free: Tauri may resolve the resource path
+    // before the packaged resource exists (and tests use an inert app path).
+    // Execution canonicalizes both the executable and its expected resource
+    // location before it trusts or launches either one.
+    let resource_dir = resource_dir.to_path_buf();
+    #[cfg(target_os = "macos")]
+    if resource_dir.file_name().and_then(|name| name.to_str()) != Some("Resources") {
+        return Err(HardwareError::Unavailable);
+    }
+    #[cfg(target_os = "macos")]
     {
-        return Err(HardwareError::Unavailable);
+        let contents = resource_dir.parent().ok_or(HardwareError::Unavailable)?;
+        if contents.file_name().and_then(|name| name.to_str()) != Some("Contents") {
+            return Err(HardwareError::Unavailable);
+        }
+        let bundle_root = contents.parent().ok_or(HardwareError::Unavailable)?;
+        if bundle_root
+            .extension()
+            .and_then(|extension| extension.to_str())
+            != Some("app")
+        {
+            return Err(HardwareError::Unavailable);
+        }
     }
-    let contents = resource_dir.parent().ok_or(HardwareError::Unavailable)?;
-    if contents.file_name().and_then(|name| name.to_str()) != Some("Contents") {
-        return Err(HardwareError::Unavailable);
-    }
-    let bundle_root = contents.parent().ok_or(HardwareError::Unavailable)?;
-    if bundle_root
-        .extension()
-        .and_then(|extension| extension.to_str())
-        != Some("app")
-    {
-        return Err(HardwareError::Unavailable);
-    }
-    Ok((resource_dir.join(resource_name), bundle_root.to_path_buf()))
+    Ok((resource_dir.join(resource_name), resource_dir))
 }
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]
@@ -1196,7 +1298,7 @@ fn run_program_in_operation(
     home: Option<&Path>,
     extra_input: Option<&[u8]>,
 ) -> Result<Vec<u8>, HardwareError> {
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
     let _ = active_chain;
     operation.remaining()?;
     if !program.is_absolute() {
@@ -1215,7 +1317,7 @@ fn run_program_in_operation(
     if let Some(home) = home {
         command.env("HOME", trusted_home(home)?);
     }
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
     if let Some(runtime) = runtime::for_operation(source, arguments, active_chain)? {
         // Only the compiled, app-sealed runtime may bypass PyInstaller extraction.
         command.env("_MEIPASS2", runtime);
@@ -1392,8 +1494,23 @@ fn trusted_executable(program: &Path, source: &HwiSource) -> Result<PathBuf, Har
             }
         }
         #[cfg(target_os = "macos")]
-        HwiSource::Bundled { bundle_root } => {
+        HwiSource::Bundled { bundle_root, .. } => {
             verify_bundled_macos_hwi(program, &canonical, &metadata, bundle_root)?;
+        }
+        #[cfg(any(target_os = "linux", target_os = "windows"))]
+        HwiSource::Bundled { resource_dir } => {
+            let expected = resource_dir
+                .join(if cfg!(target_os = "windows") {
+                    "hwi.exe"
+                } else {
+                    "hwi"
+                })
+                .canonicalize()
+                .map_err(|_| HardwareError::Unavailable)?;
+            if canonical != expected {
+                return Err(HardwareError::Unavailable);
+            }
+            verify_executable_digest(&canonical, configured_hwi_digest()?)?;
         }
     }
     Ok(canonical)
@@ -1827,10 +1944,7 @@ mod tests {
         let resources = Path::new("/Applications/Groot Testnet4.app/Contents/Resources");
         assert_eq!(
             bundled_hwi_paths(resources, "hwi"),
-            Ok((
-                resources.join("hwi"),
-                PathBuf::from("/Applications/Groot Testnet4.app")
-            ))
+            Ok((resources.join("hwi"), resources.to_path_buf()))
         );
         assert_eq!(
             bundled_hwi_paths(resources, "../MacOS/Groot"),

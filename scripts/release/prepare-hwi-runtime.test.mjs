@@ -13,12 +13,21 @@ import {
 } from './prepare-hwi-runtime.mjs';
 
 const digest = (bytes) => createHash('sha256').update(bytes).digest('hex');
-function archive(name = 'Python', kind = 'n', contents = 'Python.framework/Versions/3.9/Python\0') {
+function archive(
+  name = 'Python',
+  kind = 'n',
+  contents = 'Python.framework/Versions/3.9/Python\0',
+  pythonLibrary = 'Python'
+) {
   const entries = [
     [kind, name, Buffer.from(contents)],
-    ...(name === 'Python'
+    ...(name === pythonLibrary
       ? []
-      : [['n', 'Python', Buffer.from('Python.framework/Versions/3.9/Python\0')]]),
+      : [
+          pythonLibrary === 'Python'
+            ? ['n', 'Python', Buffer.from('Python.framework/Versions/3.9/Python\0')]
+            : ['b', pythonLibrary, Buffer.from('runtime-library')]
+        ]),
     ['o', 'pyi-contents-directory _internal', Buffer.alloc(0)]
   ];
   let position = 0;
@@ -43,7 +52,7 @@ function archive(name = 'Python', kind = 'n', contents = 'Python.framework/Versi
   cookie.writeUInt32BE(position, 12);
   cookie.writeUInt32BE(table.length, 16);
   cookie.writeUInt32BE(309, 20);
-  cookie.write('Python\0', 24);
+  cookie.write(`${pythonLibrary}\0`, 24);
   return Buffer.concat([Buffer.from('fixture bootloader'), ...data, table, cookie]);
 }
 
@@ -58,6 +67,17 @@ test('archive extraction requires exact pinned bytes and bounded paths', () => {
   const bytes2 = archive();
   bytes2.writeUInt32BE(0xffffffff, bytes2.length - 76);
   assert.throws(() => readHwiRuntimeArchive(bytes2, digest(bytes2)));
+});
+
+test('archive parser admits only the pinned Linux and Windows Python layouts', () => {
+  for (const library of ['libpython3.9.so.1.0', 'python39.dll']) {
+    const bytes = archive(library, 'b', 'runtime-library', library);
+    assert.equal(readHwiRuntimeArchive(bytes, digest(bytes))[0].name, library);
+  }
+  const windows = archive('drivers\\native.dll', 'b', 'driver', 'python39.dll');
+  assert.equal(readHwiRuntimeArchive(windows, digest(windows))[0].name, 'drivers/native.dll');
+  const unknown = archive('python310.dll', 'b', 'runtime-library', 'python310.dll');
+  assert.throws(() => readHwiRuntimeArchive(unknown, digest(unknown)));
 });
 
 test('runtime inventory detects modified, extra and writable files and escaping links', () => {

@@ -9,7 +9,7 @@ use std::{
     path::{Component, Path, PathBuf},
 };
 
-const MAX_BYTES: u64 = 64 * 1024 * 1024;
+const MAX_BYTES: u64 = 96 * 1024 * 1024;
 const MAX_ENTRIES: usize = 256;
 
 #[derive(Deserialize)]
@@ -61,9 +61,15 @@ fn digest_matches(bytes: &[u8], expected: &str) -> bool {
 
 fn regular_file(path: &Path, limit: u64) -> Result<Vec<u8>, HardwareError> {
     let metadata = fs::symlink_metadata(path).map_err(|_| HardwareError::Unavailable)?;
-    use std::os::unix::fs::PermissionsExt as _;
-    if !metadata.is_file() || metadata.len() > limit || metadata.permissions().mode() & 0o022 != 0 {
+    if !metadata.is_file() || metadata.len() > limit {
         return Err(HardwareError::Unavailable);
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt as _;
+        if metadata.permissions().mode() & 0o022 != 0 {
+            return Err(HardwareError::Unavailable);
+        }
     }
     let file = fs::File::open(path).map_err(|_| HardwareError::Unavailable)?;
     let mut bytes = Vec::new();
@@ -82,7 +88,6 @@ fn inventory(
     actual: &mut BTreeSet<String>,
     visited: &mut usize,
 ) -> Result<(), HardwareError> {
-    use std::os::unix::fs::PermissionsExt as _;
     if directory
         .components()
         .count()
@@ -108,8 +113,12 @@ fn inventory(
         }
         let metadata = fs::symlink_metadata(&path).map_err(|_| HardwareError::Unavailable)?;
         if metadata.is_dir() {
-            if metadata.permissions().mode() & 0o022 != 0 {
-                return Err(HardwareError::Unavailable);
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt as _;
+                if metadata.permissions().mode() & 0o022 != 0 {
+                    return Err(HardwareError::Unavailable);
+                }
             }
             inventory(root, &path, actual, visited)?;
         } else {
@@ -129,17 +138,20 @@ fn verify_runtime(
     manifest_digest: &str,
     source_digest: &str,
 ) -> Result<PathBuf, HardwareError> {
-    use std::os::unix::fs::PermissionsExt as _;
     let metadata = fs::symlink_metadata(root).map_err(|_| HardwareError::Unavailable)?;
-    if !metadata.is_dir()
-        || metadata.permissions().mode() & 0o022 != 0
-        || root
-            .canonicalize()
-            .map_err(|_| HardwareError::Unavailable)?
-            != root
-    {
+    if !metadata.is_dir() {
         return Err(HardwareError::Unavailable);
     }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt as _;
+        if metadata.permissions().mode() & 0o022 != 0 {
+            return Err(HardwareError::Unavailable);
+        }
+    }
+    let root = root
+        .canonicalize()
+        .map_err(|_| HardwareError::Unavailable)?;
     let bytes = regular_file(&root.join("runtime-manifest.json"), 128 * 1024)?;
     if !digest_matches(&bytes, manifest_digest) {
         return Err(HardwareError::Unavailable);
@@ -193,13 +205,13 @@ fn verify_runtime(
             || !path
                 .canonicalize()
                 .map_err(|_| HardwareError::Unavailable)?
-                .starts_with(root)
+                .starts_with(&root)
         {
             return Err(HardwareError::Unavailable);
         }
     }
     let mut actual = BTreeSet::new();
-    inventory(root, root, &mut actual, &mut 0)?;
+    inventory(&root, &root, &mut actual, &mut 0)?;
     if actual != expected {
         return Err(HardwareError::Unavailable);
     }
@@ -238,13 +250,23 @@ fn selected_fast_internal(
     }
 }
 
-fn approved_runtime_scope(network_is_multi: bool, team: Option<&str>, version: &str) -> bool {
-    network_is_multi
+fn approved_runtime_scope(
+    network_is_multi: bool,
+    network_is_testnet4: bool,
+    team: Option<&str>,
+    desktop_candidate: Option<&str>,
+    version: &str,
+) -> bool {
+    let macos_release = network_is_multi
         && match team {
             Some("REHEARSAL_ONLY") => true,
             Some("6Z85HGDUU7") => version == "5.3.0",
             _ => false,
-        }
+        };
+    let cross_platform_candidate = network_is_testnet4
+        && version == "5.4.0-rc01"
+        && matches!(desktop_candidate, Some("linux-x86_64" | "windows-x86_64"));
+    macos_release || cross_platform_candidate
 }
 
 // Called only after the existing full app/helper signature and HWI digest checks.
@@ -262,45 +284,69 @@ pub(super) fn for_operation(
     }
     if !approved_runtime_scope(
         cfg!(groot_network = "multi"),
+        cfg!(groot_network = "testnet4"),
         option_env!("GROOT_MACOS_SIGNING_TEAM_ID"),
+        option_env!("GROOT_DESKTOP_CANDIDATE_PLATFORM"),
         env!("CARGO_PKG_VERSION"),
     ) {
         return Err(HardwareError::Unavailable);
     }
-    let HwiSource::Bundled { bundle_root } = source else {
+    let HwiSource::Bundled { resource_dir, .. } = source else {
         return Err(HardwareError::Unavailable);
     };
     let source_digest = option_env!("GROOT_HWI_SHA256").ok_or(HardwareError::Unavailable)?;
-    verify_runtime(
-        &bundle_root.join("Contents/Resources/hwi-runtime"),
-        expected,
-        source_digest,
-    )
-    .map(Some)
+    verify_runtime(&resource_dir.join("hwi-runtime"), expected, source_digest).map(Some)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use serde_json::json;
+    #[cfg(unix)]
     use std::os::unix::fs::symlink;
 
     #[test]
     fn production_runtime_scope_is_exactly_the_approved_team_version_and_network() {
         assert!(approved_runtime_scope(
             true,
+            false,
             Some("REHEARSAL_ONLY"),
+            None,
             "5.3.0-rc18"
         ));
-        assert!(approved_runtime_scope(true, Some("6Z85HGDUU7"), "5.3.0"));
-        for (network, team, version) in [
-            (false, Some("6Z85HGDUU7"), "5.3.0"),
-            (true, Some("6Z85HGDUU7"), "5.3.0-rc18"),
-            (true, Some("6Z85HGDUU7"), "5.3.1"),
-            (true, Some("OTHERTEAM1"), "5.3.0"),
-            (true, None, "5.3.0"),
+        assert!(approved_runtime_scope(
+            true,
+            false,
+            Some("6Z85HGDUU7"),
+            None,
+            "5.3.0"
+        ));
+        assert!(approved_runtime_scope(
+            false,
+            true,
+            None,
+            Some("linux-x86_64"),
+            "5.4.0-rc01"
+        ));
+        assert!(approved_runtime_scope(
+            false,
+            true,
+            None,
+            Some("windows-x86_64"),
+            "5.4.0-rc01"
+        ));
+        for (multi, testnet4, team, candidate, version) in [
+            (false, false, Some("6Z85HGDUU7"), None, "5.3.0"),
+            (true, false, Some("6Z85HGDUU7"), None, "5.3.0-rc18"),
+            (true, false, Some("6Z85HGDUU7"), None, "5.3.1"),
+            (true, false, Some("OTHERTEAM1"), None, "5.3.0"),
+            (true, false, None, None, "5.3.0"),
+            (false, true, None, Some("linux-x86_64"), "5.4.0"),
+            (false, true, None, Some("macos-arm64"), "5.4.0-rc01"),
         ] {
-            assert!(!approved_runtime_scope(network, team, version));
+            assert!(!approved_runtime_scope(
+                multi, testnet4, team, candidate, version
+            ));
         }
     }
 
@@ -308,10 +354,11 @@ mod tests {
         let root = std::env::temp_dir().join(format!("groot-hwi-runtime-{}", uuid::Uuid::new_v4()));
         fs::create_dir(&root).unwrap();
         fs::write(root.join("Python"), b"runtime fixture").unwrap();
+        #[cfg(unix)]
         symlink("Python", root.join("alias")).unwrap();
         let manifest = json!({"schemaVersion":1,"sourceSha256":"source", "files":[
             {"path":"Python","size":15,"sha256":sha256::Hash::hash(b"runtime fixture").to_string()}],
-            "links":[{"path":"alias","target":"Python"}]});
+            "links": if cfg!(unix) { json!([{"path":"alias","target":"Python"}]) } else { json!([]) }});
         let bytes = serde_json::to_vec(&manifest).unwrap();
         fs::write(root.join("runtime-manifest.json"), &bytes).unwrap();
         (
@@ -377,15 +424,18 @@ mod tests {
 
     #[test]
     fn sealed_runtime_rejects_symlink_substitution_and_writable_payload() {
-        use std::os::unix::fs::PermissionsExt as _;
-        let (root, digest) = fixture();
-        fs::set_permissions(root.join("Python"), fs::Permissions::from_mode(0o666)).unwrap();
-        assert!(verify_runtime(&root, &digest, "source").is_err());
-        fs::set_permissions(root.join("Python"), fs::Permissions::from_mode(0o644)).unwrap();
-        fs::remove_file(root.join("alias")).unwrap();
-        symlink("/etc/hosts", root.join("alias")).unwrap();
-        assert!(verify_runtime(&root, &digest, "source").is_err());
-        fs::remove_dir_all(root).unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt as _;
+            let (root, digest) = fixture();
+            fs::set_permissions(root.join("Python"), fs::Permissions::from_mode(0o666)).unwrap();
+            assert!(verify_runtime(&root, &digest, "source").is_err());
+            fs::set_permissions(root.join("Python"), fs::Permissions::from_mode(0o644)).unwrap();
+            fs::remove_file(root.join("alias")).unwrap();
+            symlink("/etc/hosts", root.join("alias")).unwrap();
+            assert!(verify_runtime(&root, &digest, "source").is_err());
+            fs::remove_dir_all(root).unwrap();
+        }
     }
 
     #[test]

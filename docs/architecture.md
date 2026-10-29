@@ -6,6 +6,8 @@
 
 Svelte owns presentation and transient orchestration. Rust owns entropy, secrets, credentials, descriptors, wallet policy, PSBT review/signing, persistence, sync and broadcast. DTOs and stable errors cross IPC; BDK internals and private key material do not.
 
+Windows/Linux internal Testnet4 packages use the same trusted Rust/HWI boundary. Their build verifies official HWI 3.2.0 source and executable digests, extracts a sealed runtime, and compiles both source and runtime-manifest digests into Groot. Runtime never searches PATH or falls back to another helper. Public support still requires platform signing and physical certification (ADR 0106).
+
 | Area                     | Owner                                                                        |
 | ------------------------ | ---------------------------------------------------------------------------- |
 | Routes                   | `src/routes/`; no direct Tauri commands, dummy imports or wallet policy      |

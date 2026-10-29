@@ -1,9 +1,26 @@
-# Experimental Windows/Linux packages
+# Internal Windows/Linux desktop candidates
 
-The dispatch-only [packaging workflow](../.github/workflows/experimental-desktop.yml) prepares Windows x64 MSI and Linux x64 DEB builds. It retains validation/native gates and currently stops at the unchanged reviewed-source gate. No artifact has been built or tested on these hosts in this change. After passing every gate it retains supporting package/SBOM/digest/source evidence as a 14-day Actions artifact for owner testing, never a public GitHub release.
+The [cross-platform workflow](../.github/workflows/experimental-desktop.yml)
+builds unsigned `5.4.0-rc01` Testnet4-only packages on native GitHub-hosted
+Windows Server 2025 x86-64 and Ubuntu 24.04 x86-64 runners. It produces MSI/NSIS installers and
+DEB/AppImage packages with SBOM, source commit, build facts and SHA-256 evidence.
 
-These first packages use a separate application identity and **Signet only**. Native recovery-word entry, backup verification and software creation/recovery are unavailable outside macOS. Passive USB inventory is macOS-only. No HWI helper is bundled; Windows production HWI trust is unavailable and Linux requires a separately certified pinned/root-owned helper. File/public-descriptor/BSMS/PSBT paths are implemented, but policy-verification prerequisites still apply; unavailable USB/native operations remain errors, not silent bypasses. Existing public import/transaction tests do not establish platform usability or device certification.
+Each build downloads the official HWI 3.2.0 platform archive and source,
+verifies the published archive and inner-executable hashes, and extracts the
+one-file executable into Groot's sealed fast runtime. Build probes load every
+included signer driver without opening USB. Runtime verifies the exact bundled
+executable and complete extracted manifest and never searches PATH or falls
+back to a system HWI.
 
-Windows and Linux are experimental and untested on physical machines. They are riskier than macOS and need user testing/feedback. Use disposable Signet data. macOS rc03 is the immediate owner-testing candidate; experimental packages require successful runners, target-specific provenance/SBOM, signatures and exact release review before distributing assets.
+These packages use a separate application identity and Testnet4 only. Windows
+does not guess the unverified WebUSB controller mapping used by some Trezors.
+Recovery-word verification and native recovery entry remain unavailable on
+these platforms. Packages are unsigned internal owner-test artifacts and expire
+from Actions after 14 days. Compile success does not establish platform or
+physical-device certification. Follow
+[the human test](testing/5.4.0-cross-platform-hardware.md) and record exact
+model, firmware, transport, reject/retry, signing and restart results.
 
-Local build prerequisites and runtime libraries follow Tauri 2's platform requirements. Run pinned installation, `pnpm validate`, all native checks, then `GROOT_BUILD_NETWORK=signet pnpm exec tauri build --config src-tauri/tauri.experimental.conf.json --bundles deb` (Linux) or the equivalent `msi` (Windows). Do not bypass failed gates. Compile success is not certification.
+Final v5.4.0, Mainnet, public upload, installer signing and update metadata
+remain blocked pending a separate release decision, independent review and the
+physical certification matrix. ADR 0106 records this boundary.

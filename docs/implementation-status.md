@@ -2,6 +2,8 @@
 
 The released desktop baseline is [v5.3.0](https://github.com/grootwallet/groot/releases/tag/v5.3.0), commit `6a39bf50b2a6a042354b43369765a9af2174d061`, published 2026-10-23. The macOS Apple-silicon release includes the sealed fast runtime for the seven named standard hardware models under ADRs 0104/0105. Publication is separate from physical acceptance of the internal Testnet4 iOS and Continuity previews. Changes after this commit are development source, not a replacement release.
 
+`5.4.0-rc01` adds internal Testnet4-only Windows x86-64 and Linux x86-64 packaging under ADR 0106. Exact HWI 3.2.0 platform artifacts are checksum-pinned and unpacked into a runtime Groot verifies before use. Cached OS HID/USB/serial inventory is wired without opening signers; Windows deliberately omits unverified WebUSB Trezor path translation. Native package inspection and physical signer testing remain required before public support. Final 5.4.0 and Mainnet distribution are not authorized.
+
 **Native** means implemented behind Rust/Tauri. **Fixture** means browser demonstration only. Neither is physical-device certification. Exact release/device evidence belongs in the [Mainnet checklist](mainnet-release-checklist.md) and [hardware certification](hardware-certification.md).
 
 ## Native capabilities

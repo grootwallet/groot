@@ -6,6 +6,7 @@ fn main() {
     println!("cargo:rerun-if-env-changed=GROOT_HWI_RUNTIME_SHA256");
     println!("cargo:rerun-if-env-changed=GROOT_HWI_SESSION_PROTOCOL");
     println!("cargo:rerun-if-env-changed=GROOT_MACOS_SIGNING_TEAM_ID");
+    println!("cargo:rerun-if-env-changed=GROOT_DESKTOP_CANDIDATE_PLATFORM");
     watch_git_identity();
     println!(
         "cargo:rustc-check-cfg=cfg(groot_network, values(\"regtest\", \"signet\", \"testnet4\", \"mainnet\", \"multi\"))"
@@ -20,12 +21,23 @@ fn main() {
     println!("cargo:rustc-cfg=groot_network=\"{network}\"");
     let compiled_team_id = std::env::var("GROOT_MACOS_SIGNING_TEAM_ID")
         .unwrap_or_else(|_| "REHEARSAL_ONLY".to_owned());
-    let fast_runtime_scope = network == "multi"
+    let macos_fast_runtime_scope = network == "multi"
         && std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("macos")
         && (compiled_team_id == "REHEARSAL_ONLY"
             || (compiled_team_id == "6Z85HGDUU7" && env!("CARGO_PKG_VERSION") == "5.3.0"));
+    let candidate_platform = std::env::var("GROOT_DESKTOP_CANDIDATE_PLATFORM").ok();
+    let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
+    let cross_platform_fast_runtime_scope = network == "testnet4"
+        && env!("CARGO_PKG_VERSION") == "5.4.0-rc01"
+        && matches!(
+            (target_os.as_str(), candidate_platform.as_deref()),
+            ("linux", Some("linux-x86_64")) | ("windows", Some("windows-x86_64"))
+        );
+    let fast_runtime_scope = macos_fast_runtime_scope || cross_platform_fast_runtime_scope;
     if std::env::var_os("GROOT_HWI_RUNTIME_SHA256").is_some() && !fast_runtime_scope {
-        panic!("The extracted HWI runtime requires an approved multi-network release scope");
+        panic!(
+            "The extracted HWI runtime requires an approved release or internal candidate scope"
+        );
     }
     if std::env::var_os("GROOT_HWI_RUNTIME_SHA256").is_some()
         && std::env::var_os("GROOT_HWI_SHA256").is_none()

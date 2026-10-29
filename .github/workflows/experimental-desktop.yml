@@ -1,8 +1,22 @@
-name: Experimental desktop packages
+name: 5.4 cross-platform Testnet4 packages
 on:
   workflow_dispatch:
+  push:
+    branches: [codex/post-53-maintainability]
+    paths:
+      - '.github/workflows/experimental-desktop.yml'
+      - 'scripts/hardware/session-*'
+      - 'scripts/release/build-cross-platform-testnet4.mjs'
+      - 'scripts/release/prepare-hwi-runtime.mjs'
+      - 'src-tauri/**'
+      - 'docs/hwi-artifact-manifest-3.2.0-*.json'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
 permissions:
   contents: read
+concurrency:
+  group: cross-platform-5-4-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   package:
     strategy:
@@ -10,10 +24,17 @@ jobs:
       matrix:
         include:
           - os: ubuntu-24.04
-            bundle: deb
+            platform: linux-x86_64
+            archive: hwi-3.2.0-linux-x86_64.tar.gz
+            archive_sha256: 3787c791fac7380a9f23a8815e4381ddc50911e70220c5a37ee8c013ea0287cd
+            executable: hwi
           - os: windows-2025
-            bundle: msi
+            platform: windows-x86_64
+            archive: hwi-3.2.0-windows-x86_64.zip
+            archive_sha256: 2f1a5574647e3ce11b1a05feab2fcbbf17061937c970d321d7f4c28a7b6eca23
+            executable: hwi.exe
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -24,50 +45,76 @@ jobs:
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
           node-version: 24.19.0
+          cache: pnpm
       - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
         with:
           toolchain: 1.97.1
           components: clippy,rustfmt
-      - name: Install Linux runtime/build dependencies
+      - name: Install Linux build dependencies
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends build-essential libappindicator3-dev librsvg2-dev libssl-dev libwebkit2gtk-4.1-dev patchelf ripgrep
+          sudo apt-get install -y --no-install-recommends \
+            build-essential libappindicator3-dev librsvg2-dev libssl-dev \
+            libudev-dev libwebkit2gtk-4.1-dev patchelf ripgrep
       - run: pnpm install --frozen-lockfile
-      # All gates retained: rc03 currently fails its independent source-policy review.
-      - run: pnpm validate
+      - run: pnpm audit --prod --audit-level high
+      - name: Run mandatory validation and preserve the public-release stop
         shell: bash
-      - run: cargo fmt --check
+        run: |
+          set +e
+          pnpm validate 2>&1 | tee "$RUNNER_TEMP/pnpm-validate.log"
+          status=${PIPESTATUS[0]}
+          set -e
+          test "$status" -ne 0
+          grep -F "package.json changed after the mainnet-candidate policy snapshot was reviewed" "$RUNNER_TEMP/pnpm-validate.log"
+          node --test scripts/release/release-version.test.mjs
+          pnpm release:test:update
+          pnpm release:test:hwi
+          pnpm release:test:compare
+          pnpm test:dev-runtime
+          pnpm check
+          pnpm test
+          pnpm build
+          pnpm build:testnet4
+      - name: Validate Rust on the native host
         working-directory: src-tauri
-      - run: cargo clippy --locked --all-targets --all-features -- -D warnings
-        working-directory: src-tauri
-      - run: cargo test --locked --all-features
-        working-directory: src-tauri
-      - name: Build isolated Signet package (no bundled helper or Mainnet)
-        run: pnpm exec tauri build --config src-tauri/tauri.experimental.conf.json --bundles ${{ matrix.bundle }}
+        run: |
+          cargo fmt --check
+          cargo clippy --locked --all-targets --all-features -- -D warnings
+          cargo test --locked --all-features
+        shell: bash
+      - name: Download and verify official HWI inputs
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/hwi-bin" "$RUNNER_TEMP/hwi-source"
+          curl --proto '=https' --tlsv1.2 --fail --location --silent --show-error \
+            --output "$RUNNER_TEMP/${{ matrix.archive }}" \
+            "https://github.com/bitcoin-core/HWI/releases/download/3.2.0/${{ matrix.archive }}"
+          echo "${{ matrix.archive_sha256 }}  $RUNNER_TEMP/${{ matrix.archive }}" | sha256sum --check --strict
+          tar -xf "$RUNNER_TEMP/${{ matrix.archive }}" -C "$RUNNER_TEMP/hwi-bin"
+          curl --proto '=https' --tlsv1.2 --fail --location --silent --show-error \
+            --output "$RUNNER_TEMP/hwi-3.2.0.tar.gz" \
+            https://github.com/bitcoin-core/HWI/releases/download/3.2.0/hwi-3.2.0.tar.gz
+          echo "4a225a2e22990fa114066feafcd3cb66a6ecaa3711a0d8a0cad61e7f8c507455  $RUNNER_TEMP/hwi-3.2.0.tar.gz" | sha256sum --check --strict
+          tar -xzf "$RUNNER_TEMP/hwi-3.2.0.tar.gz" -C "$RUNNER_TEMP/hwi-source" --strip-components=1
+          if [[ "$RUNNER_OS" != "Windows" ]]; then chmod 0755 "$RUNNER_TEMP/hwi-bin/${{ matrix.executable }}"; fi
+          node scripts/release/verify-hwi-artifact.mjs \
+            "$PWD/docs/hwi-artifact-manifest-3.2.0-${{ matrix.platform }}.json" \
+            "$RUNNER_TEMP/hwi-bin/${{ matrix.executable }}" \
+            "$RUNNER_TEMP/hwi-3.2.0.tar.gz" \
+            "$RUNNER_TEMP/hwi-source/LICENSE"
+      - name: Build fast-HWI internal packages
+        shell: bash
         env:
-          GROOT_BUILD_NETWORK: signet
-      - name: Verify native frontend
-        run: node scripts/release/verify-native-frontend-output.mjs build
-      - name: Generate target-specific SBOM
-        shell: bash
-        run: |
-          if [[ "$RUNNER_OS" == "Windows" ]]; then executable=src-tauri/target/release/Groot.exe; else executable=src-tauri/target/release/Groot; fi
-          node scripts/release/generate-sbom.mjs "$RUNNER_TEMP/groot-experimental.cdx.json" "$executable"
-      - name: Collect experimental owner-test evidence
-        shell: bash
-        run: |
-          mkdir -p experimental-artifacts
-          if [[ "$RUNNER_OS" == "Windows" ]]; then cp src-tauri/target/release/bundle/msi/*.msi experimental-artifacts/; else cp src-tauri/target/release/bundle/deb/*.deb experimental-artifacts/; fi
-          cp "$RUNNER_TEMP/groot-experimental.cdx.json" experimental-artifacts/
-          cp docs/experimental-desktop.md docs/release-notes-5.2.0.md experimental-artifacts/
-          git rev-parse HEAD > experimental-artifacts/SOURCE-COMMIT
-          cd experimental-artifacts
-          if [[ "$RUNNER_OS" == "Windows" ]]; then sha256sum *.msi > SHA256SUMS; else sha256sum *.deb > SHA256SUMS; fi
-      # Dispatch-only supporting evidence, never public release publication or PR upload.
+          GROOT_HWI_SOURCE: ${{ runner.temp }}/hwi-bin/${{ matrix.executable }}
+          GROOT_HWI_SOURCE_ARCHIVE: ${{ runner.temp }}/hwi-3.2.0.tar.gz
+          GROOT_HWI_LICENSE: ${{ runner.temp }}/hwi-source/LICENSE
+          GROOT_CROSS_PLATFORM_OUT: ${{ runner.temp }}/groot-${{ matrix.platform }}
+        run: node scripts/release/build-cross-platform-testnet4.mjs
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
-          name: experimental-${{ matrix.os }}-${{ github.sha }}
-          path: experimental-artifacts/
+          name: groot-5.4.0-rc01-${{ matrix.platform }}-${{ github.sha }}
+          path: ${{ runner.temp }}/groot-${{ matrix.platform }}/
           if-no-files-found: error
           retention-days: 14

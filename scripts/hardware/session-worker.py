@@ -1,8 +1,8 @@
 """One client, one fresh full-account proof, at most one authorized action.
 
-Native routing admits only the active Testnet4 or Mainnet scope in the internal
-multi-network app. No state survives process exit. Rust authenticates the whole
-runtime before spawn and independently checks identity/result afterward.
+Native routing admits only the active Testnet4 or Mainnet scope in an approved
+sealed-runtime build. No state survives process exit. Rust authenticates the
+whole runtime before spawn and independently checks identity/result afterward.
 """
 import contextlib
 import json

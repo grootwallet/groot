@@ -45,7 +45,7 @@ contains_fixed '"authorizedTag": "v5.3.0"' docs/mainnet-release-authorization.js
 contains_fixed '"decisionAdr": "0105"' docs/mainnet-release-authorization.json \
   || fail "the authorization record does not name ADR 0105"
 release_version="$(node -p "require('./package.json').version")"
-if [[ "$release_version" =~ ^5\.3\.0-rc[1-9][0-9]*$ ]]; then
+if [[ "$release_version" =~ ^5\.3\.0-rc[1-9][0-9]*$ || "$release_version" =~ ^5\.4\.0-rc[0-9]{2}$ ]]; then
   if node scripts/release/assert-public-release-authorized.mjs "$(git rev-parse HEAD)" >/dev/null 2>&1; then
     fail "a prerelease candidate was authorized for public packaging"
   fi

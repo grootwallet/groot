@@ -32,6 +32,7 @@ const safePath = (name) =>
   /^[A-Za-z0-9_./+-]+$/.test(name) &&
   !isAbsolute(name) &&
   name.split('/').every((part) => part && part !== '.' && part !== '..');
+const normalizedArchivePath = (name) => name.replaceAll('\\', '/');
 
 // Reads data only. Never imports or executes any Python from the archive.
 export function readHwiRuntimeArchive(bytes, expectedDigest, session = false) {
@@ -43,6 +44,10 @@ export function readHwiRuntimeArchive(bytes, expectedDigest, session = false) {
     fail();
   const cookie = bytes.lastIndexOf(MAGIC);
   if (cookie < 0 || cookie + 88 > bytes.length) fail();
+  const libraryField = bytes.subarray(cookie + 24, cookie + 88);
+  const libraryTerminator = libraryField.indexOf(0);
+  if (libraryTerminator < 0) fail();
+  const pythonLibrary = libraryField.subarray(0, libraryTerminator).toString();
   const size = bytes.readUInt32BE(cookie + 8);
   const tocOffset = bytes.readUInt32BE(cookie + 12);
   const tocLength = bytes.readUInt32BE(cookie + 16);
@@ -51,7 +56,7 @@ export function readHwiRuntimeArchive(bytes, expectedDigest, session = false) {
     start < 0 ||
     tocOffset + tocLength !== size - 88 ||
     bytes.readUInt32BE(cookie + 20) !== 309 ||
-    bytes.subarray(cookie + 24, cookie + 31).toString() !== 'Python\0'
+    !['Python', 'libpython3.9.so.1.0', 'python39.dll'].includes(pythonLibrary)
   )
     fail();
   const toc = bytes.subarray(start + tocOffset, start + tocOffset + tocLength);
@@ -80,7 +85,7 @@ export function readHwiRuntimeArchive(bytes, expectedDigest, session = false) {
     const nameBytes = toc.subarray(offset + 18, offset + length);
     const terminator = nameBytes.indexOf(0);
     if (terminator < 0 || nameBytes.subarray(terminator).some((byte) => byte !== 0)) fail();
-    const name = nameBytes.subarray(0, terminator).toString('utf8');
+    const name = normalizedArchivePath(nameBytes.subarray(0, terminator).toString('utf8'));
     offset += length;
     if (kind === 'o') {
       if (name !== 'pyi-contents-directory _internal') fail();
@@ -101,7 +106,13 @@ export function readHwiRuntimeArchive(bytes, expectedDigest, session = false) {
     if (data.length !== originalLength || expanded > MAX_BYTES) fail();
     entries.push({ name, kind, data });
   }
-  if (!contentsDirectory || !entries.some((entry) => entry.name === 'Python' && entry.kind === 'n'))
+  if (
+    !contentsDirectory ||
+    !entries.some(
+      (entry) =>
+        entry.name === pythonLibrary || (pythonLibrary === 'Python' && entry.name === 'Python')
+    )
+  )
     fail();
   return entries;
 }
@@ -110,7 +121,7 @@ export function runtimeInventory(root) {
   if (
     realpathSync(root) !== resolve(root) ||
     !lstatSync(root).isDirectory() ||
-    lstatSync(root).mode & 0o022
+    (process.platform !== 'win32' && lstatSync(root).mode & 0o022)
   )
     fail();
   const files = [];
@@ -127,7 +138,7 @@ export function runtimeInventory(root) {
       const stat = lstatSync(path);
       // POSIX symlink mode bits are not enforced (Linux reports 0777). Verify
       // the link target below; permissions matter for files and directories.
-      if (!stat.isSymbolicLink() && stat.mode & 0o022) fail();
+      if (process.platform !== 'win32' && !stat.isSymbolicLink() && stat.mode & 0o022) fail();
       if (stat.isSymbolicLink()) {
         const target = readlinkSync(path);
         if (!safePath(target) || !realpathSync(path).startsWith(`${realpathSync(root)}/`)) fail();
@@ -191,8 +202,8 @@ function signProductionRuntime(root, identity) {
 
 export function prepareHwiRuntime(source, output, expectedDigest, session = false, identity) {
   if (
-    process.platform !== 'darwin' ||
-    process.arch !== 'arm64' ||
+    !['darwin', 'linux', 'win32'].includes(process.platform) ||
+    !['arm64', 'x64'].includes(process.arch) ||
     existsSync(output) ||
     !lstatSync(source).isFile() ||
     lstatSync(source).isSymbolicLink()
@@ -203,20 +214,27 @@ export function prepareHwiRuntime(source, output, expectedDigest, session = fals
   for (const entry of entries.filter((entry) => entry.kind !== 'n')) {
     const path = join(output, entry.name);
     mkdirSync(dirname(path), { recursive: true, mode: 0o755 });
-    writeFileSync(path, entry.data, { flag: 'wx', mode: entry.kind === 'b' ? 0o755 : 0o644 });
-    chmodSync(path, entry.kind === 'b' ? 0o755 : 0o644);
+    const executable =
+      entry.kind === 'b' && !/\.(?:zip|pem|txt|typed|dist-info\/)/.test(entry.name);
+    writeFileSync(path, entry.data, { flag: 'wx', mode: executable ? 0o755 : 0o644 });
+    if (process.platform !== 'win32') chmodSync(path, executable ? 0o755 : 0o644);
   }
   for (const entry of entries.filter((entry) => entry.kind === 'n')) {
-    const target = entry.data.toString('utf8').replace(/\0$/, '');
+    const target = normalizedArchivePath(entry.data.toString('utf8').replace(/\0$/, ''));
     if (!safePath(target)) fail();
     const path = join(output, entry.name);
     mkdirSync(dirname(path), { recursive: true, mode: 0o755 });
-    symlinkSync(target, path);
+    if (process.platform === 'darwin') symlinkSync(target, path);
+    else {
+      const targetPath = join(output, target);
+      if (!lstatSync(targetPath).isFile()) fail();
+      cpSync(targetPath, path, { force: false, errorOnExist: true });
+    }
   }
   // The one-file payload omits the framework resource seal. Internal RCs
   // restore it ad hoc; production signs every extracted Mach-O with the
   // reviewed Developer ID before the runtime manifest is frozen.
-  if (!identity) {
+  if (process.platform === 'darwin' && !identity) {
     execFileSync(
       '/usr/bin/codesign',
       ['--force', '--sign', '-', '--timestamp=none', join(output, 'Python.framework')],
@@ -246,36 +264,51 @@ export function prepareHwiRuntime(source, output, expectedDigest, session = fals
         mode: 0o644
       });
     }
-    execFileSync(
-      '/usr/bin/clang',
-      [
-        '-O2',
-        '-Wall',
-        '-Wextra',
-        '-Werror',
-        '-o',
-        join(output, 'groot-hwi-session'),
-        join(helperSource, 'session-launcher.c')
-      ],
-      { stdio: 'pipe' }
+    const launcher = join(
+      output,
+      process.platform === 'win32' ? 'groot-hwi-session.exe' : 'groot-hwi-session'
     );
-    chmodSync(join(output, 'groot-hwi-session'), 0o755);
-    if (!identity) {
+    if (process.platform === 'darwin') {
       execFileSync(
-        '/usr/bin/codesign',
-        ['--force', '--sign', '-', '--timestamp=none', join(output, 'groot-hwi-session')],
+        '/usr/bin/clang',
+        [
+          '-O2',
+          '-Wall',
+          '-Wextra',
+          '-Werror',
+          '-o',
+          launcher,
+          join(helperSource, 'session-launcher.c')
+        ],
         { stdio: 'pipe' }
       );
+    } else {
       execFileSync(
-        '/usr/bin/codesign',
-        ['--verify', '--strict', join(output, 'groot-hwi-session')],
-        {
-          stdio: 'pipe'
-        }
+        'rustc',
+        [
+          '--edition=2021',
+          '-O',
+          '-C',
+          'strip=symbols',
+          '-o',
+          launcher,
+          join(helperSource, 'session-launcher.rs')
+        ],
+        { stdio: 'pipe' }
       );
+    }
+    if (process.platform !== 'win32') chmodSync(launcher, 0o755);
+    if (process.platform === 'darwin' && !identity) {
+      execFileSync('/usr/bin/codesign', ['--force', '--sign', '-', '--timestamp=none', launcher], {
+        stdio: 'pipe'
+      });
+      execFileSync('/usr/bin/codesign', ['--verify', '--strict', launcher], {
+        stdio: 'pipe'
+      });
     }
   }
   if (identity) {
+    if (process.platform !== 'darwin') fail();
     if (!session) fail();
     signProductionRuntime(output, identity);
   }
