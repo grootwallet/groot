@@ -124,7 +124,7 @@ jobs:
             HWI_ARCHIVE_PATH="$RUNNER_TEMP/hwi-3.2.0.tar.gz" \
               HWI_DESTINATION_PATH="$RUNNER_TEMP/hwi-source" \
               powershell.exe -NoProfile -NonInteractive -Command \
-                'tar.exe -xzf $env:HWI_ARCHIVE_PATH -C $env:HWI_DESTINATION_PATH --strip-components=1; exit $LASTEXITCODE'
+                '& "$env:SystemRoot\System32\tar.exe" -xzf $env:HWI_ARCHIVE_PATH -C $env:HWI_DESTINATION_PATH --strip-components=1; exit $LASTEXITCODE'
           else
             tar -xzf "$RUNNER_TEMP/hwi-3.2.0.tar.gz" -C "$RUNNER_TEMP/hwi-source" --strip-components=1
           fi

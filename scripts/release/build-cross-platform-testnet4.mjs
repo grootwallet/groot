@@ -56,7 +56,7 @@ const stage = join(tauriRoot, '.release-stage');
 const resourceName = process.platform === 'win32' ? 'hwi.exe' : 'hwi';
 const stagedHwi = join(stage, resourceName);
 const stagedRuntime = join(stage, 'hwi-runtime');
-const bundles = process.platform === 'win32' ? ['msi', 'nsis'] : ['deb', 'appimage'];
+const bundles = process.platform === 'win32' ? ['msi', 'nsis'] : ['deb'];
 const digest = (path) => createHash('sha256').update(readFileSync(path)).digest('hex');
 
 const requireRegular = (path, maximum) => {
@@ -156,16 +156,6 @@ try {
       cwd: repoRoot,
       env: {
         ...process.env,
-        ...(process.platform === 'linux'
-          ? {
-              // Ubuntu 24.04 system libraries can contain RELR sections that
-              // the legacy linuxdeploy strip binary cannot parse. Groot is
-              // already compiled as an optimized release binary; this keeps
-              // linuxdeploy from corrupting or rejecting copied system libs.
-              NO_STRIP: 'true',
-              APPIMAGE_EXTRACT_AND_RUN: '1'
-            }
-          : {}),
         GROOT_BUILD_COMMIT: commit,
         GROOT_BUILD_NETWORK: 'testnet4',
         GROOT_BUNDLED_HWI_RESOURCE: resourceName,
@@ -179,7 +169,7 @@ try {
   );
 
   mkdirSync(outputRoot, { recursive: true, mode: 0o755 });
-  const extensions = process.platform === 'win32' ? ['.msi', '.exe'] : ['.deb', '.AppImage'];
+  const extensions = process.platform === 'win32' ? ['.msi', '.exe'] : ['.deb'];
   const collect = (directory) => {
     if (!existsSync(directory)) return [];
     return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
