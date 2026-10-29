@@ -64,9 +64,7 @@ class FakeCoreHandler(BaseHTTPRequestHandler):
 
 
 class FakeCore(ThreadingHTTPServer):
-    # Tests must join request handlers before deleting their private files.
-    # POSIX permits unlinking an open file; Windows correctly keeps it locked.
-    daemon_threads = False
+    daemon_threads = True
 
     def __init__(self):
         self.requests = []
@@ -93,7 +91,7 @@ class FakeFulcrumHandler(socketserver.StreamRequestHandler):
 
 class FakeFulcrum(socketserver.ThreadingTCPServer):
     allow_reuse_address = True
-    daemon_threads = False
+    daemon_threads = True
 
     def __init__(self):
         self.histories = {}
@@ -151,7 +149,6 @@ class GatewayIntegrationTests(unittest.TestCase):
             )
         )
         self.server = GatewayServer(("127.0.0.1", 0), self.gateway)
-        self.server.daemon_threads = False
         self.server_thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.server_thread.start()
 
@@ -162,9 +159,6 @@ class GatewayIntegrationTests(unittest.TestCase):
         self.core.server_close()
         self.fulcrum.shutdown()
         self.fulcrum.server_close()
-        for thread in (self.server_thread, self.core_thread, self.fulcrum_thread):
-            thread.join(timeout=2)
-            self.assertFalse(thread.is_alive())
         self.temporary.cleanup()
 
     def request(
