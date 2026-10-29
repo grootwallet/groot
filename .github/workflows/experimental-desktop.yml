@@ -108,12 +108,26 @@ jobs:
             --output "$RUNNER_TEMP/${{ matrix.archive }}" \
             "https://github.com/bitcoin-core/HWI/releases/download/3.2.0/${{ matrix.archive }}"
           echo "${{ matrix.archive_sha256 }}  $RUNNER_TEMP/${{ matrix.archive }}" | sha256sum --check --strict
-          tar -xf "$RUNNER_TEMP/${{ matrix.archive }}" -C "$RUNNER_TEMP/hwi-bin"
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            HWI_ARCHIVE_PATH="$RUNNER_TEMP/${{ matrix.archive }}" \
+              HWI_DESTINATION_PATH="$RUNNER_TEMP/hwi-bin" \
+              powershell.exe -NoProfile -NonInteractive -Command \
+                'Expand-Archive -LiteralPath $env:HWI_ARCHIVE_PATH -DestinationPath $env:HWI_DESTINATION_PATH'
+          else
+            tar -xf "$RUNNER_TEMP/${{ matrix.archive }}" -C "$RUNNER_TEMP/hwi-bin"
+          fi
           curl --proto '=https' --tlsv1.2 --fail --location --silent --show-error \
             --output "$RUNNER_TEMP/hwi-3.2.0.tar.gz" \
             https://github.com/bitcoin-core/HWI/releases/download/3.2.0/hwi-3.2.0.tar.gz
           echo "4a225a2e22990fa114066feafcd3cb66a6ecaa3711a0d8a0cad61e7f8c507455  $RUNNER_TEMP/hwi-3.2.0.tar.gz" | sha256sum --check --strict
-          tar -xzf "$RUNNER_TEMP/hwi-3.2.0.tar.gz" -C "$RUNNER_TEMP/hwi-source" --strip-components=1
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            HWI_ARCHIVE_PATH="$RUNNER_TEMP/hwi-3.2.0.tar.gz" \
+              HWI_DESTINATION_PATH="$RUNNER_TEMP/hwi-source" \
+              powershell.exe -NoProfile -NonInteractive -Command \
+                'tar.exe -xzf $env:HWI_ARCHIVE_PATH -C $env:HWI_DESTINATION_PATH --strip-components=1; exit $LASTEXITCODE'
+          else
+            tar -xzf "$RUNNER_TEMP/hwi-3.2.0.tar.gz" -C "$RUNNER_TEMP/hwi-source" --strip-components=1
+          fi
           if [[ "$RUNNER_OS" != "Windows" ]]; then chmod 0755 "$RUNNER_TEMP/hwi-bin/${{ matrix.executable }}"; fi
           node scripts/release/verify-hwi-artifact.mjs \
             "$PWD/docs/hwi-artifact-manifest-3.2.0-${{ matrix.platform }}.json" \
