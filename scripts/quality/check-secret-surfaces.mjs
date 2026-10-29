@@ -13,6 +13,10 @@ const fail = (message) => {
   process.exit(1);
 };
 
+export function normalizeRepositoryPath(path) {
+  return path.replaceAll('\\', '/');
+}
+
 function sourceFiles(directory) {
   const absolute = fileURLToPath(new URL(`${directory}/`, root));
   const visit = (path) =>
@@ -22,7 +26,7 @@ function sourceFiles(directory) {
       return ['.rs', '.ts', '.svelte'].includes(extname(entry.name)) ? [child] : [];
     });
   return visit(absolute).map((path) => ({
-    path: relative(rootPath, path),
+    path: normalizeRepositoryPath(relative(rootPath, path)),
     content: readFileSync(path, 'utf8')
   }));
 }

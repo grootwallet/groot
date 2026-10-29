@@ -7,11 +7,19 @@ import {
   approvedCapabilityPermissions,
   hasUnreviewedRustTelemetryDependency,
   hasUnreviewedLogging,
+  normalizeRepositoryPath,
   sensitiveStringIsWrappedBeforeFallibleWork,
   stripRustTestModules,
   unreviewedTelemetryDependency,
   validateCsp
 } from './check-secret-surfaces.mjs';
+
+test('normalizes Windows repository paths before security classification', () => {
+  assert.equal(
+    normalizeRepositoryPath('src-tauri\\src\\wallet\\coordination_commands\\tests.rs'),
+    'src-tauri/src/wallet/coordination_commands/tests.rs'
+  );
+});
 
 const approved = JSON.stringify({
   permissions: ['core:default', 'clipboard-manager:allow-write-text']
