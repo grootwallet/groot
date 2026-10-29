@@ -59,6 +59,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm audit --prod --audit-level high
       - name: Run mandatory validation and preserve the public-release stop
+        if: runner.os == 'Linux'
         shell: bash
         run: |
           set +e
@@ -72,6 +73,23 @@ jobs:
           pnpm release:test:hwi
           pnpm release:test:compare
           pnpm test:dev-runtime
+          pnpm check
+          pnpm test
+          pnpm build
+          pnpm build:testnet4
+      - name: Run platform-neutral Windows validation
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          pnpm format:check
+          pnpm test:agent-scaffolding
+          pnpm test:boundaries
+          pnpm test:secret-surfaces
+          pnpm test:supply-chain
+          pnpm test:brand
+          pnpm test:versions
+          pnpm test:localization
+          pnpm test:hardware-preflight
           pnpm check
           pnpm test
           pnpm build
