@@ -39,12 +39,10 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Preserve repository line endings on Windows
+      - name: Verify repository line endings on Windows
         if: runner.os == 'Windows'
         shell: bash
         run: |
-          git config core.autocrlf false
-          git checkout-index --all --force
           if git ls-files --eol | grep -E 'w/(crlf|mixed)'; then
             echo 'Windows checkout still contains converted text files' >&2
             exit 1
