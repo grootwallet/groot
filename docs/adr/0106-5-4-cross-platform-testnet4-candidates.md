@@ -40,6 +40,11 @@ The final `5.4.0` version, Mainnet enablement, and public Windows/Linux support
 are not authorized by this decision. The v5.3.0 authorization record remains
 unchanged.
 
+The Ubuntu artifact is a DEB. The Windows MSI/NSIS package metadata uses the
+numeric prerelease `5.4.0-1` because Windows Installer rejects text prerelease
+identifiers. The application, source package and build evidence continue to
+identify this internal candidate as `5.4.0-rc01`.
+
 ## Compatibility and standards
 
 No wallet, registry, descriptor, credential, backup, proposal, label or

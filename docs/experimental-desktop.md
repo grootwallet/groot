@@ -3,7 +3,10 @@
 The [cross-platform workflow](../.github/workflows/experimental-desktop.yml)
 builds unsigned `5.4.0-rc01` Testnet4-only packages on native GitHub-hosted
 Windows Server 2025 x86-64 and Ubuntu 24.04 x86-64 runners. It produces MSI/NSIS installers and
-DEB/AppImage packages with SBOM, source commit, build facts and SHA-256 evidence.
+an Ubuntu DEB with SBOM, source commit, build facts and SHA-256 evidence. Windows
+Installer requires a numeric prerelease identifier, so the MSI/NSIS package
+metadata uses `5.4.0-1`; Groot's visible candidate identity and evidence remain
+`5.4.0-rc01`.
 
 Each build downloads the official HWI 3.2.0 platform archive and source,
 verifies the published archive and inner-executable hashes, and extracts the

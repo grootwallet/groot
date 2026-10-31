@@ -140,6 +140,7 @@ try {
   const config = {
     ...baseConfig,
     productName: 'Groot 5.4 Testnet4',
+    version: process.platform === 'win32' ? '5.4.0-1' : '5.4.0-rc01',
     identifier: 'app.groot.wallet.testnet4.internal54',
     bundle: {
       ...(baseConfig.bundle ?? {}),
