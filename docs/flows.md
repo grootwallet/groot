@@ -58,6 +58,8 @@ Unknown required payment parameters and unsupported Payjoin requests fail withou
 
 Invalid/stale quotes disable continuation. Confirmed originals make saved proposals read-only; explicit discard preserves the payment. Final submission rechecks the configured node's original mempool state. Reopen resumes a proposal and collected signatures; navigation preserves it, destructive discard asks confirmation.
 
+Camera QR import starts with **Allow camera**. Denied, busy and unavailable capture have distinct localized errors and an in-place retry. Closing releases capture, including permission granted after closure. Payment entry and PSBT file import remain available when capture fails.
+
 ## Coins, activity and notifications
 
 `Coins → inspect provenance/reuse → select or confirm freeze/unfreeze → native eligibility state`

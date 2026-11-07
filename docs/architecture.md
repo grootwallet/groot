@@ -82,6 +82,8 @@ BIP129 QR enrollment authenticates signer records and binds the final complete p
 
 Shell presentation → WalletPort app-update methods → Rust `updates.rs`. This application-wide service never reads wallet state. Native state holds selected assets and opaque reveal capabilities; raw paths/URLs/keys are not accepted from IPC. Local preferences own notes dismissal and once-daily opt-in. The compiled owner-verified key is separate from the release being checked. ADR 0086 owns bounds, redirect, cache and cancellation policy.
 
+Both QR components use `qr-camera.ts` for user-initiated permission, local decoder startup and teardown. It releases late permission streams and rejects obsolete decoder callbacks; payment parsing and UR/proposal validation remain with their existing native owners.
+
 ## Diagnostics and release
 
 Allowlisted diagnostics retain stable codes and coarse scalar context, never arbitrary errors or sensitive payloads. Clipboard is explicit and typed; no secret reads or analytics sink. The [security model](security-model.md) owns control details.

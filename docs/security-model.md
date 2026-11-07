@@ -55,6 +55,8 @@ Rust/Tauri is trusted for key derivation, credential verification, descriptor pa
 - BSMS and UR inputs are public but adversarial: private material, noncanonical descriptors/CBOR, wrong networks/types, invalid first addresses, oversized payloads, too many frames, and malformed PSBT magic fail closed.
 - Direct RPC uses a transport constructed separately from the SOCKS-capable transport. An enabled proxy dependency must never silently reroute localhost or direct HTTPS traffic.
 
+The macOS app signature permits only `com.apple.security.device.camera`, with an explanatory `NSCameraUsageDescription`. Groot retains library validation; the separate HWI exception never transfers to the app. Camera startup is user initiated and QR decoding stays local. [ADR 0108](adr/0108-macos-camera-permission-and-package-verification.md) records the packaging correction and review.
+
 ## Release boundary
 
 Public macOS Apple-silicon v5.3.0 was published from `6a39bf50b2a6a042354b43369765a9af2174d061` under ADRs 0104/0105. Its authorization and exact-device evidence do not transfer to later source, platforms or policies. The internal `0.5.4-rc01` Windows/Linux Testnet4 candidates, iOS phone signing and fixed Continuity previews retain their [current status](implementation-status.md) limits. Public v0.5.4 requires separate source, package, platform and release approval; ADR 0107 also requires an explicit update transition from historical v5.3.0. The [Mainnet checklist](mainnet-release-checklist.md) owns release acceptance. [Deferred hardening decisions](security-hardening-decision-queue-2026-10-04.md) remain proposals.

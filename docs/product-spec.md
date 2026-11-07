@@ -84,6 +84,8 @@ Appearance/language/discreet/zoom preferences stay local. EN/FR/ES translate pro
 
 App logs contain allowlisted lifecycle/outcome codes and safe scalar context, never credentials, keys, descriptors, PSBTs, full identifiers, endpoints, names, labels or amounts. Logs are optional diagnostics, not the wallet ledger. Copy/export and explorer opening are explicit; explorer access discloses the privacy tradeoff.
 
+Camera scanning requires an explicit user action and system permission, uses local QR decoding without audio, and releases capture on completion or closure. Failure explains denial, camera contention or unavailable capture, with retry and manual/file alternatives.
+
 ## App releases
 
 On the first opening of each new exact version, show dismissible baked-in EN/FR/ES notes offline. Dismissal is an app preference, independent of wallet identity. Updates offers a manual GitHub check and an explicit once-daily opt-in; explain IP/app-version disclosure before enabling it. Settings places a small text Updates action beside the build identity. The side-menu text action appears only for a detected newer stable release. Newer stable releases expose a small corner action without covering wallet modals, toasts or mobile navigation.
