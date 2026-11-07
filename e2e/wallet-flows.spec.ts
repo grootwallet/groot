@@ -992,10 +992,28 @@ test('creates an external-signer wallet, signs by cable, and configures its isol
   const scanQrDialog = page.getByRole('dialog', { name: 'Scan signed PSBT' });
   await scanQrDialog.getByRole('button', { name: 'Close' }).click();
   await expect(scanQrDialog).toBeHidden();
+  await page.evaluate(async () => {
+    const { walletService } = await import('/src/lib/wallet/index.ts');
+    const scan = walletService.listHardwareDevices.bind(walletService);
+    walletService.listHardwareDevices = () => {
+      walletService.listHardwareDevices = scan;
+      return new Promise((resolve, reject) => {
+        Object.assign(window, { finishCableScan: () => scan().then(resolve, reject) });
+      });
+    };
+    const sign = walletService.signExternalWithHardware.bind(walletService);
+    walletService.signExternalWithHardware = (...args) => {
+      walletService.signExternalWithHardware = sign;
+      return new Promise((resolve, reject) => {
+        Object.assign(window, { finishCableSignature: () => sign(...args).then(resolve, reject) });
+      });
+    };
+  });
   await page.getByRole('button', { name: 'Sign with cable' }).click();
   await expect(
     page.getByRole('status', { name: 'Hardware device scan in progress' })
   ).toContainText('Looking for hardware devices');
+  await page.evaluate(() => (window as any).finishCableScan());
   const hardwareReview = page.getByRole('dialog', { name: 'Sign with hardware' });
   await expect(hardwareReview.getByText('Fee rate', { exact: true })).toBeHidden();
   await hardwareReview.getByText('View more details', { exact: true }).click();
@@ -1009,6 +1027,7 @@ test('creates an external-signer wallet, signs by cable, and configures its isol
   await expect(page.getByRole('status', { name: 'Waiting for hardware signature' })).toContainText(
     'Review and approve on the device.'
   );
+  await page.evaluate(() => (window as any).finishCableSignature());
   await expect(page.getByText('Signature verified')).toBeVisible();
   const signedReview = page.getByRole('region', { name: 'Signed transaction review' });
   await expect(signedReview).toBeVisible();
