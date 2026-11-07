@@ -1,6 +1,6 @@
 # ADR 0106: 5.4 cross-platform Testnet4 candidates
 
-- Status: accepted
+- Status: accepted; candidate version naming superseded by ADR 0107
 - Date: 2026-10-29
 
 ## Context

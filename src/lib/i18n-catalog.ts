@@ -101,6 +101,20 @@ export const copyCatalog = {
     es: 'Falló la descarga de actualización'
   },
   'Groot v{version}': { fr: 'Groot v{version}', es: 'Groot v{version}' },
+  'Maintenance work makes wallet screens, restart recovery and device operations more predictable.':
+    {
+      fr: 'Les travaux de maintenance rendent les écrans, la reprise après redémarrage et les opérations avec les appareils plus prévisibles.',
+      es: 'El mantenimiento hace más predecibles las pantallas, la recuperación tras reiniciar y las operaciones con dispositivos.'
+    },
+  'Windows and Ubuntu Testnet4 builds now bundle the verified fast HWI runtime for physical testing.':
+    {
+      fr: 'Les versions Testnet4 pour Windows et Ubuntu intègrent désormais le moteur HWI rapide vérifié pour les tests physiques.',
+      es: 'Las versiones Testnet4 para Windows y Ubuntu ahora incluyen el entorno HWI rápido verificado para pruebas físicas.'
+    },
+  'Version numbering returns to the pre-1.0 line with the 0.5.4 candidate.': {
+    fr: 'La numérotation revient à la série antérieure à 1.0 avec la version candidate 0.5.4.',
+    es: 'La numeración vuelve a la serie anterior a 1.0 con la versión candidata 0.5.4.'
+  },
   'Seven hardware signers now connect, identify, verify addresses and sign much faster.': {
     fr: 'Sept appareils de signature matériels se connectent, s’identifient, vérifient les adresses et signent beaucoup plus vite.',
     es: 'Siete dispositivos de firma se conectan, se identifican, verifican direcciones y firman mucho más rápido.'

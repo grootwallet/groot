@@ -264,7 +264,7 @@ fn approved_runtime_scope(
             _ => false,
         };
     let cross_platform_candidate = network_is_testnet4
-        && version == "5.4.0-rc01"
+        && version == "0.5.4-rc01"
         && matches!(desktop_candidate, Some("linux-x86_64" | "windows-x86_64"));
     macos_release || cross_platform_candidate
 }
@@ -326,14 +326,14 @@ mod tests {
             true,
             None,
             Some("linux-x86_64"),
-            "5.4.0-rc01"
+            "0.5.4-rc01"
         ));
         assert!(approved_runtime_scope(
             false,
             true,
             None,
             Some("windows-x86_64"),
-            "5.4.0-rc01"
+            "0.5.4-rc01"
         ));
         for (multi, testnet4, team, candidate, version) in [
             (false, false, Some("6Z85HGDUU7"), None, "5.3.0"),
@@ -341,8 +341,8 @@ mod tests {
             (true, false, Some("6Z85HGDUU7"), None, "5.3.1"),
             (true, false, Some("OTHERTEAM1"), None, "5.3.0"),
             (true, false, None, None, "5.3.0"),
-            (false, true, None, Some("linux-x86_64"), "5.4.0"),
-            (false, true, None, Some("macos-arm64"), "5.4.0-rc01"),
+            (false, true, None, Some("linux-x86_64"), "0.5.4"),
+            (false, true, None, Some("macos-arm64"), "0.5.4-rc01"),
         ] {
             assert!(!approved_runtime_scope(
                 multi, testnet4, team, candidate, version

@@ -139,8 +139,8 @@ try {
   const baseConfig = JSON.parse(readFileSync(join(tauriRoot, 'tauri.testnet4.conf.json'), 'utf8'));
   const config = {
     ...baseConfig,
-    productName: 'Groot 5.4 Testnet4',
-    version: process.platform === 'win32' ? '5.4.0-1' : '5.4.0-rc01',
+    productName: 'Groot 0.5.4 Testnet4',
+    version: process.platform === 'win32' ? '0.5.4-1' : '0.5.4-rc01',
     identifier: 'app.groot.wallet.testnet4.internal54',
     bundle: {
       ...(baseConfig.bundle ?? {}),
@@ -197,7 +197,7 @@ try {
     process.execPath,
     [
       join(repoRoot, 'scripts/release/generate-sbom.mjs'),
-      join(outputRoot, 'groot-5.4.0-rc01.cdx.json'),
+      join(outputRoot, 'groot-0.5.4-rc01.cdx.json'),
       executable
     ],
     {
@@ -207,7 +207,7 @@ try {
   );
   const buildInfo = [
     `commit=${commit}`,
-    'version=5.4.0-rc01',
+    'version=0.5.4-rc01',
     'compiled_network=testnet4',
     `platform=${platform}`,
     'signing=unsigned-internal-owner-test',
@@ -222,7 +222,7 @@ try {
   writeFileSync(join(outputRoot, 'BUILD-INFO'), buildInfo);
   copyFileSync(manifestPath, join(outputRoot, basename(manifestPath)));
   copyFileSync(
-    join(repoRoot, 'docs/testing/5.4.0-cross-platform-hardware.md'),
+    join(repoRoot, 'docs/testing/0.5.4-cross-platform-hardware.md'),
     join(outputRoot, 'TESTING.md')
   );
   const evidenceFiles = readdirSync(outputRoot).sort();

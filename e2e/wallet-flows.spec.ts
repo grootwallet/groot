@@ -1,4 +1,7 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
+import { readFileSync } from 'node:fs';
+
+const APP_VERSION = JSON.parse(readFileSync('package.json', 'utf8')).version;
 
 async function expectAmountUnitsSeparated(scope: Locator) {
   const gaps = await scope.locator('.formatted-amount').evaluateAll((elements) =>
@@ -109,7 +112,10 @@ test('copies the public build identity with inline retry feedback', async ({ pag
   await page.goto('/unlock?fixture-locked-wallet-switch=1');
   const buildIdentity = page.getByRole('button', { name: 'Copy build information' });
   const displayedIdentity = (await buildIdentity.textContent())?.trim();
-  expect(displayedIdentity).toMatch(/^Groot v\d+\.\d+\.\d+(?:-rc[1-9][0-9]*)? · [a-z0-9-]+$/);
+  const identityParts = displayedIdentity?.split(' · ');
+  expect(identityParts).toHaveLength(2);
+  expect(identityParts?.[0]).toBe(`Groot v${APP_VERSION}`);
+  expect(identityParts?.[1]).toMatch(/^[a-z0-9-]+$/);
 
   await buildIdentity.click();
   const copyStatus = page.locator('.build-identity-sidebar .build-copy-status');

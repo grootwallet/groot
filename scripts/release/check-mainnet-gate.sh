@@ -45,7 +45,7 @@ contains_fixed '"authorizedTag": "v5.3.0"' docs/mainnet-release-authorization.js
 contains_fixed '"decisionAdr": "0105"' docs/mainnet-release-authorization.json \
   || fail "the authorization record does not name ADR 0105"
 release_version="$(node -p "require('./package.json').version")"
-if [[ "$release_version" =~ ^5\.3\.0-rc[1-9][0-9]*$ || "$release_version" =~ ^5\.4\.0-rc[0-9]{2}$ ]]; then
+if [[ "$release_version" =~ ^5\.3\.0-rc[1-9][0-9]*$ || "$release_version" =~ ^0\.5\.4-rc(0[1-9]|[1-9][0-9])$ ]]; then
   if node scripts/release/assert-public-release-authorized.mjs "$(git rev-parse HEAD)" >/dev/null 2>&1; then
     fail "a prerelease candidate was authorized for public packaging"
   fi
@@ -145,4 +145,4 @@ contains_fixed "Blockstream Jade" docs/mainnet-release-checklist.md \
 contains_fixed "The authorization covers macOS Apple silicon only." docs/mainnet-threat-model.md \
   || fail "the threat model no longer scopes the approved release platform"
 
-echo "Mainnet release gate: v5.2.0 approval remains exact; prerelease public packaging is blocked."
+echo "Mainnet release gate: historical v5.3.0 approval remains exact; prerelease public packaging is blocked."

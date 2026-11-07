@@ -1,6 +1,6 @@
 # Product behavior
 
-Canonical behavior for the `5.4.0-rc01` maintenance candidate, based on desktop [v5.3.0](https://github.com/grootwallet/groot/releases/tag/v5.3.0), published 2026-10-23. ADR 0105 owns v5.3.0's exact release authorization; ADR 0106 permits unsigned internal Windows/Linux Testnet4 packages only. This does not authorize final v5.4.0 or certify the separate Testnet4 iOS, Windows/Linux hardware, or Continuity previews; [current status](implementation-status.md) separates implementation from physical acceptance.
+Canonical behavior for the `0.5.4-rc01` maintenance candidate, based on the historically published desktop [v5.3.0](https://github.com/grootwallet/groot/releases/tag/v5.3.0), published 2026-10-23. ADR 0105 owns that release's exact authorization; ADR 0107 restores the intended pre-1.0 numbering and ADR 0106 permits unsigned internal Windows/Linux Testnet4 packages only. This does not authorize final v0.5.4 or certify the separate Testnet4 iOS, Windows/Linux hardware, or Continuity previews; [current status](implementation-status.md) separates implementation from physical acceptance.
 
 ## Mobile development boundary
 

@@ -2,14 +2,15 @@
 
 Implemented scope is in [current status](implementation-status.md). GitHub [issues](https://github.com/grootwallet/groot/issues) own live priority and acceptance; this page does not duplicate their state.
 
-The first production target is a **macOS Apple-silicon desktop release with both software and approved hardware wallets**.
+The current public baseline is the historical **v5.3.0 macOS Apple-silicon desktop release**. ADR 0107 restores the intended pre-1.0 numbering for the next release line.
 
 ## Next
 
-- Finish the current wallet restoration, first-scan consent, labels, deletion and hardware UX feedback; validate the exact replacement candidate before release.
-- Reduce maintenance risk through the [code cleanup plan](engineering-roadmap.md), starting with CSS.
-- Deliver the [5.3 mobile plan](mobile-5.3-plan.md): isolated iOS build, authenticated watch-only pairing, receive labels and bounded PSBT review first. Reuse the separate mobile branch selectively. Signing stays blocked pending security, recovery and physical-device evidence.
-- Add Windows/Linux releases only after packaging, filesystem, trusted HWI and device acceptance. PGP download signatures do not replace platform or runtime helper verification.
+- Validate the exact `0.5.4-rc01` candidate with the full automated harness and preserve the frozen public-release approval gate.
+- Complete physical iPhone pairing, fixed Continuity/Miniscript and Windows/Linux signer acceptance before expanding support claims.
+- Reduce maintenance risk through the [code cleanup plan](engineering-roadmap.md), continuing the small frontend and native ownership extractions already under test.
+- Define and test the explicit manual or bridge update from historical `v5.3.0` to final `v0.5.4` before release.
+- Sign Windows/Linux packages only after packaging, filesystem, trusted HWI and per-device acceptance. Download signatures do not replace platform or runtime-helper verification.
 
 ## Later, separately reviewed
 

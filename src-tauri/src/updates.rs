@@ -553,6 +553,9 @@ mod tests {
     #[test]
     fn versions_do_not_notify_for_same_older_or_prerelease_and_compare_numerically() {
         assert!(!newer("v0.5.1", "5.2.0-rc03").unwrap());
+        // ADR 0107: the public v5.3.0 -> v0.5.4 transition requires an
+        // explicitly reviewed bridge or manual upgrade; ordinary SemVer stays strict.
+        assert!(!newer("v0.5.4", "5.3.0").unwrap());
         assert!(!newer("v5.2.0", "5.2.0").unwrap());
         assert!(newer("v5.2.0", "5.2.0-rc03").unwrap());
         assert!(newer("v5.10.0", "5.9.0").unwrap());
@@ -696,7 +699,7 @@ mod preparation_tests {
         let current = Version::parse(env!("CARGO_PKG_VERSION")).unwrap();
         let next_version = format!("{}.0.0", current.major + 1);
         let name = artifact_name(&next_version, platform().unwrap());
-        let manifest = serde_json::to_vec(&serde_json::json!({"schemaVersion":1,"product":"Groot","channel":"stable","version":next_version,"artifact":name,"sha256":sha256::Hash::hash(installer).to_string(),"commit":"b".repeat(40),"minimumSupportedVersion":"5.2.0","rollbackAllowedFrom":[]})).unwrap();
+        let manifest = serde_json::to_vec(&serde_json::json!({"schemaVersion":1,"product":"Groot","channel":"stable","version":next_version,"artifact":name,"sha256":sha256::Hash::hash(installer).to_string(),"commit":"b".repeat(40),"minimumSupportedVersion":"0.0.0","rollbackAllowedFrom":[]})).unwrap();
         let signature = key.sign(&manifest).to_bytes().to_vec();
         let r = Release {
             tag_name: format!("v{next_version}"),

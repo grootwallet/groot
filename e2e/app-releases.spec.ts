@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { readFileSync } from 'node:fs';
+import { releaseNotes } from '../src/lib/release-notes';
 const APP_VERSION = JSON.parse(readFileSync('package.json', 'utf8')).version;
 for (const language of ['en', 'fr', 'es'] as const) {
   test(`offline release notes dismiss once per version (${language})`, async ({ page }) => {
@@ -16,7 +17,7 @@ for (const language of ['en', 'fr', 'es'] as const) {
       name: language === 'en' ? 'What’s new' : language === 'fr' ? 'Nouveautés' : 'Novedades'
     });
     await expect(modal).toBeVisible({ timeout: 20_000 });
-    await expect(modal.locator('li')).toHaveCount(6);
+    await expect(modal.locator('li')).toHaveCount(releaseNotes.length);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
       true
     );

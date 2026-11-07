@@ -57,21 +57,25 @@ describe('actual iOS linked network verification', () => {
     }
   });
 
-  it.each(['5.3.0-rc2', '5.3.0'])(
+  it.each([
+    ['5.3.0-rc2', '5.3.0', '530002'],
+    ['5.3.0', '5.3.0', '530002'],
+    ['0.5.4-rc01', '0.5.4', '540001']
+  ])(
     'prepares isolated %s metadata without changing signing and is idempotent',
-    (version) => {
+    (version, shortVersion, bundleVersion) => {
       const identity = {
         identifier: mobile.identifier,
         version,
-        bundleVersion: '530002'
+        bundleVersion
       };
       const source = `PRODUCT_BUNDLE_IDENTIFIER: ${mobile.identifier}\n      - path: Externals\n      - sdk: Security.framework\nCFBundleShortVersionString: 5.2.0\nCFBundleVersion: "5.2.0"\nCODE_SIGN_STYLE: Automatic\n`;
       const prepared = prepareIosProject(source, identity);
       expect(prepareIosProject(prepared, identity)).toBe(prepared);
       expect(prepared).toContain('excludes: ["**/*.a"]');
       expect(prepared).toContain('LocalAuthentication.framework');
-      expect(prepared).toContain('CFBundleVersion: "530002"');
-      expect(prepared).toContain('CFBundleShortVersionString: 5.3.0');
+      expect(prepared).toContain(`CFBundleVersion: "${bundleVersion}"`);
+      expect(prepared).toContain(`CFBundleShortVersionString: ${shortVersion}`);
       expect(prepared).toContain('CODE_SIGN_STYLE: Automatic');
       expect(() =>
         prepareIosProject(source.replace(mobile.identifier, desktop.identifier), identity)
@@ -83,6 +87,10 @@ describe('actual iOS linked network verification', () => {
     '5.2.0',
     '5.3.1',
     '5.4.0',
+    '0.5.4',
+    '0.5.4-rc00',
+    '0.5.4-rc1',
+    '0.5.4-rc100',
     '5.3.0-rc0',
     '5.3.0-rc01',
     '5.3.0-beta1',

@@ -28,7 +28,7 @@ fn main() {
     let candidate_platform = std::env::var("GROOT_DESKTOP_CANDIDATE_PLATFORM").ok();
     let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
     let cross_platform_fast_runtime_scope = network == "testnet4"
-        && env!("CARGO_PKG_VERSION") == "5.4.0-rc01"
+        && env!("CARGO_PKG_VERSION") == "0.5.4-rc01"
         && matches!(
             (target_os.as_str(), candidate_platform.as_deref()),
             ("linux", Some("linux-x86_64")) | ("windows", Some("windows-x86_64"))
