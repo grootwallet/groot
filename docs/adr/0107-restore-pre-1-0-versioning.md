@@ -30,6 +30,13 @@ installed internal `5.4.0-rc01` Windows/Linux packages may likewise reject the
 lower technical version; testers uninstall that disposable candidate before
 installing `0.5.4-rc01`.
 
+The restored updater orders only the historical `5.2.0` and `5.3.0` lines at
+their intended pre-1.0 positions (`0.5.2` and `0.5.3`). This prevents a
+`0.5.4` client from presenting an authentic older package as a newer update
+while preserving numbered-candidate ordering and normal future SemVer. It does
+not retroactively change the updater code already shipped in `v5.3.0`, so the
+approved bridge or manual transition remains required.
+
 The isolated iOS Testnet4 development build uses short version `0.5.4` and
 monotonic build number `540001`. This does not authorize a public iOS release.
 

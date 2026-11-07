@@ -80,9 +80,20 @@ fn stable_version(value: &str) -> Result<Version> {
     }
     Ok(version)
 }
+fn release_order(mut version: Version) -> Version {
+    // Groot 5.2.0 and 5.3.0 accidentally omitted the intended leading zero.
+    // Place those exact historical lines at 0.5.2 and 0.5.3 so the restored
+    // 0.5.4 line cannot offer an authentic old package as a newer update.
+    if version.major == 5 && version.patch == 0 && matches!(version.minor, 2 | 3) {
+        version.patch = version.minor;
+        version.minor = 5;
+        version.major = 0;
+    }
+    version
+}
 fn newer(tag: &str, current: &str) -> Result<bool> {
-    let available = stable_version(tag)?;
-    let current = Version::parse(current).map_err(|_| UpdateError::InvalidRelease)?;
+    let available = release_order(stable_version(tag)?);
+    let current = release_order(Version::parse(current).map_err(|_| UpdateError::InvalidRelease)?);
     Ok(available > current)
 }
 fn platform() -> Result<&'static str> {
@@ -553,15 +564,55 @@ mod tests {
     #[test]
     fn versions_do_not_notify_for_same_older_or_prerelease_and_compare_numerically() {
         assert!(!newer("v0.5.1", "5.2.0-rc03").unwrap());
-        // ADR 0107: the public v5.3.0 -> v0.5.4 transition requires an
-        // explicitly reviewed bridge or manual upgrade; ordinary SemVer stays strict.
-        assert!(!newer("v0.5.4", "5.3.0").unwrap());
+        // ADR 0107 restores the intended lineage without allowing signed
+        // historical packages to be replayed as newer updates.
+        assert!(newer("v0.5.4", "5.3.0").unwrap());
+        assert!(!newer("v5.2.0", "0.5.4-rc01").unwrap());
+        assert!(!newer("v5.3.0", "0.5.4-rc01").unwrap());
+        assert!(!newer("v5.3.0", "0.5.4").unwrap());
+        assert!(newer("v5.3.0", "5.3.0-rc18").unwrap());
+        assert!(newer("v0.5.4", "0.5.4-rc01").unwrap());
+        assert!(newer("v0.5.5", "0.5.4").unwrap());
+        assert!(newer("v1.0.0", "0.5.4").unwrap());
         assert!(!newer("v5.2.0", "5.2.0").unwrap());
         assert!(newer("v5.2.0", "5.2.0-rc03").unwrap());
         assert!(newer("v5.10.0", "5.9.0").unwrap());
         for version in ["v5.2.0-rc03", "5.2.0+build", "5.02.0", "../5.2.0", "5.2"] {
             assert!(stable_version(version).is_err());
         }
+    }
+    #[test]
+    fn preparation_rejects_historical_release_replay_before_download() {
+        let signing = SigningKey::from_bytes(&[7; 32]);
+        let filename = artifact_name("5.3.0", platform().unwrap());
+        let release_asset = |name: String, size| Asset {
+            browser_download_url: format!("{ASSET_ROOT}v5.3.0/{name}"),
+            name,
+            size,
+            state: "uploaded".to_owned(),
+        };
+        let release = Release {
+            tag_name: "v5.3.0".to_owned(),
+            draft: false,
+            prerelease: false,
+            assets: vec![
+                release_asset(filename.clone(), 1),
+                release_asset(format!("{filename}.update.json"), 1),
+                release_asset(format!("{filename}.update.sig"), 64),
+            ],
+        };
+        let state = UpdateState::default();
+        let result = prepare(
+            &state,
+            PathBuf::new(),
+            &signing.verifying_key(),
+            &release,
+            0,
+            |_| -> Result<std::io::Cursor<Vec<u8>>> {
+                panic!("historical replay reached the download boundary")
+            },
+        );
+        assert!(matches!(result, Err(UpdateError::InvalidRelease)));
     }
     #[test]
     fn signature_binds_bytes_platform_version_and_schema() {

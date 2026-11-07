@@ -15,6 +15,15 @@ node scripts/release/verify-update-bundle.mjs \
   /absolute/update.json /absolute/Groot.dmg /absolute/update.sig /absolute/public.pem
 ```
 
+## Version-number transition
+
+Historical `v5.3.0` clients use ordinary semantic-version ordering and therefore do not offer `v0.5.4` as a newer release. [ADR 0107](adr/0107-restore-pre-1-0-versioning.md) requires an explicitly approved and tested bridge release or a documented manual-upgrade procedure before public `v0.5.4` distribution. Do not weaken the general update comparison or present this exceptional numbering correction as a silent rollback.
+
+Starting with the restored line, update comparison maps only the historical
+`5.2.0` and `5.3.0` identities to their intended `0.5.2` and `0.5.3` ordering.
+This blocks replay of those signed historical packages to `0.5.4` clients. Test
+both transition directions whenever updater or version policy changes.
+
 ## Rollback
 
 Rollback is never silent. It is allowed only to a version named in the signed manifest, whose artifact and database compatibility are reverified from a clean copy. Preserve the original user data, never downgrade it in place without a tested migration path, and explain why the rollback is required. A signing-key or updater compromise requires incident response and a new trust decision, not a manifest generated with the suspected key.
