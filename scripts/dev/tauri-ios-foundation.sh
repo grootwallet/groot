@@ -38,7 +38,7 @@ rustup target list --installed | /usr/bin/grep -qx aarch64-apple-ios || {
 # LAN dev server, inherit a desktop profile, install, or select a phone here.
 export GROOT_BUILD_NETWORK=testnet4
 export PUBLIC_BITCOIN_NETWORK=testnet4
-export CARGO_TARGET_DIR="${REPOSITORY_ROOT}/src-tauri/target/mobile-5.3"
+export CARGO_TARGET_DIR="${REPOSITORY_ROOT}/src-tauri/target/mobile-0.5.4"
 # Tauri's Xcode bridge retains CARGO_* and PATH, but not GROOT_*.
 # The small scoped Cargo runner restores the network through Cargo config.
 export CARGO_GROOT_IOS_REAL_CARGO="$(command -v cargo)"
