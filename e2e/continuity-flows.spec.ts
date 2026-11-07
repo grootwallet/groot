@@ -38,6 +38,12 @@ for (const family of [false, true]) {
 test('Partner coins show every spending path and exact per-coin block status', async ({ page }) => {
   await page.goto('/coins?fixture-continuity=partner');
 
+  const timelineNote = page.locator('.coin-list > .warning-notice.coin-timeline-note');
+  await expect(timelineNote).toContainText(
+    'Delayed spending paths become available separately for each coin. The primary path remains available.'
+  );
+  await expect(timelineNote).not.toContainText('backup key');
+
   const firstCoin = page.locator('article.coin-row').first();
   await firstCoin.locator('.coin-details-toggle').click();
   const policy = firstCoin.locator('.coin-policy-section');
@@ -69,9 +75,20 @@ test('Partner coins show every spending path and exact per-coin block status', a
   }
 
   const ownerPath = paths.filter({ hasText: 'Owner: 2 of 3' });
-  await expect(ownerPath).toContainText('2 of 3 Owner signers');
-  await expect(ownerPath).toContainText('Owner signer 1');
-  await expect(ownerPath).toContainText('00000001');
+  await expect(ownerPath.getByText('2 of 3 Owner signers', { exact: true })).toBeVisible();
+  const ownerSigners = ownerPath.locator('details.coin-policy-signers');
+  await expect(ownerSigners).not.toHaveAttribute('open', '');
+  await expect(ownerSigners.getByText('Owner signer 1', { exact: true })).toBeHidden();
+  await expect(ownerSigners.getByText('00000001', { exact: true })).toBeHidden();
+  const ownerDisclosure = ownerSigners.locator('summary');
+  await expect(ownerDisclosure).toContainText('Who can sign');
+  await ownerDisclosure.focus();
+  await expect(ownerDisclosure).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(ownerSigners).toHaveAttribute('open', '');
+  await expect(ownerSigners.getByText('Owner signer 1', { exact: true })).toBeVisible();
+  await expect(ownerSigners.getByText('00000001', { exact: true })).toBeVisible();
+  await expect(ownerSigners.getByText('Owner signer', { exact: true })).toHaveCount(0);
 
   const estatePath = paths.filter({ hasText: 'Estate guardians: 2 of 3' });
   await expect(estatePath).toContainText('12,560 blocks remaining');
@@ -139,10 +156,25 @@ test('Family assistance presents two required role groups instead of a flat thre
   }
 
   const assistance = paths.filter({ hasText: 'One parent and one child assistance signer' });
-  await expect(assistance).toContainText('1 of 2 Parents');
-  await expect(assistance).toContainText('1 of 2 Child assistance signers');
-  await expect(assistance).toContainText('Parent 1');
-  await expect(assistance).toContainText('Child assistance signer 1');
+  await expect(assistance.getByText('1 of 2 Parents', { exact: true })).toBeVisible();
+  await expect(
+    assistance.getByText('1 of 2 Child assistance signers', { exact: true })
+  ).toBeVisible();
+  const assistanceSigners = assistance.locator('details.coin-policy-signers');
+  await expect(assistanceSigners).not.toHaveAttribute('open', '');
+  await expect(assistanceSigners.getByText('Parent 1', { exact: true })).toBeHidden();
+  await expect(
+    assistanceSigners.getByText('Child assistance signer 1', { exact: true })
+  ).toBeHidden();
+  await assistanceSigners.getByText('Who can sign', { exact: true }).click();
+  await expect(assistanceSigners.getByText('Parent 1', { exact: true })).toBeVisible();
+  await expect(
+    assistanceSigners.getByText('Child assistance signer 1', { exact: true })
+  ).toBeVisible();
+  await expect(assistanceSigners.getByText('Parent', { exact: true })).toHaveCount(0);
+  await expect(assistanceSigners.getByText('Child assistance signer', { exact: true })).toHaveCount(
+    0
+  );
   await expect(assistance.getByText('2 of 4', { exact: false })).toHaveCount(0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });

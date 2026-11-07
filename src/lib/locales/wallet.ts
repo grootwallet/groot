@@ -608,6 +608,7 @@ export const walletCopy = {
     fr: 'Qui peut autoriser cette pièce et quand',
     es: 'Quién puede autorizar esta moneda y cuándo'
   },
+  'Who can sign': { fr: 'Qui peut signer', es: 'Quién puede firmar' },
   'This coin does not expire': {
     fr: 'Cette pièce n’expire pas',
     es: 'Esta moneda no caduca'
@@ -625,6 +626,20 @@ export const walletCopy = {
       fr: 'De nouveaux chemins de dépense deviennent disponibles avec le temps. Les chemins antérieurs restent disponibles, sauf si une réorganisation de la chaîne réduit l’âge confirmé de cette pièce.',
       es: 'Con el tiempo se habilitan nuevas rutas de gasto. Las rutas anteriores siguen disponibles, salvo que una reorganización de la cadena reduzca la antigüedad confirmada de esta moneda.'
     },
+  'Delayed spending paths become available separately for each coin. The primary path remains available.':
+    {
+      fr: 'Les chemins de dépense différés deviennent disponibles séparément pour chaque pièce. Le chemin principal reste disponible.',
+      es: 'Las rutas de gasto con plazo se habilitan por separado para cada moneda. La ruta principal sigue disponible.'
+    },
+  'Recovery-key access becomes available separately for each coin. Your normal keys keep working.':
+    {
+      fr: 'L’accès par la clé de récupération devient disponible séparément pour chaque pièce. Vos clés normales continuent de fonctionner.',
+      es: 'El acceso con la clave de recuperación se habilita por separado para cada moneda. Tus claves normales siguen funcionando.'
+    },
+  'Heir access becomes available separately for each coin. Your normal keys keep working.': {
+    fr: 'L’accès de l’héritier devient disponible séparément pour chaque pièce. Vos clés normales continuent de fonctionner.',
+    es: 'El acceso del heredero se habilita por separado para cada moneda. Tus claves normales siguen funcionando.'
+  },
   'Available now': { fr: 'Disponible maintenant', es: 'Disponible ahora' },
   'Waiting for blocks': { fr: 'En attente de blocs', es: 'Esperando bloques' },
   'Sync to verify': { fr: 'Synchroniser pour vérifier', es: 'Sincroniza para verificar' },

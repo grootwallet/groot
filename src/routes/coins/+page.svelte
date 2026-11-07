@@ -210,6 +210,15 @@
         group: translate($locale, group.label)
       }
     );
+  const signerRoleIsRedundant = (label: string, role: string) => {
+    const normalize = (value: string) =>
+      value
+        .normalize('NFKC')
+        .trim()
+        .toLocaleLowerCase($locale)
+        .replace(/[\s#._-]*\d+$/u, '');
+    return normalize(label) === normalize(role);
+  };
 
   $effect(() => {
     if ($discreetMode) labelFilter = '';
@@ -598,7 +607,11 @@
             <strong>{translate($locale, 'Each coin has its own protection timeline.')}</strong>
             {translate(
               $locale,
-              'Backup-key access becomes available separately for each coin. Your normal keys keep working.'
+              isContinuityPolicyType(maturitySummary.policyType)
+                ? 'Delayed spending paths become available separately for each coin. The primary path remains available.'
+                : maturitySummary.policyType === 'inheritance'
+                  ? 'Heir access becomes available separately for each coin. Your normal keys keep working.'
+                  : 'Recovery-key access becomes available separately for each coin. Your normal keys keep working.'
             )}
             {#if !maturitySummary.chainCurrent}<small class="stale-copy"
                 >{translate(
@@ -818,23 +831,6 @@
                                   : translate($locale, 'Sync to verify')}</span
                           >
                         </div>
-                        <div class="coin-policy-groups">
-                          {#each path.definition.signerGroups as group (group.code)}<div>
-                              <span>{signerRequirement(group)}</span>
-                              <ul aria-label={translate($locale, group.label)}>
-                                {#each group.signers as signer (signer.fingerprint)}<li>
-                                    <span class="coin-policy-signer"
-                                      ><strong>{signer.label}</strong><small
-                                        >{translate(
-                                          $locale,
-                                          policySignerRoleLabel(signer.role)
-                                        )}</small
-                                      ></span
-                                    ><code>{signer.fingerprint.toLowerCase()}</code>
-                                  </li>{/each}
-                              </ul>
-                            </div>{/each}
-                        </div>
                         {#if path.definition.availableAfterBlocks > 0}<dl
                             class="coin-policy-timeline"
                           >
@@ -862,6 +858,43 @@
                                 </dd>
                               </div>{/if}
                           </dl>{/if}
+                        <div
+                          class="coin-policy-requirements"
+                          aria-label={translate($locale, 'Signer group requirements')}
+                        >
+                          {#each path.definition.signerGroups as group (group.code)}<span
+                              >{signerRequirement(group)}</span
+                            >{/each}
+                        </div>
+                        <details class="coin-policy-signers">
+                          <summary
+                            ><span>{translate($locale, 'Who can sign')}</span><ChevronDown
+                              size={14}
+                              aria-hidden="true"
+                            /></summary
+                          >
+                          <div class="coin-policy-groups">
+                            {#each path.definition.signerGroups as group (group.code)}<div>
+                                <span>{translate($locale, group.label)}</span>
+                                <ul aria-label={translate($locale, group.label)}>
+                                  {#each group.signers as signer (signer.fingerprint)}
+                                    {@const signerRole = translate(
+                                      $locale,
+                                      policySignerRoleLabel(signer.role)
+                                    )}
+                                    <li>
+                                      <span class="coin-policy-signer"
+                                        ><strong>{signer.label}</strong
+                                        >{#if !signerRoleIsRedundant(signer.label, signerRole)}<small
+                                            >{signerRole}</small
+                                          >{/if}</span
+                                      ><code>{signer.fingerprint.toLowerCase()}</code>
+                                    </li>
+                                  {/each}
+                                </ul>
+                              </div>{/each}
+                          </div>
+                        </details>
                         {#if path.status.actionBlockers.includes('frozen')}<small
                             class="coin-policy-blocker"
                             >{translate($locale, 'Unfreeze this coin before spending it.')}</small
@@ -1541,10 +1574,60 @@
   :global(.coin-policy-path-heading):where(.coin-policy-path-heading) > :global(.coin-status) {
     flex: 0 0 auto;
   }
+  :global(.coin-policy-requirements):where(.coin-policy-requirements) {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  :global(.coin-policy-requirements):where(.coin-policy-requirements) > :global(span) {
+    min-width: 0;
+    padding: 6px 8px;
+    border-radius: var(--radius-control);
+    color: var(--text-soft);
+    background: var(--surface-inset);
+    font-size: var(--font-size-meta);
+    font-weight: 650;
+    overflow-wrap: anywhere;
+  }
+  :global(.coin-policy-signers):where(.coin-policy-signers) {
+    min-width: 0;
+    border-top: 1px solid var(--border);
+  }
+  :global(.coin-policy-signers):where(.coin-policy-signers) > :global(summary) {
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 0 2px;
+    border-radius: var(--radius-inset);
+    color: var(--link);
+    cursor: pointer;
+    list-style: none;
+    font-size: var(--font-size-meta);
+    font-weight: 700;
+  }
+  :global(.coin-policy-signers):where(.coin-policy-signers)
+    > :global(summary::-webkit-details-marker) {
+    display: none;
+  }
+  :global(.coin-policy-signers):where(.coin-policy-signers) > :global(summary:focus-visible) {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+  }
+  :global(.coin-policy-signers):where(.coin-policy-signers) > :global(summary svg) {
+    flex: 0 0 auto;
+    color: var(--muted);
+    transition: transform 0.15s ease;
+  }
+  :global(.coin-policy-signers[open]):where(.coin-policy-signers) > :global(summary svg) {
+    transform: rotate(180deg);
+  }
   :global(.coin-policy-groups):where(.coin-policy-groups) {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
     gap: 8px;
+    margin-top: 2px;
   }
   :global(.coin-policy-groups):where(.coin-policy-groups) > :global(div) {
     min-width: 0;
