@@ -32,6 +32,8 @@ The two browser failures were test-only: the new PIN test expected a wallet-name
 
 The current tooling classifies the existing `durable_file.rs` filesystem helper as an adapter alongside other platform I/O. Coverage thresholds and all existing deterministic-core modules remain unchanged. Earlier extended fuzz evidence remains historical; the parser source is unchanged, and current bounded parser/transaction cases passed.
 
+Paired production-browser observations collect 100 full-document samples per route after five warmups, on both required viewports. Another active task resumed Rust compilation after the initial quiet window. The runner records that interference, so these timings are excluded from performance acceptance and support no speedup or responsiveness claim. The deterministic asset comparison remains valid; real native/device waits require a separate quiet measurement.
+
 Production Node audit: zero reported advisories across 54 dependencies. Refreshed RustSec database `309392b18f6b17022f82c701f300433126901068` reports zero blocking vulnerabilities and 13 warnings: nine unmaintained, two unsound and two yanked dependencies. This is not a clean dependency-health claim. Review Tokio/glib and the platform dependency paths separately; no dependency is upgraded or warning suppressed by this change.
 
 ## Branches and worktrees
