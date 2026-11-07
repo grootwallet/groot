@@ -57,74 +57,10 @@ Candidates are not commitments. Legacy P2SH multisig, arbitrary scripts, Taproot
 
 ## Maintenance rule
 
-Update scope and evidence in the same change that changes standards behavior. Check current upstream records then; do not copy an old Draft/Deployed label into a current claim. Preserve parser bounds, network/private-material rejection and interoperability limitations. This cleanup changes no standards implementation or dependency; BIP impact is **documentation only**.
+Update this inventory whenever standards behavior or interoperability evidence changes. Check upstream status at that time; dependency support alone does not establish Groot support.
 
-The rc04 update-control layout and native Caps Lock sizing fixes have **no BIP impact** and preserve existing wallet/profile formats.
+Post-release maintenance strengthens existing BIP174 phone review: complete previous transactions bind every outpoint to its witness amount/script, and policy-map and signed-response bounds run before key access. Witness-only phone imports require a complete re-export. See [the execution evidence](testing/post-5.3-execution.md); physical camera and signer acceptance remain separate.
 
-App release/update preparation (ADR 0086) and 5.2 naming (ADR 0087) have **no BIP impact**: no key derivation, descriptor, transaction, protocol or wallet backup format changes. Experimental platform packaging does not extend physical interoperability evidence.
+Fixed Partner/Family BIP68/112 paths remain test-network previews. Their PSBT sequences bind the selected path; current age, reorgs and role requirements are checked again before finalization. Existing BIP48 origins, descriptors, backups and proposal formats remain unchanged. No direct USB Miniscript workflow or phone enrollment into these policies is certified.
 
-The 5.2.0 GA version promotion and same-machine reproduction decision (ADR 0088) have **no BIP impact**.
-
-The GA remediation keeps BIP329 records and wallet formats unchanged. It adds an atomic application-level recovery-gap bound to restored address-label imports. The first-history disclosure fix has **no BIP impact**.
-
-The 5.3 iOS foundation (ADR 0089) has **no BIP impact**: native mobile safety gates and isolated build configuration change no derivation, descriptor, PSBT, label or backup format and establish no new physical interoperability evidence.
-
-The 5.3 defect remediation (ADR 0090) changes no BIP support, PSBT encoding, derivation or wallet format. It extends application failure/recovery tests around existing SegWit BIP125/174 paths; it does not add interoperability or physical-device certification. Accessibility, Activity retention, scanner copy and worker scheduling have no BIP impact.
-
-The mobile-key scope correction (ADR 0093) and retained-branch audit change no BIP implementation or current support. Passing BIP129/174 tests on the retained branch are not merged mobile support or physical signing/recovery evidence.
-
-ADRs 0094–0096 restore the retained BIP129 encrypted enrollment and BIP174 QR phone-signing implementation for internal Testnet4 testing, with native first-address/policy checks. Existing backup/PSBT encodings and BIP39 software-passphrase versus phone-signer words-only derivation remain unchanged. Physical interoperability is not established by the local Core pass; see the RC2 candidate record.
-
-## Retained Continuity evidence
-
-Refs #17, ADR 0100: the unified internal candidate extends fixed Partner/Family BIP68/112 coordination to named delayed paths, per-input maturity/reorg checks, role-bound BIP174 signature collection and primary renewal. PSBT uniform block-based CSV identifies the selected delayed path; time-based, disabled or mismatched sequences fail closed. Existing BIP48 origins, descriptor derivation and backup/proposal formats remain unchanged. Test-network creation is available for rehearsal; physical signer interoperability, Mainnet Continuity and phone Miniscript enrollment are not certified. There is no dependency change.
-
-The RC3 mobile footer, notice spacing and first-scan configuration disclosure have no BIP impact. Node authentication, TLS/Tor validation, privacy consent and source-review gates remain unchanged.
-
-The RC4 existing-wallet setup navigation correction has no BIP impact: pairing records, derivation, PSBTs, native key authorization and persisted formats are unchanged.
-
-RC5 backup deferral: no BIP support or wire-format change. BIP39 word verification is optional during phone pairing; the existing verification flag remains false until a successful native check. BIP48 key/policy identity checks and BIP129 invitation binding are unchanged.
-
-RC6: no BIP or wire-format impact from mobile layout/copy, completed-camera cleanup or the Keychain access-policy adjustment in ADR 0097. Credentials and phone-key derivation remain unchanged.
-
-Unlocked mobile screens omit the brand header and start below the system safe area. Sync and backup reminders use compact inline actions with 44px touch targets; recovery verification remains available. This presentation change has no BIP or persisted-format impact.
-
-The Coldcard missing-policy address-error correction changes no BIP support, descriptor, key derivation, PSBT or persisted format. Physical Testnet4 discovery and public-account reads are not a completed signing certification.
-
-RC9 Coldcard Testnet4 runtime packaging (ADR 0098) has **no BIP or persisted-format impact**. The HWI 3.2.0 executable and vendor code, derivation paths, descriptors, policy requirements, PSBT encodings and signature validation are unchanged. Device-free startup measurements add no physical interoperability evidence.
-
-ADR 0099 removes an application-level mainnet rollout amount ceiling and clarifies policy errors. **No BIP or persisted-format impact**: transaction/PSBT encodings, descriptors, derivation, signing, recovery and interoperability are unchanged. Bitcoin supply bounds and final-PSBT fee protection remain enforced.
-
-The fixed-continuity finalizer verifies BIP68/112 constraints against the actual transaction as well as current input age, preventing a later-maturing branch from changing the witness for an earlier selected sequence. This corrects validation with the existing pinned Miniscript library; it changes no descriptor, backup, PSBT encoding or dependency.
-
-The RC10 test-feedback corrections have **no BIP or persisted-format impact**: independent policy/health presentation, shared error notices and per-target nullable fee responses change no derivation, descriptor, PSBT or backup format. The owner's Mk4 Testnet4 one-input timing trial is limited candidate evidence, not full model/firmware, recovery, threshold or broadcast certification.
-
-RC11 operation-scoped Testnet4 transport (ADR 0101) has **no BIP or persisted-format impact**. Full fingerprint/account-xpub proof, vendor signing/display, policy gates, descriptors, PSBT encodings and native signature validation remain required. Host timing and protocol fixtures add no physical model certification.
-
-Shared error-notice consistency after the Jade RC11 trial has **no BIP or persisted-format impact**. Only presentation and browser fixtures change; hardware transport, key reads, policy gates, signing, credentials, descriptors and backups are unchanged. Owner timing samples establish a performance baseline, not full device certification.
-
-Internal RC12 Trezor/Jade Testnet4 runtime acceleration (ADR 0102) has **no BIP or
-persisted-format impact**. The pinned HWI driver, derivation paths, descriptors,
-PSBT encodings, and native identity/policy/address/signature checks stay the same.
-Jade keeps its existing HWI shared test-network mapping for Testnet4. Owner
-performance reports are not physical interoperability certification.
-
-The Model One follow-up changes only HWI PIN result handling and fresh-scan retry presentation. It has **no BIP or persisted-format impact**: a typed already-unlocked result still proceeds through the existing live full-account identity check, and derivation, descriptors, PSBTs, signing validation and backup formats are unchanged. Physical repeated-action acceptance remains pending.
-
-RC14 corrects the internal DMG app copy so relative runtime symlinks and the app signature remain intact. It changes no BIP support, transaction or signer protocol, persisted format, derivation, descriptor, PSBT or key material. The mounted DMG must pass the same app-seal verification as the build artifact before handoff.
-
-The Model One repeated-action routing follow-up has **no BIP or persisted-format impact**. It changes when Groot requests the PIN matrix after a recent successful unlock and lets a locked saved-signer health check request that matrix. Every subsequent identity, address and signing operation still reopens the device and checks the full account identity; derivation, descriptors, PSBTs, signatures and backup formats are unchanged.
-
-The sealed internal Mainnet HWI session path has **no BIP or persisted-format impact**. It checks existing BIP84 and standard BIP48 account paths, `xpub` network identity and the explicit HWI Mainnet selector; it changes no descriptor, PSBT, signature, key, wallet file or supported standard. The RC17 scan-progress and hardware-error presentation fixes also have no BIP or persisted-format impact. Public Mainnet packaging remains separately gated.
-
-RC18's canonical-identity owner package and release notes have **no BIP or persisted-format impact**. The app identity reuses the existing network-isolated profile location; key derivation, descriptors, PSBTs, signatures and wallet files are unchanged.
-
-The revised in-app 5.3 notes and longer real-Core test RPC timeout have **no BIP or persisted-format impact**. They change presentation and test tolerance only; no network, descriptor, script, transaction, key or wallet behavior changes.
-
-The approved Developer ID 5.3.0 fast-runtime packaging has **no BIP or persisted-format impact**. It uses the already validated Mainnet BIP84 and standard BIP48 requests through the same HWI 3.2.0 operation protocol. It changes release input/signature binding and startup latency, not paths, descriptors, PSBT interpretation, signatures, keys, network selection, wallet data, or standards scope.
-
-## Post-5.3 maintenance assessment
-
-Refs #121. Refactoring presentation and native ownership has no BIP wire-format or wallet-format impact. BIP174 evidence expands with phone review/signing checks that bind every full previous transaction to its outpoint and complete witness output, plus deterministic bounded PSBT/UR/BSMS mutation coverage. Witness-only mobile input imports now fail closed; export a full PSBT without changing wallet descriptors or stored proposals. General transport limits remain unchanged. Phone review now reserves up to 109 signature bytes per input within the 112,635-byte reply ceiling and bounds derivation/signature maps to the paired signer count, before key access. BIP48 standard-only phone enrollment, test-network BIP68/112 Continuity boundaries, and lack of certified direct USB Miniscript support remain unchanged. The [execution record](testing/post-5.3-execution.md) records current boundary, composed-parser and Core evidence; [earlier maintenance evidence](testing/post-5.3-maintenance.md) is historical. Prepared-query reuse, lifecycle guards and build-tool corrections have no BIP wire-format or support impact. Physical phone/hardware acceptance remains required.
-
-The post-5.3 human-test UX refinement has **no BIP or persisted-format impact**. It hides delayed-policy compatibility text while Standard multisig is selected, shortens the existing candidate warning, and presents the unchanged Partner/Family block delays as a compact mobile timeline. BIP48 phone enrollment remains Standard-only, BIP68/112 values and roles are unchanged, and no hardware model gains certification. The exact physical steps and stop conditions are recorded in the [phone and Miniscript human acceptance checklist](testing/post-5.3-phone-miniscript-human.md).
+The current presentation/ownership cleanup has no BIP, derivation, PSBT encoding, dependency or persisted-format impact. The version correction and internal Windows/Linux packaging likewise add no certified standards support. Record new exact-candidate evidence in [the current campaign](testing/maintenance-2026-11-07.md), [hardware certification](hardware-certification.md) and the applicable dated test record; historical RC details remain in those records and the ADRs.

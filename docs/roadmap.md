@@ -16,7 +16,7 @@ The current public baseline is the historical **v5.3.0 macOS Apple-silicon deskt
 
 | Work                              | Required before support is advertised                                                                                                                            |
 | --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Timelocked recovery/inheritance   | Rehearse every spending path, loss scenario, maturity boundary and hardware flow. New creation remains disabled                                                  |
+| Timelocked recovery/inheritance   | Finish fixed test-network Partner/Family paths, loss/recovery and exact offline signer evidence; Mainnet and legacy Recovery creation remain blocked             |
 | Remote signer coordination        | Authenticated end-to-end encrypted enrollment/messages, replay and substitution protection, bounded relay metadata, offline PSBT fallback and independent review |
 | Compact-filter expansion          | Close [documented recovery, cache, peer and platform gaps](compact-filter-deferred-work.md)                                                                      |
 | Payjoin V2                        | Durable encrypted sessions, transport, exact fresh review, explicit fallback consent and interoperability                                                        |
