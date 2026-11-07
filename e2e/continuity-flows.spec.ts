@@ -51,6 +51,14 @@ test('Partner coins show every spending path and exact per-coin block status', a
 
   const paths = policy.locator('article.coin-policy-path');
   await expect(paths).toHaveCount(4);
+  expect(
+    await paths.first().evaluate((path) => {
+      const children = Array.from(path.children).map((child) => child.getBoundingClientRect());
+      return children.every(
+        (child, index) => index === 0 || child.top >= children[index - 1].bottom
+      );
+    })
+  ).toBe(true);
   for (const pathName of [
     'Owner: 2 of 3',
     'Both partner signers',

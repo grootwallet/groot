@@ -1258,7 +1258,7 @@
     border-radius: var(--radius-panel);
     overflow: hidden;
   }
-  :global(.coin-list):where(.coin-list) :global(article) {
+  :global(.coin-list):where(.coin-list) > :global(article.coin-row) {
     position: relative;
     min-height: 89px;
     background: var(--panel);
@@ -1294,17 +1294,17 @@
     position: relative;
     z-index: 2;
   }
-  :global(.coin-list.selectable):where(.coin-list) :global(article:not(.frozen)) {
+  :global(.coin-list.selectable):where(.coin-list) > :global(article.coin-row:not(.frozen)) {
     cursor: pointer;
   }
-  :global(.coin-list.selectable):where(.coin-list) :global(article:not(.frozen):hover) {
+  :global(.coin-list.selectable):where(.coin-list) > :global(article.coin-row:not(.frozen):hover) {
     background: color-mix(in srgb, var(--fr-blue) 4%, var(--panel));
   }
-  :global(.coin-list.selectable):where(.coin-list) :global(article.selected) {
+  :global(.coin-list.selectable):where(.coin-list) > :global(article.coin-row.selected) {
     background: color-mix(in srgb, var(--fr-blue) 9%, var(--panel));
     box-shadow: inset 3px 0 0 var(--fr-blue);
   }
-  :global(.coin-list):where(.coin-list) :global(article:last-child) {
+  :global(.coin-list):where(.coin-list) > :global(article.coin-row:last-child) {
     border: 0;
   }
   :global(.coin-icon):where(.coin-icon) {
@@ -1413,17 +1413,17 @@
     color: var(--text);
     background: var(--surface-control);
   }
-  :global(.coin-list.selectable):where(.coin-list) :global(article) {
+  :global(.coin-list.selectable):where(.coin-list) > :global(article.coin-row) {
     grid-template-columns: 22px 38px minmax(0, 1fr) auto;
   }
-  :global(.coin-list):where(.coin-list) :global(article.frozen) {
+  :global(.coin-list):where(.coin-list) > :global(article.coin-row.frozen) {
     opacity: 0.72;
   }
-  :global(.coin-list):where(.coin-list) :global(article.reused) {
+  :global(.coin-list):where(.coin-list) > :global(article.coin-row.reused) {
     box-shadow: inset 3px 0 0 color-mix(in srgb, var(--accent) 68%, transparent);
   }
-  :global(.coin-list):where(.coin-list) :global(article.selected),
-  :global(.coin-list):where(.coin-list) :global(article.selected.reused) {
+  :global(.coin-list):where(.coin-list) > :global(article.coin-row.selected),
+  :global(.coin-list):where(.coin-list) > :global(article.coin-row.selected.reused) {
     box-shadow: inset 3px 0 0 var(--fr-blue);
   }
   :global(.coin-check):where(.coin-check) {
@@ -2050,8 +2050,8 @@
       grid-column: 1 / -1;
       text-align: left;
     }
-    :global(.coin-list):where(.coin-list) :global(article),
-    :global(.coin-list.selectable):where(.coin-list) :global(article) {
+    :global(.coin-list):where(.coin-list) > :global(article.coin-row),
+    :global(.coin-list.selectable):where(.coin-list) > :global(article.coin-row) {
       grid-template-columns: 22px 34px 1fr;
     }
     :global(.coin-main):where(.coin-main) {
