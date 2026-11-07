@@ -21,3 +21,5 @@ Hardware coordination and operation-lock changes come last. First measure conten
 Package attribution found no safe reduction for the earlier milestone. Retain supported hardware runtime resources. Further size or dependency changes need separate evidence and review.
 
 Run [the maintainer harness](agent-harness.md), including mandatory `pnpm validate`, and record the actual result. A frozen source-policy mismatch blocks release; do not refresh hashes to make development checks green. The [current campaign](testing/maintenance-2026-11-07.md) separates automated results from physical and approval gates.
+
+The implementation portion is complete; [the internal hardware handoff](testing/internal-hardware-handoff-2026-11-07.md) maps each obligation to its owner/evidence. Continue with exact-candidate physical acceptance and approval. [CI improvements](testing/ci-efficiency-proposal-2026-11-07.md) are a measured proposal, not permission to skip checks.

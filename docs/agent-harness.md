@@ -9,6 +9,8 @@ Use Node **24.19.0**, pnpm **11.13.1**, Rust **1.97.1** and committed lockfiles.
 - Identify process, port and profile ownership. Do not stop another task's app/Vite/Core process or run a second server on its port.
 - State compatibility. A breaking persisted format needs an ADR and explicit migration-versus-discard approval before implementation. Never repurpose funded certification data for tests.
 
+A branch names a commit history; a worktree is a checkout folder with its own files and index. Worktrees share repository refs/history. Git normally checks out a branch in only one worktree at a time. Keep the maintenance branch in its existing worktree and preserve unrelated dirty checkouts.
+
 ## Checks by scope
 
 | Scope                      | Command                                                                              |
@@ -58,6 +60,8 @@ Build from a clean tracked/untracked commit. Generate fresh target-specific SBOM
 | Windows/Linux 0.5.4 owner candidate | `.github/workflows/experimental-desktop.yml`; native x86-64 runners, Testnet4-only identity, official archive/source and inner HWI digests, sealed unpacked runtime and driver probes, MSI/NSIS plus Ubuntu DEB, SBOM/digests/build facts. Unsigned and never public-release evidence             |
 
 Before accepting a macOS app, `node scripts/release/verify-macos-camera.mjs /absolute/Groot.app` must verify its signature, camera-only entitlement and usage description. The production packager and package verifier both enforce this; an Info.plist description alone is insufficient. Physical denial/retry, background/resume and QR decoding remain exact-candidate checks.
+
+Internal macOS handoffs use a separate Groot RC identity and preserve that app filename in both ZIP and DMG. The builder verifies camera permission and source stability, then writes executable-bound SBOM/provenance and artifact checksums. An ad-hoc macOS seal is required even though the candidate has no Developer ID signature or notarization. See [the current handoff](testing/internal-hardware-handoff-2026-11-07.md).
 
 Public packaging requires the accepted version/tag authorization and identical local HEAD, fresh `origin/main` and peeled annotated tag. For 5.3.0, `GROOT_SIGNED_HWI_RUNTIME` must name the same verified frozen runtime for each unsigned evidence build; the macOS packager takes that runtime directory between the signed-HWI manifest and output arguments and binds its digest to the reproduced executable before copying it into the app. It never creates/imports/prints signing credentials. Developer ID/notarization credentials must already be configured. Internal builders provide no production signing, notarization, push or public authorization.
 

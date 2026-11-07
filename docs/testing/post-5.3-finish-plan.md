@@ -2,6 +2,10 @@
 
 Approved by the owner on 2026-10-24 after two external reviews of the 81% completion assessment. This plan closes the remaining evidence, approval, physical-test and release work without broadening wallet behavior.
 
+## Current execution boundary
+
+The implementation and extended UR campaign are complete; see [the current internal hardware handoff](internal-hardware-handoff-2026-11-07.md). Counts and source identities below describe the historical assessment, not a fresh pin inventory. The owner explicitly requested an unsigned internal hardware build on 2026-11-07; that authorizes the isolated rehearsal package described in the handoff. It does not authorize refreshing source pins, merging or public release. Physical acceptance and final source approval still follow the phases below.
+
 ## Decisions
 
 - Keep the current Testnet4 phone fee behavior. A new fee threshold or confirmation rule is a separate product-policy change; this cleanup will not invent one.
