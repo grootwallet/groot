@@ -221,6 +221,7 @@ export const walletCopy = {
   },
   'Mature at block {height}': { fr: 'Mature au bloc {height}', es: 'Madura en el bloque {height}' },
   '{count} blocks remaining': { fr: '{count} blocs restants', es: '{count} bloques restantes' },
+  '1 block remaining': { fr: '1 bloc restant', es: 'Queda 1 bloque' },
   'Approximate time': { fr: 'Temps approximatif', es: 'Tiempo aproximado' },
   days: { fr: 'jours', es: 'días' },
   months: { fr: 'mois', es: 'meses' },
@@ -559,5 +560,172 @@ export const walletCopy = {
   'Verify on the saved hardware signer before sharing this address.': {
     fr: 'Vérifiez sur le signataire matériel enregistré avant de communiquer cette adresse.',
     es: 'Verifica en el firmante físico guardado antes de compartir esta dirección.'
+  },
+  'Spending paths': { fr: 'Chemins de dépense', es: 'Rutas de gasto' },
+  'Named delayed paths': {
+    fr: 'Chemins différés nommés',
+    es: 'Rutas diferidas con nombre'
+  },
+  'About spending paths': {
+    fr: 'À propos des chemins de dépense',
+    es: 'Acerca de las rutas de gasto'
+  },
+  'Each coin follows its own block timeline. Open Coins to see every signer group and exact earliest inclusion block.':
+    {
+      fr: 'Chaque pièce suit son propre calendrier de blocs. Ouvrez Pièces pour voir chaque groupe de signataires et le bloc exact d’inclusion au plus tôt.',
+      es: 'Cada moneda sigue su propio calendario de bloques. Abre Monedas para ver cada grupo de firmantes y el bloque exacto de inclusión más temprana.'
+    },
+  '1 delayed path is available across your coins.': {
+    fr: '1 chemin différé est disponible parmi vos pièces.',
+    es: 'Hay 1 ruta diferida disponible entre tus monedas.'
+  },
+  '{count} delayed paths are available across your coins.': {
+    fr: '{count} chemins différés sont disponibles parmi vos pièces.',
+    es: 'Hay {count} rutas diferidas disponibles entre tus monedas.'
+  },
+  'Delayed paths are still waiting. Each coin follows its own confirmation age.': {
+    fr: 'Les chemins différés sont encore en attente. Chaque pièce suit son propre âge de confirmation.',
+    es: 'Las rutas diferidas siguen en espera. Cada moneda sigue su propia antigüedad de confirmación.'
+  },
+  'The primary path remains available for every coin.': {
+    fr: 'Le chemin principal reste disponible pour chaque pièce.',
+    es: 'La ruta principal sigue disponible para cada moneda.'
+  },
+  'How spending paths work': {
+    fr: 'Fonctionnement des chemins de dépense',
+    es: 'Cómo funcionan las rutas de gasto'
+  },
+  'Coins do not expire.': {
+    fr: 'Les pièces n’expirent pas.',
+    es: 'Las monedas no caducan.'
+  },
+  'The primary signer group can spend now. Delayed paths require the named signer groups shown in each coin’s policy.':
+    {
+      fr: 'Le groupe de signataires principal peut dépenser maintenant. Les chemins différés nécessitent les groupes de signataires nommés affichés dans la politique de chaque pièce.',
+      es: 'El grupo principal de firmantes puede gastar ahora. Las rutas diferidas requieren los grupos de firmantes con nombre que se muestran en la política de cada moneda.'
+    },
+  'Who can authorize this coin and when': {
+    fr: 'Qui peut autoriser cette pièce et quand',
+    es: 'Quién puede autorizar esta moneda y cuándo'
+  },
+  'This coin does not expire': {
+    fr: 'Cette pièce n’expire pas',
+    es: 'Esta moneda no caduca'
+  },
+  'The delay shown for each path starts separately for every coin when that coin confirms.': {
+    fr: 'Le délai affiché pour chaque chemin commence séparément pour chaque pièce lors de sa confirmation.',
+    es: 'El plazo mostrado para cada ruta empieza por separado para cada moneda cuando se confirma.'
+  },
+  'The printable backup is unavailable until Groot can verify every spending path.': {
+    fr: 'La sauvegarde imprimable est indisponible tant que Groot ne peut pas vérifier chaque chemin de dépense.',
+    es: 'La copia imprimible no está disponible hasta que Groot pueda verificar cada ruta de gasto.'
+  },
+  'New spending paths become available over time. Earlier paths remain available unless a chain reorganization reduces this coin’s confirmed age.':
+    {
+      fr: 'De nouveaux chemins de dépense deviennent disponibles avec le temps. Les chemins antérieurs restent disponibles, sauf si une réorganisation de la chaîne réduit l’âge confirmé de cette pièce.',
+      es: 'Con el tiempo se habilitan nuevas rutas de gasto. Las rutas anteriores siguen disponibles, salvo que una reorganización de la cadena reduzca la antigüedad confirmada de esta moneda.'
+    },
+  'Available now': { fr: 'Disponible maintenant', es: 'Disponible ahora' },
+  'Waiting for blocks': { fr: 'En attente de blocs', es: 'Esperando bloques' },
+  'Sync to verify': { fr: 'Synchroniser pour vérifier', es: 'Sincroniza para verificar' },
+  'Starts after confirmation': {
+    fr: 'Commence après confirmation',
+    es: 'Comienza tras la confirmación'
+  },
+  'Sync to verify spending paths': {
+    fr: 'Synchroniser pour vérifier les chemins',
+    es: 'Sincroniza para verificar las rutas'
+  },
+  'No timelock': { fr: 'Aucun verrou temporel', es: 'Sin bloqueo temporal' },
+  'After {count} confirmations': {
+    fr: 'Après {count} confirmations',
+    es: 'Tras {count} confirmaciones'
+  },
+  '{count} of {total} {group}': {
+    fr: '{count} sur {total} · {group}',
+    es: '{count} de {total} · {group}'
+  },
+  'Owner signers': { fr: 'Signataires du propriétaire', es: 'Firmantes del propietario' },
+  'Partner signers': { fr: 'Signataires du partenaire', es: 'Firmantes de la pareja' },
+  'Estate guardians': { fr: 'Gardiens de succession', es: 'Guardianes de la herencia' },
+  Parents: { fr: 'Parents', es: 'Padres' },
+  'Child assistance signers': {
+    fr: 'Signataires d’assistance enfant',
+    es: 'Firmantes de asistencia del hijo'
+  },
+  'Inheritance signers': {
+    fr: 'Signataires d’héritage',
+    es: 'Firmantes de herencia'
+  },
+  'Heir signer': { fr: 'Signataire héritier', es: 'Firmante heredero' },
+  'Recovery signer': { fr: 'Signataire de récupération', es: 'Firmante de recuperación' },
+  'Owner signer': { fr: 'Signataire du propriétaire', es: 'Firmante del propietario' },
+  'Partner signer': { fr: 'Signataire du partenaire', es: 'Firmante de la pareja' },
+  'Estate guardian': { fr: 'Gardien de succession', es: 'Guardián de la herencia' },
+  Parent: { fr: 'Parent', es: 'Padre o madre' },
+  'Child assistance signer': {
+    fr: 'Signataire d’assistance enfant',
+    es: 'Firmante de asistencia del hijo'
+  },
+  'Child inheritance signer': {
+    fr: 'Signataire d’héritage enfant',
+    es: 'Firmante de herencia del hijo'
+  },
+  Executor: { fr: 'Exécuteur', es: 'Albacea' },
+  'Policy signer': { fr: 'Signataire de la politique', es: 'Firmante de la política' },
+  'Signer role unavailable': {
+    fr: 'Rôle du signataire indisponible',
+    es: 'Rol del firmante no disponible'
+  },
+  'Required signers': { fr: 'Signataires requis', es: 'Firmantes necesarios' },
+  'Earliest inclusion': { fr: 'Inclusion au plus tôt', es: 'Inclusión más temprana' },
+  'Block {height}': { fr: 'Bloc {height}', es: 'Bloque {height}' },
+  'Estimated around': { fr: 'Estimation vers', es: 'Estimado alrededor de' },
+  'Calendar estimate': { fr: 'Estimation calendaire', es: 'Estimación de fecha' },
+  'Unavailable on Regtest because blocks are mined manually.': {
+    fr: 'Indisponible sur Regtest, car les blocs y sont minés manuellement.',
+    es: 'No disponible en Regtest porque los bloques se minan manualmente.'
+  },
+  'Renewal is recommended now': {
+    fr: 'Le renouvellement est recommandé maintenant',
+    es: 'Se recomienda renovar ahora'
+  },
+  'Renewal is recommended in {count} blocks': {
+    fr: 'Le renouvellement est recommandé dans {count} blocs',
+    es: 'Se recomienda renovar en {count} bloques'
+  },
+  'Renewal timing starts after confirmation': {
+    fr: 'Le calendrier de renouvellement commence après confirmation',
+    es: 'El plazo de renovación comienza tras la confirmación'
+  },
+  'Sync to verify renewal timing': {
+    fr: 'Synchronisez pour vérifier le calendrier de renouvellement',
+    es: 'Sincroniza para verificar el plazo de renovación'
+  },
+  'Renewal is optional. It uses the primary path and creates an onchain self-transfer whose new waits start after confirmation.':
+    {
+      fr: 'Le renouvellement est facultatif. Il utilise le chemin principal et crée un auto-transfert onchain dont les nouvelles attentes commencent après confirmation.',
+      es: 'La renovación es opcional. Usa la ruta principal y crea una autotransferencia onchain cuyos nuevos plazos empiezan tras la confirmación.'
+    },
+  'Keep using an available path, or renew this coin to restart every delayed wait after confirmation.':
+    {
+      fr: 'Continuez avec un chemin disponible ou renouvelez cette pièce pour relancer chaque attente différée après confirmation.',
+      es: 'Sigue usando una ruta disponible o renueva esta moneda para reiniciar cada espera diferida tras la confirmación.'
+    },
+  '1 delayed path available': {
+    fr: '1 chemin différé disponible',
+    es: '1 ruta diferida disponible'
+  },
+  '{count} delayed paths available': {
+    fr: '{count} chemins différés disponibles',
+    es: '{count} rutas diferidas disponibles'
+  },
+  'Next path in {count} blocks': {
+    fr: 'Prochain chemin dans {count} blocs',
+    es: 'Siguiente ruta en {count} bloques'
+  },
+  'Sync this wallet and reopen the coin before using a delayed spending path.': {
+    fr: 'Synchronisez ce portefeuille et rouvrez la pièce avant d’utiliser un chemin de dépense différé.',
+    es: 'Sincroniza esta cartera y vuelve a abrir la moneda antes de usar una ruta de gasto diferida.'
   }
 } as const satisfies CatalogSection;

@@ -1039,11 +1039,20 @@ export const multisigCopy = {
       fr: 'Votre 2 sur 3 reste disponible. Après trois mois, votre partenaire utilise ses deux clés ; après neuf mois, une seule suffit ; après douze mois, deux responsables successoraux peuvent récupérer les fonds. Le renouvellement repousse chaque voie différée.',
       es: 'Tu 2 de 3 sigue disponible. Tras tres meses, tu pareja usa sus dos claves; tras nueve meses, basta una; tras doce meses, dos custodios sucesorios pueden recuperar los fondos. La renovación retrasa de nuevo cada vía.'
     },
-  'Both parents sign now. After three months either parent can sign with either child assistance key. After twelve months two of the children’s inheritance role keys and the executor can recover. Renewing moves the delayed paths back.':
+  'Both parents sign now. After three months either parent can sign with either child assistance key. After about twelve months, any 2 of the 3 inheritance signers—the two child inheritance keys and the executor—can recover. Renewing moves the delayed paths back.':
     {
-      fr: 'Les deux parents signent maintenant. Après trois mois, un parent peut signer avec une clé d’assistance d’un enfant. Après douze mois, deux clés parmi les rôles successoraux des enfants et l’exécuteur peuvent récupérer les fonds. Le renouvellement repousse les voies différées.',
-      es: 'Ambos padres firman ahora. Tras tres meses, uno de ellos puede firmar con una clave de asistencia de un hijo. Tras doce meses, dos claves entre los roles de herencia de los hijos y el ejecutor pueden recuperar los fondos. La renovación retrasa de nuevo las vías.'
+      fr: 'Les deux parents signent maintenant. Après trois mois, l’un des parents peut signer avec l’une des clés d’assistance des enfants. Après environ douze mois, 2 des 3 signataires d’héritage — les deux clés d’héritage des enfants et l’exécuteur — peuvent récupérer les fonds. Le renouvellement repousse les chemins différés.',
+      es: 'Ambos padres firman ahora. Tras tres meses, cualquiera de ellos puede firmar con cualquiera de las claves de asistencia de los hijos. Tras unos doce meses, 2 de los 3 firmantes de herencia —las dos claves de herencia de los hijos y el albacea— pueden recuperar los fondos. La renovación retrasa de nuevo las rutas.'
     },
+  'Parent signer': { fr: 'Parent signataire', es: 'Padre o madre firmante' },
+  'Child assistance role': {
+    fr: 'Rôle d’assistance enfant',
+    es: 'Rol de asistencia del hijo'
+  },
+  'Child inheritance role': {
+    fr: 'Rôle d’héritage enfant',
+    es: 'Rol de herencia del hijo'
+  },
   'Eight independent role keys protect you, your partner, and the estate path.': {
     fr: 'Huit clés de rôle indépendantes protègent votre couple et la voie successorale.',
     es: 'Ocho claves de rol independientes protegen a la pareja y la vía sucesoria.'
@@ -1096,6 +1105,15 @@ export const multisigCopy = {
     },
   partner_continuity_v1: { fr: 'continuité du couple v1', es: 'continuidad de pareja v1' },
   family_continuity_v1: { fr: 'continuité familiale v1', es: 'continuidad familiar v1' },
+  'Recovered spending policy': {
+    fr: 'Politique de dépense restaurée',
+    es: 'Política de gasto recuperada'
+  },
+  'This backup contains the exact spending paths below. Verify every signer group before restoring.':
+    {
+      fr: 'Cette sauvegarde contient les chemins de dépense exacts ci-dessous. Vérifiez chaque groupe de signataires avant la restauration.',
+      es: 'Esta copia contiene las rutas de gasto exactas que se muestran a continuación. Verifica cada grupo de firmantes antes de restaurar.'
+    },
   'A watch-only wallet whose spending policy is enforced by independent keys.': {
     fr: 'Un portefeuille en lecture seule dont la politique de dépense repose sur des clés indépendantes.',
     es: 'Una cartera de solo lectura cuya política de gasto depende de claves independientes.'

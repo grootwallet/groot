@@ -116,6 +116,23 @@ export const sendCopy = {
     fr: 'Seuls les signataires du chemin choisi peuvent approuver ce paiement.',
     es: 'Solo los firmantes de la ruta elegida pueden aprobar este pago.'
   },
+  'Only the signer groups shown below can authorize this path.': {
+    fr: 'Seuls les groupes de signataires affichés ci-dessous peuvent autoriser ce chemin.',
+    es: 'Solo los grupos de firmantes que se muestran a continuación pueden autorizar esta ruta.'
+  },
+  'Signed with the selected path’s signer groups': {
+    fr: 'Signé avec les groupes de signataires du chemin choisi',
+    es: 'Firmado con los grupos de firmantes de la ruta elegida'
+  },
+  'Selected path': { fr: 'Chemin choisi', es: 'Ruta elegida' },
+  'Signer group requirements': {
+    fr: 'Exigences des groupes de signataires',
+    es: 'Requisitos de los grupos de firmantes'
+  },
+  'Follow each signer group requirement below.': {
+    fr: 'Respectez chaque exigence de groupe de signataires ci-dessous.',
+    es: 'Cumple cada requisito de grupo de firmantes que se muestra a continuación.'
+  },
   'The selected path determines the required signers. The fee is deducted from this coin.': {
     fr: 'Le chemin choisi détermine les signataires requis. Les frais sont déduits de cette pièce.',
     es: 'La ruta elegida determina los firmantes necesarios. La comisión se deduce de esta moneda.'

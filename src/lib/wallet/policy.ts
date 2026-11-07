@@ -1,5 +1,10 @@
-import type { ReceiveAddress } from '$lib/types';
-import type { Utxo } from '$lib/types';
+import type {
+  PolicyPathCoinStatus,
+  PolicyPathDefinition,
+  PolicyRenewalRecommendation,
+  ReceiveAddress,
+  Utxo
+} from '$lib/types';
 import type { CoinSelection } from './contracts';
 import type { SupportedNetwork } from '$lib/config';
 import type { WalletSnapshot } from './contracts';
@@ -24,6 +29,244 @@ export function hasMiniscriptPolicy(
 
 export function isContinuityPolicyType(type: string | undefined): boolean {
   return type === 'partner_continuity_v1' || type === 'family_continuity_v1';
+}
+
+/** Maps native policy role codes to stable, localizable presentation labels. */
+export function policySignerRoleLabel(role: string): string {
+  switch (role) {
+    case 'primary':
+      return 'Primary signer';
+    case 'recovery':
+      return 'Recovery signer';
+    case 'heir':
+      return 'Heir signer';
+    case 'owner':
+      return 'Owner signer';
+    case 'partner':
+      return 'Partner signer';
+    case 'estate_guardian':
+      return 'Estate guardian';
+    case 'parent':
+      return 'Parent';
+    case 'child_assistance':
+      return 'Child assistance signer';
+    case 'child_inheritance':
+      return 'Child inheritance signer';
+    case 'executor':
+      return 'Executor';
+    case 'policy_signer':
+      return 'Policy signer';
+    default:
+      return 'Signer role unavailable';
+  }
+}
+
+export type PolicyPathRow = {
+  definition: PolicyPathDefinition;
+  status: PolicyPathCoinStatus;
+};
+
+const VALID_POLICY_STATES = new Set(['available', 'waiting', 'unconfirmed', 'unknown']);
+const VALID_POLICY_BLOCKERS = new Set(['frozen', 'stale_chain']);
+
+function validBoundedInteger(value: unknown, maximum = Number.MAX_SAFE_INTEGER): value is number {
+  return Number.isSafeInteger(value) && Number(value) >= 0 && Number(value) <= maximum;
+}
+
+/**
+ * Validates the native, wallet-wide policy-path contract before presentation.
+ * This deliberately checks structure only: Rust remains the source of the path
+ * names, delays, roles, and signer membership.
+ */
+export function validPolicyPathDefinitions(
+  definitions: PolicyPathDefinition[] | null | undefined
+): PolicyPathDefinition[] {
+  if (!definitions?.length || definitions.length > 16) return [];
+  const definitionCodes = new Set<string>();
+  const definitionIndices = new Set<number>();
+  let previousDelay = -1;
+  const validated: PolicyPathDefinition[] = [];
+  for (const definition of definitions) {
+    if (
+      !validBoundedInteger(definition.index, 15) ||
+      definition.index !== validated.length ||
+      definitionIndices.has(definition.index) ||
+      !definition.code ||
+      definition.code.length > 64 ||
+      definitionCodes.has(definition.code) ||
+      !definition.name ||
+      Array.from(definition.name).length > 96 ||
+      !validBoundedInteger(definition.required, 8) ||
+      definition.required < 1 ||
+      !validBoundedInteger(definition.availableAfterBlocks, 65_535) ||
+      definition.availableAfterBlocks < previousDelay ||
+      !Array.isArray(definition.eligibleSignerFingerprints) ||
+      definition.eligibleSignerFingerprints.length < definition.required ||
+      definition.eligibleSignerFingerprints.length > 8 ||
+      definition.eligibleSignerFingerprints.some(
+        (fingerprint) => !/^[0-9a-f]{8}$/i.test(fingerprint)
+      ) ||
+      !Array.isArray(definition.signerGroups) ||
+      definition.signerGroups.length < 1 ||
+      definition.signerGroups.length > 4
+    )
+      return [];
+    const groupCodes = new Set<string>();
+    const groupFingerprints = new Set<string>();
+    let groupRequirement = 0;
+    for (const group of definition.signerGroups) {
+      if (
+        !group.code ||
+        group.code.length > 64 ||
+        groupCodes.has(group.code) ||
+        !group.label ||
+        Array.from(group.label).length > 64 ||
+        !validBoundedInteger(group.required, 8) ||
+        group.required < 1 ||
+        !Array.isArray(group.signers) ||
+        group.signers.length < group.required ||
+        group.signers.length > 8
+      )
+        return [];
+      groupCodes.add(group.code);
+      groupRequirement += group.required;
+      for (const signer of group.signers) {
+        if (
+          !signer.label ||
+          Array.from(signer.label).length > 48 ||
+          !/^[0-9a-f]{8}$/i.test(signer.fingerprint) ||
+          !signer.role ||
+          signer.role.length > 64
+        )
+          return [];
+        const fingerprint = signer.fingerprint.toLowerCase();
+        if (groupFingerprints.has(fingerprint)) return [];
+        groupFingerprints.add(fingerprint);
+      }
+    }
+    const eligible = new Set(
+      definition.eligibleSignerFingerprints.map((fingerprint) => fingerprint.toLowerCase())
+    );
+    if (
+      groupRequirement !== definition.required ||
+      eligible.size !== groupFingerprints.size ||
+      [...eligible].some((fingerprint) => !groupFingerprints.has(fingerprint))
+    )
+      return [];
+    definitionCodes.add(definition.code);
+    definitionIndices.add(definition.index);
+    previousDelay = definition.availableAfterBlocks;
+    validated.push(definition);
+  }
+  return validated;
+}
+
+export function validPolicyPathRows(
+  coin: Utxo,
+  definitions: PolicyPathDefinition[] | null | undefined
+): PolicyPathRow[] {
+  const statuses = coin.policyPathStatuses;
+  const validatedDefinitions = validPolicyPathDefinitions(definitions);
+  if (!validatedDefinitions.length || !statuses?.length) return [];
+  if (statuses.length !== validatedDefinitions.length) return [];
+  const statusByIndex = new Map<number, PolicyPathCoinStatus>();
+  for (const status of statuses) {
+    if (
+      !validBoundedInteger(status.pathIndex, 15) ||
+      statusByIndex.has(status.pathIndex) ||
+      !VALID_POLICY_STATES.has(status.policyState) ||
+      !validBoundedInteger(status.ageBlocks) ||
+      (status.blocksUntilBroadcastEligible !== null &&
+        !validBoundedInteger(status.blocksUntilBroadcastEligible)) ||
+      (status.confirmationHeight !== null && !validBoundedInteger(status.confirmationHeight)) ||
+      (status.earliestInclusionHeight !== null &&
+        !validBoundedInteger(status.earliestInclusionHeight)) ||
+      (status.approximateSecondsRemaining !== null &&
+        !validBoundedInteger(status.approximateSecondsRemaining)) ||
+      !Array.isArray(status.actionBlockers) ||
+      new Set(status.actionBlockers).size !== status.actionBlockers.length ||
+      status.actionBlockers.some((blocker) => !VALID_POLICY_BLOCKERS.has(blocker))
+    )
+      return [];
+    statusByIndex.set(status.pathIndex, status);
+  }
+  const rows: PolicyPathRow[] = [];
+  for (const definition of validatedDefinitions) {
+    const status = statusByIndex.get(definition.index);
+    if (!status) return [];
+    const delayed = definition.availableAfterBlocks > 0;
+    const confirmed = status.ageBlocks > 0;
+    const expectedRemaining = !delayed
+      ? 0
+      : confirmed
+        ? Math.max(0, definition.availableAfterBlocks - status.ageBlocks)
+        : null;
+    const expectedEstimate = expectedRemaining === null ? null : expectedRemaining * 600;
+    if (
+      status.ageBlocks !== coin.confirmations ||
+      status.blocksUntilBroadcastEligible !== expectedRemaining ||
+      status.approximateSecondsRemaining !== expectedEstimate ||
+      (confirmed && status.confirmationHeight === null) ||
+      (!confirmed && status.confirmationHeight !== null) ||
+      (status.confirmationHeight === null
+        ? status.earliestInclusionHeight !== null
+        : delayed
+          ? status.earliestInclusionHeight !==
+            status.confirmationHeight + definition.availableAfterBlocks
+          : status.earliestInclusionHeight !== null) ||
+      (!delayed && status.policyState !== 'available') ||
+      (delayed &&
+        (status.actionBlockers.includes('stale_chain')
+          ? status.policyState !== 'unknown'
+          : !confirmed
+            ? status.policyState !== 'unconfirmed'
+            : expectedRemaining === 0
+              ? status.policyState !== 'available'
+              : status.policyState !== 'waiting'))
+    )
+      return [];
+    rows.push({ definition, status });
+  }
+  return rows;
+}
+
+/** Validates the native per-coin renewal projection against the same snapshot tip. */
+export function validPolicyRenewalRecommendation(
+  coin: Utxo,
+  tipHeight: number
+): PolicyRenewalRecommendation | null {
+  const recommendation = coin.policyRenewalRecommendation;
+  if (!recommendation || !validBoundedInteger(tipHeight)) return null;
+  if (
+    !validBoundedInteger(recommendation.recommendedAtAgeBlocks, 65_535) ||
+    recommendation.recommendedAtAgeBlocks < 1 ||
+    !validBoundedInteger(coin.confirmations) ||
+    (recommendation.remainingBlocks !== null &&
+      !validBoundedInteger(recommendation.remainingBlocks)) ||
+    (recommendation.recommendedAtHeight !== null &&
+      !validBoundedInteger(recommendation.recommendedAtHeight)) ||
+    (recommendation.approximateSecondsRemaining !== null &&
+      !validBoundedInteger(recommendation.approximateSecondsRemaining)) ||
+    typeof recommendation.due !== 'boolean'
+  )
+    return null;
+  const confirmed = coin.confirmations > 0;
+  const expectedRemaining = confirmed
+    ? Math.max(0, recommendation.recommendedAtAgeBlocks - coin.confirmations)
+    : null;
+  const expectedHeight = confirmed
+    ? tipHeight + recommendation.recommendedAtAgeBlocks - coin.confirmations
+    : null;
+  const expectedSeconds = expectedRemaining === null ? null : expectedRemaining * 600;
+  if (
+    (expectedHeight !== null && (!Number.isSafeInteger(expectedHeight) || expectedHeight < 0)) ||
+    recommendation.remainingBlocks !== expectedRemaining ||
+    recommendation.recommendedAtHeight !== expectedHeight ||
+    recommendation.approximateSecondsRemaining !== expectedSeconds ||
+    recommendation.due !== (confirmed && expectedRemaining === 0)
+  )
+    return null;
+  return recommendation;
 }
 
 export function walletPolicyPresentation(wallet: MultisigWallet): WalletPolicyPresentation {

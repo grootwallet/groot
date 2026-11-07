@@ -22,16 +22,24 @@
   import Amount from '$lib/components/Amount.svelte';
   import {
     addressReuseInsights,
-    approximateBlockDuration,
     policyMaturitySummary,
+    policySignerRoleLabel,
     selectedCoinTotal,
     isContinuityPolicyType,
+    validPolicyPathRows,
+    validPolicyRenewalRecommendation,
     validPolicyMaturity
   } from '$lib/wallet/policy';
   import { walletService, WalletError } from '$lib/wallet';
   import { toast } from '$lib/stores/toasts';
   import { onMount } from 'svelte';
-  import type { Transaction, Utxo } from '$lib/types';
+  import type {
+    PolicyPathCoinStatus,
+    PolicyPathDefinition,
+    PolicySignerGroup,
+    Transaction,
+    Utxo
+  } from '$lib/types';
   import { formatConfirmationCount, formatInteger, locale, t } from '$lib/i18n';
   import { sortCoins, type CoinSortOrder } from '$lib/wallet/presentation';
   import WalletSkeleton from '$lib/components/WalletSkeleton.svelte';
@@ -47,6 +55,9 @@
   import InsightTip from '$lib/components/InsightTip.svelte';
   import WarningNotice from '$lib/components/WarningNotice.svelte';
   import { goto } from '$app/navigation';
+  import LocalTimestamp from '$lib/components/LocalTimestamp.svelte';
+  import { estimatedFutureTimestamp } from '$lib/date-time';
+  import { defaultConfig } from '$lib/config';
 
   const walletShell = useWalletShellContext();
   const MATURITY_MATURE = 'mature' as const;
@@ -85,6 +96,7 @@
     observedAt: null,
     status: 'unknown'
   });
+  let policyPaths = $state<PolicyPathDefinition[]>([]);
   const selectedTotal = $derived(selectedCoinTotal(utxos, selected));
   const chainTipCurrent = $derived(chainTip.status === 'recent');
   const maturitySummary = $derived(policyMaturitySummary(utxos, chainTip));
@@ -153,6 +165,51 @@
       : maturity.policyType === 'inheritance'
         ? 'Heir key'
         : 'Recovery key';
+  const policyRows = (coin: Utxo) => validPolicyPathRows(coin, policyPaths);
+  const renewalPolicyRows = $derived(renewalCoin ? policyRows(renewalCoin) : []);
+  const policyPathAvailable = (status: PolicyPathCoinStatus) => status.policyState === 'available';
+  const policyPathWaiting = (status: PolicyPathCoinStatus) => status.policyState === 'waiting';
+  const policyPathUnconfirmed = (status: PolicyPathCoinStatus) =>
+    status.policyState === 'unconfirmed';
+  const policyPathUnknown = (status: PolicyPathCoinStatus) => status.policyState === 'unknown';
+  const delayedPathReady = (rows: ReturnType<typeof policyRows>) =>
+    rows.some(
+      ({ definition, status }) =>
+        definition.availableAfterBlocks > 0 &&
+        status.policyState === 'available' &&
+        status.actionBlockers.length === 0
+    );
+  const readyDelayedPathCount = (rows: ReturnType<typeof policyRows>) =>
+    rows.filter(
+      ({ definition, status }) =>
+        definition.availableAfterBlocks > 0 && status.policyState === 'available'
+    ).length;
+  const nextDelayedBlocks = (rows: ReturnType<typeof policyRows>) => {
+    const remaining = rows
+      .filter(({ definition, status }) => {
+        return (
+          definition.availableAfterBlocks > 0 &&
+          status.policyState === 'waiting' &&
+          status.blocksUntilBroadcastEligible !== null
+        );
+      })
+      .map(({ status }) => status.blocksUntilBroadcastEligible as number);
+    return remaining.length ? Math.min(...remaining) : null;
+  };
+  const estimatedAvailability = (status: PolicyPathCoinStatus) =>
+    defaultConfig.network === 'regtest' || !chainTipCurrent || status.policyState !== 'waiting'
+      ? null
+      : estimatedFutureTimestamp(chainTip.observedAt, status.approximateSecondsRemaining);
+  const signerRequirement = (group: PolicySignerGroup) =>
+    translate(
+      $locale,
+      group.required === 1 ? '{count} of {total} {group}' : '{count} of {total} {group}',
+      {
+        count: formatInteger(group.required, $locale),
+        total: formatInteger(group.signers.length, $locale),
+        group: translate($locale, group.label)
+      }
+    );
 
   $effect(() => {
     if ($discreetMode) labelFilter = '';
@@ -169,6 +226,7 @@
         utxos = event.snapshot.utxos;
         transactions = event.snapshot.transactions;
         chainTip = event.snapshot.chainTip;
+        policyPaths = event.snapshot.policyPaths ?? [];
         selected = selected.filter((outpoint) =>
           utxos.some((coin) => coin.outpoint === outpoint && !coin.frozen)
         );
@@ -219,6 +277,7 @@
       utxos = snapshot.utxos;
       transactions = snapshot.transactions;
       chainTip = snapshot.chainTip;
+      policyPaths = snapshot.policyPaths ?? [];
       const requestedCoin = new URLSearchParams(location.search).get('coin');
       if (requestedCoin && utxos.some((coin) => coin.outpoint === requestedCoin)) {
         expanded = [requestedCoin];
@@ -427,7 +486,7 @@
               expanded={selectionMenuOpen}
               onclick={() => (selectionMenuOpen = !selectionMenuOpen)}
             />{#if selectionMenuOpen}<div class="wallet-more-menu coin-selection-menu" role="menu">
-                {#if renewalCoin && chainTipCurrent && multisig}{#if renewalCoin.policyMaturity?.delayedSpendSupported && renewalCoin.policyMaturity.state === MATURITY_MATURE}<a
+                {#if renewalCoin && chainTipCurrent && multisig}{#if renewalCoin.policyMaturity?.delayedSpendSupported && delayedPathReady(renewalPolicyRows)}<a
                       role="menuitem"
                       href={delayedSpendHref}
                       ><Unlock size={15} /><span
@@ -440,7 +499,13 @@
                                 ? 'Use heir key'
                                 : 'Use recovery key'
                           )}</strong
-                        ><small>{translate($locale, 'Spend this coin with its backup key')}</small
+                        ><small
+                          >{translate(
+                            $locale,
+                            isContinuityPolicyType(renewalCoin.policyMaturity?.policyType)
+                              ? 'Who can authorize this coin and when'
+                              : 'Spend this coin with its backup key'
+                          )}</small
                         ></span
                       ></a
                     >{/if}<a role="menuitem" href={renewalHref}
@@ -448,14 +513,18 @@
                       ><strong
                         >{translate(
                           $locale,
-                          renewalCoin.policyMaturity?.policyType === 'inheritance'
-                            ? 'Postpone heir access'
-                            : 'Restart recovery wait'
+                          isContinuityPolicyType(renewalCoin.policyMaturity?.policyType)
+                            ? 'Renew protection'
+                            : renewalCoin.policyMaturity?.policyType === 'inheritance'
+                              ? 'Postpone heir access'
+                              : 'Restart recovery wait'
                         )}</strong
                       ><small
                         >{translate(
                           $locale,
-                          'Move it within this wallet to begin a new wait'
+                          isContinuityPolicyType(renewalCoin.policyMaturity?.policyType)
+                            ? 'Keep using an available path, or renew this coin to restart every delayed wait after confirmation.'
+                            : 'Move it within this wallet to begin a new wait'
                         )}</small
                       ></span
                     ></a
@@ -549,6 +618,10 @@
         {@const reuse = reuseFor(utxo.outpoint)}
         {@const linkedCoins = linkedCoinsFor(utxo.outpoint)}
         {@const maturity = validPolicyMaturity(utxo)}
+        {@const paths = policyRows(utxo)}
+        {@const renewal = validPolicyRenewalRecommendation(utxo, chainTip.height)}
+        {@const readyCount = readyDelayedPathCount(paths)}
+        {@const nextBlocks = nextDelayedBlocks(paths)}
         <article
           id={`coin-${utxo.outpoint.replace(/[^a-zA-Z0-9_-]/g, '-')}`}
           class="coin-row"
@@ -580,6 +653,27 @@
             <div class="coin-title">
               <strong>{coinKind(utxo)}</strong>{#if utxo.frozen}<span class="coin-status frozen"
                   >{translate($locale, 'Frozen')}</span
+                >{:else if maturity && isContinuityPolicyType(maturity.policyType) && paths.length}<span
+                  class="coin-status"
+                  class:policy-mature={readyCount > 0}
+                  class:policy-approaching={readyCount === 0 && nextBlocks !== null}
+                  class:pending={readyCount === 0 && nextBlocks === null}
+                  >{!chainTipCurrent
+                    ? translate($locale, 'Sync to verify spending paths')
+                    : readyCount === 1
+                      ? translate($locale, '1 delayed path available')
+                      : readyCount > 1
+                        ? translate($locale, '{count} delayed paths available', {
+                            count: formatInteger(readyCount, $locale)
+                          })
+                        : nextBlocks !== null
+                          ? translate($locale, 'Next path in {count} blocks', {
+                              count: formatInteger(nextBlocks, $locale)
+                            })
+                          : translate($locale, 'Wait starts after confirmation')}</span
+                >{:else if maturity && isContinuityPolicyType(maturity.policyType)}<span
+                  class="coin-status pending"
+                  >{translate($locale, 'Policy details unavailable')}</span
                 >{:else if maturity && maturityIs(maturity, MATURITY_MATURE)}<span
                   class="coin-status policy-mature"
                   >{translate($locale, '{key} can spend', {
@@ -653,83 +747,167 @@
           </div>
           {#if expanded.includes(utxo.outpoint)}
             <div class="coin-details" transition:slide={{ duration: 180 }}>
-              {#if maturity}<section class="coin-policy-section">
-                  <div class="coin-detail-heading">
-                    <strong>{translate($locale, 'Spending access')}</strong>
-                    <small>{translate($locale, 'Who can spend this coin now')}</small>
+              {#if maturity && paths.length}<section class="coin-policy-section">
+                  <div class="coin-detail-heading coin-policy-heading">
+                    <span>
+                      <strong>{translate($locale, 'Spending paths')}</strong>
+                      <small>{translate($locale, 'Who can authorize this coin and when')}</small>
+                    </span>
+                    {#if chainTip.observedAt}<small class="coin-policy-observed"
+                        >{translate($locale, chainTipCurrent ? 'Checked' : 'Last checked')}
+                        <LocalTimestamp value={chainTip.observedAt} /></small
+                      >{/if}
                   </div>
-                  <dl>
-                    <div>
-                      <dt>{translate($locale, extraKeyName(maturity))}</dt>
-                      <dd>
-                        {maturityIs(maturity, MATURITY_UNCONFIRMED)
-                          ? translate($locale, 'Waiting for confirmation')
-                          : maturityIs(maturity, MATURITY_MATURE)
-                            ? translate($locale, 'Can spend this coin alone')
-                            : maturityIs(maturity, MATURITY_APPROACHING)
-                              ? translate($locale, 'Available soon')
-                              : translate($locale, 'Not available yet')}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt>{translate($locale, 'Timeline')}</dt>
-                      <dd>
-                        {!chainTipCurrent
-                          ? translate($locale, 'Paused · last verified at block {height}', {
-                              height: formatInteger(chainTip.height, $locale)
-                            })
-                          : maturityIs(maturity, MATURITY_UNCONFIRMED)
-                            ? translate($locale, 'Starts after the first confirmation')
-                            : maturity.remainingBlocks === 0
-                              ? translate($locale, 'Available since block {height}', {
-                                  height: formatInteger(
-                                    maturity.maturityHeight ?? chainTip.height,
-                                    $locale
-                                  )
-                                })
-                              : translate($locale, '{count} blocks remaining', {
-                                  count: formatInteger(maturity.remainingBlocks ?? 0, $locale)
-                                })}
-                        {#if chainTipCurrent && maturity.approximateSecondsRemaining !== null && maturity.approximateSecondsRemaining > 0}{@const approximate =
-                            approximateBlockDuration(
-                              maturity.approximateSecondsRemaining
-                            )}{#if approximate}<span class="coin-approximate-time"
-                              >≈ {formatInteger(approximate.value, $locale)}
-                              {translate($locale, approximate.unit)}</span
-                            >{/if}{/if}
-                      </dd>
-                    </div>
-                    <div class="coin-policy-explanation">
-                      <dt>{translate($locale, 'What this means')}</dt>
-                      <dd>
-                        {maturityIs(maturity, MATURITY_MATURE)
-                          ? translate(
+                  <WarningNotice
+                    title={translate($locale, 'This coin does not expire')}
+                    body={translate(
+                      $locale,
+                      'New spending paths become available over time. Earlier paths remain available unless a chain reorganization reduces this coin’s confirmed age.'
+                    )}
+                  />
+                  <div class="coin-policy-paths">
+                    {#each paths as path (path.definition.index)}
+                      {@const estimate = estimatedAvailability(path.status)}
+                      <article
+                        class="coin-policy-path"
+                        class:available={policyPathAvailable(path.status)}
+                        aria-label={`${translate($locale, path.definition.name)} · ${translate(
+                          $locale,
+                          policyPathAvailable(path.status)
+                            ? 'Available now'
+                            : policyPathWaiting(path.status)
+                              ? 'Waiting for blocks'
+                              : policyPathUnconfirmed(path.status)
+                                ? 'Starts after confirmation'
+                                : 'Sync to verify'
+                        )}`}
+                      >
+                        <div class="coin-policy-path-heading">
+                          <div>
+                            <strong>{translate($locale, path.definition.name)}</strong>
+                            <small
+                              >{path.definition.availableAfterBlocks === 0
+                                ? translate($locale, 'No timelock')
+                                : translate($locale, 'After {count} confirmations', {
+                                    count: formatInteger(
+                                      path.definition.availableAfterBlocks,
+                                      $locale
+                                    )
+                                  })}</small
+                            >
+                          </div>
+                          <span
+                            class="coin-status"
+                            class:policy-mature={policyPathAvailable(path.status)}
+                            class:policy-approaching={policyPathWaiting(path.status)}
+                            class:pending={policyPathUnconfirmed(path.status) ||
+                              policyPathUnknown(path.status)}
+                            >{policyPathAvailable(path.status)
+                              ? translate($locale, 'Available now')
+                              : policyPathWaiting(path.status)
+                                ? path.status.blocksUntilBroadcastEligible === 1
+                                  ? translate($locale, '1 block remaining')
+                                  : translate($locale, '{count} blocks remaining', {
+                                      count: formatInteger(
+                                        path.status.blocksUntilBroadcastEligible ?? 0,
+                                        $locale
+                                      )
+                                    })
+                                : policyPathUnconfirmed(path.status)
+                                  ? translate($locale, 'Starts after confirmation')
+                                  : translate($locale, 'Sync to verify')}</span
+                          >
+                        </div>
+                        <div class="coin-policy-groups">
+                          {#each path.definition.signerGroups as group (group.code)}<div>
+                              <span>{signerRequirement(group)}</span>
+                              <ul aria-label={translate($locale, group.label)}>
+                                {#each group.signers as signer (signer.fingerprint)}<li>
+                                    <span class="coin-policy-signer"
+                                      ><strong>{signer.label}</strong><small
+                                        >{translate(
+                                          $locale,
+                                          policySignerRoleLabel(signer.role)
+                                        )}</small
+                                      ></span
+                                    ><code>{signer.fingerprint.toLowerCase()}</code>
+                                  </li>{/each}
+                              </ul>
+                            </div>{/each}
+                        </div>
+                        {#if path.definition.availableAfterBlocks > 0}<dl
+                            class="coin-policy-timeline"
+                          >
+                            {#if path.status.earliestInclusionHeight !== null}<div>
+                                <dt>{translate($locale, 'Earliest inclusion')}</dt>
+                                <dd>
+                                  {translate($locale, 'Block {height}', {
+                                    height: formatInteger(
+                                      path.status.earliestInclusionHeight,
+                                      $locale
+                                    )
+                                  })}
+                                </dd>
+                              </div>{/if}{#if estimate}<div>
+                                <dt>{translate($locale, 'Estimated around')}</dt>
+                                <dd><LocalTimestamp value={estimate} /></dd>
+                              </div>{:else if defaultConfig.network === 'regtest' && path.status.policyState === 'waiting'}<div
+                              >
+                                <dt>{translate($locale, 'Calendar estimate')}</dt>
+                                <dd>
+                                  {translate(
+                                    $locale,
+                                    'Unavailable on Regtest because blocks are mined manually.'
+                                  )}
+                                </dd>
+                              </div>{/if}
+                          </dl>{/if}
+                        {#if path.status.actionBlockers.includes('frozen')}<small
+                            class="coin-policy-blocker"
+                            >{translate($locale, 'Unfreeze this coin before spending it.')}</small
+                          >{/if}{#if path.status.actionBlockers.includes('stale_chain')}<small
+                            class="coin-policy-blocker"
+                            >{translate(
                               $locale,
-                              isContinuityPolicyType(maturity.policyType)
-                                ? 'A delayed path is available. Review its required signers before spending. Primary signers remain available.'
-                                : '{key} can now spend this coin alone. Your normal 2-of-3 keys still work.',
-                              { key: translate($locale, extraKeyName(maturity)) }
-                            )
-                          : translate(
-                              $locale,
-                              isContinuityPolicyType(maturity.policyType)
-                                ? 'Delayed paths are still waiting. Primary signers can spend now and remain available later.'
-                                : '{key} cannot spend this coin yet. Your normal 2-of-3 keys work now and remain available later.',
-                              { key: translate($locale, extraKeyName(maturity)) }
-                            )}
-                      </dd>
-                    </div>
-                  </dl>
-                  {#if multisig && chainTipCurrent && (maturityIs(maturity, MATURITY_MATURE) || (isContinuityPolicyType(maturity.policyType) && utxo.confirmations > 0))}<div
-                      class="coin-policy-renewal"
-                    >
+                              'Sync this wallet before checking spending paths.'
+                            )}</small
+                          >{/if}
+                      </article>
+                    {/each}
+                  </div>
+                  {#if renewal}<div class="coin-policy-renewal-recommendation">
+                      <RefreshCw size={15} />
+                      <div>
+                        <strong
+                          >{translate(
+                            $locale,
+                            !chainTipCurrent
+                              ? 'Sync to verify renewal timing'
+                              : utxo.confirmations === 0
+                                ? 'Renewal timing starts after confirmation'
+                                : renewal.due
+                                  ? 'Renewal is recommended now'
+                                  : 'Renewal is recommended in {count} blocks',
+                            {
+                              count: formatInteger(renewal.remainingBlocks ?? 0, $locale)
+                            }
+                          )}</strong
+                        ><small
+                          >{translate(
+                            $locale,
+                            'Renewal is optional. It uses the primary path and creates an onchain self-transfer whose new waits start after confirmation.'
+                          )}</small
+                        >
+                      </div>
+                    </div>{/if}
+                  {#if multisig}<div class="coin-policy-renewal">
                       <RefreshCw size={15} />
                       <div class="coin-policy-copy">
                         <strong>{translate($locale, 'No action is required')}</strong>
                         <small
                           >{translate(
                             $locale,
-                            'Keep using your normal keys, use the backup key, or restart this coin’s wait.'
+                            'Keep using an available path, or renew this coin to restart every delayed wait after confirmation.'
                           )}</small
                         >
                       </div>
@@ -737,26 +915,47 @@
                         <Button
                           variant="secondary"
                           size="small"
+                          disabled={!chainTipCurrent ||
+                            utxo.frozen ||
+                            utxo.confirmations === 0 ||
+                            (!isContinuityPolicyType(maturity.policyType) &&
+                              maturity.state !== MATURITY_MATURE)}
                           href={`/multisig/send?coins=${encodeURIComponent(utxo.outpoint)}&renewProtection=1${maturityFixtureSuffix}`}
                           >{translate(
                             $locale,
-                            maturity.policyType === 'inheritance'
-                              ? 'Postpone heir access'
-                              : 'Restart recovery wait'
+                            isContinuityPolicyType(maturity.policyType)
+                              ? 'Renew protection'
+                              : maturity.policyType === 'inheritance'
+                                ? 'Postpone heir access'
+                                : 'Restart recovery wait'
                           )}</Button
-                        >{#if maturity.delayedSpendSupported && maturityIs(maturity, MATURITY_MATURE)}<Button
+                        >{#if maturity.delayedSpendSupported && delayedPathReady(paths)}<Button
                             variant="secondary"
                             size="small"
                             href={`/multisig/send?coins=${encodeURIComponent(utxo.outpoint)}&delayedSpend=1${maturityFixtureSuffix}`}
                             >{translate(
                               $locale,
-                              maturity.policyType === 'inheritance'
-                                ? 'Use heir key'
-                                : 'Use recovery key'
+                              isContinuityPolicyType(maturity.policyType)
+                                ? 'Choose spending path'
+                                : maturity.policyType === 'inheritance'
+                                  ? 'Use heir key'
+                                  : 'Use recovery key'
                             )}</Button
                           >{/if}
                       </div>
                     </div>{/if}
+                </section>{:else if maturity}<section class="coin-policy-section">
+                  <div class="coin-detail-heading">
+                    <strong>{translate($locale, 'Spending access')}</strong>
+                    <small>{translate($locale, 'Policy details unavailable')}</small>
+                  </div>
+                  <WarningNotice
+                    title={translate($locale, 'Policy details unavailable')}
+                    body={translate(
+                      $locale,
+                      'Sync this wallet and reopen the coin before using a delayed spending path.'
+                    )}
+                  />
                 </section>{/if}
               <details class="coin-detail-group">
                 <summary>
@@ -1288,13 +1487,158 @@
     color: var(--muted);
     font-size: var(--font-size-meta);
   }
-  :global(.coin-approximate-time):where(.coin-approximate-time) {
-    color: var(--muted);
+  :global(.coin-policy-heading):where(.coin-policy-heading) {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
   }
-
-  :global(.coin-policy-explanation):where(.coin-policy-explanation) :global(dd) {
-    max-width: 62ch;
-    line-height: 1.45;
+  :global(.coin-policy-heading):where(.coin-policy-heading) > :global(span) {
+    display: grid;
+    gap: 2px;
+  }
+  :global(.coin-policy-observed):where(.coin-policy-observed) {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 4px;
+    text-align: right;
+  }
+  :global(.coin-policy-paths):where(.coin-policy-paths) {
+    display: grid;
+    gap: 8px;
+  }
+  :global(.coin-policy-path):where(.coin-policy-path) {
+    display: grid;
+    gap: 10px;
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-inset);
+    background: var(--surface-control);
+  }
+  :global(.coin-policy-path.available):where(.coin-policy-path) {
+    border-color: color-mix(in srgb, var(--success) 30%, var(--border));
+  }
+  :global(.coin-policy-path-heading):where(.coin-policy-path-heading) {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  :global(.coin-policy-path-heading):where(.coin-policy-path-heading) > :global(div) {
+    min-width: 0;
+    display: grid;
+    gap: 2px;
+  }
+  :global(.coin-policy-path-heading):where(.coin-policy-path-heading) :global(strong) {
+    overflow-wrap: anywhere;
+    font-size: 14px;
+  }
+  :global(.coin-policy-path-heading):where(.coin-policy-path-heading) :global(small) {
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+  }
+  :global(.coin-policy-path-heading):where(.coin-policy-path-heading) > :global(.coin-status) {
+    flex: 0 0 auto;
+  }
+  :global(.coin-policy-groups):where(.coin-policy-groups) {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 8px;
+  }
+  :global(.coin-policy-groups):where(.coin-policy-groups) > :global(div) {
+    min-width: 0;
+    display: grid;
+    gap: 5px;
+    padding: 9px;
+    border-radius: var(--radius-control);
+    background: var(--surface-inset);
+  }
+  :global(.coin-policy-groups):where(.coin-policy-groups) > :global(div > span) {
+    color: var(--text-soft);
+    font-size: var(--font-size-meta);
+    font-weight: 650;
+  }
+  :global(.coin-policy-groups):where(.coin-policy-groups) :global(ul) {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 3px;
+  }
+  :global(.coin-policy-groups):where(.coin-policy-groups) :global(li) {
+    min-width: 0;
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+  }
+  :global(.coin-policy-groups):where(.coin-policy-groups) :global(li strong) {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    color: var(--muted);
+    font-weight: 500;
+  }
+  :global(.coin-policy-signer):where(.coin-policy-signer) {
+    min-width: 0;
+    display: grid;
+    gap: 1px;
+  }
+  :global(.coin-policy-signer):where(.coin-policy-signer) :global(small) {
+    color: var(--muted);
+    font-size: 11px;
+  }
+  :global(.coin-policy-groups):where(.coin-policy-groups) :global(li code) {
+    flex: 0 0 auto;
+    font-size: 12px;
+  }
+  :global(.coin-policy-timeline):where(.coin-policy-timeline) {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    gap: 8px;
+  }
+  :global(.coin-policy-timeline):where(.coin-policy-timeline) > :global(div) {
+    min-width: 0;
+    display: grid;
+    grid-template-columns: minmax(110px, auto) minmax(0, 1fr);
+    gap: 8px;
+  }
+  :global(.coin-policy-timeline):where(.coin-policy-timeline) :global(dd) {
+    overflow-wrap: anywhere;
+  }
+  :global(.coin-policy-blocker):where(.coin-policy-blocker) {
+    color: var(--warning-text);
+    font-size: var(--font-size-meta);
+  }
+  :global(.coin-policy-renewal-recommendation):where(.coin-policy-renewal-recommendation) {
+    display: grid;
+    grid-template-columns: 24px minmax(0, 1fr);
+    gap: 8px;
+    padding: 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+    background: var(--surface-inset);
+  }
+  :global(.coin-policy-renewal-recommendation):where(.coin-policy-renewal-recommendation)
+    > :global(svg) {
+    color: var(--link);
+  }
+  :global(.coin-policy-renewal-recommendation):where(.coin-policy-renewal-recommendation)
+    > :global(div) {
+    display: grid;
+    gap: 2px;
+  }
+  :global(.coin-policy-renewal-recommendation):where(.coin-policy-renewal-recommendation)
+    :global(strong) {
+    font-size: var(--font-size-meta);
+  }
+  :global(.coin-policy-renewal-recommendation):where(.coin-policy-renewal-recommendation)
+    :global(small) {
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+    line-height: 1.4;
   }
   :global(.coin-policy-renewal):where(.coin-policy-renewal) {
     display: grid;
@@ -1665,6 +2009,22 @@
   @media (max-width: 700px) {
     :global(.coin-policy-actions):where(.coin-policy-actions) {
       grid-template-columns: 1fr;
+    }
+    :global(.coin-policy-heading):where(.coin-policy-heading),
+    :global(.coin-policy-path-heading):where(.coin-policy-path-heading) {
+      align-items: stretch;
+      flex-direction: column;
+    }
+    :global(.coin-policy-observed):where(.coin-policy-observed) {
+      justify-content: flex-start;
+      text-align: left;
+    }
+    :global(.coin-policy-path-heading):where(.coin-policy-path-heading) > :global(.coin-status) {
+      align-self: flex-start;
+    }
+    :global(.coin-policy-groups):where(.coin-policy-groups),
+    :global(.coin-policy-timeline):where(.coin-policy-timeline) {
+      grid-template-columns: minmax(0, 1fr);
     }
   }
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Utxo } from '$lib/types';
+import type { PolicyPathDefinition, Utxo } from '$lib/types';
 import { feeRate, sats, WalletError, type MultisigWallet } from './contracts';
 import {
   addressPrefixForNetwork,
@@ -12,8 +12,12 @@ import {
   normalizePermanentLabel,
   approximateBlockDuration,
   policyMaturitySummary,
+  policySignerRoleLabel,
   recoveryWordCountIsValid,
   selectedCoinTotal,
+  validPolicyPathDefinitions,
+  validPolicyPathRows,
+  validPolicyRenewalRecommendation,
   validPolicyMaturity,
   walletPolicyPresentation
 } from './policy';
@@ -485,4 +489,258 @@ it('recognizes only the fixed continuity policy types', async () => {
     expect(isContinuityPolicyType(type)).toBe(true);
   for (const type of [undefined, 'standard', 'recovery', 'inheritance', 'unknown_continuity'])
     expect(isContinuityPolicyType(type)).toBe(false);
+});
+
+describe('per-coin policy path contracts', () => {
+  const coin: Utxo = {
+    outpoint: 'policy:0',
+    amount: 100_000,
+    confirmations: 13_140,
+    address: 'bcrt1qfixture',
+    label: 'Reserve',
+    frozen: false,
+    primaryLabel: null,
+    provenance: {
+      state: 'known' as const,
+      context: 'received' as const,
+      labels: [],
+      clusterCount: 1,
+      addressReused: false
+    },
+    policyPathStatuses: [
+      {
+        pathIndex: 0,
+        policyState: 'available' as const,
+        ageBlocks: 13_140,
+        blocksUntilBroadcastEligible: 0,
+        confirmationHeight: 1,
+        earliestInclusionHeight: null,
+        approximateSecondsRemaining: 0,
+        actionBlockers: []
+      },
+      {
+        pathIndex: 1,
+        policyState: 'available' as const,
+        ageBlocks: 13_140,
+        blocksUntilBroadcastEligible: 0,
+        confirmationHeight: 1,
+        earliestInclusionHeight: 13_141,
+        approximateSecondsRemaining: 0,
+        actionBlockers: []
+      }
+    ]
+  };
+  const definitions: PolicyPathDefinition[] = [
+    {
+      index: 0,
+      code: 'family_parents',
+      name: 'Both parents',
+      required: 2,
+      eligibleSignerFingerprints: ['00000001', '00000002'],
+      signerGroups: [
+        {
+          code: 'parents',
+          label: 'Parents',
+          required: 2,
+          signers: [
+            { label: 'Parent 1', fingerprint: '00000001', role: 'parent' },
+            { label: 'Parent 2', fingerprint: '00000002', role: 'parent' }
+          ]
+        }
+      ],
+      availableAfterBlocks: 0
+    },
+    {
+      index: 1,
+      code: 'family_assistance',
+      name: 'One parent and one child assistance signer',
+      required: 2,
+      eligibleSignerFingerprints: ['00000001', '00000002', '00000003', '00000004'],
+      signerGroups: [
+        {
+          code: 'parents',
+          label: 'Parents',
+          required: 1,
+          signers: [
+            { label: 'Parent 1', fingerprint: '00000001', role: 'parent' },
+            { label: 'Parent 2', fingerprint: '00000002', role: 'parent' }
+          ]
+        },
+        {
+          code: 'child_assistance_signers',
+          label: 'Child assistance signers',
+          required: 1,
+          signers: [
+            { label: 'Child 1', fingerprint: '00000003', role: 'child_assistance' },
+            { label: 'Child 2', fingerprint: '00000004', role: 'child_assistance' }
+          ]
+        }
+      ],
+      availableAfterBlocks: 13_140
+    }
+  ];
+
+  it('keeps structured Family role requirements intact', () => {
+    expect(validPolicyPathDefinitions(definitions)).toEqual(definitions);
+    const rows = validPolicyPathRows(coin, definitions);
+    expect(rows).toHaveLength(2);
+    expect(rows[1].definition.signerGroups.map((group) => group.required)).toEqual([1, 1]);
+  });
+
+  it('maps every native signer role to a stable presentation label', () => {
+    expect(
+      [
+        'primary',
+        'recovery',
+        'heir',
+        'owner',
+        'partner',
+        'estate_guardian',
+        'parent',
+        'child_assistance',
+        'child_inheritance',
+        'executor',
+        'policy_signer',
+        'future_role'
+      ].map(policySignerRoleLabel)
+    ).toEqual([
+      'Primary signer',
+      'Recovery signer',
+      'Heir signer',
+      'Owner signer',
+      'Partner signer',
+      'Estate guardian',
+      'Parent',
+      'Child assistance signer',
+      'Child inheritance signer',
+      'Executor',
+      'Policy signer',
+      'Signer role unavailable'
+    ]);
+  });
+
+  it('keeps the primary path available while delayed waits await confirmation', () => {
+    const unconfirmed = structuredClone(coin);
+    unconfirmed.confirmations = 0;
+    unconfirmed.policyPathStatuses = [
+      {
+        pathIndex: 0,
+        policyState: 'available',
+        ageBlocks: 0,
+        blocksUntilBroadcastEligible: 0,
+        confirmationHeight: null,
+        earliestInclusionHeight: null,
+        approximateSecondsRemaining: 0,
+        actionBlockers: []
+      },
+      {
+        pathIndex: 1,
+        policyState: 'unconfirmed',
+        ageBlocks: 0,
+        blocksUntilBroadcastEligible: null,
+        confirmationHeight: null,
+        earliestInclusionHeight: null,
+        approximateSecondsRemaining: null,
+        actionBlockers: []
+      }
+    ];
+
+    expect(
+      validPolicyPathRows(unconfirmed, definitions).map(({ status }) => status.policyState)
+    ).toEqual(['available', 'unconfirmed']);
+  });
+
+  it('validates renewal timing without inventing a countdown before confirmation', () => {
+    const unconfirmed = structuredClone(coin);
+    unconfirmed.confirmations = 0;
+    unconfirmed.policyRenewalRecommendation = {
+      recommendedAtAgeBlocks: 26_280,
+      remainingBlocks: null,
+      recommendedAtHeight: null,
+      approximateSecondsRemaining: null,
+      due: false
+    };
+    expect(validPolicyRenewalRecommendation(unconfirmed, 50_000)).toEqual(
+      unconfirmed.policyRenewalRecommendation
+    );
+
+    const waiting = structuredClone(coin);
+    waiting.policyRenewalRecommendation = {
+      recommendedAtAgeBlocks: 26_280,
+      remainingBlocks: 13_140,
+      recommendedAtHeight: 63_140,
+      approximateSecondsRemaining: 7_884_000,
+      due: false
+    };
+    expect(validPolicyRenewalRecommendation(waiting, 50_000)).toEqual(
+      waiting.policyRenewalRecommendation
+    );
+
+    const hostile = structuredClone(waiting);
+    hostile.policyRenewalRecommendation!.remainingBlocks = 0;
+    expect(validPolicyRenewalRecommendation(hostile, 50_000)).toBeNull();
+  });
+
+  it('fails closed on absent or malformed renewal projections', () => {
+    expect(validPolicyRenewalRecommendation(coin, 50_000)).toBeNull();
+
+    const malformed = structuredClone(coin);
+    malformed.policyRenewalRecommendation = {
+      recommendedAtAgeBlocks: 0,
+      remainingBlocks: 0,
+      recommendedAtHeight: 50_000,
+      approximateSecondsRemaining: 0,
+      due: true
+    };
+    expect(validPolicyRenewalRecommendation(malformed, 50_000)).toBeNull();
+  });
+
+  it('fails closed when signer groups or path statuses disagree', () => {
+    expect(validPolicyPathDefinitions(undefined)).toEqual([]);
+
+    const invalidGroup = structuredClone(definitions);
+    invalidGroup[0].signerGroups[0].required = 0;
+    expect(validPolicyPathDefinitions(invalidGroup)).toEqual([]);
+
+    const invalidSigner = structuredClone(definitions);
+    invalidSigner[0].signerGroups[0].signers[0].label = '';
+    expect(validPolicyPathDefinitions(invalidSigner)).toEqual([]);
+
+    const wrongRequirement = structuredClone(definitions);
+    wrongRequirement[1].required = 1;
+    expect(validPolicyPathDefinitions(wrongRequirement)).toEqual([]);
+    expect(validPolicyPathRows(coin, wrongRequirement)).toEqual([]);
+
+    const missingStatus = { ...coin, policyPathStatuses: coin.policyPathStatuses?.slice(0, 1) };
+    expect(validPolicyPathRows(missingStatus, definitions)).toEqual([]);
+
+    const invalidStatus = structuredClone(coin);
+    invalidStatus.policyPathStatuses![1].actionBlockers = ['stale_chain', 'stale_chain'];
+    expect(validPolicyPathRows(invalidStatus, definitions)).toEqual([]);
+
+    const unknownStatusIndex = structuredClone(coin);
+    unknownStatusIndex.policyPathStatuses![1].pathIndex = 2;
+    expect(validPolicyPathRows(unknownStatusIndex, definitions)).toEqual([]);
+
+    const wrongFingerprint = structuredClone(definitions);
+    wrongFingerprint[1].eligibleSignerFingerprints[0] = 'ffffffff';
+    expect(validPolicyPathRows(coin, wrongFingerprint)).toEqual([]);
+
+    const wrongBoundary = structuredClone(coin);
+    wrongBoundary.policyPathStatuses![1].blocksUntilBroadcastEligible = 1;
+    expect(validPolicyPathRows(wrongBoundary, definitions)).toEqual([]);
+
+    const duplicateSigner = structuredClone(definitions);
+    duplicateSigner[1].signerGroups[1].signers[0].fingerprint = '00000001';
+    expect(validPolicyPathDefinitions(duplicateSigner)).toEqual([]);
+    expect(validPolicyPathRows(coin, duplicateSigner)).toEqual([]);
+
+    const descendingDelays = structuredClone(definitions);
+    descendingDelays[1].availableAfterBlocks = -1;
+    expect(validPolicyPathDefinitions(descendingDelays)).toEqual([]);
+
+    const staleClaim = structuredClone(coin);
+    staleClaim.policyPathStatuses![1].actionBlockers = ['stale_chain'];
+    expect(validPolicyPathRows(staleClaim, definitions)).toEqual([]);
+  });
 });

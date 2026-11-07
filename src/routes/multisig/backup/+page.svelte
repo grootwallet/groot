@@ -1,6 +1,6 @@
 <script lang="ts">
   import WarningNotice from '$lib/components/WarningNotice.svelte';
-  import { locale } from '$lib/i18n';
+  import { formatInteger, locale } from '$lib/i18n';
   import { translate, localizedError } from '$lib/i18n-catalog';
   import {
     Braces,
@@ -37,7 +37,16 @@
   } from '$lib/wallet';
   import { defaultConfig, networkName } from '$lib/config';
   import { combineDescriptorBranches } from '$lib/descriptors';
-  import { walletPolicyPresentation } from '$lib/wallet/policy';
+  import type { PolicyPathDefinition, PolicySignerGroup } from '$lib/types';
+  import {
+    isContinuityPolicyType,
+    policySignerRoleLabel,
+    validPolicyPathDefinitions,
+    walletPolicyPresentation
+  } from '$lib/wallet/policy';
+  import { useWalletShellContext } from '$lib/wallet/shell-context';
+
+  const walletShell = useWalletShellContext();
 
   let wallet = $state<MultisigWallet | null>(null);
   let pin = $state('');
@@ -54,12 +63,21 @@
   let receivePrintQr = $state<PrintableQr | null>(null);
   let loadedBackupName = $state('');
   let mobileRuntime = $state(false);
+  let policyPaths = $state<PolicyPathDefinition[]>([]);
+  let policyPathLoadState = $state<'idle' | 'loading' | 'ready' | 'error'>('idle');
+  let policyPathLoadGeneration = 0;
+  let observedWalletId: string | null = null;
   const policyPresentation = $derived(wallet ? walletPolicyPresentation(wallet) : null);
+  const continuityWallet = $derived(isContinuityPolicyType(wallet?.policyType));
+  const printablePolicyReady = $derived(
+    !continuityWallet || (policyPathLoadState === 'ready' && policyPaths.length > 0)
+  );
 
   const combinedDescriptor = $derived(
     wallet ? combineDescriptorBranches(wallet.externalDescriptor, wallet.internalDescriptor) : null
   );
   onDestroy(() => {
+    policyPathLoadGeneration += 1;
     pin = '';
     backup = '';
     exportedBackups = null;
@@ -69,8 +87,22 @@
   });
 
   $effect(() => {
-    void walletService.multisigWallet().then((value) => (wallet = value));
+    const selectedWalletId = walletShell.selectedWalletId();
+    if (selectedWalletId === observedWalletId) return;
+    observedWalletId = selectedWalletId;
+    wallet = null;
+    pin = '';
+    backup = '';
+    exportedBackups = null;
+    drill = null;
+    exportError = '';
+    drillError = '';
+    loadedBackupName = '';
+    policyPaths = [];
+    policyPathLoadState = 'idle';
+    if (selectedWalletId) void loadBackupContext(selectedWalletId);
   });
+
   $effect(() => {
     const descriptor = combinedDescriptor;
     receiveQr = '';
@@ -85,6 +117,51 @@
   });
 
   const backupBaseName = $derived(safeTransferFilename(wallet?.name ?? 'groot-wallet'));
+
+  const pathGroupRequirement = (group: PolicySignerGroup) =>
+    translate($locale, '{count} of {total} {group}', {
+      count: formatInteger(group.required, $locale),
+      total: formatInteger(group.signers.length, $locale),
+      group: translate($locale, group.label)
+    });
+
+  async function loadBackupContext(expectedWalletId = walletShell.selectedWalletId()) {
+    const generation = ++policyPathLoadGeneration;
+    policyPathLoadState = 'loading';
+    policyPaths = [];
+    try {
+      const selectedWallet = await walletService.multisigWallet();
+      if (
+        generation !== policyPathLoadGeneration ||
+        expectedWalletId !== walletShell.selectedWalletId()
+      )
+        return;
+      wallet = selectedWallet;
+      if (!isContinuityPolicyType(selectedWallet?.policyType)) {
+        policyPathLoadState = 'idle';
+        return;
+      }
+      const snapshot = await walletService.multisigSnapshot();
+      if (
+        generation !== policyPathLoadGeneration ||
+        expectedWalletId !== walletShell.selectedWalletId()
+      )
+        return;
+      const validated = validPolicyPathDefinitions(snapshot.policyPaths);
+      if (!validated.length) {
+        policyPathLoadState = 'error';
+        return;
+      }
+      policyPaths = validated;
+      policyPathLoadState = 'ready';
+    } catch {
+      if (
+        generation === policyPathLoadGeneration &&
+        expectedWalletId === walletShell.selectedWalletId()
+      )
+        policyPathLoadState = 'error';
+    }
+  }
 
   function exportErrorMessage(cause: unknown) {
     if (cause instanceof WalletError && cause.code === 'invalid_credential')
@@ -214,6 +291,10 @@
 
   async function printBackup() {
     exportError = '';
+    if (!printablePolicyReady) {
+      exportError = translate($locale, 'Policy details unavailable');
+      return;
+    }
     try {
       const pending = await walletService.preparePublicBackupPdf(`${backupBaseName}-backup.pdf`);
       if (!pending.prepared || !pending.saveToken) return;
@@ -233,6 +314,45 @@
     }
   }
 </script>
+
+{#snippet policyPathList(printable = false)}
+  <ol
+    class:print-policy-path-list={printable}
+    class:three-policy-paths={printable && policyPaths.length === 3}
+    class:backup-policy-path-list={!printable}
+  >
+    {#each policyPaths as path (path.code)}
+      <li class="backup-policy-path" data-policy-path={path.code}>
+        <div class="backup-policy-path-heading">
+          <strong>{translate($locale, path.name)}</strong>
+          <span>
+            {translate(
+              $locale,
+              path.availableAfterBlocks === 0 ? 'No timelock' : 'After {count} confirmations',
+              { count: formatInteger(path.availableAfterBlocks, $locale) }
+            )}
+          </span>
+        </div>
+        <div class="backup-policy-groups">
+          {#each path.signerGroups as group (group.code)}
+            <section class="backup-policy-group">
+              <h3>{pathGroupRequirement(group)}</h3>
+              <ul>
+                {#each group.signers as signer (signer.fingerprint)}
+                  <li>
+                    <strong>{signer.label}</strong>
+                    <code>{signer.fingerprint.toLowerCase()}</code>
+                    <span>{translate($locale, policySignerRoleLabel(signer.role))}</span>
+                  </li>
+                {/each}
+              </ul>
+            </section>
+          {/each}
+        </div>
+      </li>
+    {/each}
+  </ol>
+{/snippet}
 
 <div class="page narrow-page backup-page">
   <header class="page-header">
@@ -358,8 +478,10 @@
           ><Button variant="secondary" onclick={saveBackupFile}
             ><Download size={15} />{translate($locale, 'Download')}
             {translate($locale, backupFormat === 'bsms' ? 'BSMS' : 'JSON')}</Button
-          >{#if !mobileRuntime}<Button variant="secondary" onclick={printBackup}
-              ><Printer size={15} />{translate($locale, 'Save PDF')}</Button
+          >{#if !mobileRuntime}<Button
+              variant="secondary"
+              disabled={!printablePolicyReady}
+              onclick={printBackup}><Printer size={15} />{translate($locale, 'Save PDF')}</Button
             >{/if}
         </div>
         {#if exportError}<WarningNotice
@@ -401,6 +523,53 @@
         </div>
       {/if}
     </section>
+    {#if continuityWallet}
+      <section class="form-card continuity-backup-policy" aria-labelledby="backup-policy-heading">
+        <div class="section-heading compact">
+          <div>
+            <h2 id="backup-policy-heading">{translate($locale, 'Spending paths')}</h2>
+            <p>
+              {translate(
+                $locale,
+                'New spending paths become available over time. Earlier paths remain available unless a chain reorganization reduces this coin’s confirmed age.'
+              )}
+            </p>
+          </div>
+          <ShieldCheck size={19} />
+        </div>
+        <WarningNotice
+          title={translate($locale, 'This coin does not expire')}
+          body={translate(
+            $locale,
+            'The delay shown for each path starts separately for every coin when that coin confirms.'
+          )}
+          role="note"
+        />
+        {#if policyPathLoadState === 'loading'}
+          <p class="policy-path-loading" role="status">
+            {translate($locale, 'Loading wallet policy')}
+          </p>
+        {:else if policyPathLoadState === 'error'}
+          <WarningNotice
+            tone="danger"
+            icon
+            role="alert"
+            ariaLive="polite"
+            title={translate($locale, 'Policy details unavailable')}
+            body={translate(
+              $locale,
+              'The printable backup is unavailable until Groot can verify every spending path.'
+            )}
+          >
+            <Button variant="secondary" size="small" onclick={() => void loadBackupContext()}
+              >{translate($locale, 'Retry')}</Button
+            >
+          </WarningNotice>
+        {:else if policyPathLoadState === 'ready'}
+          {@render policyPathList()}
+        {/if}
+      </section>
+    {/if}
     <section class="form-card">
       <div class="section-heading compact">
         <div>
@@ -483,7 +652,7 @@
           >{translate($locale, 'Continue to wallet deletion')}</Button
         >
       </section>{/if}
-    {#if backup}<article
+    {#if backup && printablePolicyReady}<article
         class="backup-print-sheet"
         aria-label={translate($locale, 'Printable wallet descriptor backup')}
         aria-hidden="true"
@@ -521,20 +690,28 @@
             <dd>{formatWalletTimestamp(wallet.createdAt)}</dd>
           </div>
         </dl>
-        <section>
-          <h2>{translate($locale, 'Signers')}</h2>
-          <ol>
-            {#each wallet.cosigners as signer}<li>
-                <strong>{signer.label}</strong><span
-                  >{translate($locale, 'Fingerprint')}
-                  {signer.fingerprint.toLowerCase()} · {translate(
-                    $locale,
-                    signer.source === 'usb' ? 'USB hardware' : signer.source
-                  )}</span
-                >
-              </li>{/each}
-          </ol>
-        </section>
+        {#if continuityWallet}
+          <section class="print-policy-paths">
+            <h2>{translate($locale, 'Spending paths')}</h2>
+            <p>{translate($locale, 'This coin does not expire')}</p>
+            {@render policyPathList(true)}
+          </section>
+        {:else}
+          <section>
+            <h2>{translate($locale, 'Signers')}</h2>
+            <ol>
+              {#each wallet.cosigners as signer}<li>
+                  <strong>{signer.label}</strong><span
+                    >{translate($locale, 'Fingerprint')}
+                    {signer.fingerprint.toLowerCase()} · {translate(
+                      $locale,
+                      signer.source === 'usb' ? 'USB hardware' : signer.source
+                    )}</span
+                  >
+                </li>{/each}
+            </ol>
+          </section>
+        {/if}
         <section class="print-descriptors">
           <div>
             <h2>{translate($locale, 'Wallet descriptor')}</h2>
@@ -853,6 +1030,95 @@
     color: var(--text);
     background: var(--surface-hover);
   }
+  :global(.continuity-backup-policy):where(.continuity-backup-policy) > :global(.warning-notice) {
+    margin-bottom: 14px;
+  }
+  :global(.continuity-backup-policy):where(.continuity-backup-policy)
+    :global(.warning-notice-content .button) {
+    width: fit-content;
+    margin-top: 8px;
+  }
+  :global(.policy-path-loading):where(.policy-path-loading) {
+    margin: 14px 0 0;
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+  }
+  :global(.backup-policy-path-list):where(.backup-policy-path-list) {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  :global(.backup-policy-path):where(.backup-policy-path) {
+    min-width: 0;
+    padding: 13px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+    background: var(--surface-control);
+  }
+  :global(.backup-policy-path-heading):where(.backup-policy-path-heading) {
+    display: flex;
+    align-items: start;
+    justify-content: space-between;
+    gap: 12px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border);
+  }
+  :global(.backup-policy-path-heading):where(.backup-policy-path-heading) :global(strong) {
+    line-height: 1.35;
+  }
+  :global(.backup-policy-path-heading):where(.backup-policy-path-heading) :global(span) {
+    flex: 0 0 auto;
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+    white-space: nowrap;
+  }
+  :global(.backup-policy-groups):where(.backup-policy-groups) {
+    display: grid;
+    gap: 11px;
+    padding-top: 10px;
+  }
+  :global(.backup-policy-group):where(.backup-policy-group) {
+    min-width: 0;
+    margin: 0;
+  }
+  :global(.backup-policy-group):where(.backup-policy-group) :global(h3) {
+    margin: 0 0 6px;
+    color: var(--text-soft);
+    font-size: var(--font-size-meta);
+  }
+  :global(.backup-policy-group):where(.backup-policy-group) :global(ul) {
+    display: grid;
+    gap: 5px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  :global(.backup-policy-group):where(.backup-policy-group) :global(li) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 2px 8px;
+    min-width: 0;
+    padding: 7px 8px;
+    border-radius: var(--radius-control);
+    background: var(--surface-inset);
+  }
+  :global(.backup-policy-group):where(.backup-policy-group) :global(li strong) {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    font-size: var(--font-size-meta);
+  }
+  :global(.backup-policy-group):where(.backup-policy-group) :global(li code) {
+    color: var(--text-soft);
+    font-size: var(--font-size-meta);
+  }
+  :global(.backup-policy-group):where(.backup-policy-group) :global(li span) {
+    grid-column: 1 / -1;
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+  }
 
   @media (max-width: 760px) {
     :global(.backup-auth):where(.backup-auth) {
@@ -861,8 +1127,13 @@
     }
     :global(.backup-actions):where(.backup-actions),
     :global(.backup-format-grid):where(.backup-format-grid),
-    :global(.descriptor-qr-preview):where(.descriptor-qr-preview) {
+    :global(.descriptor-qr-preview):where(.descriptor-qr-preview),
+    :global(.backup-policy-path-list):where(.backup-policy-path-list) {
       grid-template-columns: 1fr;
+    }
+    :global(.backup-policy-path-heading):where(.backup-policy-path-heading) {
+      flex-direction: column;
+      gap: 4px;
     }
   }
 </style>

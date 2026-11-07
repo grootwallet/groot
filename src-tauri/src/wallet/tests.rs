@@ -5182,6 +5182,50 @@ fn inheritance_descriptor_backup_recompiles_the_persisted_template() {
 }
 
 #[test]
+fn recovery_drill_presents_valid_advanced_backups_without_enabling_the_coordinator() {
+    use crate::recovery::TimedSpendingPath;
+
+    for template in [
+        RecoveryTemplate::Decaying {
+            stages: vec![
+                TimedSpendingPath::new(0, 3, ["key-1", "key-2", "key-3", "key-4"]),
+                TimedSpendingPath::new(4_320, 2, ["key-1", "key-2", "key-3", "key-4"]),
+            ],
+        },
+        RecoveryTemplate::Expanding {
+            stages: vec![
+                TimedSpendingPath::new(0, 2, ["key-1", "key-2"]),
+                TimedSpendingPath::new(4_320, 2, ["key-1", "key-2", "key-3"]),
+            ],
+        },
+    ] {
+        let mut backup = descriptor_backup();
+        let analysis = analyze_template(&template, &backup.wallet.cosigners).unwrap();
+        backup.wallet.external_descriptor = analysis.external_descriptor;
+        backup.wallet.internal_descriptor = analysis.internal_descriptor;
+        backup.wallet.threshold = analysis.paths[0].threshold;
+        backup.wallet.policy_type = recovery_policy_type(&template).to_owned();
+        backup.wallet.recovery_template = Some(template);
+        backup.wallet.spending_paths = analysis.paths;
+
+        let validated = validate_multisig_backup(&serde_json::to_string(&backup).unwrap()).unwrap();
+        let (policy_type, paths) = recovery_drill_policy_presentation(&validated.wallet).unwrap();
+        assert_eq!(
+            policy_type.as_deref(),
+            Some(validated.wallet.policy_type.as_str())
+        );
+        assert_eq!(paths.len(), validated.wallet.spending_paths.len());
+        assert_eq!(paths[0].available_after_blocks, 0);
+        assert_eq!(paths[1].available_after_blocks, 4_320);
+        assert_eq!(
+            verified_analysis(&validated.wallet).unwrap_err().code,
+            "hardware_policy_unsupported",
+            "inspection compatibility must not expand transaction-coordinator support"
+        );
+    }
+}
+
+#[test]
 fn descriptor_backup_rejects_oversize_network_and_policy_tampering() {
     assert_eq!(
         validate_multisig_backup(&"x".repeat(256 * 1024 + 1))
@@ -5605,6 +5649,7 @@ fn synced_snapshots_enqueue_received_and_first_confirmation_events_once() {
             observed_at: Some("1".to_owned()),
             status: "stale",
         },
+        policy_paths: vec![],
     };
 
     enqueue_snapshot_notifications(&db, &snapshot).unwrap();
@@ -7300,6 +7345,155 @@ fn family_assistance_requires_a_parent_and_an_assistance_role() {
             ));
         }
     }
+}
+
+#[test]
+fn per_coin_policy_status_preserves_the_bip68_inclusion_boundary() {
+    let metadata = continuity_test_metadata(false);
+    let analysis = verified_analysis(&metadata).unwrap();
+    let definitions = policy_path_definitions(&metadata, &analysis).unwrap();
+    let delayed = &definitions[1];
+    let delay = delayed.available_after_blocks;
+    let confirmation_height = 100;
+
+    let waiting_confirmations = delay - 1;
+    let waiting_tip = confirmation_height + waiting_confirmations - 1;
+    let waiting =
+        policy_path_coin_status(delayed, waiting_confirmations, waiting_tip, true, false).unwrap();
+    assert_eq!(waiting.policy_state, "waiting");
+    assert_eq!(waiting.blocks_until_broadcast_eligible, Some(1));
+    assert_eq!(waiting.confirmation_height, Some(confirmation_height));
+    assert_eq!(
+        waiting.earliest_inclusion_height,
+        Some(confirmation_height + delay)
+    );
+
+    let eligible_tip = confirmation_height + delay - 1;
+    let eligible = policy_path_coin_status(delayed, delay, eligible_tip, true, false).unwrap();
+    assert_eq!(eligible.policy_state, "available");
+    assert_eq!(eligible.blocks_until_broadcast_eligible, Some(0));
+    assert_eq!(eligible.confirmation_height, Some(confirmation_height));
+    assert_eq!(
+        eligible.earliest_inclusion_height,
+        Some(eligible_tip + 1),
+        "the first valid inclusion block is the block after the tip where the coin reaches the required confirmation count"
+    );
+}
+
+#[test]
+fn per_coin_policy_status_keeps_action_blockers_separate_from_path_state() {
+    let metadata = continuity_test_metadata(false);
+    let analysis = verified_analysis(&metadata).unwrap();
+    let definitions = policy_path_definitions(&metadata, &analysis).unwrap();
+    let delayed = &definitions[1];
+    let confirmations = delayed.available_after_blocks;
+    let tip = 100 + confirmations - 1;
+
+    let frozen = policy_path_coin_status(delayed, confirmations, tip, true, true).unwrap();
+    assert_eq!(frozen.policy_state, "available");
+    assert_eq!(frozen.action_blockers, vec!["frozen"]);
+
+    let stale = policy_path_coin_status(delayed, confirmations, tip, false, false).unwrap();
+    assert_eq!(stale.policy_state, "unknown");
+    assert_eq!(stale.action_blockers, vec!["stale_chain"]);
+
+    let primary = policy_path_coin_status(&definitions[0], 1, 100, false, true).unwrap();
+    assert_eq!(primary.policy_state, "available");
+    assert_eq!(primary.action_blockers, vec!["frozen", "stale_chain"]);
+}
+
+#[test]
+fn per_coin_policy_unconfirmed_has_no_path_height_or_calendar_estimate() {
+    let metadata = continuity_test_metadata(false);
+    let analysis = verified_analysis(&metadata).unwrap();
+    let definitions = policy_path_definitions(&metadata, &analysis).unwrap();
+
+    let status = policy_path_coin_status(&definitions[1], 0, 500, true, false).unwrap();
+    assert_eq!(status.policy_state, "unconfirmed");
+    assert_eq!(status.age_blocks, 0);
+    assert_eq!(status.blocks_until_broadcast_eligible, None);
+    assert_eq!(status.confirmation_height, None);
+    assert_eq!(status.earliest_inclusion_height, None);
+    assert_eq!(status.approximate_seconds_remaining, None);
+    assert!(status.action_blockers.is_empty());
+}
+
+#[test]
+fn per_coin_policy_continuity_renewal_becomes_due_at_26_280_confirmations() {
+    let confirmation_height = 200;
+    let before_confirmations = CONTINUITY_RENEWAL_BLOCKS - 1;
+    let before_tip = confirmation_height + before_confirmations - 1;
+    let before =
+        policy_renewal_recommendation("partner_continuity_v1", before_confirmations, before_tip)
+            .unwrap()
+            .unwrap();
+    assert!(!before.due);
+    assert_eq!(before.remaining_blocks, Some(1));
+    assert_eq!(
+        before.recommended_at_height,
+        Some(confirmation_height + CONTINUITY_RENEWAL_BLOCKS - 1)
+    );
+
+    let due_tip = confirmation_height + CONTINUITY_RENEWAL_BLOCKS - 1;
+    let due =
+        policy_renewal_recommendation("family_continuity_v1", CONTINUITY_RENEWAL_BLOCKS, due_tip)
+            .unwrap()
+            .unwrap();
+    assert!(due.due);
+    assert_eq!(due.recommended_at_age_blocks, 26_280);
+    assert_eq!(due.remaining_blocks, Some(0));
+    assert_eq!(due.recommended_at_height, Some(due_tip));
+    assert_eq!(due.approximate_seconds_remaining, Some(0));
+
+    assert!(policy_renewal_recommendation("recovery", 26_280, due_tip)
+        .unwrap()
+        .is_none());
+}
+
+#[test]
+fn per_coin_policy_family_assistance_preserves_parent_and_child_role_groups() {
+    let metadata = continuity_test_metadata(true);
+    let analysis = verified_analysis(&metadata).unwrap();
+    let definitions = policy_path_definitions(&metadata, &analysis).unwrap();
+    let assistance = &definitions[1];
+
+    assert_eq!(assistance.code, "family_assistance");
+    assert_eq!(assistance.required, 2);
+    assert_eq!(assistance.signer_groups.len(), 2);
+    assert_eq!(assistance.signer_groups[0].code, "parents");
+    assert_eq!(assistance.signer_groups[0].required, 1);
+    assert_eq!(assistance.signer_groups[0].signers.len(), 2);
+    assert!(assistance.signer_groups[0]
+        .signers
+        .iter()
+        .all(|signer| signer.role == "parent"));
+    assert_eq!(assistance.signer_groups[1].code, "child_assistance_signers");
+    assert_eq!(assistance.signer_groups[1].required, 1);
+    assert_eq!(assistance.signer_groups[1].signers.len(), 2);
+    assert!(assistance.signer_groups[1]
+        .signers
+        .iter()
+        .all(|signer| signer.role == "child_assistance"));
+    let mut grouped_fingerprints = assistance
+        .signer_groups
+        .iter()
+        .flat_map(|group| group.signers.iter())
+        .map(|signer| signer.fingerprint.clone())
+        .collect::<Vec<_>>();
+    grouped_fingerprints.sort();
+    grouped_fingerprints.dedup();
+    let mut eligible_fingerprints = assistance.eligible_signer_fingerprints.clone();
+    eligible_fingerprints.sort();
+    eligible_fingerprints.dedup();
+    assert_eq!(grouped_fingerprints, eligible_fingerprints);
+    assert_eq!(
+        assistance
+            .signer_groups
+            .iter()
+            .map(|group| group.required)
+            .sum::<usize>(),
+        assistance.required
+    );
 }
 
 #[test]

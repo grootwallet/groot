@@ -60,13 +60,14 @@
     type SignerPolicyVerification,
     type WalletErrorCode
   } from '$lib/wallet';
-  import type { LabelSuggestion, Utxo } from '$lib/types';
+  import type { LabelSuggestion, PolicySignerGroup, Utxo } from '$lib/types';
   import { defaultConfig, networkName, transactionExplorerUrl } from '$lib/config';
   import {
     addressPrefixForNetwork,
     hasAddressPrefixForNetwork,
     normalizePermanentLabel,
     isContinuityPolicyType,
+    policySignerRoleLabel,
     validPolicyMaturity,
     walletPolicyPresentation
   } from '$lib/wallet/policy';
@@ -339,6 +340,12 @@
   const selectedNamedPath = $derived(
     namedPaths.find((path) => path.index === Number(namedPathIndex))
   );
+  const pathGroupRequirement = (group: PolicySignerGroup) =>
+    translate($locale, '{count} of {total} {group}', {
+      count: group.required,
+      total: group.signers.length,
+      group: translate($locale, group.label)
+    });
   const delayedSpendMaturity = $derived(
     delayedSpendCoin ? validPolicyMaturity(delayedSpendCoin) : null
   );
@@ -2257,10 +2264,25 @@
               </label>
               {#if selectedNamedPath}<WarningNotice
                   title={translate($locale, selectedNamedPath.name)}
-                  body={translate($locale, 'Required signatures: {count}', {
-                    count: selectedNamedPath.required
-                  })}
-                />{/if}
+                  body={translate(
+                    $locale,
+                    'Only the signer groups shown below can authorize this path.'
+                  )}
+                />
+                <div class="named-path-groups">
+                  {#each selectedNamedPath.signerGroups ?? [] as group (group.code)}<div>
+                      <strong>{pathGroupRequirement(group)}</strong>
+                      <ul>
+                        {#each group.signers as signer (signer.fingerprint)}<li>
+                            <span
+                              ><strong>{signer.label}</strong><small
+                                >{translate($locale, policySignerRoleLabel(signer.role))}</small
+                              ></span
+                            ><code>{signer.fingerprint}</code>
+                          </li>{/each}
+                      </ul>
+                    </div>{/each}
+                </div>{/if}
             {/if}
             <div class="renewal-coin-summary">
               <span>{translate($locale, 'Coin available')}</span>
@@ -2762,12 +2784,30 @@
               {#if proposal.spendingPathDetails}<WarningNotice
                   title={translate($locale, 'Spending path')}
                   body={`${translate($locale, proposal.spendingPathDetails.name)} · ${proposal.spendingPathDetails.availableAfterBlocks} ${translate($locale, 'blocks')}`}
-                />{/if}
+                />
+                <div class="named-path-groups review-path-groups">
+                  {#each proposal.spendingPathDetails.signerGroups ?? [] as group (group.code)}<div>
+                      <strong>{pathGroupRequirement(group)}</strong>
+                      <ul>
+                        {#each group.signers as signer (signer.fingerprint)}<li>
+                            <span
+                              ><strong>{signer.label}</strong><small
+                                >{translate($locale, policySignerRoleLabel(signer.role))}</small
+                              ></span
+                            ><code>{signer.fingerprint}</code>
+                          </li>{/each}
+                      </ul>
+                    </div>{/each}
+                </div>{/if}
               {#if delayedSpendMode}<div class="selection-review renewal-review">
                   <strong
-                    >{translate($locale, 'Signed by the {key}', {
-                      key: delayedSpendKeyName
-                    })}</strong
+                    >{translate(
+                      $locale,
+                      isContinuityPolicyType(wallet?.policyType)
+                        ? 'Signed with the selected path’s signer groups'
+                        : 'Signed by the {key}',
+                      { key: delayedSpendKeyName }
+                    )}</strong
                   >
                   <span
                     >{translate(
@@ -2956,6 +2996,7 @@
                   signers={signerItems}
                   required={proposal.required}
                   signedFingerprints={proposal.signedFingerprints}
+                  signerGroups={proposal.spendingPathDetails?.signerGroups ?? []}
                   collecting
                   ondiscard={accelerationConfirmed
                     ? undefined
@@ -3672,6 +3713,67 @@
     grid-column: 2;
     align-self: center;
     font-size: 13px;
+  }
+  :global(.named-path-groups):where(.named-path-groups) {
+    display: grid;
+    gap: 7px;
+    margin: -7px 0 18px;
+  }
+  :global(.named-path-groups):where(.named-path-groups) > :global(div) {
+    min-width: 0;
+    display: grid;
+    gap: 3px;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+    background: var(--surface-inset);
+  }
+  :global(.named-path-groups):where(.named-path-groups) :global(strong) {
+    font-size: var(--font-size-meta);
+  }
+  :global(.named-path-groups):where(.named-path-groups) :global(ul) {
+    display: grid;
+    gap: 4px;
+    margin: 3px 0 0;
+    padding: 0;
+    list-style: none;
+  }
+  :global(.named-path-groups):where(.named-path-groups) :global(li) {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  :global(.named-path-groups):where(.named-path-groups) :global(li span) {
+    min-width: 0;
+    display: grid;
+    gap: 1px;
+  }
+  :global(.named-path-groups):where(.named-path-groups) :global(li strong),
+  :global(.named-path-groups):where(.named-path-groups) :global(li small) {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  :global(.named-path-groups):where(.named-path-groups) :global(li strong) {
+    font-weight: 550;
+  }
+  :global(.named-path-groups):where(.named-path-groups) :global(li small),
+  :global(.named-path-groups):where(.named-path-groups) :global(code) {
+    overflow-wrap: anywhere;
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+    line-height: 1.45;
+  }
+  :global(.named-path-groups):where(.named-path-groups) :global(li small) {
+    font-size: 11px;
+  }
+  :global(.named-path-groups):where(.named-path-groups) :global(code) {
+    flex: 0 0 auto;
+  }
+  :global(.review-path-groups):where(.review-path-groups) {
+    margin-top: -3px;
   }
   :global(.renewal-review):where(.renewal-review) {
     border-color: color-mix(in srgb, var(--link) 24%, var(--border));

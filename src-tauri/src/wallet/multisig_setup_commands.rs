@@ -1077,6 +1077,8 @@ pub fn multisig_bsms_inspect(
         cosigners,
         first_address: derived_first,
         matches_current_wallet,
+        policy_type: None,
+        policy_paths: Vec::new(),
     })
 }
 
@@ -1246,6 +1248,9 @@ pub async fn multisig_recovery_drill(
             .transpose()
             .map_err(bsms_api_error)?
             .unwrap_or(false);
+        // Finish every fallible backup and presentation check before recording a
+        // successful drill or mutating the in-memory verification marker.
+        let (policy_type, policy_paths) = recovery_drill_policy_presentation(&backup.wallet)?;
         if matches_current_wallet {
             let wallet_id = selected_profile_of_kind(&app, WalletKind::Multisig)?.id;
             let descriptor = current_wallet
@@ -1275,6 +1280,8 @@ pub async fn multisig_recovery_drill(
             cosigners: backup.wallet.cosigners,
             first_address,
             matches_current_wallet,
+            policy_type,
+            policy_paths,
         })
     })
     .await

@@ -96,6 +96,12 @@ Rust compiles fixed Continuity roles and derives primary BDK conditions recursiv
 
 Fixed continuity finalization binds the witness script to canonical wallet prevouts and uses the pinned Miniscript PSBT satisfier/interpreter against the transaction's actual timelocks. Current chain age is checked separately; it cannot authorize a different witness branch than the encoded sequence. Immutable analysis stays within the operation's signing context, while availability is read fresh.
 
+The snapshot carries one transient list of path definitions compiled from the verified policy plus per-UTXO path status rows keyed by path index. Each row contains confirmed age, exact earliest inclusion height, remaining blocks and presentation blockers. This avoids one IPC request or repeated descriptor analysis per coin. Signer metadata is returned once per snapshot, not copied into every UTXO. Groot JSON recovery inspection derives the same definitions from verified policy context instead of treating every backup key as one flat threshold. The frontend validates indexes, order, thresholds, signer groups and fingerprints before joining or presenting those rows; inconsistent presentation data is hidden rather than guessed.
+
+Rust owns the exact block facts. The webview may turn a recent observation and bounded seconds-remaining hint into an explicitly approximate local calendar time, but that value is transient display data and cannot select or authorize a spending path. Regtest suppresses the estimate because manual mining has no meaningful wall-clock schedule. Frozen and stale-chain states are action blockers kept separate from cryptographic path availability. The same native proposal checks still run before signature import and finalization, so the snapshot is not an authorization cache.
+
+This is an additive DTO/presentation change. It does not alter descriptors, BIP68 sequences, PSBTs, wallet/profile/backup/proposal schemas, database transactions or signer authority. Existing profiles need no migration.
+
 ## Post-5.3 ownership
 
 `wallet/profiles.rs` owns the existing registry/profile identity, preparation, commit and rollback helpers; `wallet/notification_delivery.rs` owns snapshot notification construction and transactional enqueue; `wallet/recovery_commands.rs` owns recovery settings and rescan IPC. Command names, DTOs, guard ordering and caller transaction boundaries are unchanged. These are nested orchestration adapters, retaining the existing coverage classification.

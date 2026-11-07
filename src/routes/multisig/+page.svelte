@@ -55,7 +55,9 @@
   import { useWalletShellContext } from '$lib/wallet/shell-context';
   import {
     hasMiniscriptPolicy,
+    isContinuityPolicyType,
     policyMaturitySummary,
+    validPolicyPathRows,
     validPolicyMaturity,
     walletPolicyPresentation
   } from '$lib/wallet/policy';
@@ -123,12 +125,85 @@
   const maturitySummary = $derived(
     snapshot ? policyMaturitySummary(snapshot.utxos, snapshot.chainTip) : null
   );
-  const policyCoins = $derived(snapshot?.utxos.filter((coin) => validPolicyMaturity(coin)) ?? []);
+  const continuityPolicy = $derived(isContinuityPolicyType(wallet?.policyType));
+  const policyPaths = $derived(snapshot?.policyPaths ?? []);
+  const policyRows = (coin: WalletSnapshot['utxos'][number]) =>
+    validPolicyPathRows(coin, policyPaths);
+  const continuityRowsByCoin = $derived(
+    continuityPolicy
+      ? (snapshot?.utxos ?? []).map((coin) => ({ coin, paths: policyRows(coin) }))
+      : []
+  );
+  const continuityCoinRows = $derived(continuityRowsByCoin.filter(({ paths }) => paths.length > 0));
+  const policyCoins = $derived(
+    continuityPolicy
+      ? []
+      : (snapshot?.utxos.filter((coin) => Boolean(validPolicyMaturity(coin))) ?? [])
+  );
+  const continuityAvailableDelayedPaths = $derived(
+    continuityCoinRows.reduce(
+      (count, { paths }) =>
+        count +
+        paths.filter(
+          ({ definition, status }) => definition.index > 0 && status.policyState === 'available'
+        ).length,
+      0
+    )
+  );
+  const continuityNextPathBlocks = $derived(
+    continuityCoinRows.reduce<number | null>((nearest, { paths }) => {
+      const next = paths
+        .filter(
+          ({ definition, status }) =>
+            definition.index > 0 &&
+            status.policyState === 'waiting' &&
+            status.blocksUntilBroadcastEligible !== null
+        )
+        .reduce<number | null>(
+          (coinNearest, { status }) =>
+            coinNearest === null
+              ? status.blocksUntilBroadcastEligible
+              : Math.min(coinNearest, status.blocksUntilBroadcastEligible!),
+          null
+        );
+      return next === null ? nearest : nearest === null ? next : Math.min(nearest, next);
+    }, null)
+  );
+  const continuityHasCoins = $derived((snapshot?.utxos.length ?? 0) > 0);
+  const continuityNeedsSync = $derived(
+    continuityHasCoins &&
+      (continuityCoinRows.length !== continuityRowsByCoin.length ||
+        continuityCoinRows.some(({ paths }) =>
+          paths.some(({ status }) => status.policyState === 'unknown')
+        ))
+  );
+  function continuityCoinPathSummary(paths: ReturnType<typeof policyRows>) {
+    const delayed = paths.filter(({ definition }) => definition.index > 0);
+    const available = delayed.filter(({ status }) => status.policyState === 'available').length;
+    const next = delayed
+      .filter(
+        ({ status }) =>
+          status.policyState === 'waiting' && status.blocksUntilBroadcastEligible !== null
+      )
+      .reduce<number | null>(
+        (nearest, { status }) =>
+          nearest === null
+            ? status.blocksUntilBroadcastEligible
+            : Math.min(nearest, status.blocksUntilBroadcastEligible!),
+        null
+      );
+    return {
+      available,
+      next,
+      unconfirmed: delayed.some(({ status }) => status.policyState === 'unconfirmed'),
+      unknown: delayed.some(({ status }) => status.policyState === 'unknown')
+    };
+  }
   const delayedPolicyType = $derived(
     wallet?.policyType === 'inheritance' ? 'inheritance' : 'recovery'
   );
   const policyPresentation = $derived(wallet ? walletPolicyPresentation(wallet) : null);
-  const recoveryPolicyLabAvailable = $derived(hasMiniscriptPolicy(wallet));
+  const recoveryPolicyLabAvailable = $derived(hasMiniscriptPolicy(wallet) && !continuityPolicy);
   onDestroy(() => {
     phoneBackupCredential = '';
     healthPinChallenge = '';
@@ -677,7 +752,17 @@
       <div class="vault-summary">
         <strong class="vault-balance"><Amount value={snapshot?.balance.total ?? 0} /></strong>
         <div class="vault-policy-tags" aria-label={translate($locale, 'Spending policy')}>
-          {#if policyPresentation?.delayed && policyPresentation.delayedKeyLabel}
+          {#if continuityPolicy && policyPresentation?.delayed}
+            <span class="policy-pill"
+              >{translate($locale, '{required} of {total} primary keys', {
+                required: policyPresentation.primaryThreshold,
+                total: policyPresentation.primarySignerCount
+              })}</span
+            >
+            <span class="policy-pill delayed"
+              ><Clock3 size={12} />{translate($locale, 'Named delayed paths')}</span
+            >
+          {:else if policyPresentation?.delayed && policyPresentation.delayedKeyLabel}
             <span class="policy-pill"
               >{translate($locale, '{required} of {total} primary keys', {
                 required: policyPresentation.primaryThreshold,
@@ -757,7 +842,111 @@
           >{:else}<Button href="/multisig/send">{translate($locale, 'Send')}</Button>{/if}
       </div>
     </section>
-    {#if maturitySummary}
+    {#if continuityPolicy}
+      <section class="policy-maturity-panel" aria-live="polite">
+        <div class="policy-maturity-panel-heading">
+          <span><Clock3 size={19} /></span>
+          <div>
+            <h2>
+              {translate($locale, 'Spending paths')}<InsightTip
+                label={translate($locale, 'About spending paths')}
+                text={translate(
+                  $locale,
+                  'Each coin follows its own block timeline. Open Coins to see every signer group and exact earliest inclusion block.'
+                )}
+              />
+            </h2>
+            <p>
+              {#if !continuityHasCoins}
+                {translate($locale, 'No coins yet')}
+              {:else if continuityNeedsSync}
+                {translate($locale, 'Sync to verify spending paths')}
+              {:else if continuityAvailableDelayedPaths === 1}
+                {translate($locale, '1 delayed path is available across your coins.')}
+              {:else if continuityAvailableDelayedPaths > 1}
+                {translate($locale, '{count} delayed paths are available across your coins.', {
+                  count: formatInteger(continuityAvailableDelayedPaths, $locale)
+                })}
+              {:else}
+                {translate(
+                  $locale,
+                  'Delayed paths are still waiting. Each coin follows its own confirmation age.'
+                )}
+              {/if}
+            </p>
+          </div>
+          <Button variant="secondary" size="small" href="/coins"
+            >{translate($locale, 'Review coins')}</Button
+          >
+        </div>
+        <div class="policy-maturity-facts">
+          {#if continuityHasCoins}<div class="info-banner">
+              <ShieldCheck size={16} />
+              <p>{translate($locale, 'The primary path remains available for every coin.')}</p>
+            </div>{:else}<div class="info-banner">
+              <Clock3 size={16} />
+              <p>{translate($locale, 'No coins yet')}</p>
+            </div>{/if}
+          {#if !continuityNeedsSync && continuityNextPathBlocks !== null}<div class="info-banner">
+              <Clock3 size={16} />
+              <p>
+                {translate($locale, 'Next path in {count} blocks', {
+                  count: formatInteger(continuityNextPathBlocks, $locale)
+                })}
+              </p>
+            </div>{/if}
+        </div>
+        <details class="policy-maturity-details">
+          <summary>{translate($locale, 'How spending paths work')}</summary>
+          <p>
+            {translate(
+              $locale,
+              'New spending paths become available over time. Earlier paths remain available unless a chain reorganization reduces this coin’s confirmed age.'
+            )}
+          </p>
+          <p>{translate($locale, 'Coins do not expire.')}</p>
+          {#if continuityCoinRows.length}<div class="policy-access-coins">
+              <h3>{translate($locale, 'Coin timelines')}</h3>
+              <div>
+                {#each continuityCoinRows as { coin, paths } (coin.outpoint)}{@const pathSummary =
+                    continuityCoinPathSummary(paths)}
+                  <article>
+                    <span>
+                      {#if coin.label}<PermanentLabelTags
+                          labels={[coin.label]}
+                          prominent
+                        />{:else}<strong>{translate($locale, 'Coin')}</strong>{/if}
+                      <small
+                        class="coin-status"
+                        class:policy-mature={pathSummary.available > 0}
+                        class:policy-immature={pathSummary.available === 0 &&
+                          pathSummary.next !== null}
+                        class:pending={pathSummary.unconfirmed || pathSummary.unknown}
+                        >{pathSummary.unknown
+                          ? translate($locale, 'Sync to verify')
+                          : pathSummary.available === 1
+                            ? translate($locale, '1 delayed path available')
+                            : pathSummary.available > 1
+                              ? translate($locale, '{count} delayed paths available', {
+                                  count: formatInteger(pathSummary.available, $locale)
+                                })
+                              : pathSummary.next !== null
+                                ? translate($locale, 'Next path in {count} blocks', {
+                                    count: formatInteger(pathSummary.next, $locale)
+                                  })
+                                : translate($locale, 'Wait starts after confirmation')}</small
+                      >
+                    </span>
+                    <Amount value={coin.amount} />
+                  </article>{/each}
+              </div>
+            </div>{:else if continuityHasCoins}<WarningNotice
+              title={translate($locale, 'Policy details unavailable')}
+              body={translate($locale, 'Sync to verify spending paths')}
+            />{:else}<p>{translate($locale, 'No coins yet')}</p>{/if}
+        </details>
+      </section>
+    {:else if maturitySummary}
       <section class="policy-maturity-panel" aria-live="polite">
         <div class="policy-maturity-panel-heading">
           <span><Clock3 size={19} /></span>
@@ -905,9 +1094,11 @@
             <p>
               {translate(
                 $locale,
-                policyPresentation?.delayed
-                  ? 'Payments normally use 2 of 3 primary keys. The separate backup key becomes available per coin after its wait.'
-                  : translate($locale, 'Any {count} keys can sign.', { count: wallet.threshold })
+                continuityPolicy
+                  ? 'The primary signer group can spend now. Delayed paths require the named signer groups shown in each coin’s policy.'
+                  : policyPresentation?.delayed
+                    ? 'Payments normally use 2 of 3 primary keys. The separate backup key becomes available per coin after its wait.'
+                    : translate($locale, 'Any {count} keys can sign.', { count: wallet.threshold })
               )}
             </p>
           </div>

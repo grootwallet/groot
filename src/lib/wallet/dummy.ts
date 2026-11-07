@@ -60,6 +60,7 @@ import {
   fixtureAddressForNetwork,
   fixtureCosigners,
   fixtureMultisigWallet,
+  fixturePolicyPaths,
   prototypeCredential
 } from './dummy-state';
 import type { PaymentDraft } from './payment-draft';
@@ -766,6 +767,20 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
       typeof location !== 'undefined' &&
       new URLSearchParams(location.search).has('fixture-pending-self-spend');
     const initialHistoryRequired = this._initialHistoryRequired && !this._initialHistoryCompleted;
+    const staleTip =
+      typeof location !== 'undefined' &&
+      new URLSearchParams(location.search).has('fixture-stale-tip');
+    const selectedKind = this._profiles.find((profile) => profile.id === walletId)?.kind;
+    const snapshotCoins = structuredClone(this._coins).map((coin) => ({
+      ...coin,
+      policyPathStatuses: coin.policyPathStatuses?.map((status) => ({
+        ...status,
+        policyState: staleTip && status.pathIndex !== 0 ? ('unknown' as const) : status.policyState,
+        actionBlockers: staleTip
+          ? [...new Set([...status.actionBlockers, 'stale_chain' as const])]
+          : status.actionBlockers
+      }))
+    }));
     const snapshot: WalletSnapshot = {
       network: defaultConfig.network,
       balance: emptyWallet
@@ -817,30 +832,24 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
                 }
               ]
             : structuredClone(this._transactions),
-      utxos: emptyWallet ? [] : structuredClone(this._coins),
+      utxos: emptyWallet ? [] : snapshotCoins,
       receiveAddresses: structuredClone(this._addresses),
       labelSuggestions: structuredClone(this._labelSuggestionsByWallet.get(walletId) ?? []),
       syncedAt: initialHistoryRequired
         ? null
-        : typeof location !== 'undefined' &&
-            new URLSearchParams(location.search).has('fixture-stale-tip')
+        : staleTip
           ? '2026-01-01T00:00:00.000Z'
           : new Date().toISOString(),
       chainTip: {
         height: initialHistoryRequired ? 0 : 250_000,
         observedAt: initialHistoryRequired
           ? null
-          : typeof location !== 'undefined' &&
-              new URLSearchParams(location.search).has('fixture-stale-tip')
+          : staleTip
             ? '2026-01-01T00:00:00.000Z'
             : new Date().toISOString(),
-        status: initialHistoryRequired
-          ? 'unknown'
-          : typeof location !== 'undefined' &&
-              new URLSearchParams(location.search).has('fixture-stale-tip')
-            ? 'stale'
-            : 'recent'
-      }
+        status: initialHistoryRequired ? 'unknown' : staleTip ? 'stale' : 'recent'
+      },
+      policyPaths: selectedKind === 'multisig' ? fixturePolicyPaths() : []
     };
     if (emptyActivity && !this._emptyActivitySyncScheduled) {
       this._emptyActivitySyncScheduled = true;
@@ -2158,7 +2167,9 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
         threshold: this._multisig?.threshold ?? 2,
         cosigners: structuredClone(this._multisig?.cosigners ?? fixtureMultisigWallet().cosigners),
         firstAddress: `${addressPrefixForNetwork(defaultConfig.network)}qdummy5n8k2r7v4cx9s6jlawephgzuqf5t8ul`,
-        matchesCurrentWallet
+        matchesCurrentWallet,
+        policyType: this._multisig?.policyType,
+        policyPaths: fixturePolicyPaths()
       };
     } catch {
       throw new WalletError('invalid_backup', 'Enter a valid Groot descriptor backup.');
@@ -2532,6 +2543,7 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     if (!coin || !wallet?.recoveryTemplate)
       throw new WalletError('unknown_spending_path', 'This wallet has no delayed spending paths.');
     const analysis = await this.analyzeRecoveryPolicy(wallet.recoveryTemplate, wallet.cosigners);
+    const fixtureDefinitions = fixturePolicyPaths();
     const names =
       wallet.recoveryTemplate.type === 'partner_continuity_v1'
         ? [
@@ -2544,6 +2556,10 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
           ? ['Both parents', 'One parent and one child assistance signer', 'Inheritance: 2 of 3']
           : ['Primary signers', 'Recovery signers'];
     return analysis.paths.map((path, index) => {
+      const definition = fixtureDefinitions.find(
+        (candidate) =>
+          candidate.index === index && candidate.availableAfterBlocks === path.availableAfterBlocks
+      );
       const remaining = Math.max(0, path.availableAfterBlocks - coin.confirmations);
       const reason = coin.frozen
         ? 'Unfreeze this coin before spending it.'
@@ -2552,11 +2568,26 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
           : null;
       return {
         index,
+        code: definition?.code ?? `policy_path_${index}`,
         name: names[index] ?? 'Recovery signers',
         required: path.threshold,
         eligibleSignerFingerprints: wallet.cosigners
           .filter((key) => path.signerIds.includes(key.id))
           .map((key) => key.fingerprint),
+        signerGroups: definition?.signerGroups ?? [
+          {
+            code: `policy_path_${index}_signers`,
+            label: 'Required signers',
+            required: path.threshold,
+            signers: wallet.cosigners
+              .filter((key) => path.signerIds.includes(key.id))
+              .map((key) => ({
+                label: key.label,
+                fingerprint: key.fingerprint.toLowerCase(),
+                role: 'policy_signer'
+              }))
+          }
+        ],
         availableAfterBlocks: path.availableAfterBlocks,
         remainingBlocks: remaining,
         available: reason === null,
@@ -2600,6 +2631,14 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     proposal.eligibleSignerFingerprints = path.eligibleSignerFingerprints;
     proposal.required = path.required;
     proposal.spendingPathDetails = path;
+    if (
+      typeof location !== 'undefined' &&
+      new URLSearchParams(location.search).has('fixture-continuity-saved-path-unavailable')
+    ) {
+      proposal.spendingPathDetails.available = false;
+      proposal.spendingPathDetails.reason = 'Sync this wallet before checking spending paths.';
+      proposal.canFinalize = false;
+    }
     this._multisigProposals.set(proposal.proposalId, proposal);
     return structuredClone(proposal);
   }

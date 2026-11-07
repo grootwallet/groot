@@ -56,6 +56,7 @@ Use an external offline PSBT signer or tool that you have independently verified
 5. Save the descriptor backup. Restore it into a clean disposable profile and independently verify the descriptor and first receive address before funding.
 6. Fund with a small Testnet4 amount. Create a primary-path payment, export the PSBT, review and sign it offline, then import the signature. Groot must accept only the intended path, proposal revision, recipient, amount, fee, and change.
 7. Create a primary-path renewal. Confirm it sends to a fresh owned address and restarts the delayed clock only after confirmation.
+8. Open **Coins**, expand the funded coin and verify all four paths appear. Each path must show the expected signer names and fingerprints, exact block delay, state, remaining blocks and earliest inclusion block. The screen must say the coin does not expire and that earlier paths stay available. A Testnet4 calendar date, if shown, must be labelled as an estimate.
 
 ## 4. Test Family continuity
 
@@ -67,16 +68,20 @@ Repeat the previous section with **Family continuity** and verify this timeline:
 
 Verify that a signature from the wrong role cannot satisfy a path and that Family assistance keeps requesting signatures until both required role groups have signed.
 
+In **Coins**, Family assistance must appear as two separate requirements: **1 of 2 Parents** and **1 of 2 Child assistance signers**. It must never be summarized as 2 of 4. Expand two coins confirmed at different heights and verify their exact block targets differ.
+
 ## 5. Test delayed paths on Regtest
 
 The long delays cannot be approved in a normal Testnet4 session. Use the repository's deterministic Regtest/Core harness for Partner and Family:
 
 1. Test every delayed path one block before, exactly at, and one block after maturity.
-2. Test two inputs with different confirmation ages; the later input must control availability.
-3. Sign partially, restart Groot, and finish signing. The selected path and existing signatures must persist.
-4. Reorg an input below maturity; the delayed path must become unavailable. Reconfirm and mature it again before spending.
-5. Test primary renewal before and after delayed maturity and verify the new confirmed output starts a new delay.
-6. Restore the descriptor in a clean profile and verify the same paths, fingerprints, and first address.
+2. Expand each test coin in **Coins**. Verify the exact remaining blocks and earliest inclusion block agree with Core. Regtest must say the calendar estimate is unavailable because blocks are mined manually.
+3. Verify an unconfirmed output says its delayed waits start after confirmation. Confirm it, mine blocks, and verify only that coin's countdown advances.
+4. Attempt to add or substitute a second input in a reviewed delayed-spend proposal. Groot must reject the changed transaction; delayed spending intentionally remains one input and one output.
+5. Sign partially, restart Groot, and finish signing. The selected path and existing signatures must persist.
+6. Reorg an input below maturity; the delayed path must become unavailable. Reconfirm and mature it again before spending.
+7. Test primary renewal before and after delayed maturity and verify the new confirmed output starts a new delay. Verify the optional renewal recommendation begins at 26,280 confirmations.
+8. Restore the descriptor in a clean profile and verify the same paths, fingerprints, and first address.
 
 ## Stop immediately if
 

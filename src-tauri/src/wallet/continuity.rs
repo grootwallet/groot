@@ -7,13 +7,266 @@ use bdk_wallet::descriptor::policy::{PkOrF, Policy};
 #[serde(rename_all = "camelCase")]
 pub struct SpendingPathDetailsDto {
     pub index: usize,
-    pub name: &'static str,
+    pub code: String,
+    pub name: String,
     pub required: usize,
     pub eligible_signer_fingerprints: Vec<String>,
+    pub signer_groups: Vec<PolicySignerGroupDto>,
     pub available_after_blocks: u32,
     pub remaining_blocks: Option<u32>,
     pub available: bool,
     pub reason: Option<&'static str>,
+}
+
+fn signer_group(
+    metadata: &MultisigWalletDto,
+    code: &str,
+    label: &str,
+    required: usize,
+    signer_roles: &[(&str, &str)],
+) -> ApiResult<PolicySignerGroupDto> {
+    let signers = signer_roles
+        .iter()
+        .map(|(signer_id, role)| {
+            let signer = metadata
+                .cosigners
+                .iter()
+                .find(|candidate| candidate.id == *signer_id)
+                .ok_or_else(|| {
+                    api_error(
+                        "wallet_corrupt",
+                        "The wallet spending path references an unknown signer.",
+                    )
+                })?;
+            Ok(PolicyPathSignerDto {
+                label: signer.label.clone(),
+                fingerprint: signer.fingerprint.trim().to_lowercase(),
+                role: (*role).to_owned(),
+            })
+        })
+        .collect::<ApiResult<Vec<_>>>()?;
+    Ok(PolicySignerGroupDto {
+        code: code.to_owned(),
+        label: label.to_owned(),
+        required,
+        signers,
+    })
+}
+
+fn one_signer_group(
+    metadata: &MultisigWalletDto,
+    code: &str,
+    label: &str,
+    required: usize,
+    signer_ids: &[String],
+    role: &str,
+) -> ApiResult<Vec<PolicySignerGroupDto>> {
+    let signer_roles = signer_ids
+        .iter()
+        .map(|signer_id| (signer_id.as_str(), role))
+        .collect::<Vec<_>>();
+    Ok(vec![signer_group(
+        metadata,
+        code,
+        label,
+        required,
+        &signer_roles,
+    )?])
+}
+
+pub(super) fn path_code(template: &RecoveryTemplate, index: usize) -> String {
+    match (template, index) {
+        (RecoveryTemplate::Recovery { .. }, 0) => "primary".to_owned(),
+        (RecoveryTemplate::Recovery { .. }, 1) => "recovery".to_owned(),
+        (RecoveryTemplate::PartnerContinuityV1 { .. }, 0) => "partner_owner".to_owned(),
+        (RecoveryTemplate::PartnerContinuityV1 { .. }, 1) => "partner_assistance".to_owned(),
+        (RecoveryTemplate::PartnerContinuityV1 { .. }, 2) => "partner_solo".to_owned(),
+        (RecoveryTemplate::PartnerContinuityV1 { .. }, 3) => "partner_estate".to_owned(),
+        (RecoveryTemplate::FamilyContinuityV1 { .. }, 0) => "family_parents".to_owned(),
+        (RecoveryTemplate::FamilyContinuityV1 { .. }, 1) => "family_assistance".to_owned(),
+        (RecoveryTemplate::FamilyContinuityV1 { .. }, 2) => "family_inheritance".to_owned(),
+        (_, index) => format!("policy_path_{index}"),
+    }
+}
+
+pub(super) fn policy_path_definition(
+    metadata: &MultisigWalletDto,
+    analysis: &PolicyAnalysis,
+    index: usize,
+) -> ApiResult<PolicyPathDefinitionDto> {
+    let template = metadata
+        .recovery_template
+        .as_ref()
+        .ok_or_else(|| internal("Missing policy template"))?;
+    let path = analysis
+        .paths
+        .get(index)
+        .ok_or_else(|| api_error("unknown_spending_path", "Choose a valid spending path."))?;
+    let (_, eligible_signer_fingerprints) =
+        signer_fingerprints_for_ids(metadata, &path.signer_ids)?;
+    let code = path_code(template, index);
+    let signer_groups = match (template, index) {
+        (RecoveryTemplate::Recovery { immediate, .. }, 0) => one_signer_group(
+            metadata,
+            "primary_signers",
+            "Primary signers",
+            immediate.threshold,
+            &immediate.signer_ids,
+            "primary",
+        )?,
+        (RecoveryTemplate::Recovery { recovery, .. }, 1) => one_signer_group(
+            metadata,
+            if metadata.policy_type == "inheritance" {
+                "heir_signers"
+            } else {
+                "recovery_signers"
+            },
+            if metadata.policy_type == "inheritance" {
+                "Heir signer"
+            } else {
+                "Recovery signer"
+            },
+            recovery.threshold,
+            &recovery.signer_ids,
+            if metadata.policy_type == "inheritance" {
+                "heir"
+            } else {
+                "recovery"
+            },
+        )?,
+        (RecoveryTemplate::PartnerContinuityV1 { owner, .. }, 0) => one_signer_group(
+            metadata,
+            "owner_signers",
+            "Owner signers",
+            owner.threshold,
+            &owner.signer_ids,
+            "owner",
+        )?,
+        (RecoveryTemplate::PartnerContinuityV1 { partner, .. }, 1 | 2) => one_signer_group(
+            metadata,
+            "partner_signers",
+            "Partner signers",
+            path.threshold,
+            &partner.signer_ids,
+            "partner",
+        )?,
+        (RecoveryTemplate::PartnerContinuityV1 { estate, .. }, 3) => one_signer_group(
+            metadata,
+            "estate_guardians",
+            "Estate guardians",
+            estate.threshold,
+            &estate.signer_ids,
+            "estate_guardian",
+        )?,
+        (RecoveryTemplate::FamilyContinuityV1 { parents, .. }, 0) => one_signer_group(
+            metadata,
+            "parents",
+            "Parents",
+            parents.threshold,
+            &parents.signer_ids,
+            "parent",
+        )?,
+        (
+            RecoveryTemplate::FamilyContinuityV1 {
+                parents,
+                child_assistance,
+                ..
+            },
+            1,
+        ) => {
+            let parent_roles = parents
+                .signer_ids
+                .iter()
+                .map(|id| (id.as_str(), "parent"))
+                .collect::<Vec<_>>();
+            let assistance_roles = child_assistance
+                .signer_ids
+                .iter()
+                .map(|id| (id.as_str(), "child_assistance"))
+                .collect::<Vec<_>>();
+            vec![
+                signer_group(metadata, "parents", "Parents", 1, &parent_roles)?,
+                signer_group(
+                    metadata,
+                    "child_assistance_signers",
+                    "Child assistance signers",
+                    1,
+                    &assistance_roles,
+                )?,
+            ]
+        }
+        (
+            RecoveryTemplate::FamilyContinuityV1 {
+                child_inheritance,
+                executor_signer_id,
+                ..
+            },
+            2,
+        ) => {
+            let mut inheritance_roles = child_inheritance
+                .signer_ids
+                .iter()
+                .map(|id| (id.as_str(), "child_inheritance"))
+                .collect::<Vec<_>>();
+            inheritance_roles.push((executor_signer_id.as_str(), "executor"));
+            vec![signer_group(
+                metadata,
+                "inheritance_signers",
+                "Inheritance signers",
+                path.threshold,
+                &inheritance_roles,
+            )?]
+        }
+        _ => one_signer_group(
+            metadata,
+            &format!("{code}_signers"),
+            "Required signers",
+            path.threshold,
+            &path.signer_ids,
+            "policy_signer",
+        )?,
+    };
+    Ok(PolicyPathDefinitionDto {
+        index,
+        code,
+        name: path_name(template, index).to_owned(),
+        required: path.threshold,
+        eligible_signer_fingerprints,
+        signer_groups,
+        available_after_blocks: path.available_after_blocks,
+    })
+}
+
+pub(super) fn policy_path_definitions(
+    metadata: &MultisigWalletDto,
+    analysis: &PolicyAnalysis,
+) -> ApiResult<Vec<PolicyPathDefinitionDto>> {
+    analysis
+        .paths
+        .iter()
+        .enumerate()
+        .map(|(index, _)| policy_path_definition(metadata, analysis, index))
+        .collect()
+}
+
+pub(super) fn spending_path_unavailable_reason(
+    available_after_blocks: u32,
+    age: Option<u32>,
+    recent: bool,
+    frozen: bool,
+) -> Option<&'static str> {
+    let remaining = age.map(|value| available_after_blocks.saturating_sub(value));
+    if frozen {
+        Some("Unfreeze this coin before spending it.")
+    } else if !recent {
+        Some("Sync this wallet before checking spending paths.")
+    } else if available_after_blocks > 0 && age.is_none() {
+        Some("This coin must confirm before its waiting period starts.")
+    } else if remaining.is_some_and(|value| value > 0) {
+        Some("This spending path is still waiting for blocks.")
+    } else {
+        None
+    }
 }
 
 pub(super) fn verified_analysis(metadata: &MultisigWalletDto) -> ApiResult<PolicyAnalysis> {
@@ -78,35 +331,18 @@ pub(super) fn path_details(
     recent: bool,
     frozen: bool,
 ) -> ApiResult<SpendingPathDetailsDto> {
-    let path = analysis
-        .paths
-        .get(index)
-        .ok_or_else(|| api_error("unknown_spending_path", "Choose a valid spending path."))?;
-    let (_, eligible) = signer_fingerprints_for_ids(metadata, &path.signer_ids)?;
-    let remaining = age.map(|value| path.available_after_blocks.saturating_sub(value));
-    let reason = if frozen {
-        Some("Unfreeze this coin before spending it.")
-    } else if !recent {
-        Some("Sync this wallet before checking spending paths.")
-    } else if path.available_after_blocks > 0 && age.is_none() {
-        Some("This coin must confirm before its waiting period starts.")
-    } else if remaining.is_some_and(|value| value > 0) {
-        Some("This spending path is still waiting for blocks.")
-    } else {
-        None
-    };
+    let definition = policy_path_definition(metadata, analysis, index)?;
+    let remaining = age.map(|value| definition.available_after_blocks.saturating_sub(value));
+    let reason =
+        spending_path_unavailable_reason(definition.available_after_blocks, age, recent, frozen);
     Ok(SpendingPathDetailsDto {
         index,
-        name: path_name(
-            metadata
-                .recovery_template
-                .as_ref()
-                .ok_or_else(|| internal("Missing policy template"))?,
-            index,
-        ),
-        required: path.threshold,
-        eligible_signer_fingerprints: eligible,
-        available_after_blocks: path.available_after_blocks,
+        code: definition.code,
+        name: definition.name,
+        required: definition.required,
+        eligible_signer_fingerprints: definition.eligible_signer_fingerprints,
+        signer_groups: definition.signer_groups,
+        available_after_blocks: definition.available_after_blocks,
         remaining_blocks: remaining,
         available: reason.is_none(),
         reason,

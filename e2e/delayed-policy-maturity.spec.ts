@@ -25,14 +25,14 @@ test('shows security-accurate delayed-policy state across overview, coins, and p
     .getByRole('button', { name: /Show details for/ })
     .click();
   await expect(page.getByText(/820 blocks remaining/).first()).toBeVisible();
+  await expect(page.getByText('This coin does not expire', { exact: true }).first()).toBeVisible();
   await expect(
-    page
-      .getByText(
-        'Recovery key cannot spend this coin yet. Your normal 2-of-3 keys work now and remain available later.',
-        { exact: true }
-      )
-      .first()
-  ).toBeVisible();
+    page.getByRole('article', { name: 'Primary signers · Available now' }).first()
+  ).toContainText('2 of 3 Primary signers');
+  await expect(
+    page.getByRole('article', { name: 'Recovery signers · Waiting for blocks' }).first()
+  ).toContainText('1 of 1 Recovery signer');
+  await expect(page.getByText('Block 250,821', { exact: true })).toBeVisible();
 
   await page.goto('/multisig?fixture-policy-maturity=1');
   await expect(page.getByText('2 of 3 primary keys', { exact: true })).toBeVisible();
@@ -170,7 +170,10 @@ test('spends one mature coin with only its recovery key', async ({ page }) => {
   const matureCoin = page.locator('.coin-row').filter({ hasText: 'Recovery key can spend' });
   await matureCoin.getByRole('button', { name: /Show details for/ }).click();
   await expect(matureCoin.getByText('No action is required')).toBeVisible();
-  await expect(matureCoin.getByText('Spending access', { exact: true })).toBeVisible();
+  await expect(matureCoin.getByText('Spending paths', { exact: true })).toBeVisible();
+  await expect(
+    matureCoin.getByRole('article', { name: 'Recovery signers · Available now' })
+  ).toContainText('Recovery key');
   await expect(matureCoin.getByText('Privacy & history', { exact: true })).toBeVisible();
   await expect(matureCoin.getByText('Technical details', { exact: true })).toBeVisible();
   await matureCoin.getByRole('link', { name: 'Use recovery key' }).click();
@@ -215,8 +218,11 @@ test('pauses exact countdowns when the verified chain tip is stale', async ({ pa
   await expect(page.getByText(/available in .* blocks/)).toHaveCount(0);
   const details = page.getByRole('button', { name: /Show details for/ }).first();
   await details.click();
-  await expect(page.getByText(/Paused · last verified at block/).first()).toBeVisible();
-  await expect(page.getByText('Approximate time')).toHaveCount(0);
+  await expect(page.locator('.coin-policy-observed')).toContainText('Last checked');
+  await expect(
+    page.getByRole('article', { name: 'Recovery signers · Sync to verify' })
+  ).toContainText('Sync this wallet before checking spending paths.');
+  await expect(page.getByText('Calendar estimate')).toHaveCount(0);
 });
 
 test('localizes maturity state without layout overflow', async ({ page }) => {

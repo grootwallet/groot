@@ -707,6 +707,15 @@ describe('hardware receive verification UI', () => {
     expect(appCss).toContain('.send-signers.loading::after');
   });
 
+  it('keeps structured path groups visible while multisig signatures are collected', () => {
+    expect(signerSummary).toContain('signerGroups?: PolicySignerGroup[]');
+    expect(signerSummary).toContain('signerGroupRequirement(group)');
+    expect(signerSummary).toContain('signerGroupSignedCount(group)');
+    expect(multisigSend).toContain(
+      'signerGroups={proposal.spendingPathDetails?.signerGroups ?? []}'
+    );
+  });
+
   it('keeps the single-key transaction review visible while choosing a signing transport', () => {
     const review = singleKeySend.indexOf(
       "externalProposal?.canFinalize ? 'Signed transaction review'"

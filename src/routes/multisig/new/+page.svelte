@@ -1550,7 +1550,7 @@
                   ? 'Choose how many independent keys must sign each payment. No single key can spend alone.'
                   : templateKind === 'partner_continuity_v1'
                     ? 'Your 2-of-3 remains available. After three months your partner uses both partner keys, after nine months either partner key works, and after twelve months two estate guardians can recover. Renewing moves every delayed path back.'
-                    : 'Both parents sign now. After three months either parent can sign with either child assistance key. After twelve months two of the children’s inheritance role keys and the executor can recover. Renewing moves the delayed paths back.'
+                    : 'Both parents sign now. After three months either parent can sign with either child assistance key. After about twelve months, any 2 of the 3 inheritance signers—the two child inheritance keys and the executor—can recover. Renewing moves the delayed paths back.'
               )}
             />
           </div>
@@ -1992,9 +1992,13 @@
         >
       </div>
       <div class="review-signers">
-        {#each preview.cosigners as signer}<div>
+        {#each preview.cosigners as signer, i}<div>
             <Check size={14} /><span
-              ><strong>{signer.label}</strong><small>{signer.fingerprint}</small></span
+              ><strong>{signer.label}</strong><small
+                >{#if templateKind === 'partner_continuity_v1' || templateKind === 'family_continuity_v1'}<span
+                    class="review-signer-role">{translate($locale, policyRole(i))}</span
+                  >{/if}<code>{signer.fingerprint}</code></small
+              ></span
             >
           </div>{/each}
       </div>
@@ -3558,6 +3562,19 @@
   :global(.review-signers):where(.review-signers) :global(small) {
     color: var(--muted);
     font-size: var(--font-size-meta);
+  }
+  :global(.review-signers):where(.review-signers) :global(small:has(.review-signer-role)) {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3px 6px;
+  }
+  :global(.review-signer-role):where(.review-signer-role) {
+    color: var(--text-soft);
+    font-weight: 650;
+  }
+  :global(.review-signers):where(.review-signers) :global(code) {
+    color: var(--muted);
+    font-size: inherit;
   }
   :global(.cosigner-step-heading):where(.cosigner-step-heading) :global(.setup-step) {
     display: block;

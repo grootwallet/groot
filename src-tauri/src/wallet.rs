@@ -81,6 +81,7 @@ use crate::proposal::{
 };
 use crate::recovery::{
     analyze_template, calculate_maturity, MaturityState, PolicyAnalysis, RecoveryTemplate,
+    CONTINUITY_RENEWAL_BLOCKS,
 };
 use crate::registry::{self, RegistryError, WalletKind, WalletProfile, WalletRegistry};
 use crate::secure_store;
@@ -1248,6 +1249,8 @@ pub struct UtxoDto {
     provenance: ProvenanceSummaryDto,
     frozen: bool,
     policy_maturity: Option<PolicyMaturityDto>,
+    policy_path_statuses: Vec<PolicyPathCoinStatusDto>,
+    policy_renewal_recommendation: Option<PolicyRenewalRecommendationDto>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -1262,6 +1265,58 @@ pub struct PolicyMaturityDto {
     maturity_height: Option<u32>,
     approximate_seconds_remaining: Option<u64>,
     delayed_spend_supported: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PolicyPathSignerDto {
+    label: String,
+    fingerprint: String,
+    role: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PolicySignerGroupDto {
+    code: String,
+    label: String,
+    required: usize,
+    signers: Vec<PolicyPathSignerDto>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PolicyPathDefinitionDto {
+    index: usize,
+    code: String,
+    name: String,
+    required: usize,
+    eligible_signer_fingerprints: Vec<String>,
+    signer_groups: Vec<PolicySignerGroupDto>,
+    available_after_blocks: u32,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PolicyPathCoinStatusDto {
+    path_index: usize,
+    policy_state: &'static str,
+    age_blocks: u32,
+    blocks_until_broadcast_eligible: Option<u32>,
+    confirmation_height: Option<u32>,
+    earliest_inclusion_height: Option<u32>,
+    approximate_seconds_remaining: Option<u64>,
+    action_blockers: Vec<&'static str>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PolicyRenewalRecommendationDto {
+    recommended_at_age_blocks: u32,
+    remaining_blocks: Option<u32>,
+    recommended_at_height: Option<u32>,
+    approximate_seconds_remaining: Option<u64>,
+    due: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -1283,12 +1338,14 @@ pub struct WalletSnapshotDto {
     label_suggestions: Vec<LabelSuggestionDto>,
     synced_at: Option<String>,
     chain_tip: ChainTipDto,
+    policy_paths: Vec<PolicyPathDefinitionDto>,
 }
 
 #[derive(Debug, Clone)]
 struct DelayedPolicyContext {
     policy_type: String,
     delay_blocks: u32,
+    paths: Vec<PolicyPathDefinitionDto>,
 }
 
 #[derive(Clone, Serialize)]
@@ -1641,6 +1698,8 @@ pub struct RecoveryDrillDto {
     cosigners: Vec<CosignerInput>,
     first_address: String,
     matches_current_wallet: bool,
+    policy_type: Option<String>,
+    policy_paths: Vec<PolicyPathDefinitionDto>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq)]
@@ -4923,8 +4982,8 @@ fn delayed_policy_context(wallet: &MultisigWalletDto) -> ApiResult<Option<Delaye
         return Ok(None);
     };
     let analysis = verified_analysis(wallet)?;
-    let delay_blocks = analysis
-        .paths
+    let paths = policy_path_definitions(wallet, &analysis)?;
+    let delay_blocks = paths
         .iter()
         .find(|path| path.available_after_blocks > 0)
         .map(|path| path.available_after_blocks)
@@ -4949,12 +5008,50 @@ fn delayed_policy_context(wallet: &MultisigWalletDto) -> ApiResult<Option<Delaye
             }
         }
     } else {
-        recovery_policy_type(template)
+        let expected = recovery_policy_type(template);
+        if wallet.policy_type != expected {
+            return Err(api_error(
+                "wallet_corrupt",
+                "The delayed-policy type does not match its verified template.",
+            ));
+        }
+        expected
     };
     Ok(Some(DelayedPolicyContext {
         policy_type: policy_type.to_owned(),
         delay_blocks,
+        paths,
     }))
+}
+
+// Recovery inspection must describe every backup format that the backup validator
+// accepts, including historical Decaying and Expanding templates. Transaction
+// coordination intentionally supports a narrower set through `verified_analysis`.
+fn recovery_drill_policy_presentation(
+    wallet: &MultisigWalletDto,
+) -> ApiResult<(Option<String>, Vec<PolicyPathDefinitionDto>)> {
+    let Some(template) = wallet.recovery_template.as_ref() else {
+        return Ok((None, Vec::new()));
+    };
+    let analysis = analyze_template(template, &wallet.cosigners).map_err(recovery_api_error)?;
+    if analysis.external_descriptor != wallet.external_descriptor
+        || analysis.internal_descriptor != wallet.internal_descriptor
+        || analysis.paths != wallet.spending_paths
+    {
+        return Err(api_error(
+            "wallet_corrupt",
+            "The recovery policy does not match the verified backup descriptors.",
+        ));
+    }
+    let policy_type = verified_recovery_policy_type(template, &analysis.paths);
+    if wallet.policy_type != policy_type {
+        return Err(api_error(
+            "wallet_corrupt",
+            "The recovery-policy type does not match the verified backup template.",
+        ));
+    }
+    let paths = policy_path_definitions(wallet, &analysis)?;
+    Ok((Some(policy_type.to_owned()), paths))
 }
 
 fn selected_delayed_policy_context(app: &AppHandle) -> ApiResult<Option<DelayedPolicyContext>> {
@@ -7269,6 +7366,118 @@ fn snapshot_from(
     snapshot_for_view(wallet, db, synced_at, multisig, delayed_policy, false, true)
 }
 
+fn confirmation_height(confirmations: u32, tip: u32) -> ApiResult<Option<u32>> {
+    if confirmations == 0 {
+        return Ok(None);
+    }
+    tip.checked_sub(confirmations.saturating_sub(1))
+        .map(Some)
+        .ok_or_else(|| {
+            api_error(
+                "wallet_corrupt",
+                "A coin's confirmation height is outside the supported range.",
+            )
+        })
+}
+
+fn policy_path_coin_status(
+    definition: &PolicyPathDefinitionDto,
+    confirmations: u32,
+    tip: u32,
+    recent: bool,
+    frozen: bool,
+) -> ApiResult<PolicyPathCoinStatusDto> {
+    let confirmation_height = confirmation_height(confirmations, tip)?;
+    let mut action_blockers = Vec::with_capacity(2);
+    if frozen {
+        action_blockers.push("frozen");
+    }
+    if !recent {
+        action_blockers.push("stale_chain");
+    }
+    if definition.available_after_blocks == 0 {
+        return Ok(PolicyPathCoinStatusDto {
+            path_index: definition.index,
+            policy_state: "available",
+            age_blocks: confirmations,
+            blocks_until_broadcast_eligible: Some(0),
+            confirmation_height,
+            earliest_inclusion_height: None,
+            approximate_seconds_remaining: Some(0),
+            action_blockers,
+        });
+    }
+    let calculation = calculate_maturity(definition.available_after_blocks, confirmations)
+        .map_err(recovery_api_error)?;
+    let earliest_inclusion_height = match confirmation_height {
+        Some(height) => Some(
+            height
+                .checked_add(definition.available_after_blocks)
+                .ok_or_else(|| {
+                    api_error(
+                        "wallet_corrupt",
+                        "A coin's delayed-policy height is outside the supported range.",
+                    )
+                })?,
+        ),
+        None => None,
+    };
+    let policy_state = if !recent {
+        "unknown"
+    } else {
+        match calculation.state {
+            MaturityState::Unconfirmed => "unconfirmed",
+            MaturityState::Immature | MaturityState::Approaching => "waiting",
+            MaturityState::Mature => "available",
+        }
+    };
+    Ok(PolicyPathCoinStatusDto {
+        path_index: definition.index,
+        policy_state,
+        age_blocks: calculation.age_blocks,
+        blocks_until_broadcast_eligible: calculation.remaining_blocks,
+        confirmation_height,
+        earliest_inclusion_height,
+        approximate_seconds_remaining: calculation.approximate_seconds_remaining,
+        action_blockers,
+    })
+}
+
+fn policy_renewal_recommendation(
+    policy_type: &str,
+    confirmations: u32,
+    tip: u32,
+) -> ApiResult<Option<PolicyRenewalRecommendationDto>> {
+    if !matches!(
+        policy_type,
+        "partner_continuity_v1" | "family_continuity_v1"
+    ) {
+        return Ok(None);
+    }
+    let calculation =
+        calculate_maturity(CONTINUITY_RENEWAL_BLOCKS, confirmations).map_err(recovery_api_error)?;
+    let recommended_at_height = match confirmation_height(confirmations, tip)? {
+        Some(height) => Some(
+            height
+                .checked_add(CONTINUITY_RENEWAL_BLOCKS.saturating_sub(1))
+                .ok_or_else(|| {
+                    api_error(
+                        "wallet_corrupt",
+                        "A coin's renewal height is outside the supported range.",
+                    )
+                })?,
+        ),
+        None => None,
+    };
+    Ok(Some(PolicyRenewalRecommendationDto {
+        recommended_at_age_blocks: CONTINUITY_RENEWAL_BLOCKS,
+        remaining_blocks: calculation.remaining_blocks,
+        recommended_at_height,
+        approximate_seconds_remaining: calculation.approximate_seconds_remaining,
+        due: calculation.state == MaturityState::Mature,
+    }))
+}
+
 // The overview-only intermediate is projected to WalletOverviewDto before IPC;
 // it is never returned to a full-snapshot consumer such as coin selection.
 fn snapshot_for_view(
@@ -7287,6 +7496,7 @@ fn snapshot_for_view(
     let balance = wallet.balance();
     let tip = wallet.latest_checkpoint().height();
     let chain_tip = chain_tip_dto(db, tip, synced_at.as_deref())?;
+    let chain_tip_recent = chain_tip.status == "recent";
     let addresses = if overview_only {
         Vec::new()
     } else {
@@ -7326,6 +7536,7 @@ fn snapshot_for_view(
         )
         .map_err(internal)?;
         let primary_label = provenance.labels.first().cloned();
+        let coin_frozen = frozen.contains(&output.outpoint.to_string());
         let label = primary_label
             .as_ref()
             .map(|label| label.text.clone())
@@ -7365,6 +7576,32 @@ fn snapshot_for_view(
                 })
             })
             .transpose()?;
+        // Definitions are verified once when the wallet opens. This projection is
+        // pure and stays inside the single snapshot command: no per-coin IPC or SQL.
+        let policy_path_statuses = delayed_policy
+            .map(|policy| {
+                policy
+                    .paths
+                    .iter()
+                    .map(|path| {
+                        policy_path_coin_status(
+                            path,
+                            output_confirmations,
+                            tip,
+                            chain_tip_recent,
+                            coin_frozen,
+                        )
+                    })
+                    .collect::<ApiResult<Vec<_>>>()
+            })
+            .transpose()?
+            .unwrap_or_default();
+        let policy_renewal_recommendation = delayed_policy
+            .map(|policy| {
+                policy_renewal_recommendation(&policy.policy_type, output_confirmations, tip)
+            })
+            .transpose()?
+            .flatten();
         utxos.push(UtxoDto {
             outpoint: output.outpoint.to_string(),
             amount: output.txout.value.to_sat(),
@@ -7373,8 +7610,10 @@ fn snapshot_for_view(
             label,
             primary_label,
             provenance,
-            frozen: frozen.contains(&output.outpoint.to_string()),
+            frozen: coin_frozen,
             policy_maturity,
+            policy_path_statuses,
+            policy_renewal_recommendation,
         });
     }
 
@@ -7398,6 +7637,9 @@ fn snapshot_for_view(
             label_provenance::label_suggestions(db, None).map_err(internal)?
         },
         synced_at: chain_tip.observed_at.clone(),
+        policy_paths: delayed_policy
+            .map(|policy| policy.paths.clone())
+            .unwrap_or_default(),
         chain_tip,
     })
 }
