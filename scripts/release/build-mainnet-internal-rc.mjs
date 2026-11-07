@@ -56,7 +56,15 @@ const source = resolve(process.env.GROOT_HWI_SOURCE ?? '/opt/homebrew/bin/hwi');
 const cargoMetadata = JSON.parse(
   execFileSync(
     'cargo',
-    ['metadata', '--format-version', '1', '--no-deps', '--manifest-path', 'src-tauri/Cargo.toml'],
+    [
+      'metadata',
+      '--locked',
+      '--format-version',
+      '1',
+      '--no-deps',
+      '--manifest-path',
+      'src-tauri/Cargo.toml'
+    ],
     { cwd: repoRoot, encoding: 'utf8' }
   )
 );
@@ -150,7 +158,9 @@ try {
       }),
       '--bundles',
       'app',
-      '--no-sign'
+      '--no-sign',
+      '--',
+      '--locked'
     ],
     {
       cwd: repoRoot,

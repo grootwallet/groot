@@ -19,6 +19,7 @@ test('internal RC permits fixed-mainnet, isolated multi, and canonical-identity 
   assert.match(source, /validateCompiledTeamId\([\s\S]*'REHEARSAL_ONLY'/);
   assert.match(source, /requireProductionSigning: false/);
   assert.match(source, /'--no-sign'/);
+  assert.match(source, /'--locked'/);
   assert.doesNotMatch(source, /Developer ID Application|notarytool|stapler|git push/);
 });
 
