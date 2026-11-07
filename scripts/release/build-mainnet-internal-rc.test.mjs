@@ -18,6 +18,7 @@ test('internal RC permits fixed-mainnet, isolated multi, and canonical-identity 
   assert.match(source, /GROOT_MACOS_SIGNING_TEAM_ID: 'REHEARSAL_ONLY'/);
   assert.match(source, /validateCompiledTeamId\([\s\S]*'REHEARSAL_ONLY'/);
   assert.match(source, /requireProductionSigning: false/);
+  assert.match(source, /'--no-sign'/);
   assert.doesNotMatch(source, /Developer ID Application|notarytool|stapler|git push/);
 });
 
@@ -47,4 +48,14 @@ test('one-operation worker is enabled only with the sealed internal multi runtim
   assert.match(source, /buildNetwork === 'multi'[\s\S]*prepareHwiRuntime/);
   assert.match(source, /GROOT_HWI_SESSION_PROTOCOL: '1'/);
   assert.match(source, /hwi_session_protocol=1/);
+});
+
+test('internal handoff verifies actual camera permission, frozen source and artifact provenance', () => {
+  assert.match(source, /verifyMacosCameraAccess\(builtApp\)/);
+  assert.match(source, /verifyMacosCameraAccess\(outputApp\)/);
+  assert.match(source, /head !== commit \|\| status\.trim\(\)/);
+  assert.match(source, /scripts\/release\/generate-sbom\.mjs', sbom, executable/);
+  assert.match(source, /'PROVENANCE\.json'/);
+  assert.match(source, /'SHA256SUMS'/);
+  assert.match(source, /'ditto', \['-c', '-k', '--keepParent', outputApp, outputZip\]/);
 });

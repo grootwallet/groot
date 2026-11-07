@@ -31,6 +31,8 @@ if (!appArgument || !outputArgument || !isAbsolute(appArgument) || !isAbsolute(o
   fail('usage: create-macos-dmg.mjs /absolute/Groot.app /new/absolute/Groot.dmg [volume name]');
 }
 const app = resolve(appArgument);
+const appFileName = basename(app);
+const branded = appFileName === 'Groot.app';
 const output = resolve(outputArgument);
 const backgroundBytes = readFileSync(
   join(repoRoot, 'scripts/release/assets/groot-dmg-background.png')
@@ -50,8 +52,7 @@ const writableDmg = join(temporaryRoot, 'Groot-layout.dmg');
 
 try {
   mkdirSync(staging, { mode: 0o700 });
-  mkdirSync(join(staging, '.background'), { mode: 0o755 });
-  const stagedApp = join(staging, 'Groot.app');
+  const stagedApp = join(staging, appFileName);
   // Node otherwise rewrites relative framework links to absolute paths into
   // the build folder, invalidating the app seal inside the DMG.
   cpSync(app, stagedApp, {
@@ -61,11 +62,14 @@ try {
   });
   run('codesign', ['--verify', '--deep', '--strict', stagedApp]);
   symlinkSync('/Applications', join(staging, 'Applications'));
-  writeFileSync(join(staging, '.background/groot-dmg-background.png'), backgroundBytes);
-  writeFileSync(
-    join(staging, '.DS_Store'),
-    readFileSync(join(repoRoot, 'scripts/release/assets/groot-dmg.DS_Store'))
-  );
+  if (branded) {
+    mkdirSync(join(staging, '.background'), { mode: 0o755 });
+    writeFileSync(join(staging, '.background/groot-dmg-background.png'), backgroundBytes);
+    writeFileSync(
+      join(staging, '.DS_Store'),
+      readFileSync(join(repoRoot, 'scripts/release/assets/groot-dmg.DS_Store'))
+    );
+  }
   run('hdiutil', [
     'create',
     '-volname',
@@ -91,7 +95,7 @@ try {
   mkdirSync(mounted, { mode: 0o700 });
   run('hdiutil', ['attach', '-readonly', '-nobrowse', '-mountpoint', mounted, output]);
   try {
-    run('codesign', ['--verify', '--deep', '--strict', join(mounted, 'Groot.app')]);
+    run('codesign', ['--verify', '--deep', '--strict', join(mounted, appFileName)]);
   } finally {
     run('hdiutil', ['detach', mounted]);
   }
