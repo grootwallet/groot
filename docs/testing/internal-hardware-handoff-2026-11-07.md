@@ -25,7 +25,7 @@ Use Testnet4 and disposable wallets. Do not replace public Groot, reset a funded
 
 ## Minimal owner acceptance
 
-The CI follow-up changes test/build orchestration only. The existing `51a09f43` macOS candidate retains its exact runtime and camera/package evidence; it is not relabelled as a build of the new CI helpers. The concurrent timelock coin-UX task will integrate both branches and issue a combined candidate. Wait for that build for the next owner pass; use its recorded checksum and Testnet4 with disposable wallets.
+The existing `51a09f43` macOS candidate retains its historical runtime and camera/package evidence; it is not relabelled as a build of later changes. Timelock coin UX was integrated in `41a2ed91..f3d9ab4e`, followed by release-integrity work on the same post-5.3 maintenance branch. Use only the final combined candidate built from the final recorded clean commit for the next owner pass. Verify its fresh checksum and use Testnet4 with disposable wallets.
 
 1. **Camera:** allow/deny then retry; scan one real payment QR and animated QR, close/reopen and background once. Confirm the decoded details and that capture stops.
 2. **Each signer model you intend to use:** combine discovery/unlock, exact account and receive-address confirmation, rejection/retry, and approval of one tiny Testnet4 payment. Disconnect once and check the retry is understandable; compare address, amount and fee on the trusted display.

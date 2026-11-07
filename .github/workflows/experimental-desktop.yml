@@ -86,6 +86,8 @@ jobs:
           pnpm test:versions
           pnpm test:localization
           pnpm test:hardware-preflight
+          pnpm test:release-gate:internal
+          node --test scripts/release/prepare-hwi-runtime.test.mjs
           pnpm test:ci-workflows
           node --test scripts/quality/rust-coverage-harness.test.mjs
           pnpm check

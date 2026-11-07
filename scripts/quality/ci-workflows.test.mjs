@@ -17,6 +17,10 @@ function workflow(path) {
 }
 const ci = workflow('.github/workflows/ci.yml');
 const internal = workflow('.github/workflows/experimental-desktop.yml');
+const crossPlatformBuilder = readFileSync(
+  new URL('scripts/release/build-cross-platform-testnet4.mjs', root),
+  'utf8'
+);
 const runs = (job) => job.steps.flatMap((step) => (step.run ? [step.run] : []));
 const aggregate = ci.jobs.frontend;
 const aggregateStep = aggregate.steps.find((step) => step.env?.CI_REQUIRED_RESULTS);
@@ -146,6 +150,30 @@ test('internal packages use structured release-stop validation and preserve Wind
   assert.ok(linux, 'Linux must run complete internal validation');
   assert.doesNotMatch(linux.run, /grep|set \+e|PIPESTATUS/);
   const windows = steps.find((step) => step.name === 'Run Windows-compatible validation');
+  const windowsCommands = windows.run.split('\n').map((command) => command.trim());
+  const internalGate = 'pnpm test:release-gate:internal';
+  assert.equal(
+    windowsCommands.filter((command) => command === internalGate).length,
+    1,
+    'Windows must run exactly one explicit internal release gate'
+  );
+  assert.equal(
+    runs(internal.jobs.package)
+      .join('\n')
+      .split('\n')
+      .filter((command) => command.trim() === internalGate).length,
+    1,
+    'the explicit Windows gate must not be duplicated elsewhere in the workflow'
+  );
+  assert.ok(windowsCommands.indexOf(internalGate) < windowsCommands.indexOf('pnpm build'));
+  assert.ok(windowsCommands.indexOf(internalGate) < windowsCommands.indexOf('pnpm build:testnet4'));
+  const portableRuntimeTest = 'node --test scripts/release/prepare-hwi-runtime.test.mjs';
+  assert.equal(
+    windowsCommands.filter((command) => command === portableRuntimeTest).length,
+    1,
+    'Windows must exercise native-separator runtime inventory and depth limits'
+  );
+  assert.ok(windowsCommands.indexOf(portableRuntimeTest) < windowsCommands.indexOf('pnpm build'));
   assert.match(windows.run, /pnpm test:coverage/);
   assert.doesNotMatch(windows.run, /pnpm test\s*(?:\n|$)/);
   assert.match(
@@ -153,6 +181,65 @@ test('internal packages use structured release-stop validation and preserve Wind
     /cargo test --locked --all-targets --all-features/
   );
   assert.equal(steps.filter((step) => step.uses?.startsWith('Swatinem/rust-cache@')).length, 1);
+});
+
+test('the shared cross-platform builder gates a clean checkout before staging and building', () => {
+  const cleanCheckout = crossPlatformBuilder.indexOf(
+    "execFileSync('git', ['status', '--porcelain=v1', '--untracked-files=all']"
+  );
+  const cleanCheckoutRejection = crossPlatformBuilder.indexOf(
+    'Cross-platform package builds require a clean tracked and untracked source checkout'
+  );
+  const internalGate = crossPlatformBuilder.indexOf(
+    "execFileSync(process.execPath, [join(repoRoot, 'scripts/release/internal-release-gate.mjs')]"
+  );
+  const firstStageMutation = crossPlatformBuilder.indexOf('rmSync(stage');
+  const packageBuild = crossPlatformBuilder.indexOf("['exec', 'tauri', 'build'");
+  const firstSourceRecheck = crossPlatformBuilder.indexOf('assertSourceUnchanged();', packageBuild);
+  const outputCreation = crossPlatformBuilder.indexOf('mkdirSync(outputRoot');
+  const evidenceChecksums = crossPlatformBuilder.indexOf("join(outputRoot, 'SHA256SUMS')");
+  const finalSourceRecheck = crossPlatformBuilder.lastIndexOf('assertSourceUnchanged();');
+  assert.ok(cleanCheckout >= 0, 'the builder must validate the clean checkout');
+  assert.ok(
+    cleanCheckoutRejection > cleanCheckout,
+    'the clean-checkout validation must reject a dirty source tree'
+  );
+  assert.ok(
+    internalGate > cleanCheckoutRejection,
+    'the internal gate must follow clean-checkout validation'
+  );
+  assert.ok(
+    firstStageMutation > internalGate,
+    'the internal gate must run before the first staging mutation'
+  );
+  assert.ok(packageBuild > firstStageMutation, 'the package build must follow staging');
+  assert.ok(
+    firstSourceRecheck > packageBuild && outputCreation > firstSourceRecheck,
+    'source must be rechecked after compilation and before artifact output'
+  );
+  assert.ok(
+    finalSourceRecheck > evidenceChecksums,
+    'source must remain unchanged through final evidence generation'
+  );
+  assert.equal(
+    (crossPlatformBuilder.match(/assertSourceUnchanged\(\);/g) ?? []).length,
+    2,
+    'the shared builder must recheck source after build and evidence generation'
+  );
+  assert.equal(
+    (crossPlatformBuilder.match(/scripts\/release\/internal-release-gate\.mjs/g) ?? []).length,
+    1
+  );
+
+  const packageSteps = internal.jobs.package.steps.filter(
+    (step) => step.run?.trim() === 'node scripts/release/build-cross-platform-testnet4.mjs'
+  );
+  assert.equal(packageSteps.length, 1, 'both matrix hosts must use the protected shared builder');
+  assert.equal(packageSteps[0].if, undefined);
+  assert.deepEqual(
+    internal.jobs.package.strategy.matrix.include.map(({ platform }) => platform),
+    ['linux-x86_64', 'windows-x86_64']
+  );
 });
 
 test('every acceptance job is bounded and keeps read-only permissions', () => {

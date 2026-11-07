@@ -98,6 +98,10 @@ const worktreeStatus = execFileSync('git', ['status', '--porcelain=v1', '--untra
 });
 if (worktreeStatus.trim())
   fail('internal RC builds require a clean tracked and untracked worktree');
+execFileSync(process.execPath, [join(repoRoot, 'scripts/release/internal-release-gate.mjs')], {
+  cwd: repoRoot,
+  stdio: 'inherit'
+});
 function assertSourceUnchanged() {
   const head = execFileSync('git', ['rev-parse', 'HEAD'], {
     cwd: repoRoot,

@@ -8,7 +8,9 @@ import { classifyReleaseTests, releaseTestFiles } from './internal-release-gate.
 import { verifyInternalSourcePolicy } from './verify-internal-source-policy.mjs';
 import {
   isSourceApprovalRequired,
-  validatePinnedPolicySources
+  validateMainnetSourceSemantics,
+  validatePinnedPolicySources,
+  validatePinnedPolicySourceSnapshot
 } from './verify-mainnet-source-policy.mjs';
 const sourcePath = 'package.json';
 const code = 'ERR_SOURCE_APPROVAL_REQUIRED';
@@ -230,39 +232,79 @@ test('only the named macOS compiler fixture may skip on other systems', () => {
   assert.throws(() => classifyReleaseTests(e, 'linux'), /Unexpected skipped/);
   assert.throws(() => classifyReleaseTests(fixture(), 'linux'));
 });
-test('semantic regressions remain failures after any known pending source pin', () => {
+test('the exact internal snapshot rejects all unreviewed drift and preserves the public stop', () => {
   verifyInternalSourcePolicy(read, bytes);
   assert.throws(
-    () =>
-      verifyInternalSourcePolicy(
-        (p) =>
-          p === 'src/lib/config.ts'
-            ? "export const SUPPORTED_NETWORKS = ['mainnet'] as const;"
-            : read(p),
-        bytes
-      ),
-    /unsafe/
-  );
-  const earlierRead = (p) => (p === 'src-tauri/src/wallet/activity.rs' ? 'unreviewed' : read(p));
-  assert.throws(
-    () => validatePinnedPolicySources(earlierRead, bytes),
+    () => validatePinnedPolicySources(read, bytes),
     (error) =>
       isSourceApprovalRequired(error) &&
       error.cause.sourcePath === 'src-tauri/src/wallet/activity.rs'
   );
-  assert.doesNotThrow(() => verifyInternalSourcePolicy(earlierRead, bytes));
+  const firstDrift = (p) =>
+    p === 'src-tauri/src/wallet/activity.rs' ? `${read(p)}\nunreviewed` : read(p);
+  assert.throws(
+    () => verifyInternalSourcePolicy(firstDrift, bytes),
+    (error) =>
+      !isSourceApprovalRequired(error) &&
+      /snapshot mismatch: src-tauri\/src\/wallet\/activity\.rs/.test(error.message)
+  );
+  const laterDrift = (p) =>
+    p === 'scripts/hardware/session-worker.py' ? `${read(p)}\nunreviewed` : read(p);
+  assert.throws(
+    () => verifyInternalSourcePolicy(laterDrift, bytes),
+    (error) => !isSourceApprovalRequired(error) && /session-worker\.py/.test(error.message)
+  );
+  const unchangedPublicDrift = (p) =>
+    p === 'src-tauri/src/session.rs' ? `${read(p)}\nunreviewed` : read(p);
+  assert.throws(
+    () => verifyInternalSourcePolicy(unchangedPublicDrift, bytes),
+    (error) => !isSourceApprovalRequired(error) && /src-tauri\/src\/session\.rs/.test(error.message)
+  );
+  const binaryDrift = (p) =>
+    p === 'scripts/release/assets/groot-dmg-background.png'
+      ? Buffer.concat([bytes(p), Buffer.of(0)])
+      : bytes(p);
+  assert.throws(
+    () => verifyInternalSourcePolicy(read, binaryDrift),
+    (error) => !isSourceApprovalRequired(error) && /groot-dmg-background\.png/.test(error.message)
+  );
+  assert.throws(
+    () => validatePinnedPolicySourceSnapshot(read, bytes),
+    /reviewed internal source snapshot mismatch/
+  );
   assert.throws(
     () =>
-      verifyInternalSourcePolicy(
-        (p) =>
-          p === 'src/lib/config.ts'
-            ? "export const SUPPORTED_NETWORKS = ['mainnet'] as const;"
-            : earlierRead(p),
-        bytes
+      validatePinnedPolicySourceSnapshot(
+        read,
+        bytes,
+        new Map([['unknown/source', 'a'.repeat(64)]])
+      ),
+    /unknown reviewed internal text source/
+  );
+  assert.throws(
+    () =>
+      validatePinnedPolicySourceSnapshot(
+        read,
+        bytes,
+        new Map([
+          [
+            'src-tauri/src/session.rs',
+            '61cf28ce44dd7262c0c3567d1d9bc456f1861520effaf00cbda501657ad1193e'
+          ]
+        ])
+      ),
+    /stale reviewed internal text override/
+  );
+  assert.throws(
+    () =>
+      validateMainnetSourceSemantics((p) =>
+        p === 'src/lib/config.ts'
+          ? "export const SUPPORTED_NETWORKS = ['mainnet'] as const;"
+          : read(p)
       ),
     /unsafe/
   );
-  assert.throws(() => verifyInternalSourcePolicy(read), /binary-safe source reader/);
+  assert.throws(() => verifyInternalSourcePolicy(read), /text and binary-safe readers/);
 });
 test('actual Node events reject a second failure and a missing test beside the expected stop', () => {
   const dir = mkdtempSync(join(tmpdir(), 'groot-internal-gate-'));

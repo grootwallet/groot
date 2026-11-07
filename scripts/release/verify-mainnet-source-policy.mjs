@@ -435,6 +435,50 @@ export function validatePinnedPolicySources(read, readBytes) {
   }
 }
 
+function validateSnapshotOverrides(overrides, pinned, kind) {
+  if (!(overrides instanceof Map)) {
+    throw new Error(`the reviewed internal ${kind} overrides must be a Map`);
+  }
+  for (const [path, expected] of overrides) {
+    if (!pinned.has(path)) {
+      throw new Error(`unknown reviewed internal ${kind} source: ${path}`);
+    }
+    if (!/^[a-f0-9]{64}$/.test(expected)) {
+      throw new Error(`invalid reviewed internal ${kind} digest: ${path}`);
+    }
+    if (expected === pinned.get(path)) {
+      throw new Error(`stale reviewed internal ${kind} override: ${path}`);
+    }
+  }
+}
+
+export function validatePinnedPolicySourceSnapshot(
+  read,
+  readBytes,
+  textOverrides = new Map(),
+  binaryOverrides = new Map()
+) {
+  if (typeof read !== 'function' || typeof readBytes !== 'function') {
+    throw new Error('the reviewed internal source snapshot requires text and binary-safe readers');
+  }
+  validateSnapshotOverrides(textOverrides, pinnedPolicySources, 'text');
+  validateSnapshotOverrides(binaryOverrides, pinnedBinaryPolicySources, 'binary');
+  const mismatches = [];
+  for (const [path, publicDigest] of pinnedPolicySources) {
+    const expected = textOverrides.get(path) ?? publicDigest;
+    const actual = createHash('sha256').update(read(path)).digest('hex');
+    if (actual !== expected) mismatches.push(path);
+  }
+  for (const [path, publicDigest] of pinnedBinaryPolicySources) {
+    const expected = binaryOverrides.get(path) ?? publicDigest;
+    const actual = createHash('sha256').update(readBytes(path)).digest('hex');
+    if (actual !== expected) mismatches.push(path);
+  }
+  if (mismatches.length > 0) {
+    throw new Error(`reviewed internal source snapshot mismatch: ${mismatches.join(', ')}`);
+  }
+}
+
 export function validateUpdateKeyPair(rawHexSource, publicPemSource) {
   const rawHex = rawHexSource.trim();
   if (!/^[0-9a-f]{64}$/.test(rawHex)) {

@@ -52,6 +52,14 @@ test('one-operation worker is enabled only with the sealed internal multi runtim
 });
 
 test('internal handoff verifies actual camera permission, frozen source and artifact provenance', () => {
+  const cleanCheckout = source.indexOf('if (worktreeStatus.trim())');
+  const internalGate = source.indexOf(
+    "execFileSync(process.execPath, [join(repoRoot, 'scripts/release/internal-release-gate.mjs')]"
+  );
+  const firstStageMutation = source.indexOf('rmSync(stageDirectory');
+  assert.ok(cleanCheckout >= 0);
+  assert.ok(internalGate > cleanCheckout);
+  assert.ok(firstStageMutation > internalGate);
   assert.match(source, /verifyMacosCameraAccess\(builtApp\)/);
   assert.match(source, /verifyMacosCameraAccess\(outputApp\)/);
   assert.match(source, /head !== commit \|\| status\.trim\(\)/);

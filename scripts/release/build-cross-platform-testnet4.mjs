@@ -88,6 +88,23 @@ if (
     'Cross-platform package builds require a clean tracked and untracked source checkout'
   );
 }
+function assertSourceUnchanged() {
+  const currentCommit = execFileSync('git', ['rev-parse', 'HEAD'], {
+    cwd: repoRoot,
+    encoding: 'utf8'
+  }).trim();
+  const status = execFileSync('git', ['status', '--porcelain=v1', '--untracked-files=all'], {
+    cwd: repoRoot,
+    encoding: 'utf8'
+  });
+  if (currentCommit !== commit || status.trim()) {
+    throw new Error('Cross-platform package source changed during the build');
+  }
+}
+execFileSync(process.execPath, [join(repoRoot, 'scripts/release/internal-release-gate.mjs')], {
+  cwd: repoRoot,
+  stdio: 'inherit'
+});
 if (existsSync(outputRoot)) throw new Error(`Output already exists: ${outputRoot}`);
 execFileSync(
   process.execPath,
@@ -171,6 +188,7 @@ try {
       stdio: 'inherit'
     }
   );
+  assertSourceUnchanged();
 
   mkdirSync(outputRoot, { recursive: true, mode: 0o755 });
   const extensions = process.platform === 'win32' ? ['.msi', '.exe'] : ['.deb'];
@@ -230,6 +248,7 @@ try {
     join(outputRoot, 'SHA256SUMS'),
     evidenceFiles.map((name) => `${digest(join(outputRoot, name))}  ${name}`).join('\n') + '\n'
   );
+  assertSourceUnchanged();
   console.log(`Cross-platform Testnet4 packages: ${outputRoot}`);
 } finally {
   rmSync(stage, { recursive: true, force: true });

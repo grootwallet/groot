@@ -15,7 +15,7 @@ import {
   symlinkSync,
   writeFileSync
 } from 'node:fs';
-import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const MAGIC = Buffer.from('4d45490c0b0a0b0e', 'hex');
@@ -33,6 +33,7 @@ const safePath = (name) =>
   !isAbsolute(name) &&
   name.split('/').every((part) => part && part !== '.' && part !== '..');
 const normalizedArchivePath = (name) => name.replaceAll('\\', '/');
+const normalizedFilesystemPath = (root, path) => relative(root, path).split(sep).join('/');
 
 // Reads data only. Never imports or executes any Python from the archive.
 export function readHwiRuntimeArchive(bytes, expectedDigest, session = false) {
@@ -129,11 +130,11 @@ export function runtimeInventory(root) {
   let total = 0;
   let visited = 0;
   function visit(directory) {
-    if (relative(root, directory).split('/').length > 16) fail();
+    if (normalizedFilesystemPath(root, directory).split('/').length > 16) fail();
     for (const name of readdirSync(directory).sort()) {
       if (++visited > MAX_ENTRIES * 2) fail();
       const path = join(directory, name);
-      const rel = relative(root, path).split('\\').join('/');
+      const rel = normalizedFilesystemPath(root, path);
       if (!safePath(rel)) fail();
       const stat = lstatSync(path);
       // POSIX symlink mode bits are not enforced (Linux reports 0777). Verify

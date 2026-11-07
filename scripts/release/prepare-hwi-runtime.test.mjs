@@ -1,9 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdtempSync, writeFileSync, symlinkSync, rmSync, chmodSync, realpathSync } from 'node:fs';
+import {
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  realpathSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync
+} from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, sep } from 'node:path';
 import {
   copyHwiRuntime,
   readHwiRuntimeArchive,
@@ -60,7 +68,16 @@ test('archive extraction requires exact pinned bytes and bounded paths', () => {
   const bytes = archive();
   assert.equal(readHwiRuntimeArchive(bytes, digest(bytes))[0].name, 'Python');
   assert.throws(() => readHwiRuntimeArchive(bytes, '0'.repeat(64)));
-  for (const name of ['../Python', '/Python', 'a/../Python', 'a//Python']) {
+  for (const name of [
+    '../Python',
+    '/Python',
+    'a/../Python',
+    'a//Python',
+    '..\\Python',
+    '\\Python',
+    'a\\..\\Python',
+    'a\\\\Python'
+  ]) {
     const bytes = archive(name);
     assert.throws(() => readHwiRuntimeArchive(bytes, digest(bytes)));
   }
@@ -111,6 +128,32 @@ test('runtime inventory detects modified, extra and writable files and escaping 
   } finally {
     rmSync(root, { recursive: true, force: true });
     rmSync(copied, { recursive: true, force: true });
+  }
+});
+
+test('runtime inventory uses portable nested paths and enforces its depth bound', () => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'groot-runtime-depth-test-')));
+  try {
+    const levels = Array.from({ length: 16 }, (_, index) => `level-${index + 1}`);
+    const directory = join(root, ...levels);
+    mkdirSync(directory, { recursive: true });
+    writeFileSync(join(directory, 'native.dll'), 'driver', { mode: 0o644 });
+    assert.deepEqual(
+      runtimeInventory(root).files.map(({ path }) => path),
+      [`${levels.join('/')}/native.dll`]
+    );
+
+    if (sep === '/') {
+      const invalid = join(root, 'invalid\\name');
+      writeFileSync(invalid, 'invalid', { mode: 0o644 });
+      assert.throws(() => runtimeInventory(root));
+      rmSync(invalid);
+    }
+
+    mkdirSync(join(root, ...levels, 'level-17'), { recursive: true });
+    assert.throws(() => runtimeInventory(root));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
   }
 });
 

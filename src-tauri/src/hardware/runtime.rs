@@ -51,6 +51,21 @@ fn relative_path(value: &str) -> bool {
             .all(|part| matches!(part, Component::Normal(_)))
 }
 
+fn manifest_relative_path(path: &Path) -> Result<String, HardwareError> {
+    let mut parts = Vec::new();
+    for component in path.components() {
+        let Component::Normal(part) = component else {
+            return Err(HardwareError::Unavailable);
+        };
+        parts.push(part.to_str().ok_or(HardwareError::Unavailable)?);
+    }
+    let relative = parts.join("/");
+    if !relative_path(&relative) {
+        return Err(HardwareError::Unavailable);
+    }
+    Ok(relative)
+}
+
 fn digest_matches(bytes: &[u8], expected: &str) -> bool {
     expected.len() == 64
         && expected
@@ -102,15 +117,10 @@ fn inventory(
             return Err(HardwareError::Unavailable);
         }
         let path = entry.map_err(|_| HardwareError::Unavailable)?.path();
-        let relative = path
-            .strip_prefix(root)
-            .map_err(|_| HardwareError::Unavailable)?
-            .to_str()
-            .ok_or(HardwareError::Unavailable)?
-            .to_owned();
-        if !relative_path(&relative) {
-            return Err(HardwareError::Unavailable);
-        }
+        let relative = manifest_relative_path(
+            path.strip_prefix(root)
+                .map_err(|_| HardwareError::Unavailable)?,
+        )?;
         let metadata = fs::symlink_metadata(&path).map_err(|_| HardwareError::Unavailable)?;
         if metadata.is_dir() {
             #[cfg(unix)]
@@ -353,12 +363,13 @@ mod tests {
     fn fixture() -> (PathBuf, String) {
         let root = std::env::temp_dir().join(format!("groot-hwi-runtime-{}", uuid::Uuid::new_v4()));
         fs::create_dir(&root).unwrap();
-        fs::write(root.join("Python"), b"runtime fixture").unwrap();
+        fs::create_dir(root.join("drivers")).unwrap();
+        fs::write(root.join("drivers/native.dll"), b"runtime fixture").unwrap();
         #[cfg(unix)]
-        symlink("Python", root.join("alias")).unwrap();
+        symlink("drivers/native.dll", root.join("alias")).unwrap();
         let manifest = json!({"schemaVersion":1,"sourceSha256":"source", "files":[
-            {"path":"Python","size":15,"sha256":sha256::Hash::hash(b"runtime fixture").to_string()}],
-            "links": if cfg!(unix) { json!([{"path":"alias","target":"Python"}]) } else { json!([]) }});
+            {"path":"drivers/native.dll","size":15,"sha256":sha256::Hash::hash(b"runtime fixture").to_string()}],
+            "links": if cfg!(unix) { json!([{"path":"alias","target":"drivers/native.dll"}]) } else { json!([]) }});
         let bytes = serde_json::to_vec(&manifest).unwrap();
         fs::write(root.join("runtime-manifest.json"), &bytes).unwrap();
         (
@@ -415,9 +426,9 @@ mod tests {
         fs::write(root.join("extra"), b"injected").unwrap();
         assert!(verify_runtime(&root, &digest, "source").is_err());
         fs::remove_file(root.join("extra")).unwrap();
-        fs::write(root.join("Python"), b"tampered bytes!").unwrap();
+        fs::write(root.join("drivers/native.dll"), b"tampered bytes!").unwrap();
         assert!(verify_runtime(&root, &digest, "source").is_err());
-        fs::remove_file(root.join("Python")).unwrap();
+        fs::remove_file(root.join("drivers/native.dll")).unwrap();
         assert!(verify_runtime(&root, &digest, "source").is_err());
         fs::remove_dir_all(root).unwrap();
     }
@@ -428,9 +439,17 @@ mod tests {
         {
             use std::os::unix::fs::PermissionsExt as _;
             let (root, digest) = fixture();
-            fs::set_permissions(root.join("Python"), fs::Permissions::from_mode(0o666)).unwrap();
+            fs::set_permissions(
+                root.join("drivers/native.dll"),
+                fs::Permissions::from_mode(0o666),
+            )
+            .unwrap();
             assert!(verify_runtime(&root, &digest, "source").is_err());
-            fs::set_permissions(root.join("Python"), fs::Permissions::from_mode(0o644)).unwrap();
+            fs::set_permissions(
+                root.join("drivers/native.dll"),
+                fs::Permissions::from_mode(0o644),
+            )
+            .unwrap();
             fs::remove_file(root.join("alias")).unwrap();
             symlink("/etc/hosts", root.join("alias")).unwrap();
             assert!(verify_runtime(&root, &digest, "source").is_err());
@@ -461,5 +480,9 @@ mod tests {
             assert!(!relative_path(invalid));
         }
         assert!(relative_path("Python.framework/Versions/3.9/Python"));
+        assert_eq!(
+            manifest_relative_path(Path::new("drivers").join("native.dll").as_path()).unwrap(),
+            "drivers/native.dll"
+        );
     }
 }

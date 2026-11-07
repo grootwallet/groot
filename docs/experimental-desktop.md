@@ -15,6 +15,12 @@ included signer driver without opening USB. Runtime verifies the exact bundled
 executable and complete extracted manifest and never searches PATH or falls
 back to a system HWI.
 
+Both native hosts must pass the exact reviewed internal source snapshot while
+preserving the separate public-release approval stop. The shared package
+builder repeats that gate after rejecting a dirty checkout and before staging
+or compiling, so a failed Linux job cannot leave an independently uploadable
+Windows candidate and a direct builder invocation has the same boundary.
+
 These packages use a separate application identity and Testnet4 only. Windows
 does not guess the unverified WebUSB controller mapping used by some Trezors.
 Recovery-word verification and native recovery entry remain unavailable on
