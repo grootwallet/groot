@@ -165,7 +165,7 @@ try {
   }
 
   // This private QR rehearsal can request camera access only after a user gesture.
-  // Do not inherit HWI entitlements or broaden the production signing workflow.
+  // Keep the app camera-only; never inherit the HWI runtime entitlement.
   const cameraEntitlements = join(tauriRoot, 'Entitlements.camera.plist');
   const cameraPolicy = JSON.parse(
     execFileSync('/usr/bin/plutil', ['-convert', 'json', '-o', '-', cameraEntitlements], {

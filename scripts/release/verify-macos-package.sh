@@ -10,5 +10,5 @@ app="$1"
 
 codesign --verify --deep --strict --verbose=2 "$app"
 spctl --assess --type execute --verbose=2 "$app"
-codesign -d --entitlements :- "$app"
+node "$(dirname "$0")/verify-macos-camera.mjs" "$app"
 echo "Signature, Gatekeeper assessment, and entitlements verified."
