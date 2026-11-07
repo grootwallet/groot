@@ -1513,6 +1513,8 @@ fn trusted_executable(program: &Path, source: &HwiSource) -> Result<PathBuf, Har
             }
             verify_executable_digest(&canonical, configured_hwi_digest()?)?;
         }
+        #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+        HwiSource::Bundled { .. } => return Err(HardwareError::Unavailable),
     }
     Ok(canonical)
 }
