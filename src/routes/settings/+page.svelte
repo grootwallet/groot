@@ -136,10 +136,14 @@
   async function changePin() {
     const id = selectedProfile?.id;
     if (!id || pinChangeBusy || newPin !== confirmPin) return;
+    const current = settingsAction('pinChange');
     pinChangeBusy = true;
     pinChangeError = '';
     try {
-      await walletService.changePin(currentPin, newPin, id);
+      const pending = walletService.changePin(currentPin, newPin, id);
+      currentPin = newPin = confirmPin = '';
+      await pending;
+      if (!current()) return;
       pinChangeOpen = false;
       toast({
         title: 'App PIN changed',
@@ -148,10 +152,11 @@
       });
       await goto('/unlock');
     } catch (cause) {
+      if (!current()) return;
       pinChangeError = localizedError(cause, $locale, 'Could not change the app PIN.');
       toast({ title: 'App PIN not changed', description: pinChangeError, tone: 'danger' });
       const session = await walletService.session().catch(() => null);
-      if (session && !session.unlocked) {
+      if (current() && session && !session.unlocked) {
         pinChangeOpen = false;
         await goto('/unlock');
       }

@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 
 for (const success of [true, false]) {
   test(`node save ${success ? 'success' : 'failure'} does not publish after navigation`, async ({
@@ -270,4 +270,109 @@ test('pending Settings snapshot survives a rejected selection', async ({ page },
   await page.evaluate(() => (window as any).rejectSelection());
   await expect(page.getByText('Wallet not switched', { exact: true })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Everyday wallet settings' })).toBeVisible();
+});
+
+async function openPinSettings(page: Page) {
+  await page.addInitScript(
+    (dark) => localStorage.setItem('groot-theme', dark ? 'dark' : 'light'),
+    process.env.GROOT_E2E_DARK === '1'
+  );
+  await page.goto('/');
+  await expect(page.locator('html')).toHaveAttribute(
+    'data-theme',
+    process.env.GROOT_E2E_DARK === '1' ? 'dark' : 'light'
+  );
+  if ((page.viewportSize()?.width ?? 1180) <= 760) {
+    await page.getByRole('button', { name: 'Switch wallet' }).click();
+    await page.getByRole('menuitemradio', { name: /Family wallet/ }).click();
+  } else {
+    await page
+      .getByRole('complementary')
+      .getByRole('button', { name: /Family wallet/ })
+      .click();
+  }
+  await expect(page.getByRole('heading', { name: 'Family wallet', exact: true })).toBeVisible();
+  await page.getByLabel('App PIN', { exact: true }).fill('prototype-passphrase');
+  await page.getByRole('button', { name: 'Unlock wallet', exact: true }).click();
+  await expect(page.getByLabel('App PIN', { exact: true })).not.toBeVisible();
+  await page.locator('a[href="/settings"]:visible').first().click();
+}
+
+for (const success of [true, false]) {
+  test(`PIN rotation ${success ? 'success' : 'failure'} stays quiet after leaving Settings`, async ({
+    page
+  }) => {
+    await openPinSettings(page);
+    await page.evaluate(async () => {
+      const { walletService } = await import('/src/lib/wallet/index.ts');
+      walletService.changePin = () =>
+        new Promise((resolve, reject) => {
+          Object.assign(window, {
+            finishPin: (ok: boolean) =>
+              ok ? resolve(undefined) : reject(new Error('obsolete PIN failure'))
+          });
+        });
+    });
+    await page.getByRole('button', { name: /Change app PIN/ }).click();
+    const dialog = page.getByRole('dialog', { name: 'Change app PIN' });
+    await dialog.getByLabel('Current app PIN', { exact: true }).fill('synthetic-old-pin');
+    await dialog.getByLabel('New app PIN', { exact: true }).fill('synthetic-new-pin');
+    await dialog.getByLabel('Confirm new app PIN', { exact: true }).fill('synthetic-new-pin');
+    await dialog.getByRole('button', { name: 'Change app PIN', exact: true }).click();
+    await expect.poll(() => page.evaluate(() => typeof (window as any).finishPin)).toBe('function');
+    for (const label of ['Current app PIN', 'New app PIN', 'Confirm new app PIN']) {
+      await expect(dialog.getByLabel(label, { exact: true })).toHaveValue('');
+    }
+    await page.goBack();
+    await expect(dialog).not.toBeVisible();
+    const destination = page.url();
+    await page.evaluate((ok) => (window as any).finishPin(ok), success);
+    // Let the completed promise, native-session follow-up and Svelte navigation settle.
+    await page.evaluate(() => new Promise((resolve) => setTimeout(resolve, 100)));
+    await expect(page).toHaveURL(destination);
+    await expect(page.getByText('App PIN changed', { exact: true })).toHaveCount(0);
+    await expect(page.getByText('App PIN not changed', { exact: true })).toHaveCount(0);
+    await expect(page.getByText('obsolete PIN failure', { exact: true })).toHaveCount(0);
+  });
+}
+
+test('PIN rotation rejects a wrong credential and preserves unlock with the new PIN', async ({
+  page
+}) => {
+  await openPinSettings(page);
+  await page.getByRole('button', { name: /Change app PIN/ }).click();
+  const dialog = page.getByRole('dialog', { name: 'Change app PIN' });
+  async function submit(current: string) {
+    await dialog.getByLabel('Current app PIN', { exact: true }).fill(current);
+    await dialog.getByLabel('New app PIN', { exact: true }).fill('synthetic-replacement-pin');
+    await dialog
+      .getByLabel('Confirm new app PIN', { exact: true })
+      .fill('synthetic-replacement-pin');
+    await dialog.getByRole('button', { name: 'Change app PIN', exact: true }).click();
+  }
+  await submit('synthetic-wrong-pin');
+  await expect(dialog.getByRole('alert')).toHaveText('Incorrect app PIN.');
+  for (const label of ['Current app PIN', 'New app PIN', 'Confirm new app PIN']) {
+    await expect(dialog.getByLabel(label, { exact: true })).toHaveValue('');
+  }
+  await page.screenshot({
+    path: test.info().outputPath('pin-error-cleared-fields.png'),
+    animations: 'disabled'
+  });
+  await submit('prototype-passphrase');
+  await expect(dialog).not.toBeVisible();
+  await expect(page).toHaveURL(/\/unlock$/);
+  await page.getByLabel('App PIN', { exact: true }).fill('synthetic-replacement-pin');
+  await page.getByRole('button', { name: 'Unlock wallet', exact: true }).click();
+  await expect(page).not.toHaveURL(/\/unlock$/);
+  await expect(page.getByRole('heading', { name: 'Overview', exact: true })).toBeVisible();
+  await expect
+    .poll(() =>
+      page.evaluate(async () => {
+        const { walletService } = await import('/src/lib/wallet/index.ts');
+        const session = await walletService.session();
+        return { name: session.profile.name, unlocked: session.unlocked };
+      })
+    )
+    .toEqual({ name: 'Family wallet', unlocked: true });
 });
