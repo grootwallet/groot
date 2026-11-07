@@ -49,6 +49,14 @@ jobs:
         with:
           toolchain: 1.97.1
           components: clippy,rustfmt
+      - name: Cache native build dependencies
+        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        with:
+          workspaces: src-tauri
+          key: internal-${{ matrix.platform }}-ordinary-v1
+          cache-bin: false
+          cache-workspace-crates: false
+          save-if: ${{ github.ref == 'refs/heads/codex/post-53-maintainability' }}
       - name: Install Linux build dependencies
         if: runner.os == 'Linux'
         run: |
@@ -58,24 +66,13 @@ jobs:
             libudev-dev libwebkit2gtk-4.1-dev patchelf ripgrep
       - run: pnpm install --frozen-lockfile
       - run: pnpm audit --prod --audit-level high
-      - name: Run mandatory validation and preserve the public-release stop
+      - name: Validate internal candidate and preserve the public-release stop
         if: runner.os == 'Linux'
         shell: bash
         run: |
-          set +e
-          pnpm validate 2>&1 | tee "$RUNNER_TEMP/pnpm-validate.log"
-          status=${PIPESTATUS[0]}
-          set -e
-          test "$status" -ne 0
-          grep -F "package.json changed after the mainnet-candidate policy snapshot was reviewed" "$RUNNER_TEMP/pnpm-validate.log"
-          node --test scripts/release/release-version.test.mjs
-          pnpm release:test:update
-          pnpm release:test:hwi
-          pnpm release:test:compare
-          pnpm test:dev-runtime
-          pnpm check
-          pnpm test
-          pnpm build
+          set -o pipefail
+          TIMEFORMAT='real %3R s; user %3U s; sys %3S s'
+          { time pnpm validate:internal; } 2>&1 | tee "$RUNNER_TEMP/internal-validation.log"
           pnpm build:testnet4
       - name: Run Windows-compatible validation
         if: runner.os == 'Windows'
@@ -89,8 +86,10 @@ jobs:
           pnpm test:versions
           pnpm test:localization
           pnpm test:hardware-preflight
+          pnpm test:ci-workflows
+          node --test scripts/quality/rust-coverage-harness.test.mjs
           pnpm check
-          pnpm test
+          pnpm test:coverage
           pnpm build
           pnpm build:testnet4
       - name: Validate Rust on the native host
@@ -98,8 +97,17 @@ jobs:
         run: |
           cargo fmt --check
           cargo clippy --locked --all-targets --all-features -- -D warnings
-          cargo test --locked --all-features
+          cargo test --locked --all-targets --all-features
+          cargo test --locked --doc --all-features
         shell: bash
+      - name: Retain internal validation evidence
+        if: always() && runner.os == 'Linux'
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: internal-validation-${{ matrix.platform }}-${{ github.sha }}
+          path: ${{ runner.temp }}/internal-validation.log
+          if-no-files-found: warn
+          retention-days: 14
       - name: Download and verify official HWI inputs
         shell: bash
         run: |

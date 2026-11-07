@@ -47,7 +47,8 @@ require_text .github/workflows/ci.yml 'pnpm validate'
 require_text .github/workflows/ci.yml 'pnpm test:sbom'
 require_text .github/workflows/ci.yml 'pnpm test:acceptance'
 require_text .github/workflows/ci.yml 'cargo clippy --locked --all-targets --all-features -- -D warnings'
-require_text .github/workflows/ci.yml 'cargo test --locked --all-features'
+require_text .github/workflows/ci.yml 'cargo test --locked --all-targets --all-features'
+require_text .github/workflows/ci.yml 'cargo test --locked --doc --all-features'
 
 node <<'NODE'
 import { readFileSync } from 'node:fs';

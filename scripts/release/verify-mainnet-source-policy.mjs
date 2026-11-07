@@ -398,6 +398,25 @@ const pinnedBinaryPolicySources = new Map([
   ]
 ]);
 
+const sourceApprovalCode = 'ERR_SOURCE_APPROVAL_REQUIRED';
+const sourceApprovalSuffix = ' changed after the mainnet-candidate policy snapshot was reviewed';
+
+function sourceApprovalError(sourcePath) {
+  return new Error(`${sourcePath}${sourceApprovalSuffix}`, {
+    cause: { code: sourceApprovalCode, sourcePath }
+  });
+}
+
+export function isSourceApprovalRequired(error) {
+  const sourcePath = error?.cause?.sourcePath;
+  return Boolean(
+    error?.cause?.code === sourceApprovalCode &&
+    typeof sourcePath === 'string' &&
+    (pinnedPolicySources.has(sourcePath) || pinnedBinaryPolicySources.has(sourcePath)) &&
+    error.message === `${sourcePath}${sourceApprovalSuffix}`
+  );
+}
+
 export function validatePinnedPolicySources(read, readBytes) {
   if (typeof readBytes !== 'function') {
     throw new Error('the mainnet source policy requires a binary-safe source reader');
@@ -405,13 +424,13 @@ export function validatePinnedPolicySources(read, readBytes) {
   for (const [path, expected] of pinnedPolicySources) {
     const actual = createHash('sha256').update(read(path)).digest('hex');
     if (actual !== expected) {
-      throw new Error(`${path} changed after the mainnet-candidate policy snapshot was reviewed`);
+      throw sourceApprovalError(path);
     }
   }
   for (const [path, expected] of pinnedBinaryPolicySources) {
     const actual = createHash('sha256').update(readBytes(path)).digest('hex');
     if (actual !== expected) {
-      throw new Error(`${path} changed after the mainnet-candidate policy snapshot was reviewed`);
+      throw sourceApprovalError(path);
     }
   }
 }
@@ -691,6 +710,10 @@ function crateRustSources() {
 
 export function validateMainnetSourcePolicy(read, readBytes) {
   validatePinnedPolicySources(read, readBytes);
+  validateMainnetSourceSemantics(read);
+}
+
+export function validateMainnetSourceSemantics(read) {
   validateUpdateKeyPair(read('docs/release-update-key.hex'), read('docs/release-update-key.pem'));
   validateBrowserNetworkSource(read('src/lib/config.ts'));
   validateBuildScriptSource(read('src-tauri/build.rs'));

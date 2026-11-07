@@ -20,6 +20,8 @@
 - Sync: exact network/genesis, consent, bounded failures, no silent fallback, atomic results, cancellation, reorg and restart.
 - UI: durable results plus toast, loading/empty/offline states, 1180×780 and 390×844, both themes, translated copy and keyboard-safe spacing.
 
+Harness fixtures additionally test aggregate failures, missing/skipped results, mixed source-approval failures, coverage ordering, scenario inventory and owned cleanup. CI optimizations preserve assertions and thresholds; command stubs are supplemented by actual tool and integration runs.
+
 Coverage gates protect deterministic policy and native module classification. A percentage is not a substitute for named adversarial assertions. Browser fixtures and virtual signers never establish physical or public-network readiness.
 
 ## Keep the suite maintainable
@@ -36,4 +38,4 @@ Internal iOS Testnet4 tests cover native capability guards, pairing, complete-pr
 
 Real-Core scenarios cover funded phone-sign/desktop-merge/broadcast and fixed Continuity roles, maturity, reorg, restoration and renewal. They do not certify a signer model or transport. Phone enrollment stays Standard-only; delayed policies keep USB signing blocked.
 
-The [current maintenance record](testing/maintenance-2026-11-07.md) records fresh checks. Earlier candidate records retain their original scope and source identity. Never carry a passing result forward solely because a later build has the same version.
+The [maintenance record](testing/maintenance-2026-11-07.md) and [CI acceptance record](testing/ci-efficiency-proposal-2026-11-07.md) record their respective checks. Earlier candidate records retain their original scope and source identity. Never carry a passing result forward solely because a later build has the same version.

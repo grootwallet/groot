@@ -23,12 +23,14 @@ The handoff directory contains the app, ZIP/DMG, `BUILD-INFO`, `PROVENANCE.json`
 
 Use Testnet4 and disposable wallets. Do not replace public Groot, reset a funded profile or copy private wallet data into evidence. A multi-network internal binary does not expand phone, Continuity or hardware certification scope. Mainnet phone signing, Mainnet Continuity and unsupported delayed-policy signers remain blocked.
 
-## Physical acceptance, once per frozen candidate
+## Minimal owner acceptance
 
-1. Verify the artifact checksum, open the separate Groot RC app and confirm its version/commit and Testnet4 network. Record model, firmware, OS and artifact digest using the [hardware worksheet](../hardware-certification.md).
-2. Exercise camera allow/deny/retry, a real payment QR, animated PSBT QR, close/reopen, camera contention and background/resume. Check imported payment details before continuing.
-3. Exercise standard signer discovery, unlock, exact account identity, policy/address display, rejection/disconnect/retry and transaction review/signing on your devices. Observe waits separately from app computation.
-4. Follow the [phone/Miniscript checklist](post-5.3-phone-miniscript-human.md): phone pairing is Standard-only; Partner/Family use exact approved offline PSBT/model/firmware/transport combinations on test networks. No delayed USB certification is implied.
-5. Check restart, proposal recovery, backup/recovery and persisted accounting. Stop on mismatched address/policy/amount/fee, unexpected signature, lost state or failed recovery. Keep live identifiers and secrets out of reports.
+The CI follow-up changes test/build orchestration only. The existing `51a09f43` macOS candidate retains its exact runtime and camera/package evidence; it is not relabelled as a build of the new CI helpers. The concurrent timelock coin-UX task will integrate both branches and issue a combined candidate. Wait for that build for the next owner pass; use its recorded checksum and Testnet4 with disposable wallets.
 
-The [CI proposal](ci-efficiency-proposal-2026-11-07.md) records measured costs and recommended changes; no CI obligation is removed. Source approval remains frozen. A later public package requires the approval-only hash commit, complete aggregate, accepted physical evidence and explicit release authorization.
+1. **Camera:** allow/deny then retry; scan one real payment QR and animated QR, close/reopen and background once. Confirm the decoded details and that capture stops.
+2. **Each signer model you intend to use:** combine discovery/unlock, exact account and receive-address confirmation, rejection/retry, and approval of one tiny Testnet4 payment. Disconnect once and check the retry is understandable; compare address, amount and fee on the trusted display.
+3. **Restart:** reopen/unlock the same wallet and confirm the transaction/proposal and accounting persist. Record any unexpected delay, unclear action or layout problem during these same flows.
+
+Record model, firmware, OS and artifact digest using the [hardware worksheet](../hardware-certification.md). This is the minimal owner pass, not blanket certification. Add [phone/Miniscript acceptance](post-5.3-phone-miniscript-human.md) only for the flows you intend to use: phone pairing remains Standard-only and delayed policies require exact offline-signer/model/firmware/transport evidence. Stop on an identity/address/policy/amount/fee mismatch, unexpected signature, lost state or failed recovery. Do not repeat automated browser, parser or Core regression suites manually.
+
+The [CI record](ci-efficiency-proposal-2026-11-07.md) records measured costs and recommended changes; no CI obligation is removed. Source approval remains frozen. A later public package requires the approval-only hash commit, complete aggregate, accepted physical evidence and explicit release authorization.

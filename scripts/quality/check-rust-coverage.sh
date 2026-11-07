@@ -1,7 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-cd "$(dirname "$0")/../.."
+PROJECT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
+MANIFEST_PATH="${PROJECT_DIR}/src-tauri/Cargo.toml"
+# Keep instrumented artifacts separate from ordinary tests and package builds.
+export CARGO_LLVM_COV_TARGET_DIR="${CARGO_LLVM_COV_TARGET_DIR:-${CARGO_TARGET_DIR:-${PROJECT_DIR}/src-tauri/target}/llvm-cov-target}"
+
+cd "${PROJECT_DIR}"
 
 # A new Rust module must be classified deliberately instead of silently
 # entering or disappearing from the security-core percentage.
@@ -73,10 +78,13 @@ echo "Reporting adapters separately through whole-library coverage: ${adapter_mo
 # Nested files under `wallet/` and `native_backup/` are extracted pieces of
 # those already-classified orchestration/platform adapters, not new core scope.
 adapter_pattern="src/(compact_filters|direct_rpc|durable_file|hardware|label_provenance|lib|main|managed_gateway|native_backup|network|process_lock|registry|secure_store|tor_rpc|updates|wallet)(\\.rs|/.*\\.rs)$"
-cargo llvm-cov \
+# Discard stale instrumented Groot objects/profiles, retaining ordinary Cargo
+# artifacts and the coverage dependency cache. The core report precedes Core I/O.
+cargo llvm-cov clean --workspace --locked --manifest-path "${MANIFEST_PATH}"
+cargo llvm-cov --no-report --locked --manifest-path "${MANIFEST_PATH}" --lib
+cargo llvm-cov report \
   --locked \
-  --manifest-path src-tauri/Cargo.toml \
-  --lib \
+  --manifest-path "${MANIFEST_PATH}" \
   --summary-only \
   --ignore-filename-regex "$adapter_pattern" \
   --fail-under-lines 99 \

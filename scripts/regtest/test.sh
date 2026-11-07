@@ -58,7 +58,7 @@ trap cleanup EXIT
 run_lib_test() {
   local test_name="$1"
   if [[ "${GROOT_RUST_COVERAGE:-0}" == "1" ]]; then
-    cargo llvm-cov --no-clean --locked \
+    cargo llvm-cov --no-report --locked \
       --manifest-path "${PROJECT_DIR}/src-tauri/Cargo.toml" \
       --lib -- "${test_name}" --ignored --nocapture --test-threads=1
   else
@@ -81,7 +81,7 @@ run_lib_test() {
 
 run_regtest_multisig() {
   if [[ "${GROOT_RUST_COVERAGE:-0}" == "1" ]]; then
-    cargo llvm-cov --no-clean --locked \
+    cargo llvm-cov --no-report --locked \
       --manifest-path "${PROJECT_DIR}/src-tauri/Cargo.toml" \
       --test regtest_multisig -- --ignored --nocapture --test-threads=1
   else

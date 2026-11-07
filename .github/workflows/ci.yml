@@ -13,8 +13,9 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  frontend:
+  frontend-checks:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -32,21 +33,74 @@ jobs:
           sudo apt-get install -y --no-install-recommends ripgrep
       - run: pnpm install --frozen-lockfile
       - run: pnpm audit --prod --audit-level high
-      - name: Static boundaries, release gates, and build
-        run: pnpm validate
+      - name: Static boundaries, release gates, unit coverage, and build
+        shell: bash
+        run: |
+          set -o pipefail
+          TIMEFORMAT='real %3R s; user %3U s; sys %3S s'
+          { time pnpm validate:ci; } 2>&1 | tee "$RUNNER_TEMP/frontend-validation.log"
       - name: Deterministic CycloneDX SBOM and dependency-license evidence
         run: pnpm test:sbom
-      - name: Unit and domain-policy coverage (pyramid base)
-        run: pnpm test:coverage
-      - run: pnpm exec playwright install --with-deps chromium webkit
-      - name: Browser acceptance tests (pyramid top)
-        run: pnpm test:acceptance
+      - name: Retain validation evidence
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: frontend-validation-${{ github.sha }}
+          path: ${{ runner.temp }}/frontend-validation.log
+          if-no-files-found: warn
+          retention-days: 14
+
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - project: desktop
+            browser: chromium
+          - project: mobile
+            browser: webkit
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: 11.13.1
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 24.19.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps ${{ matrix.browser }}
+      - name: Browser acceptance tests (one isolated worker per project)
+        shell: bash
+        run: |
+          set -o pipefail
+          TIMEFORMAT='real %3R s; user %3U s; sys %3S s'
+          { time pnpm test:acceptance --project=${{ matrix.project }} --workers=1 --global-timeout=1500000; } 2>&1 | tee "$RUNNER_TEMP/browser-${{ matrix.project }}.log"
+      - name: Retain browser logs and failure traces
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: browser-${{ matrix.project }}-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/browser-${{ matrix.project }}.log
+            test-results/
+          if-no-files-found: warn
+          retention-days: 14
 
   rust:
     runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      CARGO_TARGET_DIR: ${{ github.workspace }}/src-tauri/target/normal
+      CARGO_LLVM_COV_TARGET_DIR: ${{ github.workspace }}/src-tauri/target/coverage
     defaults:
       run:
         working-directory: src-tauri
+        shell: bash
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -65,9 +119,21 @@ jobs:
         with:
           toolchain: 1.97.1
           components: clippy,rustfmt
-      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+      - name: Cache ordinary Rust dependencies
+        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
         with:
-          workspaces: src-tauri
+          workspaces: src-tauri -> target/normal
+          key: ordinary-v1
+          cache-bin: false
+          cache-workspace-crates: false
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: Cache instrumented dependencies and pinned tools
+        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        with:
+          workspaces: src-tauri -> target/coverage
+          key: coverage-v1-audit-0.22.2-llvm-cov-0.8.7
+          cache-workspace-crates: false
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: cargo fmt --check
       - run: cargo clippy --locked --all-targets --all-features -- -D warnings
       - name: Compile every permitted native network
@@ -75,7 +141,23 @@ jobs:
       - name: Build Rust API documentation with warnings denied
         run: RUSTDOCFLAGS="-D warnings" cargo doc --locked --no-deps --all-features
       - name: Rust unit and integration tests (pyramid base and middle)
-        run: cargo test --locked --all-features
+        run: |
+          set -o pipefail
+          TIMEFORMAT='real %3R s; user %3U s; sys %3S s'
+          { time cargo test --locked --all-targets --all-features; } 2>&1 | tee "$RUNNER_TEMP/rust-tests.log"
+      - name: Execute Rust documentation examples
+        run: cargo test --locked --doc --all-features
+      - name: Release ordinary workspace binaries and record disk usage
+        run: |
+          df -h . > "$RUNNER_TEMP/rust-disk-before-coverage.log"
+          du -sh "$CARGO_TARGET_DIR" >> "$RUNNER_TEMP/rust-disk-before-coverage.log"
+          if [[ -d "$CARGO_LLVM_COV_TARGET_DIR" ]]; then
+            du -sh "$CARGO_LLVM_COV_TARGET_DIR" >> "$RUNNER_TEMP/rust-disk-before-coverage.log"
+          fi
+          cargo clean --locked --package groot --target-dir "$CARGO_TARGET_DIR"
+          df -h . >> "$RUNNER_TEMP/rust-disk-before-coverage.log"
+          du -sh "$CARGO_TARGET_DIR" >> "$RUNNER_TEMP/rust-disk-before-coverage.log"
+          cat "$RUNNER_TEMP/rust-disk-before-coverage.log"
       - name: Install pinned Bitcoin Core 31.1 for isolated Regtest
         run: |
           archive=/tmp/bitcoin-31.1-x86_64-linux-gnu.tar.gz
@@ -85,17 +167,64 @@ jobs:
           echo "b80d9c3e04da78fb6f0569685673418cf686fadba9042d926d13fb87ff503f9e  $archive" | sha256sum --check --strict
           tar --extract --gzip --file "$archive" --directory /tmp
           echo "/tmp/bitcoin-31.1/bin" >> "$GITHUB_PATH"
-      - name: Real Bitcoin Core Regtest multisig and recovery
-        run: bash ../scripts/regtest/test.sh
       - name: Install security and coverage tools
         run: |
           cargo install cargo-audit --locked --version 0.22.2
           cargo install cargo-llvm-cov --locked --version 0.8.7
       - run: cargo audit --file Cargo.lock
-      - name: Release prior build artifacts before instrumented coverage
-        run: cargo clean
-      - name: Enforce explicitly classified deterministic-core coverage
-        run: bash ../scripts/quality/check-rust-coverage.sh
-      - name: Prevent whole-library coverage regression
+      - name: Enforce deterministic-core coverage, then whole-library coverage with real Core
         working-directory: .
-        run: bash scripts/quality/check-rust-full-coverage.sh
+        run: |
+          set -o pipefail
+          TIMEFORMAT='real %3R s; user %3U s; sys %3S s'
+          { time bash scripts/quality/check-rust-full-coverage.sh; } 2>&1 | tee "$RUNNER_TEMP/rust-coverage.log"
+      - name: Record final native disk usage
+        if: always()
+        run: |
+          df -h . > "$RUNNER_TEMP/rust-disk-after-coverage.log"
+          for directory in "$CARGO_TARGET_DIR" "$CARGO_LLVM_COV_TARGET_DIR"; do
+            if [[ -d "$directory" ]]; then
+              du -sh "$directory" >> "$RUNNER_TEMP/rust-disk-after-coverage.log"
+            fi
+          done
+          cat "$RUNNER_TEMP/rust-disk-after-coverage.log"
+      - name: Retain native test and coverage evidence
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: native-validation-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/rust-tests.log
+            ${{ runner.temp }}/rust-coverage.log
+            ${{ runner.temp }}/rust-disk-before-coverage.log
+            ${{ runner.temp }}/rust-disk-after-coverage.log
+          if-no-files-found: warn
+          retention-days: 14
+
+  # Preserve the existing required frontend check as the full acceptance gate.
+  frontend:
+    if: always()
+    needs: [frontend-checks, browser, rust]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 24.19.0
+      - name: Require every acceptance lane to succeed
+        env:
+          CI_REQUIRED_RESULTS: ${{ toJSON(needs) }}
+        run: |
+          node --input-type=module <<'NODE'
+          const expected = ['frontend-checks', 'browser', 'rust'];
+          const results = JSON.parse(process.env.CI_REQUIRED_RESULTS);
+          if (Object.keys(results).length !== expected.length) {
+            throw new Error('Acceptance result inventory is incomplete or unexpected');
+          }
+          for (const job of expected) {
+            if (results[job]?.result !== 'success') {
+              throw new Error(`Required acceptance lane ${job} did not succeed`);
+            }
+          }
+          console.log('Every required acceptance lane succeeded');
+          NODE

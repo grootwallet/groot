@@ -13,24 +13,28 @@ A branch names a commit history; a worktree is a checkout folder with its own fi
 
 ## Checks by scope
 
-| Scope                      | Command                                                                              |
-| -------------------------- | ------------------------------------------------------------------------------------ |
-| Formatting                 | `pnpm format`, review diff; `pnpm format:check`                                      |
-| Required handoff           | `pnpm validate`                                                                      |
-| Frontend types/units       | `pnpm check`; `pnpm test`                                                            |
-| Browser UI                 | `pnpm test:acceptance`; inspect 1180×780 and 390×844, both themes                    |
-| Frontend policy coverage   | `pnpm test:coverage`                                                                 |
-| Rust format                | `cargo fmt --check` from `src-tauri`                                                 |
-| Rust lint                  | `cargo clippy --locked --all-targets --all-features -- -D warnings` from `src-tauri` |
-| Rust tests                 | `cargo test --locked --all-features` from `src-tauri`                                |
-| Rust API docs              | `RUSTDOCFLAGS="-D warnings" cargo doc --locked --no-deps --all-features`             |
-| Native network compilation | `pnpm network:check-builds`                                                          |
-| Real Core                  | `pnpm test:integration:regtest`                                                      |
-| Rust coverage              | `pnpm test:coverage:rust`; `pnpm test:coverage:rust:all`                             |
-| SBOM/license               | `pnpm test:sbom`                                                                     |
-| Combined local suite       | `pnpm test:full`                                                                     |
+| Scope                      | Command                                                                                                         |
+| -------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| Formatting                 | `pnpm format`, review diff; `pnpm format:check`                                                                 |
+| Required handoff           | `pnpm validate`                                                                                                 |
+| Frontend types/units       | `pnpm check`; `pnpm test`                                                                                       |
+| Browser UI                 | `pnpm test:acceptance`; inspect 1180×780 and 390×844, both themes                                               |
+| Frontend policy coverage   | `pnpm test:coverage`                                                                                            |
+| Rust format                | `cargo fmt --check` from `src-tauri`                                                                            |
+| Rust lint                  | `cargo clippy --locked --all-targets --all-features -- -D warnings` from `src-tauri`                            |
+| Rust tests                 | `cargo test --locked --all-targets --all-features`; `cargo test --locked --doc --all-features` from `src-tauri` |
+| Rust API docs              | `RUSTDOCFLAGS="-D warnings" cargo doc --locked --no-deps --all-features`                                        |
+| Native network compilation | `pnpm network:check-builds`                                                                                     |
+| Real Core                  | `pnpm test:integration:regtest`                                                                                 |
+| Rust coverage              | `pnpm test:coverage:rust:all` (both scopes); `pnpm test:coverage:rust` (core only)                              |
+| SBOM/license               | `pnpm test:sbom`                                                                                                |
+| Combined local suite       | `pnpm test:full`                                                                                                |
 
 `pnpm validate` covers formatting, scaffolding/boundaries/secrets, supply chain, brand, version/release guards, localization, hardware fixtures, release-verifier fixtures, runtime launcher, types, units and frontend build. It does not run every CI suite. `.github/workflows/ci.yml` additionally owns browser acceptance, dependency/RustSec audits, SBOM, policy/native coverage, Rust docs/tests/lint, all native networks and real-Core tests.
+
+`pnpm validate:ci` derives the same mandatory inventory from `validate`, replacing its single unit pass with coverage. `pnpm validate:internal` also replaces the release gate with an internal-only check: all 28 release fixtures must run, with exactly one typed frozen source-approval assertion failing (and only the known macOS compiler fixture skipped on other platforms). It independently runs source semantics and the complete structural release checks; any other failure stops acceptance. It does not approve public source or make strict `pnpm validate` green. Do not refresh pins to remove this stop.
+
+CI runs desktop Chromium and mobile WebKit independently, one worker each, retaining every case and failure traces. The required `frontend` aggregate rejects failed, skipped, cancelled or missing frontend/browser/Rust jobs. Rust ordinary and instrumented dependency caches are separate. Full coverage runs ordinary library units once, checks core 99/100/97 **before** appending all 15 real-Core scenarios, then checks whole-library 62/59/59. It preserves all-target/all-feature tests and doctests as separate ordinary obligations. Only disposable Groot package objects are cleared; ordinary dependency caches are retained.
 
 Use focused checks while iterating, then mandatory validation and applicable extended suites. Report actual failures; never weaken a gate to get green output. Documentation-only changes require formatting, reference checks and validation, not manufactured UI/device evidence.
 
@@ -65,7 +69,7 @@ Internal macOS handoffs use a separate Groot RC identity and preserve that app f
 
 Public packaging requires the accepted version/tag authorization and identical local HEAD, fresh `origin/main` and peeled annotated tag. For 5.3.0, `GROOT_SIGNED_HWI_RUNTIME` must name the same verified frozen runtime for each unsigned evidence build; the macOS packager takes that runtime directory between the signed-HWI manifest and output arguments and binds its digest to the reproduced executable before copying it into the app. It never creates/imports/prints signing credentials. Developer ID/notarization credentials must already be configured. Internal builders provide no production signing, notarization, push or public authorization.
 
-The cross-platform workflow's Linux job must run mandatory `pnpm validate` and confirm it stops at the unchanged public Mainnet source-policy gate. It then runs the remaining candidate checks explicitly; this preserves the release stop rather than refreshing or weakening it. Windows independently runs the Windows-compatible quality, frontend and hardware-preflight checks. Linux owns the POSIX branding and gateway gates, while the macOS release-evidence suites stay on their supported host. Both packaging hosts run the complete native Rust checks. Build inputs stay outside the checkout, and the package builder requires a clean exact commit before staging resources. Follow [the 0.5.4 human test](testing/0.5.4-cross-platform-hardware.md); compilation and device-free driver probes do not certify a signer or platform.
+The cross-platform workflow's Linux job runs `pnpm validate:internal`: it classifies the exact typed source-approval stop, independently checks source semantics and structural release guards, then completes the remaining mandatory inventory. Strict validation and public packaging keep their source-approval stop. Windows independently runs the Windows-compatible quality, frontend and hardware-preflight checks. Linux owns the POSIX branding and gateway gates, while the macOS release-evidence suites stay on their supported host. Both packaging hosts run the complete native Rust checks. Build inputs stay outside the checkout, and the package builder requires a clean exact commit before staging resources. Follow [the 0.5.4 human test](testing/0.5.4-cross-platform-hardware.md); compilation and device-free driver probes do not certify a signer or platform.
 
 [Mainnet checklist](mainnet-release-checklist.md), [HWI provenance](hwi-artifact-provenance.md), [release signing](release-git-tag-signing.md) and [update/rollback](release-update-rollback.md) own evidence details. Earlier package/device passes apply only to their recorded candidate.
 
