@@ -719,6 +719,7 @@ test('spends end-to-end from the ready-made demo wallet', async ({ page }) => {
   await expect(page.locator('.toast').filter({ hasText: 'Signed PSBT rejected' })).toBeVisible();
   await expect(signerSummary.getByText('0 of 2 collected')).toBeVisible();
   await rejectedImport.getByRole('button', { name: 'Cancel' }).click();
+  await expect(rejectedImport).toHaveCount(0);
   const durableImportError = page
     .getByRole('region', { name: 'Transaction review' })
     .getByRole('alert');
@@ -736,6 +737,7 @@ test('spends end-to-end from the ready-made demo wallet', async ({ page }) => {
   await expect(rejectedImport.getByRole('textbox', { name: 'Signed PSBT' })).toHaveValue('');
   await expect(rejectedImport.getByRole('alert')).toHaveCount(0);
   await rejectedImport.getByRole('button', { name: 'Cancel' }).click();
+  await expect(rejectedImport).toHaveCount(0);
   await page.getByRole('button', { name: 'Show unsigned QR' }).click();
   const unsignedQrDialog = page.getByRole('dialog', { name: 'Unsigned PSBT' });
   const unsignedQrImage = unsignedQrDialog.getByRole('img', { name: /QR frame/ });
@@ -2523,6 +2525,7 @@ for (const language of ['en', 'fr', 'es'] as const) {
             ),
           fullPage: true
         });
+        await expect(page.locator('.toast-region .toast')).toHaveCount(0, { timeout: 10_000 });
         await review.click();
         await expect(review).toHaveCount(0);
       }
