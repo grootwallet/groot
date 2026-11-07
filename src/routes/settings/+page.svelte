@@ -53,6 +53,7 @@
   import { onDestroy, onMount } from 'svelte';
   import { useWalletShellContext } from '$lib/wallet/shell-context';
   import { readSettingsWalletData } from '$lib/wallet/settings-data';
+  import { createSettingsActions } from '$lib/wallet/settings-actions';
   import { isWalletSyncActive } from '$lib/wallet/live-sync';
   import type {
     CoreNodeConfig,
@@ -350,19 +351,9 @@
     labelInterchangeResult = $state(''),
     labelInterchangeError = $state('');
 
-  const actionVersions = new Map<string, number>();
-  function invalidateAction(name: string) {
-    actionVersions.set(name, (actionVersions.get(name) ?? 0) + 1);
-  }
-  function settingsAction(name: string) {
-    invalidateAction(name);
-    const version = actionVersions.get(name);
-    const walletId = walletShell.selectedWalletId();
-    return () =>
-      !destroyed &&
-      version === actionVersions.get(name) &&
-      walletId === walletShell.selectedWalletId();
-  }
+  const settingsActions = createSettingsActions(() => walletShell.selectedWalletId());
+  const settingsAction = settingsActions.begin;
+  const invalidateAction = settingsActions.invalidate;
 
   async function pollSyncStatus() {
     if (destroyed || !walletUnlocked) return;
@@ -588,6 +579,7 @@
   }
   onDestroy(() => {
     destroyed = true;
+    settingsActions.dispose();
     ++profileReadGeneration;
     currentPin = newPin = confirmPin = '';
     deleteCredential = '';
