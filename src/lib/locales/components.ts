@@ -1,6 +1,18 @@
 import type { CatalogSection } from './types';
 
 export const componentCopy = {
+  'Camera access requires Groot’s secure app connection. Reopen the scanner in Groot.': {
+    fr: 'La caméra nécessite la connexion sécurisée de Groot. Rouvrez le scanner dans Groot.',
+    es: 'La cámara necesita la conexión segura de Groot. Vuelve a abrir el escáner en Groot.'
+  },
+  'The camera is being used by another app. Close its camera, then try again.': {
+    fr: 'Une autre application utilise la caméra. Fermez sa caméra, puis réessayez.',
+    es: 'Otra aplicación está usando la cámara. Cierra su cámara e inténtalo de nuevo.'
+  },
+  'Groot could not start the camera. Check its system permission, then try again.': {
+    fr: 'Groot n’a pas pu démarrer la caméra. Vérifiez son autorisation dans les réglages système, puis réessayez.',
+    es: 'Groot no pudo iniciar la cámara. Comprueba su permiso en los ajustes del sistema e inténtalo de nuevo.'
+  },
   '{count} unique frame scanned': {
     fr: '{count} image unique analysée',
     es: '{count} fotograma único escaneado'
@@ -17,9 +29,9 @@ export const componentCopy = {
     fr: 'Trop d’images QR. Relancez l’analyse.',
     es: 'Demasiados fotogramas QR. Reinicia el escaneo.'
   },
-  'Camera access was denied. Allow camera access for Groot, then reopen this scanner.': {
-    fr: 'L’accès à la caméra a été refusé. Autorisez Groot à l’utiliser, puis rouvrez ce scanner.',
-    es: 'Se denegó el acceso a la cámara. Permite el acceso a Groot y vuelve a abrir este escáner.'
+  'Camera access was denied. Allow camera access for Groot, then try again.': {
+    fr: 'L’accès à la caméra a été refusé. Autorisez Groot à l’utiliser, puis réessayez.',
+    es: 'Se denegó el acceso a la cámara. Permite el acceso a Groot e inténtalo de nuevo.'
   },
   'No usable camera is available. Connect a camera or import the signed PSBT file instead.': {
     fr: 'Aucune caméra utilisable. Connectez une caméra ou importez le fichier PSBT signé.',

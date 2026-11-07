@@ -2713,6 +2713,12 @@ test('payment QR scanner loads on demand and cancels safely while loading', asyn
   let requested = false;
   let releaseDecoder!: () => void;
   const decoderReady = new Promise<void>((resolve) => (releaseDecoder = resolve));
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'mediaDevices', {
+      configurable: true,
+      value: { getUserMedia: async () => ({ getTracks: () => [] }) }
+    });
+  });
   await page.route(/\/qr-scanner\.js(?:\?|$)/, async (route) => {
     requested = true;
     await decoderReady;
@@ -2729,6 +2735,7 @@ test('payment QR scanner loads on demand and cancels safely while loading', asyn
   await expect(page.getByRole('heading', { name: 'Send bitcoin', exact: true })).toBeVisible();
   expect(requested).toBe(false);
   await page.getByRole('button', { name: 'Scan Bitcoin payment QR' }).click();
+  await page.getByRole('button', { name: 'Allow camera', exact: true }).click();
   await expect.poll(() => requested).toBe(true);
 
   const dialog = page.getByRole('dialog', { name: 'Scan payment request' });
@@ -2737,6 +2744,7 @@ test('payment QR scanner loads on demand and cancels safely while loading', asyn
   releaseDecoder();
   // Reopening reuses the module, but the closed scanner must never acquire a camera.
   await page.getByRole('button', { name: 'Scan Bitcoin payment QR' }).click();
+  await page.getByRole('button', { name: 'Allow camera', exact: true }).click();
   await expect
     .poll(() =>
       page.evaluate(() => (window as unknown as { scannerStarted?: number }).scannerStarted)
@@ -2780,6 +2788,12 @@ test('payment QR scanner loads on demand and cancels safely while loading', asyn
 });
 
 test('rejected payment QR stays fully visible without scrolling the camera', async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'mediaDevices', {
+      configurable: true,
+      value: { getUserMedia: async () => ({ getTracks: () => [] }) }
+    });
+  });
   await page.route(/\/qr-scanner\.js(?:\?|$)/, (route) =>
     route.fulfill({
       contentType: 'application/javascript',
@@ -2792,6 +2806,7 @@ test('rejected payment QR stays fully visible without scrolling the camera', asy
   );
   await page.goto('/send');
   await page.getByRole('button', { name: 'Scan Bitcoin payment QR' }).click();
+  await page.getByRole('button', { name: 'Allow camera', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'Scan payment request' });
   await expect
     .poll(() =>

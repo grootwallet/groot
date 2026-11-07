@@ -140,8 +140,8 @@ describe('mobile pairing lifecycle UI', () => {
   });
 
   it('retries camera permission and centers non-zooming phone inputs in the visible viewport', () => {
-    expect(scannerSource).toContain("name === 'NotAllowedError'");
-    expect(scannerSource).toContain('navigator.mediaDevices.getUserMedia');
+    expect(scannerSource).toMatch(/cameraError\(\s*cause,/);
+    expect(scannerSource).toContain('createQrCamera(video,');
     expect(scannerSource).toContain("error ? 'Try camera again' : 'Allow camera'");
     expect(scannerSource).toContain('class="camera-frame"');
     expect(scannerSource).toContain('class:camera-inactive={!cameraActive}');
@@ -237,7 +237,7 @@ describe('mobile pairing lifecycle UI', () => {
     expect(animatedQrSource).toContain('overlay?.focus()');
   });
 
-  it('gives only the isolated signed macOS camera harness native camera access', () => {
+  it('keeps macOS camera permission separate from audio and screen capture', () => {
     expect(macosCameraEntitlements).toContain('com.apple.security.device.camera');
     expect(macosCameraEntitlements).not.toContain('audio-input');
     expect(macosCameraEntitlements).not.toContain('screen');
