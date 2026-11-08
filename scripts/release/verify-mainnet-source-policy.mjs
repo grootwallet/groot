@@ -731,6 +731,10 @@ export function validateCrateDatabaseOpenSources(sources) {
   }
 }
 
+export function normalizeRepositoryPath(path) {
+  return path.replaceAll('\\', '/');
+}
+
 function crateRustSources() {
   const root = resolve(repoRoot, 'src-tauri/src');
   const excluded = new Set([
@@ -744,7 +748,7 @@ function crateRustSources() {
       const absolute = resolve(directory, entry.name);
       if (entry.isDirectory()) visit(absolute);
       if (!entry.isFile() || !entry.name.endsWith('.rs')) continue;
-      const path = `src-tauri/src/${absolute.slice(root.length + 1)}`;
+      const path = normalizeRepositoryPath(`src-tauri/src/${absolute.slice(root.length + 1)}`);
       if (!excluded.has(path)) sources.push([path, readFileSync(absolute, 'utf8')]);
     }
   };
