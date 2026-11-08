@@ -26,7 +26,7 @@ export const INTERNAL_ATTESTATION_POLICY = Object.freeze({
   oidcIssuer: 'https://token.actions.githubusercontent.com',
   deploymentEnvironment: 'internal-candidate-approval',
   tokenSubject:
-    'repository_owner_id:315751550:repository_id:1321708536:environment:internal-candidate-approval'
+    'repo:grootwallet@315751550/groot@1321708536:environment:internal-candidate-approval'
 });
 
 function readDerElement(bytes, offset, limit) {

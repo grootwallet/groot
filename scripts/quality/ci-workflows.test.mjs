@@ -307,15 +307,18 @@ test('internal artifact verifier binds file, commit, workflow, hosted runner and
   assert.throws(() => requireSafeGhVersion('gh version 2.101.0\n'), /2\.102\.0 or newer/);
   assert.throws(() => buildGhVerifyArguments('/tmp/groot.deb', 'a'.repeat(12)), /full/);
 
-  const extensions = extractProtectedEnvironmentExtensions(attestationCertificate());
+  // Use the format emitted by GitHub, independently of the verifier's policy.
+  const emittedSubject =
+    'repo:grootwallet@315751550/groot@1321708536:environment:internal-candidate-approval';
+  const certificate = attestationCertificate('internal-candidate-approval', emittedSubject);
+  const extensions = extractProtectedEnvironmentExtensions(certificate);
   assert.deepEqual(extensions, {
     deploymentEnvironment: 'internal-candidate-approval',
-    tokenSubject:
-      'repository_owner_id:315751550:repository_id:1321708536:environment:internal-candidate-approval'
+    tokenSubject: emittedSubject
   });
   assert.equal(
     assertApprovedAttestationResults(
-      [attestationResult(commit), attestationResult(commit)],
+      [attestationResult(commit, certificate), attestationResult(commit)],
       commit
     ),
     2
@@ -339,16 +342,21 @@ test('internal artifact verifier rejects missing, duplicate and mismatched signe
     0x30,
     der(0x30, extension(0x18, INTERNAL_ATTESTATION_POLICY.tokenSubject))
   );
+  const wrongSubjects = [
+    'repo:grootwallet/groot:environment:internal-candidate-approval',
+    'repo:grootwallet@315751550/groot@1321708537:environment:internal-candidate-approval',
+    'repo:grootwallet@315751551/groot@1321708536:environment:internal-candidate-approval',
+    'repo:grootwallet@315751550/groot@1321708536:ref:refs/heads/codex/post-53-maintainability'
+  ];
   for (const result of [
     attestationResult(
       commit,
       attestationCertificate('unreviewed', INTERNAL_ATTESTATION_POLICY.tokenSubject)
     ),
-    attestationResult(
-      commit,
-      attestationCertificate(
-        INTERNAL_ATTESTATION_POLICY.deploymentEnvironment,
-        'repo:grootwallet@315751550/groot@1321708536:ref:refs/heads/codex/post-53-maintainability'
+    ...wrongSubjects.map((subject) =>
+      attestationResult(
+        commit,
+        attestationCertificate(INTERNAL_ATTESTATION_POLICY.deploymentEnvironment, subject)
       )
     ),
     attestationResult(commit, missingEnvironment),
