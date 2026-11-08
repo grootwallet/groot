@@ -16,11 +16,17 @@ import {
 } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { validateCompiledTeamId, verifyPackagedHwi } from './verify-packaged-hwi.mjs';
-import { copyHwiRuntime, prepareHwiRuntime, verifyHwiRuntime } from './prepare-hwi-runtime.mjs';
-import { verifyMacosCameraAccess } from './verify-macos-camera.mjs';
+import {
+  assertInternalCandidateSource,
+  requireInternalCandidateSource
+} from './internal-candidate-source.mjs';
 
 const repoRoot = resolve(fileURLToPath(new URL('../../', import.meta.url)));
+const sourceIdentity = requireInternalCandidateSource(repoRoot);
+const { validateCompiledTeamId, verifyPackagedHwi } = await import('./verify-packaged-hwi.mjs');
+const { copyHwiRuntime, prepareHwiRuntime, verifyHwiRuntime } =
+  await import('./prepare-hwi-runtime.mjs');
+const { verifyMacosCameraAccess } = await import('./verify-macos-camera.mjs');
 const tauriRoot = join(repoRoot, 'src-tauri');
 const manifestPath = join(repoRoot, 'docs/hwi-artifact-manifest-3.2.0-mac-arm64.json');
 const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
@@ -68,10 +74,7 @@ const cargoMetadata = JSON.parse(
     { cwd: repoRoot, encoding: 'utf8' }
   )
 );
-const commit = execFileSync('git', ['rev-parse', 'HEAD'], {
-  cwd: repoRoot,
-  encoding: 'utf8'
-}).trim();
+const commit = sourceIdentity.candidateCommit;
 const cargoTarget = cargoMetadata.target_directory;
 const stageDirectory = join(tauriRoot, '.release-stage');
 const stagedHwi = join(stageDirectory, 'hwi');
@@ -92,26 +95,16 @@ const fail = (message) => {
 if (process.platform !== 'darwin' || process.arch !== 'arm64') {
   fail('the internal mainnet RC is restricted to macOS Apple silicon');
 }
-const worktreeStatus = execFileSync('git', ['status', '--porcelain=v1', '--untracked-files=all'], {
-  cwd: repoRoot,
-  encoding: 'utf8'
-});
-if (worktreeStatus.trim())
-  fail('internal RC builds require a clean tracked and untracked worktree');
 execFileSync(process.execPath, [join(repoRoot, 'scripts/release/internal-release-gate.mjs')], {
   cwd: repoRoot,
   stdio: 'inherit'
 });
 function assertSourceUnchanged() {
-  const head = execFileSync('git', ['rev-parse', 'HEAD'], {
-    cwd: repoRoot,
-    encoding: 'utf8'
-  }).trim();
-  const status = execFileSync('git', ['status', '--porcelain=v1', '--untracked-files=all'], {
-    cwd: repoRoot,
-    encoding: 'utf8'
-  });
-  if (head !== commit || status.trim()) fail('source changed during the internal build');
+  try {
+    assertInternalCandidateSource(repoRoot, sourceIdentity);
+  } catch (error) {
+    fail(error instanceof Error ? error.message : String(error));
+  }
 }
 
 if (existsSync(outputRoot)) fail(`output already exists: ${outputRoot}`);
@@ -243,6 +236,11 @@ try {
   const executable = join(outputApp, 'Contents', 'MacOS', 'Groot');
   const buildInfo = [
     `commit=${commit}`,
+    `candidate_commit=${sourceIdentity.candidateCommit}`,
+    `source_tree=${sourceIdentity.sourceTree}`,
+    `source_snapshot_sha256=${sourceIdentity.sourceSnapshotSha256}`,
+    `source_tracked_files=${sourceIdentity.trackedFileCount}`,
+    `approval_context=${sourceIdentity.approvalContext}`,
     `compiled_network=${buildNetwork}`,
     `bundle_identifier=${buildIdentity.identifier}`,
     'signing=ad-hoc-internal-only',
@@ -264,6 +262,11 @@ try {
     schemaVersion: 1,
     kind: 'groot-internal-hardware-candidate',
     commit,
+    candidateCommit: sourceIdentity.candidateCommit,
+    sourceTree: sourceIdentity.sourceTree,
+    sourceSnapshotSha256: sourceIdentity.sourceSnapshotSha256,
+    sourceTrackedFiles: sourceIdentity.trackedFileCount,
+    approvalContext: sourceIdentity.approvalContext,
     version: JSON.parse(readFileSync(join(repoRoot, 'package.json'), 'utf8')).version,
     compiledNetwork: buildNetwork,
     bundleIdentifier: buildIdentity.identifier,

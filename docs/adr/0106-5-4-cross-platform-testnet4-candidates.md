@@ -1,6 +1,6 @@
 # ADR 0106: 5.4 cross-platform Testnet4 candidates
 
-- Status: accepted; candidate version naming superseded by ADR 0107
+- Status: accepted; candidate version naming superseded by ADR 0107 and internal source acceptance governed by ADR 0109
 - Date: 2026-10-29
 
 ## Context
@@ -41,9 +41,9 @@ are not authorized by this decision. The v5.3.0 authorization record remains
 unchanged.
 
 The Ubuntu artifact is a DEB. The Windows MSI/NSIS package metadata uses the
-numeric prerelease `5.4.0-1` because Windows Installer rejects text prerelease
-identifiers. The application, source package and build evidence continue to
-identify this internal candidate as `5.4.0-rc01`.
+numeric prerelease `0.5.4-1` because Windows Installer rejects text prerelease
+identifiers. The application, source package and build evidence identify this
+internal candidate as `0.5.4-rc01` under ADR 0107.
 
 ## Compatibility and standards
 

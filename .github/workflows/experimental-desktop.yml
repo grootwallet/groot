@@ -5,11 +5,17 @@ on:
     branches: [codex/post-53-maintainability]
 permissions:
   contents: read
+  id-token: write
+  attestations: write
 concurrency:
   group: cross-platform-0-5-4-${{ github.ref }}
   cancel-in-progress: true
 jobs:
   package:
+    environment: internal-candidate-approval
+    env:
+      GROOT_INTERNAL_CANDIDATE_COMMIT: ${{ github.sha }}
+      GROOT_INTERNAL_APPROVAL_CONTEXT: protected-github-environment
     strategy:
       fail-fast: false
       matrix:
@@ -29,7 +35,24 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          clean: true
+          fetch-depth: 1
           persist-credentials: false
+          ref: ${{ github.sha }}
+      - name: Bind protected approval to the exact detached candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! "$GROOT_INTERNAL_CANDIDATE_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
+            echo 'Protected candidate approval requires one full lowercase commit SHA' >&2
+            exit 1
+          fi
+          test "$(git rev-parse HEAD)" = "$GROOT_INTERNAL_CANDIDATE_COMMIT"
+          if git symbolic-ref -q HEAD; then
+            echo 'Protected candidate builds require a detached checkout' >&2
+            exit 1
+          fi
+          test -z "$(git status --porcelain=v1 --untracked-files=all)"
       - name: Verify repository line endings on Windows
         if: runner.os == 'Windows'
         shell: bash
@@ -152,9 +175,13 @@ jobs:
           GROOT_HWI_LICENSE: ${{ runner.temp }}/hwi-source/LICENSE
           GROOT_CROSS_PLATFORM_OUT: ${{ runner.temp }}/groot-${{ matrix.platform }}
         run: node scripts/release/build-cross-platform-testnet4.mjs
+      - name: Attest protected candidate artifacts
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: ${{ runner.temp }}/groot-${{ matrix.platform }}/**/*
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
-          name: groot-0.5.4-rc01-${{ matrix.platform }}-${{ github.sha }}
+          name: groot-0.5.4-rc01-${{ matrix.platform }}-${{ env.GROOT_INTERNAL_CANDIDATE_COMMIT }}
           path: ${{ runner.temp }}/groot-${{ matrix.platform }}/
           if-no-files-found: error
           retention-days: 14

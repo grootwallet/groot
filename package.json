@@ -90,7 +90,7 @@
     "validate:internal": "node scripts/quality/validate.mjs --internal",
     "test:release-gate:internal": "node scripts/release/internal-release-gate.mjs",
     "test:ci-workflows": "node --test scripts/quality/ci-workflows.test.mjs",
-    "test:ci-harness": "node --test scripts/quality/validate.test.mjs scripts/quality/rust-coverage-harness.test.mjs scripts/release/internal-release-gate.test.mjs"
+    "test:ci-harness": "node --test scripts/quality/validate.test.mjs scripts/quality/rust-coverage-harness.test.mjs scripts/release/internal-release-gate.test.mjs scripts/release/internal-candidate-source.test.mjs"
   },
   "devDependencies": {
     "@playwright/test": "1.62.1",

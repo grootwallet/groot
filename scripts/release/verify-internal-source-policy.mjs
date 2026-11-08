@@ -16,7 +16,7 @@ const internalTextOverrides = new Map([
     'src-tauri/src/wallet/activity.rs',
     '86a9b616c973fe9542d81ba8de8ca34c0c6e2dc5c20f7249a1bb574bf2b88d13'
   ],
-  ['package.json', 'cf6695de5127d03d80f1baeecc456e29408d0b837f7bd125ea8395fcb04d6d74'],
+  ['package.json', '0c3943a2460b39d8bd73573e3903a85e146cefca380949c9aa62dae5817c9f30'],
   ['src-tauri/Cargo.toml', 'eb3d0832e5bfdc24b804da02d25e386c7ad4e6570521ef175c662f15504a2355'],
   ['src-tauri/tauri.conf.json', 'dcfc61fef779c1a0df714a95c843b9dc42276381bbe066ef9a1c72266c38c56f'],
   ['src-tauri/src/lib.rs', '685e0df112f35055faf33fa13093ff0ef29449606016642223a3aa992d91f72d'],
@@ -90,7 +90,7 @@ const internalTextOverrides = new Map([
   ],
   [
     'scripts/release/build-mainnet-internal-rc.mjs',
-    '833912946111f0c5088eebc565b92b767b68426f374ec670562531da4532d74e'
+    '4129e7e8324706b8722efec714dedc8fbb2615a07c37a54dc3217c7674d5da48'
   ],
   [
     'src-tauri/src/hardware/session.rs',
@@ -136,7 +136,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
       (path) => readFileSync(resolve(root, path))
     );
     console.log(
-      'Exact internal source snapshot and semantics passed; frozen public source approval remains pending.'
+      'Focused internal policy snapshot and semantics passed; exact-commit acceptance is external and frozen public source approval remains pending.'
     );
   } catch (error) {
     console.error(error instanceof Error ? error.message : error);

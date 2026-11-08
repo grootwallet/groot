@@ -17,9 +17,14 @@ import {
 } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { prepareHwiRuntime, verifyHwiRuntime } from './prepare-hwi-runtime.mjs';
+import {
+  assertInternalCandidateSource,
+  requireInternalCandidateSource
+} from './internal-candidate-source.mjs';
 
 const repoRoot = resolve(fileURLToPath(new URL('../../', import.meta.url)));
+const sourceIdentity = requireInternalCandidateSource(repoRoot);
+const { prepareHwiRuntime, verifyHwiRuntime } = await import('./prepare-hwi-runtime.mjs');
 const tauriRoot = join(repoRoot, 'src-tauri');
 const platform =
   process.platform === 'linux' && process.arch === 'x64'
@@ -35,14 +40,19 @@ const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
 const source = resolve(process.env.GROOT_HWI_SOURCE ?? '');
 const sourceArchive = resolve(process.env.GROOT_HWI_SOURCE_ARCHIVE ?? '');
 const license = resolve(process.env.GROOT_HWI_LICENSE ?? '');
-const commit = execFileSync('git', ['rev-parse', 'HEAD'], {
-  cwd: repoRoot,
-  encoding: 'utf8'
-}).trim();
+const commit = sourceIdentity.candidateCommit;
 const target = JSON.parse(
   execFileSync(
     'cargo',
-    ['metadata', '--format-version', '1', '--no-deps', '--manifest-path', 'src-tauri/Cargo.toml'],
+    [
+      'metadata',
+      '--locked',
+      '--format-version',
+      '1',
+      '--no-deps',
+      '--manifest-path',
+      'src-tauri/Cargo.toml'
+    ],
     {
       cwd: repoRoot,
       encoding: 'utf8'
@@ -78,28 +88,8 @@ for (const [path, maximum] of [
 ])
   requireRegular(path, maximum);
 
-if (
-  execFileSync('git', ['status', '--porcelain=v1', '--untracked-files=all'], {
-    cwd: repoRoot,
-    encoding: 'utf8'
-  }).trim()
-) {
-  throw new Error(
-    'Cross-platform package builds require a clean tracked and untracked source checkout'
-  );
-}
 function assertSourceUnchanged() {
-  const currentCommit = execFileSync('git', ['rev-parse', 'HEAD'], {
-    cwd: repoRoot,
-    encoding: 'utf8'
-  }).trim();
-  const status = execFileSync('git', ['status', '--porcelain=v1', '--untracked-files=all'], {
-    cwd: repoRoot,
-    encoding: 'utf8'
-  });
-  if (currentCommit !== commit || status.trim()) {
-    throw new Error('Cross-platform package source changed during the build');
-  }
+  assertInternalCandidateSource(repoRoot, sourceIdentity);
 }
 execFileSync(process.execPath, [join(repoRoot, 'scripts/release/internal-release-gate.mjs')], {
   cwd: repoRoot,
@@ -171,7 +161,17 @@ try {
   writeFileSync(buildConfig, `${JSON.stringify(config)}\n`);
   execFileSync(
     process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm',
-    ['exec', 'tauri', 'build', '--config', buildConfig, '--bundles', bundles.join(',')],
+    [
+      'exec',
+      'tauri',
+      'build',
+      '--config',
+      buildConfig,
+      '--bundles',
+      bundles.join(','),
+      '--',
+      '--locked'
+    ],
     {
       cwd: repoRoot,
       env: {
@@ -225,6 +225,11 @@ try {
   );
   const buildInfo = [
     `commit=${commit}`,
+    `candidate_commit=${sourceIdentity.candidateCommit}`,
+    `source_tree=${sourceIdentity.sourceTree}`,
+    `source_snapshot_sha256=${sourceIdentity.sourceSnapshotSha256}`,
+    `source_tracked_files=${sourceIdentity.trackedFileCount}`,
+    `approval_context=${sourceIdentity.approvalContext}`,
     'version=0.5.4-rc01',
     'compiled_network=testnet4',
     `platform=${platform}`,

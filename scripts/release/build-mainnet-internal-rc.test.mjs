@@ -52,17 +52,23 @@ test('one-operation worker is enabled only with the sealed internal multi runtim
 });
 
 test('internal handoff verifies actual camera permission, frozen source and artifact provenance', () => {
-  const cleanCheckout = source.indexOf('if (worktreeStatus.trim())');
+  const sourceIdentity = source.indexOf('requireInternalCandidateSource(repoRoot)');
   const internalGate = source.indexOf(
     "execFileSync(process.execPath, [join(repoRoot, 'scripts/release/internal-release-gate.mjs')]"
   );
   const firstStageMutation = source.indexOf('rmSync(stageDirectory');
-  assert.ok(cleanCheckout >= 0);
-  assert.ok(internalGate > cleanCheckout);
+  const cargoMetadata = source.indexOf("'metadata'");
+  assert.ok(sourceIdentity >= 0);
+  assert.ok(cargoMetadata > sourceIdentity);
+  assert.ok(internalGate > sourceIdentity);
   assert.ok(firstStageMutation > internalGate);
   assert.match(source, /verifyMacosCameraAccess\(builtApp\)/);
   assert.match(source, /verifyMacosCameraAccess\(outputApp\)/);
-  assert.match(source, /head !== commit \|\| status\.trim\(\)/);
+  assert.match(source, /assertInternalCandidateSource\(repoRoot, sourceIdentity\)/);
+  assert.match(source, /candidate_commit=\$\{sourceIdentity\.candidateCommit\}/);
+  assert.match(source, /source_tree=\$\{sourceIdentity\.sourceTree\}/);
+  assert.match(source, /sourceSnapshotSha256: sourceIdentity\.sourceSnapshotSha256/);
+  assert.match(source, /approvalContext: sourceIdentity\.approvalContext/);
   assert.match(source, /scripts\/release\/generate-sbom\.mjs', sbom, executable/);
   assert.match(source, /'PROVENANCE\.json'/);
   assert.match(source, /'SHA256SUMS'/);

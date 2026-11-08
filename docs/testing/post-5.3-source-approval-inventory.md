@@ -1,8 +1,13 @@
 # Post-5.3 source-approval inventory
 
+> Historical review inventory. ADR 0109 supersedes using this selective map as
+> complete internal-candidate authorization. The map remains focused regression
+> evidence; external acceptance binds the complete candidate commit, including
+> executable build and workflow files.
+
 This is the pre-approval inventory for the final maintenance candidate. It does not update any approved hash or authorize release. Released baseline: `6a39bf50b2a6a042354b43369765a9af2174d061`. Exact tested application/reporting source: `ec940d22b06c5efe71c848801e8cefac1f4341d7`.
 
-The exact inventory contains 115 pins: 106 byte-identical to the approved values and nine divergent. The release-to-candidate diff contains 91 changed paths. `60bd8238b18f4f17d213cff9a60b917b235d81b6` changes the already-divergent Settings route to fix the read-retry/action race and adds browser regression coverage. Recompute all 115 pin hashes against the final candidate before approval; the nine-path classification below remains the review starting point, not an approval of its new bytes.
+The exact historical inventory contains 115 pins: 106 byte-identical to the approved values and nine divergent. The release-to-candidate diff contains 91 changed paths. `60bd8238b18f4f17d213cff9a60b917b235d81b6` changes the already-divergent Settings route to fix the read-retry/action race and adds browser regression coverage. Recompute these hashes as focused regression evidence; complete candidate acceptance now applies to the full commit under ADR 0109. The nine-path classification below remains a review starting point, not approval of its new bytes.
 
 ## Nine currently divergent pinned sources
 

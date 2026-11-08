@@ -88,7 +88,7 @@ Both QR components use `qr-camera.ts` for user-initiated permission, local decod
 
 Allowlisted diagnostics retain stable codes and coarse scalar context, never arbitrary errors or sensitive payloads. Clipboard is explicit and typed; no secret reads or analytics sink. The [security model](security-model.md) owns control details.
 
-[Current status](implementation-status.md) owns capability claims, [ADRs](adr/) own decisions, and the [Mainnet checklist](mainnet-release-checklist.md) owns exact-candidate evidence. Release/source-hash guards, provenance and signatures are independent of runtime tests. Documentation cleanup does not refresh authorization or reviewed-source hashes.
+[Current status](implementation-status.md) owns capability claims, [ADRs](adr/) own decisions, and the [Mainnet checklist](mainnet-release-checklist.md) owns exact-candidate evidence. Under ADR 0109, external acceptance of a full commit is the internal package authorization boundary; focused source hashes, clean-state checks, provenance and signatures remain separate supporting controls. Documentation cleanup does not refresh public authorization or reviewed-source hashes.
 
 ## Retained Miniscript boundary
 

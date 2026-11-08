@@ -5,6 +5,13 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { parseDocument } from 'yaml';
+import {
+  INTERNAL_ATTESTATION_POLICY,
+  assertApprovedAttestationResults,
+  buildGhVerifyArguments,
+  extractProtectedEnvironmentExtensions,
+  requireSafeGhVersion
+} from '../release/verify-internal-artifact-attestation.mjs';
 
 const root = new URL('../../', import.meta.url);
 function workflow(path) {
@@ -28,6 +35,64 @@ const aggregateCode = aggregateStep.run.match(/<<'NODE'\n([\s\S]*?)\nNODE\s*$/)?
 assert.ok(aggregateCode, 'the required gate must have an executable result validator');
 const lanes = ['frontend-checks', 'browser', 'rust'];
 const successful = () => Object.fromEntries(lanes.map((lane) => [lane, { result: 'success' }]));
+
+function derLength(length) {
+  if (length < 0x80) return Buffer.from([length]);
+  const bytes = [];
+  for (let value = length; value > 0; value = Math.floor(value / 256)) bytes.unshift(value & 0xff);
+  return Buffer.from([0x80 | bytes.length, ...bytes]);
+}
+
+function der(tag, content) {
+  return Buffer.concat([Buffer.from([tag]), derLength(content.length), content]);
+}
+
+function attestationCertificate(
+  environment = INTERNAL_ATTESTATION_POLICY.deploymentEnvironment,
+  subject = INTERNAL_ATTESTATION_POLICY.tokenSubject,
+  additions = []
+) {
+  const extension = (lastOidByte, value) =>
+    der(
+      0x30,
+      Buffer.concat([
+        der(0x06, Buffer.from([0x2b, 0x06, 0x01, 0x04, 0x01, 0x83, 0xbf, 0x30, 0x01, lastOidByte])),
+        der(0x04, der(0x0c, Buffer.from(value, 'utf8')))
+      ])
+    );
+  return der(
+    0x30,
+    der(0x30, Buffer.concat([extension(0x17, environment), extension(0x18, subject), ...additions]))
+  );
+}
+
+function attestationResult(commit, rawCertificate = attestationCertificate(), overrides = {}) {
+  return {
+    attestation: {
+      bundle: {
+        verificationMaterial: { certificate: { rawBytes: rawCertificate.toString('base64') } }
+      }
+    },
+    verificationResult: {
+      signature: {
+        certificate: {
+          subjectAlternativeName: INTERNAL_ATTESTATION_POLICY.certificateIdentity,
+          issuer: INTERNAL_ATTESTATION_POLICY.oidcIssuer,
+          buildSignerDigest: commit,
+          runnerEnvironment: 'github-hosted',
+          sourceRepositoryURI: `https://github.com/${INTERNAL_ATTESTATION_POLICY.repository}`,
+          sourceRepositoryDigest: commit,
+          sourceRepositoryRef: INTERNAL_ATTESTATION_POLICY.sourceRef,
+          sourceRepositoryIdentifier: INTERNAL_ATTESTATION_POLICY.repositoryId,
+          sourceRepositoryOwnerIdentifier: INTERNAL_ATTESTATION_POLICY.repositoryOwnerId,
+          buildConfigURI: INTERNAL_ATTESTATION_POLICY.certificateIdentity,
+          buildConfigDigest: commit,
+          ...overrides
+        }
+      }
+    }
+  };
+}
 function checkResults(results) {
   return spawnSync(process.execPath, ['--input-type=module', '-e', aggregateCode], {
     encoding: 'utf8',
@@ -143,7 +208,25 @@ test('ordinary and instrumented caches cannot include workspace or packaged app 
 });
 
 test('internal packages use structured release-stop validation and preserve Windows coverage', () => {
+  assert.equal(internal.jobs.package.environment, 'internal-candidate-approval');
+  assert.deepEqual(internal.jobs.package.env, {
+    GROOT_INTERNAL_CANDIDATE_COMMIT: '${{ github.sha }}',
+    GROOT_INTERNAL_APPROVAL_CONTEXT: 'protected-github-environment'
+  });
   const steps = internal.jobs.package.steps;
+  const checkout = steps.find((step) => step.uses?.startsWith('actions/checkout@'));
+  assert.deepEqual(checkout.with, {
+    clean: true,
+    'fetch-depth': 1,
+    'persist-credentials': false,
+    ref: '${{ github.sha }}'
+  });
+  const protectedApproval = steps.find(
+    (step) => step.name === 'Bind protected approval to the exact detached candidate'
+  );
+  assert.match(protectedApproval.run, /GROOT_INTERNAL_CANDIDATE_COMMIT/);
+  assert.match(protectedApproval.run, /git symbolic-ref -q HEAD/);
+  assert.match(protectedApproval.run, /git status --porcelain=v1 --untracked-files=all/);
   const linux = steps.find(
     (step) => step.if === "runner.os == 'Linux'" && step.run?.includes('validate:internal')
   );
@@ -181,33 +264,128 @@ test('internal packages use structured release-stop validation and preserve Wind
     /cargo test --locked --all-targets --all-features/
   );
   assert.equal(steps.filter((step) => step.uses?.startsWith('Swatinem/rust-cache@')).length, 1);
+  const buildIndex = steps.findIndex(
+    (step) => step.run?.trim() === 'node scripts/release/build-cross-platform-testnet4.mjs'
+  );
+  const attestationIndex = steps.findIndex(
+    (step) => step.uses === 'actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6'
+  );
+  const packageUploadIndex = steps.findIndex(
+    (step) =>
+      step.uses?.startsWith('actions/upload-artifact@') && step.with?.name?.startsWith('groot-')
+  );
+  assert.ok(buildIndex < attestationIndex && attestationIndex < packageUploadIndex);
+  assert.equal(steps[attestationIndex].name, 'Attest protected candidate artifacts');
+  assert.deepEqual(steps[attestationIndex].with, {
+    'subject-path': '${{ runner.temp }}/groot-${{ matrix.platform }}/**/*'
+  });
 });
 
-test('the shared cross-platform builder gates a clean checkout before staging and building', () => {
-  const cleanCheckout = crossPlatformBuilder.indexOf(
-    "execFileSync('git', ['status', '--porcelain=v1', '--untracked-files=all']"
+test('internal artifact verifier binds file, commit, workflow, hosted runner and Environment', () => {
+  const commit = 'a'.repeat(40);
+  assert.deepEqual(buildGhVerifyArguments('/tmp/groot.deb', commit), [
+    'attestation',
+    'verify',
+    '/tmp/groot.deb',
+    '--repo',
+    'grootwallet/groot',
+    '--cert-identity',
+    INTERNAL_ATTESTATION_POLICY.certificateIdentity,
+    '--cert-oidc-issuer',
+    'https://token.actions.githubusercontent.com',
+    '--source-digest',
+    commit,
+    '--source-ref',
+    'refs/heads/codex/post-53-maintainability',
+    '--signer-digest',
+    commit,
+    '--deny-self-hosted-runners',
+    '--format',
+    'json'
+  ]);
+  assert.equal(requireSafeGhVersion('gh version 2.102.0 (2026-10-01)\n'), '2.102.0');
+  assert.throws(() => requireSafeGhVersion('gh version 2.101.0\n'), /2\.102\.0 or newer/);
+  assert.throws(() => buildGhVerifyArguments('/tmp/groot.deb', 'a'.repeat(12)), /full/);
+
+  const extensions = extractProtectedEnvironmentExtensions(attestationCertificate());
+  assert.deepEqual(extensions, {
+    deploymentEnvironment: 'internal-candidate-approval',
+    tokenSubject:
+      'repository_owner_id:315751550:repository_id:1321708536:environment:internal-candidate-approval'
+  });
+  assert.equal(
+    assertApprovedAttestationResults(
+      [attestationResult(commit), attestationResult(commit)],
+      commit
+    ),
+    2
   );
-  const cleanCheckoutRejection = crossPlatformBuilder.indexOf(
-    'Cross-platform package builds require a clean tracked and untracked source checkout'
+});
+
+test('internal artifact verifier rejects missing, duplicate and mismatched signed approval claims', () => {
+  const commit = 'b'.repeat(40);
+  const extension = (lastOidByte, value) =>
+    der(
+      0x30,
+      Buffer.concat([
+        der(0x06, Buffer.from([0x2b, 0x06, 0x01, 0x04, 0x01, 0x83, 0xbf, 0x30, 0x01, lastOidByte])),
+        der(0x04, der(0x0c, Buffer.from(value, 'utf8')))
+      ])
+    );
+  const duplicateEnvironment = attestationCertificate(undefined, undefined, [
+    extension(0x17, 'internal-candidate-approval')
+  ]);
+  const missingEnvironment = der(
+    0x30,
+    der(0x30, extension(0x18, INTERNAL_ATTESTATION_POLICY.tokenSubject))
   );
+  for (const result of [
+    attestationResult(
+      commit,
+      attestationCertificate('unreviewed', INTERNAL_ATTESTATION_POLICY.tokenSubject)
+    ),
+    attestationResult(
+      commit,
+      attestationCertificate(
+        INTERNAL_ATTESTATION_POLICY.deploymentEnvironment,
+        'repo:grootwallet@315751550/groot@1321708536:ref:refs/heads/codex/post-53-maintainability'
+      )
+    ),
+    attestationResult(commit, missingEnvironment),
+    attestationResult(commit, duplicateEnvironment),
+    attestationResult(commit, attestationCertificate(), {
+      subjectAlternativeName:
+        'https://github.com/grootwallet/groot/.github/workflows/unreviewed.yml'
+    }),
+    attestationResult(commit, attestationCertificate(), { runnerEnvironment: 'self-hosted' }),
+    attestationResult(commit, attestationCertificate(), { sourceRepositoryDigest: 'c'.repeat(40) })
+  ]) {
+    assert.throws(
+      () => assertApprovedAttestationResults([result], commit),
+      /No attestation proves protected candidate approval/
+    );
+  }
+  const truncated = attestationCertificate().subarray(0, -1);
+  assert.throws(() => extractProtectedEnvironmentExtensions(truncated), /exceeds|Truncated/);
+});
+
+test('the shared cross-platform builder binds the accepted commit before staging and building', () => {
+  const sourceIdentity = crossPlatformBuilder.indexOf('requireInternalCandidateSource(repoRoot)');
+  const cargoMetadata = crossPlatformBuilder.indexOf("'metadata'");
   const internalGate = crossPlatformBuilder.indexOf(
     "execFileSync(process.execPath, [join(repoRoot, 'scripts/release/internal-release-gate.mjs')]"
   );
   const firstStageMutation = crossPlatformBuilder.indexOf('rmSync(stage');
-  const packageBuild = crossPlatformBuilder.indexOf("['exec', 'tauri', 'build'");
+  const packageBuild = crossPlatformBuilder.indexOf(
+    "process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm'"
+  );
   const firstSourceRecheck = crossPlatformBuilder.indexOf('assertSourceUnchanged();', packageBuild);
   const outputCreation = crossPlatformBuilder.indexOf('mkdirSync(outputRoot');
   const evidenceChecksums = crossPlatformBuilder.indexOf("join(outputRoot, 'SHA256SUMS')");
   const finalSourceRecheck = crossPlatformBuilder.lastIndexOf('assertSourceUnchanged();');
-  assert.ok(cleanCheckout >= 0, 'the builder must validate the clean checkout');
-  assert.ok(
-    cleanCheckoutRejection > cleanCheckout,
-    'the clean-checkout validation must reject a dirty source tree'
-  );
-  assert.ok(
-    internalGate > cleanCheckoutRejection,
-    'the internal gate must follow clean-checkout validation'
-  );
+  assert.ok(sourceIdentity >= 0, 'the builder must bind the externally accepted source identity');
+  assert.ok(cargoMetadata > sourceIdentity, 'source identity must precede Cargo metadata');
+  assert.ok(internalGate > sourceIdentity, 'the internal gate must follow exact candidate binding');
   assert.ok(
     firstStageMutation > internalGate,
     'the internal gate must run before the first staging mutation'
@@ -230,6 +408,10 @@ test('the shared cross-platform builder gates a clean checkout before staging an
     (crossPlatformBuilder.match(/scripts\/release\/internal-release-gate\.mjs/g) ?? []).length,
     1
   );
+  assert.match(crossPlatformBuilder, /assertInternalCandidateSource\(repoRoot, sourceIdentity\)/);
+  assert.match(crossPlatformBuilder, /candidate_commit=\$\{sourceIdentity\.candidateCommit\}/);
+  assert.match(crossPlatformBuilder, /source_tree=\$\{sourceIdentity\.sourceTree\}/);
+  assert.match(crossPlatformBuilder, /'--',\s*'--locked'/);
 
   const packageSteps = internal.jobs.package.steps.filter(
     (step) => step.run?.trim() === 'node scripts/release/build-cross-platform-testnet4.mjs'
@@ -240,11 +422,21 @@ test('the shared cross-platform builder gates a clean checkout before staging an
     internal.jobs.package.strategy.matrix.include.map(({ platform }) => platform),
     ['linux-x86_64', 'windows-x86_64']
   );
+  const upload = internal.jobs.package.steps.find(
+    (step) =>
+      step.uses?.startsWith('actions/upload-artifact@') && step.with?.name?.startsWith('groot-')
+  );
+  assert.match(upload.with.name, /GROOT_INTERNAL_CANDIDATE_COMMIT/);
 });
 
-test('every acceptance job is bounded and keeps read-only permissions', () => {
+test('every acceptance job is bounded and keeps least-privilege permissions', () => {
+  assert.deepEqual(ci.permissions, { contents: 'read' });
+  assert.deepEqual(internal.permissions, {
+    contents: 'read',
+    'id-token': 'write',
+    attestations: 'write'
+  });
   for (const document of [ci, internal]) {
-    assert.deepEqual(document.permissions, { contents: 'read' });
     assert.equal(document.concurrency['cancel-in-progress'], true);
     for (const job of Object.values(document.jobs)) {
       assert.ok(job['timeout-minutes'] > 0 && job['timeout-minutes'] <= 90);

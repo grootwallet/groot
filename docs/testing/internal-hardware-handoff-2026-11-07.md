@@ -1,6 +1,6 @@
 # Internal hardware handoff — 2026-11-07
 
-Refs #121. This closes the implementation portion of the post-5.3 refactoring plan and prepares the owner's explicitly requested unsigned internal macOS candidate. Physical acceptance, independent exact-source approval and public release remain separate. BIP impact: none; build evidence does not expand standards support.
+Refs #121. This closes the implementation portion of the post-5.3 refactoring plan and prepares the owner's explicitly requested unsigned internal macOS candidate. Physical acceptance, external exact-commit acceptance and public release remain separate. BIP impact: none; build evidence does not expand standards support.
 
 ## Implementation closure
 
@@ -19,7 +19,7 @@ The original engineering work is implemented. A new line-count target, broad UI 
 
 The internal app is **Groot RC**, identifier `app.groot.wallet.internal`, separate from public Groot. Previous internal RC profiles may already exist there. macOS arm64 still requires an ad-hoc executable seal; there is no Developer ID signing, notarization or public installer authorization. The build uses the pinned HWI and sealed fast runtime, with `REHEARSAL_ONLY` compiled signing identity.
 
-The handoff directory contains the app, ZIP/DMG, `BUILD-INFO`, `PROVENANCE.json`, executable-bound `groot.cdx.json` and `SHA256SUMS`. The manifests name the exact commit and digests. The builder rejects source drift and incomplete packaging; its final camera-only permission and code seals are checked. Internal DMGs preserve the app filename rather than renaming it to the public app's filename.
+The handoff directory contains the app, ZIP/DMG, `BUILD-INFO`, `PROVENANCE.json`, executable-bound `groot.cdx.json` and `SHA256SUMS`. The manifests name the owner-accepted commit, Git tree, complete tracked-source digest and package digests. The builder requires a fresh detached checkout, compares every tracked blob with that commit, rejects persistent source drift and incomplete packaging, and checks camera-only permission plus code seals. This owner-local artifact is self-test evidence, not independent approval. Internal DMGs preserve the app filename rather than renaming it to the public app's filename.
 
 Use Testnet4 and disposable wallets. Do not replace public Groot, reset a funded profile or copy private wallet data into evidence. A multi-network internal binary does not expand phone, Continuity or hardware certification scope. Mainnet phone signing, Mainnet Continuity and unsupported delayed-policy signers remain blocked.
 
