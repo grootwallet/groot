@@ -142,7 +142,8 @@ export function runtimeInventory(root) {
       if (process.platform !== 'win32' && !stat.isSymbolicLink() && stat.mode & 0o022) fail();
       if (stat.isSymbolicLink()) {
         const target = readlinkSync(path);
-        if (!safePath(target) || !realpathSync(path).startsWith(`${realpathSync(root)}/`)) fail();
+        const resolvedTarget = normalizedFilesystemPath(realpathSync(root), realpathSync(path));
+        if (!safePath(target) || !safePath(resolvedTarget)) fail();
         links.push({ path: rel, target });
       } else if (stat.isDirectory()) visit(path);
       else if (stat.isFile()) {

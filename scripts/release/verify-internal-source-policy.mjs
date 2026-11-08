@@ -110,7 +110,7 @@ const internalTextOverrides = new Map([
   ],
   [
     'scripts/release/prepare-hwi-runtime.mjs',
-    'bfe9bff950bc658e54b094a38d645a20299f5edc1cdd51c30d555a90fbd5d984'
+    '2beeecd21784c7450a9e2addc43608e1b569ce56f37d43e0819012f31309a0c9'
   ]
 ]);
 

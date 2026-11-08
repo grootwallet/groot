@@ -100,6 +100,7 @@ test('archive parser admits only the pinned Linux and Windows Python layouts', (
 test('runtime inventory detects modified, extra and writable files and escaping links', () => {
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'groot-runtime-test-')));
   const copied = `${root}-copy`;
+  const outside = `${root}-outside`;
   try {
     writeFileSync(join(root, 'Python'), 'fixture', { mode: 0o644 });
     symlinkSync('Python', join(root, 'alias'));
@@ -120,14 +121,18 @@ test('runtime inventory detects modified, extra and writable files and escaping 
     assert.throws(check);
     rmSync(join(root, 'extra'));
     chmodSync(join(root, 'Python'), 0o666);
-    assert.throws(check);
+    // Node cannot model POSIX group/world write bits through chmod on Windows.
+    if (process.platform === 'win32') assert.doesNotThrow(check);
+    else assert.throws(check);
     chmodSync(join(root, 'Python'), 0o644);
     rmSync(join(root, 'alias'));
-    symlinkSync('/etc/hosts', join(root, 'alias'));
+    writeFileSync(outside, 'outside');
+    symlinkSync(outside, join(root, 'alias'));
     assert.throws(check);
   } finally {
     rmSync(root, { recursive: true, force: true });
     rmSync(copied, { recursive: true, force: true });
+    rmSync(outside, { force: true });
   }
 });
 

@@ -731,8 +731,8 @@ export function validateCrateDatabaseOpenSources(sources) {
   }
 }
 
-export function normalizeRepositoryPath(path) {
-  return path.replaceAll('\\', '/');
+export function normalizeRepositoryPath(path, platform = process.platform) {
+  return platform === 'win32' ? path.replaceAll('\\', '/') : path;
 }
 
 function crateRustSources() {
