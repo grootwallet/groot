@@ -269,7 +269,14 @@ pub(super) fn descriptor_pair_from_directory(
     let permit = database_open_permit_for_offline_identity_inspection()?;
     let mut db =
         open_existing_wallet_database_read_only(&directory.join("wallet.sqlite"), &permit)?;
-    let wallet = load_wallet(&mut db)?;
+    // Identity inspection needs only BDK's public descriptors. Older databases
+    // may not have the application recovery-settings table until first open.
+    let wallet = Wallet::load()
+        .check_network(network())
+        .lookahead(0)
+        .load_wallet(&mut db)
+        .map_err(internal)?
+        .ok_or_else(|| api_error("wallet_not_found", "Wallet database is empty."))?;
     let external = wallet.public_descriptor(KeychainKind::External).to_string();
     let internal_descriptor = wallet.public_descriptor(KeychainKind::Internal).to_string();
     let expected = match profile.kind {

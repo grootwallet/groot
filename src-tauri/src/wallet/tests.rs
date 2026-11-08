@@ -5438,7 +5438,7 @@ fn exact_identity_inspection_reads_an_existing_wallet_database_without_mutating_
     let path = dir.join("wallet.sqlite");
     let permit = database_open_permit_for_test();
     let mut writable = open_wallet_database(&path, &permit).unwrap();
-    init_app_schema(&writable).unwrap();
+    // A previously created wallet can predate the recovery-settings table.
     let mnemonic = Mnemonic::parse(WORDS).unwrap();
     let (external, internal) = software_wallet_descriptors(
         &mnemonic,
@@ -5450,7 +5450,19 @@ fn exact_identity_inspection_reads_an_existing_wallet_database_without_mutating_
         .network(network())
         .create_wallet(&mut writable)
         .unwrap();
-    let expected = wallet.public_descriptor(KeychainKind::External).to_string();
+    let expected = (
+        wallet.public_descriptor(KeychainKind::External).to_string(),
+        wallet.public_descriptor(KeychainKind::Internal).to_string(),
+    );
+    let profile = WalletProfile {
+        id: Uuid::new_v4(),
+        name: "Legacy software wallet".to_owned(),
+        network: network_name().to_owned(),
+        kind: WalletKind::SingleKey,
+        descriptor_checksum: descriptor_checksum(&expected.0).unwrap(),
+        created_at: now(),
+        backup_verified: true,
+    };
     drop(wallet);
     drop(writable);
     let before = fs::metadata(&path).unwrap();
@@ -5460,15 +5472,10 @@ fn exact_identity_inspection_reads_an_existing_wallet_database_without_mutating_
         .collect::<Vec<_>>();
     entries_before.sort();
 
-    let permit = database_open_permit_for_test();
-    let mut read_only = open_existing_wallet_database_read_only(&path, &permit).unwrap();
-    let loaded = load_wallet(&mut read_only).unwrap();
     assert_eq!(
-        loaded.public_descriptor(KeychainKind::External).to_string(),
+        descriptor_pair_from_directory(&dir, &profile).unwrap(),
         expected
     );
-    drop(loaded);
-    drop(read_only);
 
     let after = fs::metadata(&path).unwrap();
     let mut entries_after = fs::read_dir(&dir)
