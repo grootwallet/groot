@@ -33,6 +33,9 @@ test('source watcher enumerates the same repository paths from the native crate'
     const root = join(directory, 'repository with spaces');
     mkdirSync(root);
     execFileSync('git', ['init', '--quiet', root]);
+    const watcherRoot = execFileSync('git', ['-C', root, 'rev-parse', '--show-toplevel'], {
+      encoding: 'utf8'
+    }).trim();
     const tracked = [
       'src-tauri/Cargo.toml',
       'src-tauri/build.rs',
@@ -53,15 +56,21 @@ test('source watcher enumerates the same repository paths from the native crate'
     const nativePaths = observe(join(root, 'src-tauri'));
     assert.deepEqual(nativePaths, rootPaths);
     for (const path of [...tracked, 'src/untracked.txt']) {
-      assert.ok(nativePaths.has(`cargo:rerun-if-changed=${root}/${path}`), `Missing ${path}`);
+      assert.ok(
+        nativePaths.has(`cargo:rerun-if-changed=${watcherRoot}/${path}`),
+        `Missing ${path}`
+      );
     }
     for (const path of ['Cargo.toml', 'build.rs', 'ignored.tmp']) {
-      assert.ok(!nativePaths.has(`cargo:rerun-if-changed=${root}/${path}`), `Unexpected ${path}`);
+      assert.ok(
+        !nativePaths.has(`cargo:rerun-if-changed=${watcherRoot}/${path}`),
+        `Unexpected ${path}`
+      );
     }
     // Parent-directory watches are deliberately retained, including recursive
     // Cargo observation of ignored children; only individual enumeration excludes them.
-    assert.ok(nativePaths.has(`cargo:rerun-if-changed=${root}/src-tauri`));
-    assert.ok(nativePaths.has(`cargo:rerun-if-changed=${root}/src`));
+    assert.ok(nativePaths.has(`cargo:rerun-if-changed=${watcherRoot}/src-tauri`));
+    assert.ok(nativePaths.has(`cargo:rerun-if-changed=${watcherRoot}/src`));
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
