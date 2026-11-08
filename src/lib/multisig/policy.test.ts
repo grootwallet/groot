@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   MULTISIG_ACCOUNT_PATH,
+  TAPROOT_CONTINUITY_ACCOUNT_PATH,
   applyMultisigNetwork,
   coordinatorProgress,
   descriptorPreview,
@@ -60,6 +61,22 @@ describe('multisig policy invariants', () => {
     expect(validatePolicyDraft({ name: 'Family vault', threshold: 2, cosigners: keys })).toEqual(
       []
     );
+  });
+
+  it('accepts the distinct Taproot account origin only when explicitly selected', () => {
+    const draft = {
+      name: 'Offline rehearsal',
+      threshold: 2,
+      cosigners: Array.from({ length: 3 }, (_, index) =>
+        cosigner({
+          fingerprint: index.toString(16).padStart(8, '0'),
+          xpub: `tpub-fixture-${index}`,
+          derivationPath: TAPROOT_CONTINUITY_ACCOUNT_PATH
+        })
+      )
+    };
+    expect(validatePolicyDraft(draft)).toContain(`Every v1 key must use ${MULTISIG_ACCOUNT_PATH}.`);
+    expect(validatePolicyDraft(draft, TAPROOT_CONTINUITY_ACCOUNT_PATH)).toEqual([]);
   });
 
   it('rejects unsafe thresholds, too few keys, and oversized policies', () => {

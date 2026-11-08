@@ -98,10 +98,13 @@ export type Transaction = {
   provenance: ProvenanceSummary;
 };
 
+export type SoftwareAddressType = 'nativeSegwit' | 'taproot';
+
 export type ReceiveAddress = {
   id: number;
   address: string;
   testnetAlias?: string | null;
+  addressType?: SoftwareAddressType | null;
   label: string;
   labels?: string[];
   created: string;

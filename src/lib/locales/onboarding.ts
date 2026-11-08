@@ -1,6 +1,69 @@
 import type { CatalogSection } from './types';
 
 export const onboardingCopy = {
+  'Could not create wallet.': {
+    fr: 'Impossible de créer le portefeuille.',
+    es: 'No se pudo crear la cartera.'
+  },
+  'Could not recover wallet.': {
+    fr: 'Impossible de restaurer le portefeuille.',
+    es: 'No se pudo recuperar la cartera.'
+  },
+  'Could not prepare the public descriptor.': {
+    fr: 'Impossible de préparer le descripteur public.',
+    es: 'No se pudo preparar el descriptor público.'
+  },
+  'Software Taproot wallets are available on macOS with Regtest or Testnet4.': {
+    fr: 'Les portefeuilles logiciels Taproot sont disponibles sur macOS avec Regtest ou Testnet4.',
+    es: 'Las carteras de software Taproot están disponibles en macOS con Regtest o Testnet4.'
+  },
+  'Enter the saved public Taproot descriptor to recover this wallet.': {
+    fr: 'Saisissez le descripteur public Taproot sauvegardé pour restaurer ce portefeuille.',
+    es: 'Introduce el descriptor público Taproot guardado para recuperar esta cartera.'
+  },
+  'The recovery details do not match the saved public wallet descriptor.': {
+    fr: 'Les informations de récupération ne correspondent pas au descripteur public sauvegardé.',
+    es: 'Los datos de recuperación no coinciden con el descriptor público guardado.'
+  },
+  'Taproot · BIP86': { fr: 'Taproot · BIP86', es: 'Taproot · BIP86' },
+  'Choose the address type recorded with your original wallet backup.': {
+    fr: 'Choisissez le type d’adresse indiqué dans la sauvegarde de votre portefeuille.',
+    es: 'Elige el tipo de dirección que anotaste con la copia de seguridad de tu cartera.'
+  },
+  'Native SegWit is the default. Taproot is available for software wallets on this test network.': {
+    fr: 'SegWit natif est le choix par défaut. Taproot est disponible pour les portefeuilles logiciels sur ce réseau de test.',
+    es: 'SegWit nativo es la opción predeterminada. Taproot está disponible para carteras de software en esta red de prueba.'
+  },
+  'Taproot recovery in Groot requires your 24 words, exact passphrase, and public wallet descriptor. Save all three after setup.':
+    {
+      fr: 'Pour restaurer un portefeuille Taproot dans Groot, il faut vos 24 mots, votre phrase secrète exacte et le descripteur public. Conservez les trois après la configuration.',
+      es: 'Para recuperar una cartera Taproot en Groot necesitas tus 24 palabras, la frase de contraseña exacta y el descriptor público. Guarda los tres al terminar.'
+    },
+  'Save the public descriptor with your 24 words and exact passphrase. A matching fingerprint alone cannot confirm the address type.':
+    {
+      fr: 'Conservez le descripteur public avec vos 24 mots et votre phrase secrète exacte. L’empreinte seule ne suffit pas à confirmer le type d’adresse.',
+      es: 'Guarda el descriptor público con tus 24 palabras y la frase de contraseña exacta. La huella por sí sola no confirma el tipo de dirección.'
+    },
+  'Paste the public receive and change descriptor saved with your Taproot wallet.': {
+    fr: 'Collez le descripteur public de réception et de monnaie rendue que vous avez sauvegardé pour ce portefeuille Taproot.',
+    es: 'Pega el descriptor público de recepción y cambio que guardaste para tu cartera Taproot.'
+  },
+  'Could not copy the public descriptor. Try again.': {
+    fr: 'Impossible de copier le descripteur public. Réessayez.',
+    es: 'No se pudo copiar el descriptor público. Vuelve a intentarlo.'
+  },
+  'Groot imports Native SegWit (BIP84) hardware accounts.': {
+    fr: 'Groot importe les comptes matériels SegWit natif (BIP84).',
+    es: 'Groot importa cuentas de firmantes físicos con SegWit nativo (BIP84).'
+  },
+  'View and copy the receive and change descriptor.': {
+    fr: 'Affichez et copiez le descripteur de réception et de monnaie rendue.',
+    es: 'Consulta y copia el descriptor de recepción y cambio.'
+  },
+  'Keep this public descriptor with your recovery backup. It reveals wallet activity.': {
+    fr: 'Conservez ce descripteur public avec votre sauvegarde. Il révèle l’activité du portefeuille.',
+    es: 'Guarda este descriptor público con tu copia de seguridad. Revela la actividad de la cartera.'
+  },
   'Network setup was not copied. Configure it in Settings.': {
     fr: 'La configuration réseau n’a pas été copiée. Configurez-la dans les réglages.',
     es: 'La configuración de red no se copió. Configúrala en Ajustes.'

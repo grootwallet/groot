@@ -44,6 +44,8 @@ pub struct MultisigSetupDraft {
     version: u8,
     stage: MultisigSetupStage,
     template_kind: MultisigSetupTemplate,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    taproot: bool,
     #[serde(default)]
     recovery_delay_blocks: Option<u32>,
     standard_recipe: MultisigSetupRecipe,
@@ -91,9 +93,11 @@ fn preview_multisig_setup_draft(draft: &MultisigSetupDraft) -> ApiResult<Multisi
         threshold: draft.threshold,
         cosigners: draft.cosigners.clone(),
     };
-    let standard_preview = policy.preview().map_err(policy_api_error)?;
     if matches!(draft.template_kind, MultisigSetupTemplate::Standard) {
-        return Ok(standard_preview);
+        return policy.preview().map_err(policy_api_error);
+    }
+    if !draft.taproot {
+        policy.preview().map_err(policy_api_error)?;
     }
     let signer_ids = draft
         .cosigners
@@ -124,9 +128,14 @@ fn preview_multisig_setup_draft(draft: &MultisigSetupDraft) -> ApiResult<Multisi
         },
         MultisigSetupTemplate::Standard => unreachable!("standard returned above"),
     };
+    let template = if draft.taproot {
+        template.into_taproot().map_err(recovery_api_error)?
+    } else {
+        template
+    };
     let analysis = analyze_template(&template, &draft.cosigners).map_err(recovery_api_error)?;
     Ok(MultisigPreviewDto {
-        name: standard_preview.name,
+        name: draft.name.trim().to_owned(),
         threshold: 2,
         cosigners: draft.cosigners.clone(),
         external_descriptor: analysis.external_descriptor,
@@ -157,8 +166,24 @@ fn validate_multisig_setup_draft(
         ));
     }
     reject_virtual_cosigners(&draft.cosigners)?;
+    if draft.taproot {
+        require_taproot_continuity_network(network())?;
+        if !matches!(
+            draft.template_kind,
+            MultisigSetupTemplate::PartnerContinuityV1 | MultisigSetupTemplate::FamilyContinuityV1
+        ) || draft.coldcard_registered
+            || !draft.policy_verifications.is_empty()
+        {
+            return Err(hardware_policy_unsupported());
+        }
+    }
     for cosigner in &draft.cosigners {
-        cosigner.parse_for_validation().map_err(policy_api_error)?;
+        if draft.taproot {
+            crate::recovery::validate_taproot_cosigner(cosigner, network())
+                .map_err(recovery_api_error)?;
+        } else {
+            cosigner.parse_for_validation().map_err(policy_api_error)?;
+        }
     }
     let unique_ids = draft
         .cosigners
@@ -559,6 +584,7 @@ mod setup_draft_tests {
 
     fn draft() -> MultisigSetupDraft {
         MultisigSetupDraft {
+            taproot: false,
             version: 1,
             stage: MultisigSetupStage::Backup,
             template_kind: MultisigSetupTemplate::Standard,
@@ -821,16 +847,59 @@ pub fn multisig_preview(policy: PolicyInput) -> ApiResult<MultisigPreviewDto> {
     policy.preview().map_err(policy_api_error)
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecoveryPolicyPreviewDto {
+    #[serde(flatten)]
+    analysis: PolicyAnalysis,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    encoded_backup: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    first_address: Option<String>,
+}
+
 #[tauri::command]
 pub fn recovery_policy_analyze(
     template: RecoveryTemplate,
     cosigners: Vec<crate::multisig::CosignerInput>,
-) -> ApiResult<PolicyAnalysis> {
+    wallet_name: Option<String>,
+) -> ApiResult<RecoveryPolicyPreviewDto> {
+    let taproot = template.uses_taproot();
+    if taproot {
+        require_taproot_continuity_network(network())?;
+    }
     reject_virtual_cosigners(&cosigners)?;
     for cosigner in &cosigners {
         validate_label_formatting(&cosigner.label)?;
     }
-    analyze_template(&template, &cosigners).map_err(recovery_api_error)
+    let analysis = analyze_template(&template, &cosigners).map_err(recovery_api_error)?;
+    let mut preview = RecoveryPolicyPreviewDto {
+        analysis,
+        encoded_backup: None,
+        first_address: None,
+    };
+    if let Some(name) = wallet_name.filter(|_| taproot) {
+        let name = name.trim();
+        if name.is_empty() || name.chars().count() > 48 {
+            return Err(policy_api_error(crate::multisig::PolicyError::InvalidName));
+        }
+        let wallet = multisig_recovery_metadata(
+            name.to_owned(),
+            template,
+            cosigners,
+            preview.analysis.clone(),
+        );
+        preview.first_address = Some(first_multisig_address(&wallet)?);
+        preview.encoded_backup = Some(
+            serde_json::to_string_pretty(&MultisigBackupDto {
+                version: 1,
+                network: network_name().to_owned(),
+                wallet,
+            })
+            .map_err(internal)?,
+        );
+    }
+    Ok(preview)
 }
 
 #[tauri::command]
@@ -1079,6 +1148,7 @@ pub fn multisig_bsms_inspect(
         matches_current_wallet,
         policy_type: None,
         policy_paths: Vec::new(),
+        taproot: false,
     })
 }
 
@@ -1251,6 +1321,11 @@ pub async fn multisig_recovery_drill(
         // Finish every fallible backup and presentation check before recording a
         // successful drill or mutating the in-memory verification marker.
         let (policy_type, policy_paths) = recovery_drill_policy_presentation(&backup.wallet)?;
+        let taproot = backup
+            .wallet
+            .recovery_template
+            .as_ref()
+            .is_some_and(RecoveryTemplate::uses_taproot);
         if matches_current_wallet {
             let wallet_id = selected_profile_of_kind(&app, WalletKind::Multisig)?.id;
             let descriptor = current_wallet
@@ -1282,6 +1357,7 @@ pub async fn multisig_recovery_drill(
             matches_current_wallet,
             policy_type,
             policy_paths,
+            taproot,
         })
     })
     .await
@@ -1577,27 +1653,84 @@ pub async fn multisig_address_create(
 ) -> ApiResult<ReceiveAddressDto> {
     let expected_wallet_id = load_registry(&app)?.selected_wallet_id;
     tauri::async_runtime::spawn_blocking(move || {
-    let state = app.state::<AppState>();
-    let _operation = operation_guard(&state)?;
-    if load_registry(&app)?.selected_wallet_id != expected_wallet_id {
-        return Err(api_error("wallet_selection_changed", "The selected wallet changed. Retry in the current wallet."));
-    }
-    let wallet_id = require_unlocked(&app, &state)?;
-    coordination_commands::require_receive_authority(&app, &WalletKind::Multisig)?;
-    let labels = normalize_labels(labels)?;
-    let metadata = read_multisig_metadata(&app)?;
-    let db = open_multisig_db(&app)?;
-    let verifications = signer_policy_verification_rows(&db)?;
-    require_multisig_receive_readiness(network(), &metadata, &verifications)?;
-    drop(db);
+        let state = app.state::<AppState>();
+        let _operation = operation_guard(&state)?;
+        if load_registry(&app)?.selected_wallet_id != expected_wallet_id {
+            return Err(api_error(
+                "wallet_selection_changed",
+                "The selected wallet changed. Retry in the current wallet.",
+            ));
+        }
+        let wallet_id = require_unlocked(&app, &state)?;
+        coordination_commands::require_receive_authority(&app, &WalletKind::Multisig)?;
+        let metadata = read_multisig_metadata(&app)?;
+        let mut db = open_multisig_db(&app)?;
+        let verifications = signer_policy_verification_rows(&db)?;
+        require_multisig_receive_readiness(network(), &metadata, &verifications)?;
+        let response = create_multisig_address(&mut db, &metadata, labels)?;
+        forget_core_mempool_snapshot(&state, wallet_id);
+        diagnostics::record(
+            &app,
+            &state,
+            diagnostics::DiagnosticEventKind::ReceiveAddressGenerated,
+            diagnostics::DiagnosticOutcome::Succeeded,
+            diagnostics::DiagnosticContext {
+                wallet_kind: Some(diagnostics::DiagnosticWalletKind::Multisig),
+                item_count: u32::try_from(response.labels.len()).ok(),
+                ..Default::default()
+            },
+            None,
+        );
+        Ok(response)
+    })
+    .await
+    .map_err(internal)?
+}
+
+pub(super) fn create_multisig_address(
+    db: &mut Connection,
+    metadata: &MultisigWalletDto,
+    raw_labels: Vec<String>,
+) -> ApiResult<ReceiveAddressDto> {
+    let labels = normalize_labels(raw_labels)?;
     let label = labels[0].clone();
-    let mut db = open_multisig_db(&app)?;
     let mut transaction = db.transaction().map_err(internal)?;
     let mut wallet = Wallet::load()
         .check_network(network())
         .load_wallet(&mut transaction)
         .map_err(internal)?
         .ok_or_else(|| api_error("wallet_not_found", "Multisig wallet database is empty."))?;
+    let taproot = metadata
+        .recovery_template
+        .as_ref()
+        .is_some_and(RecoveryTemplate::uses_taproot);
+    if matches!(
+        wallet.public_descriptor(KeychainKind::External),
+        Descriptor::Tr(_)
+    ) != taproot
+        || matches!(
+            wallet.public_descriptor(KeychainKind::Internal),
+            Descriptor::Tr(_)
+        ) != taproot
+    {
+        return Err(api_error(
+            "wallet_corrupt",
+            "The wallet database does not match the saved script policy.",
+        ));
+    }
+    if taproot {
+        verified_analysis(metadata)?;
+        if wallet.public_descriptor(KeychainKind::External).to_string()
+            != metadata.external_descriptor
+            || wallet.public_descriptor(KeychainKind::Internal).to_string()
+                != metadata.internal_descriptor
+        {
+            return Err(api_error(
+                "wallet_corrupt",
+                "The wallet database does not match the verified Taproot policy.",
+            ));
+        }
+    }
     let info = wallet.reveal_next_address(KeychainKind::External);
     enforce_recovery_gap(&transaction, info.index)?;
     let created = now();
@@ -1618,35 +1751,31 @@ pub async fn multisig_address_create(
     .map_err(internal)?;
     wallet.persist(&mut transaction).map_err(internal)?;
     transaction.commit().map_err(internal)?;
-    forget_core_mempool_snapshot(&state, wallet_id);
-    let response = ReceiveAddressDto {
+    Ok(ReceiveAddressDto {
         id: info.index,
-        testnet_alias: regtest_testnet_address_alias(&info.address.to_string()),
+        testnet_alias: if taproot {
+            None
+        } else {
+            regtest_testnet_address_alias(&info.address.to_string())
+        },
         address: info.address.to_string(),
         label,
         labels,
         created: created.to_string(),
         status: "awaiting".to_owned(),
-        derivation_path: format!("{}/0/{}", multisig_account_path(), info.index),
+        derivation_path: format!(
+            "{}/0/{}",
+            if taproot {
+                crate::multisig::taproot_continuity_account_path(network())
+            } else {
+                multisig_account_path()
+            },
+            info.index
+        ),
+        address_type: None,
         hardware_verified_at: None,
         hardware_verified_by: None,
-    };
-    diagnostics::record(
-        &app,
-        &state,
-        diagnostics::DiagnosticEventKind::ReceiveAddressGenerated,
-        diagnostics::DiagnosticOutcome::Succeeded,
-        diagnostics::DiagnosticContext {
-            wallet_kind: Some(diagnostics::DiagnosticWalletKind::Multisig),
-            item_count: u32::try_from(response.labels.len()).ok(),
-            ..Default::default()
-        },
-        None,
-    );
-    Ok(response)
     })
-    .await
-    .map_err(internal)?
 }
 
 pub(crate) fn claim_observed_receive_output(
@@ -1722,13 +1851,25 @@ pub(crate) fn claim_observed_receive_output(
     transaction.commit().map_err(internal)?;
     Ok(ReceiveAddressDto {
         id: index,
-        testnet_alias: regtest_testnet_address_alias(&address.to_string()),
+        testnet_alias: if output.txout.script_pubkey.is_p2tr() {
+            None
+        } else {
+            regtest_testnet_address_alias(&address.to_string())
+        },
         address: address.to_string(),
         labels,
         label,
         created: created.to_string(),
         status: "used".to_owned(),
-        derivation_path: format!("{}/0/{index}", multisig_account_path()),
+        derivation_path: format!(
+            "{}/0/{index}",
+            if output.txout.script_pubkey.is_p2tr() {
+                crate::multisig::taproot_continuity_account_path(network())
+            } else {
+                multisig_account_path()
+            }
+        ),
+        address_type: None,
         hardware_verified_at: None,
         hardware_verified_by: None,
     })

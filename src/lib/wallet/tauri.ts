@@ -173,6 +173,17 @@ function serializeMultisigSetupDraft(
   };
 }
 
+function nativeRecoveryTemplate(template: RecoveryTemplate) {
+  if (!('parents' in template)) return template;
+  return {
+    type: template.type,
+    parents: template.parents,
+    child_assistance: template.childAssistance,
+    child_inheritance: template.childInheritance,
+    executor_signer_id: template.executorSignerId
+  };
+}
+
 export class TauriWalletAdapter implements WalletPort {
   checkUpdate() {
     return invoke<import('./contracts').UpdateOffer | null>('update_check');
@@ -273,13 +284,15 @@ export class TauriWalletAdapter implements WalletPort {
     name: string,
     credential: string,
     _backupVerified: boolean,
-    networkSetupSourceWalletId?: string
+    networkSetupSourceWalletId?: string,
+    addressType?: import('./contracts').SoftwareAddressType
   ) {
     this.#generation++;
     return command<import('./contracts').SoftwareWalletCreation>('wallet_create', {
       name,
       credential,
-      networkSetupSourceWalletId
+      networkSetupSourceWalletId,
+      addressType
     });
   }
   verifyBackup(credential: string) {
@@ -288,9 +301,17 @@ export class TauriWalletAdapter implements WalletPort {
   revealAndVerifyBackup(credential: string) {
     return command<boolean>('wallet_reveal_and_verify_backup', { credential });
   }
-  recoverWallet(name: string, credential: string) {
+  recoverWallet(
+    name: string,
+    credential: string,
+    addressType?: import('./contracts').SoftwareAddressType,
+    expectedDescriptor?: string
+  ) {
     this.#generation++;
-    return command<void>('wallet_recover', { name, credential });
+    return command<void>('wallet_recover', { name, credential, addressType, expectedDescriptor });
+  }
+  softwareWalletDescriptor(expectedWalletId: string) {
+    return command<string>('wallet_software_descriptor', { expectedWalletId });
   }
   profileCompatibility() {
     return command<import('./contracts').WalletProfileCompatibility>(
@@ -799,8 +820,16 @@ export class TauriWalletAdapter implements WalletPort {
   previewMultisig(policy: PolicyDraft) {
     return command<MultisigPreview>('multisig_preview', { policy });
   }
-  analyzeRecoveryPolicy(template: RecoveryTemplate, cosigners: PolicyDraft['cosigners']) {
-    return command<RecoveryPolicyAnalysis>('recovery_policy_analyze', { template, cosigners });
+  analyzeRecoveryPolicy(
+    template: RecoveryTemplate,
+    cosigners: PolicyDraft['cosigners'],
+    walletName?: string
+  ) {
+    return command<RecoveryPolicyAnalysis>('recovery_policy_analyze', {
+      template: nativeRecoveryTemplate(template),
+      cosigners,
+      walletName
+    });
   }
   createMultisig(policy: PolicyDraft, credential: string, networkSetupSourceWalletId?: string) {
     this.#generation++;
@@ -815,15 +844,17 @@ export class TauriWalletAdapter implements WalletPort {
     template: RecoveryTemplate,
     cosigners: PolicyDraft['cosigners'],
     credential: string,
-    networkSetupSourceWalletId?: string
+    networkSetupSourceWalletId?: string,
+    expectedFirstAddress?: string
   ) {
     this.#generation++;
     return command<MultisigCreation>('multisig_recovery_create', {
       name,
-      template,
+      template: nativeRecoveryTemplate(template),
       cosigners,
       credential,
-      networkSetupSourceWalletId
+      networkSetupSourceWalletId,
+      expectedFirstAddress
     });
   }
   multisigWallet() {

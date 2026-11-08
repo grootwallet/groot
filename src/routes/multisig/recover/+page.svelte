@@ -291,7 +291,19 @@
       loadingLabel={translate($locale, 'Validating backup…')}
       onclick={inspect}><FileUp size={15} />{translate($locale, 'Validate backup')}</Button
     >
-    {#if drill}<div class="drill-result passed">
+    {#if drill}
+      {#if drill.taproot}
+        <WarningNotice
+          role="note"
+          icon
+          title={translate($locale, 'Taproot · Miniscript')}
+          body={translate(
+            $locale,
+            'Regtest rehearsal only. Keep this exact Groot JSON backup and the independent offline software signers that support Taproot Miniscript PSBTs.'
+          )}
+        />
+      {/if}
+      <div class="drill-result passed">
         <Check size={17} /><span
           ><strong>{translate($locale, 'Backup is valid')}</strong><small
             >{translate(

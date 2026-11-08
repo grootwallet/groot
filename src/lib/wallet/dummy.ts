@@ -1,5 +1,6 @@
 import { APP_VERSION, defaultConfig, transactionExplorerUrl } from '$lib/config';
 import type { ReceiveAddress, Transaction } from '$lib/types';
+import { combineDescriptorBranches } from '$lib/descriptors';
 import {
   addressPrefixForNetwork,
   canDiscardAddress,
@@ -19,6 +20,7 @@ import {
   type CoinSelectionPreview,
   type FeeEstimates,
   type PaymentProposal,
+  type SoftwareAddressType,
   type WalletEvent,
   type WalletPort,
   type WalletSnapshot
@@ -66,7 +68,26 @@ import {
 import type { PaymentDraft } from './payment-draft';
 import { pendingBalanceBreakdown, sortTransactions } from './presentation';
 
+const FIXTURE_MASTER_FINGERPRINT = '0fe7e3d2';
+
+function fixtureSoftwareDescriptor(branch: 0 | 1, addressType: SoftwareAddressType) {
+  const purpose = addressType === 'taproot' ? 86 : 84;
+  const wrapper = addressType === 'taproot' ? 'tr' : 'wpkh';
+  const mainnet = defaultConfig.network === 'mainnet';
+  const coin = mainnet ? 0 : 1;
+  const key = mainnet ? 'xpub-groot-demo' : 'tpub-groot-demo';
+  return `${wrapper}([${FIXTURE_MASTER_FINGERPRINT}/${purpose}'/${coin}'/0']${key}/${branch}/*)`;
+}
+
+function fixtureSoftwareMultipathDescriptor(addressType: SoftwareAddressType) {
+  return combineDescriptorBranches(
+    fixtureSoftwareDescriptor(0, addressType),
+    fixtureSoftwareDescriptor(1, addressType)
+  )!;
+}
+
 export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
+  private taprootAddresses = new Map<string, ReceiveAddress[]>();
   async checkUpdate(): Promise<import('./contracts').UpdateOffer | null> {
     if (sessionStorage.getItem('fixture-update-delay') === '1')
       await new Promise<void>((resolve) => {
@@ -316,7 +337,8 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     name: string,
     credential: string,
     backupVerified: boolean,
-    _networkSetupSourceWalletId?: string
+    _networkSetupSourceWalletId?: string,
+    addressType: SoftwareAddressType = 'nativeSegwit'
   ) {
     // Keep the browser adapter asynchronous enough to exercise the same
     // painted loading state as native profile encryption and persistence.
@@ -330,6 +352,8 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
       );
     if (utf8ByteLength(credential) > MAX_WALLET_PASSPHRASE_BYTES)
       throw new WalletError('invalid_credential', 'The wallet passphrase is too long.');
+    if (addressType === 'taproot' && !['regtest', 'testnet4'].includes(defaultConfig.network))
+      throw new WalletError('unsupported_operation', 'Taproot is unavailable on this network.');
     const profile = {
       id: crypto.randomUUID(),
       name: name.trim(),
@@ -344,17 +368,42 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     this._credentials.set(profile.id, credential);
     this._unlockedWalletIds.add(profile.id);
     this._exists = true;
+    if (addressType === 'taproot') this.taprootAddresses.set(profile.id, []);
     return {
-      masterFingerprint: '0fe7e3d2',
-      externalDescriptor: "wpkh([0fe7e3d2/84'/1'/0']tpub-groot-demo/0/*)#c4z9ljqv",
-      internalDescriptor: "wpkh([0fe7e3d2/84'/1'/0']tpub-groot-demo/1/*)#xkgxenf9",
+      masterFingerprint: FIXTURE_MASTER_FINGERPRINT,
+      externalDescriptor: fixtureSoftwareDescriptor(0, addressType),
+      internalDescriptor: fixtureSoftwareDescriptor(1, addressType),
       networkSetupCopied: true
     };
   }
-  async recoverWallet(_name: string, _credential: string) {
+  async recoverWallet(
+    _name: string,
+    _credential: string,
+    addressType: SoftwareAddressType = 'nativeSegwit',
+    expectedDescriptor?: string
+  ) {
+    if (
+      addressType === 'taproot' &&
+      expectedDescriptor !== fixtureSoftwareMultipathDescriptor(addressType)
+    )
+      throw new WalletError(
+        'invalid_descriptor',
+        'Enter the saved public Taproot descriptor to recover this wallet.'
+      );
     throw new WalletError(
       'secure_storage_unavailable',
       'Recovery words must be entered in Groot desktop’s native recovery window.'
+    );
+  }
+  async softwareWalletDescriptor(expectedWalletId: string) {
+    if (expectedWalletId !== this._selectedWalletId)
+      throw new WalletError('wallet_selection_changed', 'The selected wallet changed.');
+    const { profile, unlocked } = await this.session();
+    if (!unlocked) throw new WalletError('wallet_locked', 'Unlock this wallet first.');
+    if (profile.kind !== 'single_key')
+      throw new WalletError('wrong_wallet_kind', 'Select a software wallet first.');
+    return fixtureSoftwareMultipathDescriptor(
+      this.taprootAddresses.has(expectedWalletId) ? 'taproot' : 'nativeSegwit'
     );
   }
   async verifyBackup(credential: string) {
@@ -419,6 +468,7 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
       this._profiles = this._profiles.filter((wallet) => wallet.id !== this._selectedWalletId);
       this._credentials.delete(this._selectedWalletId);
       this._unlockedWalletIds.delete(this._selectedWalletId);
+      this.taprootAddresses.delete(this._selectedWalletId);
       if (this._selectedWalletId === this._multisigProfileId) {
         this._multisig = null;
         this._multisigCredential = '';
@@ -437,6 +487,7 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
       this._profiles = this._profiles.filter((wallet) => wallet.id !== this._selectedWalletId);
       this._credentials.delete(this._selectedWalletId);
       this._unlockedWalletIds.delete(this._selectedWalletId);
+      this.taprootAddresses.delete(this._selectedWalletId);
     }
     this._selectedWalletId = this._profiles[0]?.id ?? null;
     this._exists = this._profiles.length > 0;
@@ -833,7 +884,7 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
               ]
             : structuredClone(this._transactions),
       utxos: emptyWallet ? [] : snapshotCoins,
-      receiveAddresses: structuredClone(this._addresses),
+      receiveAddresses: structuredClone(this.taprootAddresses.get(walletId) ?? this._addresses),
       labelSuggestions: structuredClone(this._labelSuggestionsByWallet.get(walletId) ?? []),
       syncedAt: initialHistoryRequired
         ? null
@@ -894,32 +945,42 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
   async createAddress(rawLabels: string[]): Promise<ReceiveAddress> {
     const labels = rawLabels.map(normalizePermanentLabel);
     const label = labels[0];
-    const id = Math.max(8, ...this._addresses.map((address) => address.id)) + 1;
+    const walletId = this._selectedWalletId ?? '';
+    const taproot = this.taprootAddresses.has(walletId);
+    const addresses = this.taprootAddresses.get(walletId) ?? this._addresses;
+    const id = Math.max(taproot ? -1 : 8, ...addresses.map((address) => address.id)) + 1;
     const address: ReceiveAddress = {
       id,
-      address: `${addressPrefixForNetwork(defaultConfig.network)}qdummy${id.toString().padStart(4, '0')}5n8k2r7v4cx9s6jlawephgzuqf5t8ul`,
+      address: `${addressPrefixForNetwork(defaultConfig.network)}${taproot ? 'p' : 'q'}dummy${id.toString().padStart(4, '0')}5n8k2r7v4cx9s6jlawephgzuqf5t8ul`,
+      addressType: taproot ? 'taproot' : 'nativeSegwit',
       label,
       labels,
       created: 'Just now',
       status: 'awaiting',
-      derivationPath: `m/84'/1'/0'/0/${id}`
+      derivationPath: `m/${taproot ? 86 : 84}'/${defaultConfig.network === 'mainnet' ? 0 : 1}'/0'/0/${id}`
     };
-    this._addresses = [address, ...this._addresses];
+    if (taproot) this.taprootAddresses.set(walletId, [address, ...addresses]);
+    else this._addresses = [address, ...addresses];
     labels.forEach((item) => this.recordLabelUsage(item, 'receive'));
     return structuredClone(address);
   }
 
   async discardAddress(id: number): Promise<void> {
-    const address = this._addresses.find((item) => item.id === id);
+    const walletId = this._selectedWalletId ?? '';
+    const taproot = this.taprootAddresses.has(walletId);
+    const addresses = this.taprootAddresses.get(walletId) ?? this._addresses;
+    const address = addresses.find((item) => item.id === id);
     if (!address || !canDiscardAddress(address, false)) {
       throw new WalletError(
         'address_not_discardable',
         'Only an unused address awaiting payment can be discarded.'
       );
     }
-    this._addresses = this._addresses.map((address) =>
+    const updated: ReceiveAddress[] = addresses.map((address) =>
       address.id === id ? { ...address, status: 'discarded' } : address
     );
+    if (taproot) this.taprootAddresses.set(walletId, updated);
+    else this._addresses = updated;
   }
 
   async setCoinFrozen(outpoint: string, frozen: boolean) {
@@ -1860,12 +1921,21 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     template: RecoveryTemplate,
     cosigners: PolicyDraft['cosigners']
   ): Promise<RecoveryPolicyAnalysis> {
+    if (
+      template.type === 'partner_continuity_taproot_v1' ||
+      template.type === 'family_continuity_taproot_v1'
+    ) {
+      throw new WalletError(
+        'unsupported_wallet_policy',
+        'Taproot Continuity is available only for isolated Regtest rehearsal.'
+      );
+    }
     const paths: import('./contracts').TimedSpendingPath[] =
       template.type === 'recovery'
         ? [{ ...template.immediate, availableAfterBlocks: 0 }, template.recovery]
         : template.type === 'decaying' || template.type === 'expanding'
           ? template.stages
-          : template.type === 'partner_continuity_v1'
+          : 'owner' in template
             ? [
                 { ...template.owner, availableAfterBlocks: 0 },
                 { ...template.partner, availableAfterBlocks: 13_140 },

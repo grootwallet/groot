@@ -318,6 +318,9 @@
     verifyError = $state(''),
     verifying = $state(false),
     revealingBackup = $state(false);
+  let softwareDescriptor = $state('');
+  let softwareDescriptorError = $state('');
+  let softwareDescriptorLoading = $state(false);
   let hardwareBackupOpen = $state(false),
     descriptorDetailsOpen = $state(false),
     hardwareBackupPin = $state(''),
@@ -359,6 +362,13 @@
   const settingsActions = createSettingsActions(() => walletShell.selectedWalletId());
   const settingsAction = settingsActions.begin;
   const invalidateAction = settingsActions.invalidate;
+  $effect(() => {
+    walletShell.selectedWalletId();
+    invalidateAction('softwareDescriptor');
+    softwareDescriptor = '';
+    softwareDescriptorError = '';
+    softwareDescriptorLoading = false;
+  });
 
   async function pollSyncStatus() {
     if (destroyed || !walletUnlocked) return;
@@ -595,6 +605,7 @@
     syncCredential = '';
     scanCredential = '';
     verifyCredential = '';
+    softwareDescriptor = '';
     hardwareBackupPin = '';
     hardwareBackup = '';
     hardwareBackupContent = '';
@@ -1358,6 +1369,31 @@
       }
     }
   }
+  async function showSoftwareDescriptor() {
+    const walletId = selectedWalletId;
+    if (!walletId || softwareDescriptorLoading) return;
+    const current = settingsAction('softwareDescriptor');
+    softwareDescriptorLoading = true;
+    softwareDescriptorError = '';
+    try {
+      const descriptor = await walletService.softwareWalletDescriptor(walletId);
+      if (current()) softwareDescriptor = descriptor;
+    } catch (cause) {
+      if (!current()) return;
+      softwareDescriptorError = localizedError(
+        cause,
+        $locale,
+        'Could not prepare the public descriptor.'
+      );
+      toast({
+        title: 'Could not prepare the public descriptor.',
+        description: softwareDescriptorError,
+        tone: 'danger'
+      });
+    } finally {
+      if (current()) softwareDescriptorLoading = false;
+    }
+  }
   async function prepareHardwareBackup() {
     const current = settingsAction('hardwareBackup');
     exportingHardwareBackup = true;
@@ -1676,7 +1712,30 @@
                 >{translate($locale, 'Save a watch-only backup for independent recovery.')}</small
               ></span
             ><ChevronRight size={16} /></button
-          >{/if}
+          >{:else if isSoftwareWallet}
+          <button
+            onclick={showSoftwareDescriptor}
+            disabled={softwareDescriptorLoading}
+            aria-busy={softwareDescriptorLoading}
+          >
+            <span class="setting-icon"><FileKey size={18} /></span>
+            <span>
+              <strong>{translate($locale, 'Public wallet descriptor')}</strong>
+              <small>
+                {translate(
+                  $locale,
+                  softwareDescriptorLoading
+                    ? 'Preparing…'
+                    : 'View and copy the receive and change descriptor.'
+                )}
+              </small>
+            </span>
+            <ChevronRight size={16} />
+          </button>
+          {#if softwareDescriptorError}
+            <WarningNotice tone="danger" icon role="alert" body={softwareDescriptorError} />
+          {/if}
+        {/if}
         <button
           onclick={() => {
             labelInterchangeOpen = true;
@@ -2451,6 +2510,17 @@
     </div>
   {/if}
 </Modal>
+<IdentifierDetailsModal
+  open={walletUnlocked && Boolean(softwareDescriptor)}
+  value={softwareDescriptor}
+  title={translate($locale, 'Public wallet descriptor')}
+  description={translate(
+    $locale,
+    'Keep this public descriptor with your recovery backup. It reveals wallet activity.'
+  )}
+  label={translate($locale, 'Descriptor')}
+  onclose={() => (softwareDescriptor = '')}
+/>
 <IdentifierDetailsModal
   open={descriptorDetailsOpen}
   value={hardwareBackup}

@@ -15,7 +15,7 @@
 ## Required cases
 
 - Create/recover/unlock/lock/delete: wrong credentials, backup requirements, interruption and other-wallet preservation.
-- Receive: atomic permanent labels, unused-only discard, recovery gap, exact device identity and address proof.
+- Receive: atomic permanent labels, unused-only discard, recovery gap, exact device identity and address proof. [Taproot verification](testing/taproot-receiving.md) covers software descriptor identity, funded Core recovery and spend, responsive checks and the separate Testnet4 rehearsal.
 - Send/acceleration: PSBT-derived review, canonical inputs, validated signatures, freeze/eligibility, confirmation races and resumable proposals. Compile Mainnet policy (`GROOT_BUILD_NETWORK=multi`) and verify payments around/above the former 1,000,000-sat boundary, final fee protection, Bitcoin supply bounds, invalid fee-child rejection and specific EN/FR/ES errors (ADR 0099).
 - Sync: exact network/genesis, consent, bounded failures, no silent fallback, atomic results, cancellation, reorg and restart.
 - UI: durable results plus toast, loading/empty/offline states, 1180×780 and 390×844, both themes, translated copy and keyboard-safe spacing.

@@ -74,7 +74,12 @@ export function findDuplicateCosigner(
   return null;
 }
 
-export function validatePolicyDraft(draft: PolicyDraft): string[] {
+export const TAPROOT_CONTINUITY_ACCOUNT_PATH = "m/48'/1'/0'/3'";
+
+export function validatePolicyDraft(
+  draft: PolicyDraft,
+  expectedDerivationPath = MULTISIG_ACCOUNT_PATH
+): string[] {
   const errors: string[] = [];
   const cosigners = draft.cosigners.map(normalizeCosigner);
   if (!draft.name.trim()) errors.push('A wallet name is required.');
@@ -95,8 +100,8 @@ export function validatePolicyDraft(draft: PolicyDraft): string[] {
     errors.push('Signer labels must be 48 characters or fewer.');
   if (cosigners.some((cosigner) => !/^[0-9a-f]{8}$/.test(cosigner.fingerprint)))
     errors.push('Every master fingerprint must contain 8 hexadecimal characters.');
-  if (cosigners.some((cosigner) => cosigner.derivationPath !== MULTISIG_ACCOUNT_PATH))
-    errors.push(`Every v1 key must use ${MULTISIG_ACCOUNT_PATH}.`);
+  if (cosigners.some((cosigner) => cosigner.derivationPath !== expectedDerivationPath))
+    errors.push(`Every v1 key must use ${expectedDerivationPath}.`);
   const validAccountKey =
     defaultConfig.network === 'mainnet' ? /^(xpub|ypub|zpub)/ : /^(tpub|upub|vpub)/;
   if (cosigners.some((cosigner) => !validAccountKey.test(cosigner.xpub)))

@@ -318,9 +318,12 @@ pub async fn wallet_create(
     name: String,
     credential: String,
     network_setup_source_wallet_id: Option<String>,
+    address_type: Option<SoftwareAddressType>,
 ) -> ApiResult<SoftwareWalletCreation> {
     let credential = Zeroizing::new(credential);
     require_software_key_operation()?;
+    let address_type = address_type.unwrap_or_default();
+    address_type.require_supported(network(), cfg!(target_os = "macos"))?;
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<AppState>();
 
@@ -348,15 +351,18 @@ pub async fn wallet_create(
         let master_fingerprint =
             software_wallet_master_fingerprint(&mnemonic, credential.as_str())?;
         let authenticated_descriptors =
-            software_wallet_descriptors(&mnemonic, credential.as_str())?;
+            software_wallet_descriptors(&mnemonic, credential.as_str(), address_type)?;
         let network_setup_copied = match create_from_mnemonic(
             &app,
             &state,
-            name,
             mnemonic,
-            credential.as_str(),
-            pending.backup_verified,
-            network_setup_source_wallet_id.as_deref(),
+            SoftwareWalletSetup {
+                name: &name,
+                credential: credential.as_str(),
+                backup_verified: pending.backup_verified,
+                network_setup_source_wallet_id: network_setup_source_wallet_id.as_deref(),
+                descriptors: &authenticated_descriptors,
+            },
         ) {
             Ok(network_setup_copied) => network_setup_copied,
             Err(error) => {
@@ -394,9 +400,36 @@ pub async fn wallet_create(
 }
 
 #[tauri::command]
-pub async fn wallet_recover(app: AppHandle, name: String, credential: String) -> ApiResult<()> {
+pub async fn wallet_recover(
+    app: AppHandle,
+    name: String,
+    credential: String,
+    address_type: Option<SoftwareAddressType>,
+    expected_descriptor: Option<String>,
+) -> ApiResult<()> {
     let credential = Zeroizing::new(credential);
     require_software_key_operation()?;
+    let address_type = address_type.unwrap_or_default();
+    address_type.require_supported(network(), cfg!(target_os = "macos"))?;
+    if expected_descriptor
+        .as_ref()
+        .is_some_and(|value| value.len() > MAX_SOFTWARE_RECOVERY_DESCRIPTOR_BYTES)
+    {
+        return Err(api_error(
+            "backup_mismatch",
+            "The recovery details do not match the saved public wallet descriptor.",
+        ));
+    }
+    if address_type == SoftwareAddressType::Taproot
+        && expected_descriptor
+            .as_deref()
+            .is_none_or(|value| value.trim().is_empty())
+    {
+        return Err(api_error(
+            "invalid_descriptor",
+            "Enter the saved public Taproot descriptor to recover this wallet.",
+        ));
+    }
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<AppState>();
 
@@ -421,15 +454,23 @@ pub async fn wallet_recover(app: AppHandle, name: String, credential: String) ->
             ));
         }
         let authenticated_descriptors =
-            software_wallet_descriptors(&mnemonic, credential.as_str())?;
+            software_wallet_descriptors(&mnemonic, credential.as_str(), address_type)?;
+        validate_software_recovery_descriptor(
+            address_type,
+            expected_descriptor.as_deref(),
+            &authenticated_descriptors,
+        )?;
         create_from_mnemonic(
             &app,
             &state,
-            name,
             mnemonic,
-            credential.as_str(),
-            true,
-            None,
+            SoftwareWalletSetup {
+                name: &name,
+                credential: credential.as_str(),
+                backup_verified: true,
+                network_setup_source_wallet_id: None,
+                descriptors: &authenticated_descriptors,
+            },
         )?;
         let selected = selected_profile_of_kind(&app, WalletKind::SingleKey)?.id;
         state
@@ -592,10 +633,27 @@ pub async fn wallet_unlock(app: AppHandle, credential: String) -> ApiResult<()> 
         let state = app.state::<AppState>();
         let _operation = operation_guard(&state)?;
         check_auth_throttle(&app, &state)?;
-        let result = match selected_profile(&app)?.kind {
+        let profile = selected_profile(&app)?;
+        let result = match profile.kind {
             WalletKind::SingleKey => {
                 decrypt_mnemonic(&app, credential.as_str()).and_then(|mnemonic| {
-                    software_wallet_descriptors(&mnemonic, credential.as_str()).map(Some)
+                    // Mainnet remains BIP84 and keeps its existing pre-admission behavior.
+                    if network() == Network::Bitcoin {
+                        return software_wallet_descriptors(
+                            &mnemonic,
+                            credential.as_str(),
+                            SoftwareAddressType::NativeSegwit,
+                        )
+                        .map(Some);
+                    }
+                    let stored = profile_descriptor_pair(&app, &profile)?;
+                    authenticated_software_wallet_descriptors(
+                        &profile,
+                        &stored,
+                        &mnemonic,
+                        credential.as_str(),
+                    )
+                    .map(Some)
                 })
             }
             WalletKind::Multisig => {
@@ -632,6 +690,33 @@ pub async fn wallet_unlock(app: AppHandle, credential: String) -> ApiResult<()> 
             None,
         );
         Ok(())
+    })
+    .await
+    .map_err(internal)?
+}
+
+#[tauri::command]
+pub async fn wallet_software_descriptor(
+    app: AppHandle,
+    expected_wallet_id: Uuid,
+) -> ApiResult<String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let _operation = operation_guard(&state)?;
+        require_wallet_read_context(&app, &state, expected_wallet_id, None)?;
+        selected_profile_of_kind(&app, WalletKind::SingleKey)?;
+        let descriptors = state
+            .authenticated_software_descriptors
+            .lock()
+            .map_err(internal)?;
+        let (external, internal_descriptor) =
+            descriptors.get(&expected_wallet_id).ok_or_else(|| {
+                api_error(
+                    "wallet_locked",
+                    "Unlock the software wallet before viewing its descriptor.",
+                )
+            })?;
+        software_multipath_descriptor(external, internal_descriptor)
     })
     .await
     .map_err(internal)?
@@ -870,52 +955,16 @@ pub async fn address_create(app: AppHandle, labels: Vec<String>) -> ApiResult<Re
         let state = app.state::<AppState>();
         let _operation = operation_guard(&state)?;
         if load_registry(&app)?.selected_wallet_id != expected_wallet_id {
-            return Err(api_error("wallet_selection_changed", "The selected wallet changed. Retry in the current wallet."));
+            return Err(api_error(
+                "wallet_selection_changed",
+                "The selected wallet changed. Retry in the current wallet.",
+            ));
         }
         let wallet_id = require_unlocked(&app, &state)?;
         coordination_commands::require_receive_authority(&app, &selected_profile(&app)?.kind)?;
-        let labels = normalize_labels(labels)?;
-        let label = labels[0].clone();
         let mut db = open_db(&app)?;
-        let mut transaction = db.transaction().map_err(internal)?;
-        let mut wallet = Wallet::load()
-            .check_network(network())
-            .load_wallet(&mut transaction)
-            .map_err(internal)?
-            .ok_or_else(|| api_error("wallet_not_found", "Wallet database is empty."))?;
-        let info = wallet.reveal_next_address(KeychainKind::External);
-        enforce_recovery_gap(&transaction, info.index)?;
-        let created = now();
-        transaction
-            .execute(
-                "INSERT INTO groot_addresses (idx, address, label, created_at, state) VALUES (?1, ?2, ?3, ?4, 'awaiting')",
-                params![info.index, info.address.to_string(), label, created],
-            )
-            .map_err(internal)?;
-        label_provenance::assign_labels(
-            &transaction,
-            &labels,
-            LabelOrigin::Receive,
-            "address",
-            &info.index.to_string(),
-            created,
-        )
-        .map_err(internal)?;
-        wallet.persist(&mut transaction).map_err(internal)?;
-        transaction.commit().map_err(internal)?;
+        let response = create_labeled_software_receive(&mut db, labels)?;
         forget_core_mempool_snapshot(&state, wallet_id);
-        let response = ReceiveAddressDto {
-            id: info.index,
-            testnet_alias: regtest_testnet_address_alias(&info.address.to_string()),
-            address: info.address.to_string(),
-            label,
-            labels,
-            created: created.to_string(),
-            status: "awaiting".to_owned(),
-            derivation_path: format!("{}/0/{}", singlesig_account_path(), info.index),
-            hardware_verified_at: None,
-            hardware_verified_by: None,
-        };
         diagnostics::record(
             &app,
             &state,
@@ -932,6 +981,59 @@ pub async fn address_create(app: AppHandle, labels: Vec<String>) -> ApiResult<Re
     })
     .await
     .map_err(internal)?
+}
+
+pub(super) fn create_labeled_software_receive(
+    db: &mut Connection,
+    labels: Vec<String>,
+) -> ApiResult<ReceiveAddressDto> {
+    let labels = normalize_labels(labels)?;
+    let label = labels[0].clone();
+    let mut transaction = db.transaction().map_err(internal)?;
+    let mut wallet = load_wallet_transaction(&mut transaction)?;
+    let info = wallet.reveal_next_address(KeychainKind::External);
+    enforce_recovery_gap(&transaction, info.index)?;
+    let address_type = match info.address.address_type() {
+        Some(AddressType::P2tr) => SoftwareAddressType::Taproot,
+        Some(AddressType::P2wpkh) => SoftwareAddressType::NativeSegwit,
+        _ => return Err(internal("Unexpected software receive address type.")),
+    };
+    let address = info.address.to_string();
+    let created = now();
+    transaction
+        .execute(
+            "INSERT INTO groot_addresses (idx, address, label, created_at, state) VALUES (?1, ?2, ?3, ?4, 'awaiting')",
+            params![info.index, address, label, created],
+        )
+        .map_err(internal)?;
+    label_provenance::assign_labels(
+        &transaction,
+        &labels,
+        LabelOrigin::Receive,
+        "address",
+        &info.index.to_string(),
+        created,
+    )
+    .map_err(internal)?;
+    wallet.persist(&mut transaction).map_err(internal)?;
+    transaction.commit().map_err(internal)?;
+    Ok(ReceiveAddressDto {
+        id: info.index,
+        testnet_alias: if address_type == SoftwareAddressType::NativeSegwit {
+            regtest_testnet_address_alias(&address)
+        } else {
+            None
+        },
+        address,
+        label,
+        labels,
+        created: created.to_string(),
+        status: "awaiting".to_owned(),
+        derivation_path: format!("{}/0/{}", address_type.account_path(network()), info.index),
+        address_type: Some(address_type),
+        hardware_verified_at: None,
+        hardware_verified_by: None,
+    })
 }
 
 #[tauri::command]

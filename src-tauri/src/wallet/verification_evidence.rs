@@ -1,6 +1,9 @@
 use super::*;
 
-pub(super) fn address_rows(db: &Connection, multisig: bool) -> ApiResult<Vec<ReceiveAddressDto>> {
+pub(super) fn address_rows(
+    db: &Connection,
+    multisig_account_path: Option<&str>,
+) -> ApiResult<Vec<ReceiveAddressDto>> {
     let mut statement = db
         .prepare(
             "SELECT a.idx, a.address, a.label, a.created_at, a.state,
@@ -29,9 +32,26 @@ pub(super) fn address_rows(db: &Connection, multisig: bool) -> ApiResult<Vec<Rec
                     row.get(5)?,
                     row.get(6)?,
                 );
+            let address_kind = Address::from_str(&address)
+                .ok()
+                .and_then(|address| address.require_network(network()).ok())
+                .and_then(|address| address.address_type());
+            let address_type = if multisig_account_path.is_some() {
+                None
+            } else {
+                match address_kind {
+                    Some(AddressType::P2tr) => Some(SoftwareAddressType::Taproot),
+                    Some(AddressType::P2wpkh) => Some(SoftwareAddressType::NativeSegwit),
+                    _ => None,
+                }
+            };
             Ok(ReceiveAddressDto {
                 id: row.get(0)?,
-                testnet_alias: regtest_testnet_address_alias(&address),
+                testnet_alias: if address_kind == Some(AddressType::P2tr) {
+                    None
+                } else {
+                    regtest_testnet_address_alias(&address)
+                },
                 address,
                 label: row.get(2)?,
                 labels: label_provenance::labels_for_subject(
@@ -44,11 +64,14 @@ pub(super) fn address_rows(db: &Connection, multisig: bool) -> ApiResult<Vec<Rec
                 .collect(),
                 created: row.get::<_, u64>(3)?.to_string(),
                 status: row.get(4)?,
-                derivation_path: if multisig {
-                    format!("{}/0/{}", multisig_account_path(), row.get::<_, u32>(0)?)
-                } else {
-                    format!("{}/0/{}", singlesig_account_path(), row.get::<_, u32>(0)?)
-                },
+                derivation_path: format!(
+                    "{}/0/{}",
+                    multisig_account_path.unwrap_or_else(|| address_type
+                        .unwrap_or_default()
+                        .account_path(network())),
+                    row.get::<_, u32>(0)?
+                ),
+                address_type,
                 hardware_verified_at,
                 hardware_verified_by,
             })
@@ -81,7 +104,7 @@ pub(super) fn record_address_verification(
         )
         .map_err(internal)?;
     transaction.commit().map_err(internal)?;
-    address_rows(db, multisig)?
+    address_rows(db, multisig.then(multisig_account_path))?
         .into_iter()
         .find(|address| address.id == address_id)
         .ok_or_else(|| internal("Verified address disappeared from wallet storage."))

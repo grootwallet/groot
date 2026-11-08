@@ -48,13 +48,13 @@ export type RecoveryTemplate =
   | { type: 'decaying'; stages: TimedSpendingPath[] }
   | { type: 'expanding'; stages: TimedSpendingPath[] }
   | {
-      type: 'partner_continuity_v1';
+      type: 'partner_continuity_v1' | 'partner_continuity_taproot_v1';
       owner: SpendingPath;
       partner: SpendingPath;
       estate: SpendingPath;
     }
   | {
-      type: 'family_continuity_v1';
+      type: 'family_continuity_v1' | 'family_continuity_taproot_v1';
       parents: SpendingPath;
       childAssistance: SpendingPath;
       childInheritance: SpendingPath;
@@ -66,6 +66,8 @@ export type RecoveryPolicyAnalysis = {
   paths: TimedSpendingPath[];
   warnings: { code: string; message: string }[];
   maxSatisfactionWeight: number;
+  encodedBackup?: string;
+  firstAddress?: string;
 };
 export type RecoveryDrill = {
   firstAddress: string;
@@ -74,6 +76,7 @@ export type RecoveryDrill = {
   cosigners?: CosignerDraft[];
   policyType?: MultisigWallet['policyType'];
   policyPaths?: PolicyPathDefinition[];
+  taproot?: boolean;
 };
 
 export type MultisigSetupStage = 'policy' | 'keys' | 'review' | 'backup';
@@ -84,6 +87,7 @@ export type MultisigSetupDraft = {
   version: 1;
   stage: MultisigSetupStage;
   templateKind: MultisigSetupTemplate;
+  taproot?: boolean;
   recoveryDelayBlocks?: number;
   standardRecipe: MultisigSetupRecipe;
   customCosignerCount: number;

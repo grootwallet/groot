@@ -8,6 +8,13 @@ import type {
 
 const UNIX_SECONDS_PATTERN = /^\d{1,20}$/;
 
+export function isTaprootContinuityTemplate(template?: RecoveryTemplate): boolean {
+  return (
+    template?.type === 'partner_continuity_taproot_v1' ||
+    template?.type === 'family_continuity_taproot_v1'
+  );
+}
+
 /** Convert the UI's display timestamp to the native draft's canonical Unix seconds. */
 export function multisigVerificationTimestampForStorage(value: string): string | null {
   const timestamp = value.trim();
@@ -39,14 +46,15 @@ export function multisigSetupSignerTarget(draft: MultisigSetupDraft): number {
 export function multisigSetupRecoveryTemplate(
   templateKind: MultisigSetupTemplate,
   cosigners: CosignerDraft[],
-  recoveryDelayBlocks = 4_320
+  recoveryDelayBlocks = 4_320,
+  taproot = false
 ): RecoveryTemplate | null {
   const ids = cosigners.map((key) => key.id);
   if (templateKind === 'standard') return null;
   if (templateKind === 'partner_continuity_v1') {
     if (ids.length < 8) return null;
     return {
-      type: 'partner_continuity_v1',
+      type: taproot ? 'partner_continuity_taproot_v1' : 'partner_continuity_v1',
       owner: { threshold: 2, signerIds: ids.slice(0, 3) },
       partner: { threshold: 2, signerIds: ids.slice(3, 5) },
       estate: { threshold: 2, signerIds: ids.slice(5, 8) }
@@ -55,7 +63,7 @@ export function multisigSetupRecoveryTemplate(
   if (templateKind === 'family_continuity_v1') {
     if (ids.length < 7) return null;
     return {
-      type: 'family_continuity_v1',
+      type: taproot ? 'family_continuity_taproot_v1' : 'family_continuity_v1',
       parents: { threshold: 2, signerIds: ids.slice(0, 2) },
       childAssistance: { threshold: 1, signerIds: ids.slice(2, 4) },
       childInheritance: { threshold: 2, signerIds: ids.slice(4, 6) },

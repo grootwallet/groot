@@ -27,6 +27,7 @@
   import UrQrScanner from '$lib/components/UrQrScanner.svelte';
   import { formatInteger, locale } from '$lib/i18n';
   import { defaultConfig, networkName } from '$lib/config';
+  import ReadableAddress from '$lib/components/ReadableAddress.svelte';
   import FieldCounter from '$lib/components/FieldCounter.svelte';
   import HardwareActionPrompt from '$lib/components/HardwareActionPrompt.svelte';
   import HardwareDeviceList from '$lib/components/HardwareDeviceList.svelte';
@@ -60,6 +61,7 @@
   import {
     findDuplicateCosigner,
     MULTISIG_ACCOUNT_PATH,
+    TAPROOT_CONTINUITY_ACCOUNT_PATH,
     normalizeSignerLabel,
     validatePolicyDraft,
     type CosignerDraft,
@@ -216,6 +218,21 @@
   let reviewAttempted = $state(false);
   let draftReady = $state(false);
   let hasDraft = $state(false);
+  let rehearsalDraft = $state(false);
+  let taprootSetupAvailable = $state(false);
+  let taprootSelected = $state(false);
+  let taprootBackup = $state('');
+  let taprootFirstAddress = $state('');
+  let confirmedTaprootAddress = $state('');
+  let fixedTemplate = $derived(
+    templateKind === 'partner_continuity_v1' || templateKind === 'family_continuity_v1'
+  );
+  let signerAccountPath = $derived(
+    taprootSelected ? TAPROOT_CONTINUITY_ACCOUNT_PATH : MULTISIG_ACCOUNT_PATH
+  );
+  let taprootAddressMatches = $derived(
+    Boolean(taprootFirstAddress) && confirmedTaprootAddress.trim() === taprootFirstAddress
+  );
   let discardDraftOpen = $state(false);
   let discardDraftError = $state('');
   let discardingDraft = $state(false);
@@ -244,7 +261,7 @@
     cosigners.some((signer) => signer.deviceType === 'groot-mobile')
   );
   const errors = $derived([
-    ...validatePolicyDraft(policy),
+    ...validatePolicyDraft(policy, signerAccountPath),
     ...(cosigners.length !== requiredKeys
       ? [
           translate($locale, '{subject} needs exactly {count} signers.', {
@@ -287,7 +304,12 @@
     return [...errors.filter((item) => !countErrors.has(item)), countGuidance].map(signerLanguage);
   });
   const recoveryTemplate = $derived.by<RecoveryTemplate | null>(() => {
-    return multisigSetupRecoveryTemplate(templateKind, cosigners, recoveryDelayBlocks);
+    return multisigSetupRecoveryTemplate(
+      templateKind,
+      cosigners,
+      recoveryDelayBlocks,
+      taprootSelected
+    );
   });
   const combinedDescriptor = $derived(
     preview
@@ -341,6 +363,7 @@
       version: 1,
       stage,
       templateKind,
+      taproot: taprootSelected || undefined,
       recoveryDelayBlocks,
       standardRecipe: recipeForDraft(),
       customCosignerCount,
@@ -438,10 +461,16 @@
     const restoredTemplate = multisigSetupRecoveryTemplate(
       draft.templateKind,
       draft.cosigners,
-      draft.recoveryDelayBlocks
+      draft.recoveryDelayBlocks,
+      draft.taproot
     );
     if (!restoredTemplate) return;
-    const analysis = await walletService.analyzeRecoveryPolicy(restoredTemplate, draft.cosigners);
+    const analysis = await walletService.analyzeRecoveryPolicy(
+      restoredTemplate,
+      draft.cosigners,
+      draft.taproot ? draft.name : undefined
+    );
+    if (draft.taproot) setTaprootBackup(analysis);
     preview = {
       name: draft.name,
       threshold: 2,
@@ -458,6 +487,7 @@
     stage = draft.stage;
     policyStep = draft.stage === 'policy' ? 'configure' : 'choose';
     templateKind = draft.templateKind;
+    taprootSelected = draft.taproot === true;
     if (draft.templateKind !== 'standard' && defaultConfig.network === 'mainnet') {
       stage = 'policy';
       policyStep = 'choose';
@@ -487,6 +517,8 @@
     stage = 'policy';
     policyStep = 'choose';
     templateKind = 'standard';
+    taprootSelected = false;
+    taprootBackup = taprootFirstAddress = confirmedTaprootAddress = '';
     standardRecipe = '2of3';
     customCosignerCount = 3;
     saved = false;
@@ -513,6 +545,7 @@
       await walletService.discardMultisigSetupDraft();
       lastDraftFingerprint = '';
       hasDraft = false;
+      rehearsalDraft = false;
       discardDraftOpen = false;
       discardDraftError = '';
       resetSetupState();
@@ -531,7 +564,17 @@
 
   onMount(async () => {
     try {
-      const draft = await walletService.multisigSetupDraft();
+      const [draft, runtime] = await Promise.all([
+        walletService.multisigSetupDraft(),
+        walletService.runtimePlatform().catch(() => null)
+      ]);
+      taprootSetupAvailable =
+        runtime?.network === 'regtest' && runtime.platform !== 'browser' && !runtime.mobile;
+      if (draft?.taproot && !taprootSetupAvailable) {
+        hasDraft = true;
+        rehearsalDraft = true;
+        return;
+      }
       if (draft) {
         applySetupDraft(draft);
         await previewRestoredDraft(draft);
@@ -562,7 +605,7 @@
   });
 
   $effect(() => {
-    if (!draftReady || discardingDraft) return;
+    if (!draftReady || discardingDraft || rehearsalDraft) return;
     const draft = currentSetupDraft();
     if (!isMeaningfulMultisigSetupDraft(draft)) return;
     const fingerprint = JSON.stringify(draft);
@@ -779,6 +822,10 @@
   }
 
   function chooseTemplate(next: MultisigSetupDraft['templateKind']) {
+    if (taprootSelected && next === 'standard') {
+      if (cosigners.length) return;
+      taprootSelected = false;
+    }
     templateKind = next;
     if (next !== 'standard') threshold = 2;
     else applyStandardRecipe(standardRecipe);
@@ -819,13 +866,17 @@
   }
 
   function addKey() {
+    if (taprootSelected && !xpub.trim().startsWith('tpub')) {
+      keyError = translate($locale, 'Enter a public test-network account key beginning with tpub.');
+      return;
+    }
     const candidate: CosignerDraft = {
       id: crypto.randomUUID(),
       label,
       fingerprint,
       xpub,
-      derivationPath: MULTISIG_ACCOUNT_PATH,
-      source
+      derivationPath: signerAccountPath,
+      source: taprootSelected ? 'manual' : source
     };
     if (!appendCosigner(candidate, (message) => (keyError = message))) return;
     label = '';
@@ -981,6 +1032,13 @@
     };
   }
 
+  function setTaprootBackup(analysis: { encodedBackup?: string; firstAddress?: string }) {
+    if (!analysis.encodedBackup || !analysis.firstAddress)
+      throw new Error(translate($locale, 'Groot could not prepare the Taproot recovery backup.'));
+    taprootBackup = analysis.encodedBackup;
+    taprootFirstAddress = analysis.firstAddress;
+  }
+
   async function saveDescriptorDraft() {
     if (!preview || savingDescriptor) return;
     savingDescriptor = true;
@@ -990,11 +1048,13 @@
       preview.internalDescriptor
     );
     try {
-      if (!portable) throw new Error('The wallet descriptor could not be combined.');
-      const content = `${portable}\n`;
+      if (taprootSelected && (!taprootBackup || (!saved && !taprootAddressMatches))) return;
+      if (!taprootSelected && !portable)
+        throw new Error('The wallet descriptor could not be combined.');
+      const baseName = safeTransferFilename(preview.name);
       const savedBackup = await walletService.savePublicBackup(
-        `${safeTransferFilename(preview.name)}-descriptors.txt`,
-        content
+        taprootSelected ? `${baseName}-taproot-backup.json` : `${baseName}-descriptors.txt`,
+        taprootSelected ? taprootBackup : `${portable}\n`
       );
       if (savedBackup.saved) {
         saved = true;
@@ -1265,7 +1325,16 @@
     try {
       const previousDescriptor = preview?.externalDescriptor;
       if (recoveryTemplate) {
-        const analysis = await walletService.analyzeRecoveryPolicy(recoveryTemplate, cosigners);
+        const analysis = await walletService.analyzeRecoveryPolicy(
+          recoveryTemplate,
+          cosigners,
+          taprootSelected ? name : undefined
+        );
+        if (taprootSelected) {
+          setTaprootBackup(analysis);
+          saved = false;
+          confirmedTaprootAddress = '';
+        }
         preview = {
           name: name.trim(),
           threshold: 2,
@@ -1306,6 +1375,7 @@
 
   async function create() {
     if (templateKind !== 'standard' && defaultConfig.network === 'mainnet') return;
+    if (taprootSelected && (!taprootSetupAvailable || !taprootBackup)) return;
     if (
       !preview ||
       !saved ||
@@ -1321,7 +1391,14 @@
     try {
       await flushCurrentDraft();
       if (recoveryTemplate) {
-        await walletService.createRecoveryMultisig(name, recoveryTemplate, cosigners, credential);
+        await walletService.createRecoveryMultisig(
+          name,
+          recoveryTemplate,
+          cosigners,
+          credential,
+          undefined,
+          taprootSelected ? confirmedTaprootAddress.trim() || taprootFirstAddress : undefined
+        );
       } else {
         await walletService.createMultisig(policy, credential);
       }
@@ -1426,7 +1503,10 @@
           aria-label={translate($locale, 'Recover from backup')}
           ><FileUp size={15} />{translate($locale, 'Recover')}</a
         >{/if}<span class="network-chip"
-        >{networkName(defaultConfig.network)} · {translate($locale, 'Native SegWit')}</span
+        >{networkName(defaultConfig.network)} · {translate(
+          $locale,
+          taprootSelected ? 'Taproot' : 'Native SegWit'
+        )}</span
       >
     </div>
   </header>
@@ -1451,6 +1531,16 @@
         label={translate($locale, 'Restoring multisig setup')}
       />
     </section>
+  {:else if rehearsalDraft}
+    <WarningNotice
+      role="note"
+      icon
+      title={translate($locale, 'Taproot · Miniscript')}
+      body={translate(
+        $locale,
+        'This saved Taproot setup is for isolated Regtest rehearsal. To start a new wallet, first discard this setup.'
+      )}
+    />
   {:else if stage === 'policy'}
     <div class="coordinator-grid policy-only-grid">
       <section class="form-card coordinator-main policy-setup-card">
@@ -1467,6 +1557,7 @@
             <button
               class="policy-kind-card standard"
               class:active={templateKind === 'standard'}
+              disabled={taprootSelected && cosigners.length > 0}
               onclick={() => chooseTemplate('standard')}
               ><span class="policy-kind-icon"><Users size={21} /></span><span
                 class="policy-kind-copy"
@@ -1527,7 +1618,7 @@
                 >{/if}</button
             >
           </div>
-          {#if templateKind !== 'standard'}<WarningNotice
+          {#if templateKind !== 'standard' && !taprootSelected}<WarningNotice
               title={translate($locale, 'Limited signer support')}
               body={translate(
                 $locale,
@@ -1653,7 +1744,27 @@
                 >
               </div>
             {/if}
-          {:else if templateKind === 'partner_continuity_v1' || templateKind === 'family_continuity_v1'}
+          {:else if fixedTemplate}
+            {#if taprootSetupAvailable}
+              <label class="backup-confirmation">
+                <input
+                  type="checkbox"
+                  bind:checked={taprootSelected}
+                  disabled={cosigners.length > 0}
+                />
+                <span>
+                  <strong>{translate($locale, 'Use Taproot · Regtest rehearsal')}</strong>
+                  <small
+                    >{translate(
+                      $locale,
+                      cosigners.length
+                        ? 'Remove the added signers before changing address type.'
+                        : 'Use independent offline Bitcoin Core signers with Taproot Miniscript PSBT support. Enter each public account manually.'
+                    )}</small
+                  >
+                </span>
+              </label>
+            {/if}
             <div
               class="path-visual continuity-path-visual"
               class:family-continuity-path={templateKind === 'family_continuity_v1'}
@@ -1715,16 +1826,18 @@
                 'Renew around six months to move every delayed path back.'
               )}
             </p>
-            <div class="recovery-separation">
-              <ShieldCheck size={15} /><span
-                ><strong>{translate($locale, 'Offline PSBT only')}</strong><small
-                  >{translate(
-                    $locale,
-                    'Candidates pending exact-model certification: Ledger, Jade/Jade Plus, BitBox02, BitBox02 Nova. Unsupported: Coldcard, Trezor, phone signers.'
-                  )}</small
-                ></span
-              >
-            </div>
+            {#if !taprootSelected}
+              <div class="recovery-separation">
+                <ShieldCheck size={15} /><span
+                  ><strong>{translate($locale, 'Offline PSBT only')}</strong><small
+                    >{translate(
+                      $locale,
+                      'Candidates pending exact-model certification: Ledger, Jade/Jade Plus, BitBox02, BitBox02 Nova. Unsupported: Coldcard, Trezor, phone signers.'
+                    )}</small
+                  ></span
+                >
+              </div>
+            {/if}
           {:else}<div class="path-visual">
               <span
                 ><b>{translate($locale, 'TODAY')}</b><strong
@@ -1857,7 +1970,10 @@
             variant="secondary"
             size="small"
             disabled={cosigners.length >= requiredKeys}
-            onclick={() => (pickerOpen = true)}
+            onclick={() => {
+              if (taprootSelected) chooseSource('manual');
+              else pickerOpen = true;
+            }}
             ><Plus size={15} />{translate(
               $locale,
               cosigners.length >= requiredKeys ? 'All added' : 'Add a signer'
@@ -1959,13 +2075,15 @@
           <li>{translate($locale, 'Verify keys on each signer.')}</li>
           <li>{translate($locale, 'Store signers separately.')}</li>
         </ul>
-        <button class="hardware-help-card" onclick={() => openHardwareHelp()}
-          ><CircleHelp size={17} /><span
-            ><strong>{translate($locale, 'Hardware setup help')}</strong><small
-              >{translate($locale, 'Coldcard, BitBox02, Ledger, Trezor, Jade')}</small
-            ></span
-          ><ChevronRight size={14} /></button
-        >
+        {#if !taprootSelected}
+          <button class="hardware-help-card" onclick={() => openHardwareHelp()}
+            ><CircleHelp size={17} /><span
+              ><strong>{translate($locale, 'Hardware setup help')}</strong><small
+                >{translate($locale, 'Coldcard, BitBox02, Ledger, Trezor, Jade')}</small
+              ></span
+            ><ChevronRight size={14} /></button
+          >
+        {/if}
       </aside>
     </div>
   {:else if stage === 'review' && preview}
@@ -1987,7 +2105,11 @@
         ><span
           >{translate(
             $locale,
-            templateKind === 'standard' ? 'wsh · sortedmulti · BIP48' : 'wsh · Miniscript · BIP48'
+            taprootSelected
+              ? 'Taproot · Miniscript'
+              : templateKind === 'standard'
+                ? 'wsh · sortedmulti · BIP48'
+                : 'wsh · Miniscript · BIP48'
           )}</span
         >
       </div>
@@ -2029,14 +2151,21 @@
         ><span
           >{translate(
             $locale,
-            templateKind === 'standard' ? 'wsh · sortedmulti · BIP48' : 'wsh · Miniscript · BIP48'
+            taprootSelected
+              ? 'Taproot · Miniscript'
+              : templateKind === 'standard'
+                ? 'wsh · sortedmulti · BIP48'
+                : 'wsh · Miniscript · BIP48'
           )}</span
         >
       </div>
       <div class="backup-setup-sections">
         <SetupTask
           step={1}
-          title={translate($locale, 'Save the wallet descriptor')}
+          title={translate(
+            $locale,
+            taprootSelected ? 'Save the Groot JSON recovery backup' : 'Save the wallet descriptor'
+          )}
           description={translate(
             $locale,
             'This public backup recovers every wallet address and coordinates signatures. It cannot spend, but it reveals wallet activity.'
@@ -2044,15 +2173,47 @@
           state={saved ? 'complete' : 'current'}
           status={saved ? 'Saved' : 'Current step'}
         >
+          {#if taprootSelected && taprootFirstAddress}
+            {#if saved || taprootAddressMatches}
+              <ReadableAddress
+                address={taprootFirstAddress}
+                oncopy={async () => {
+                  await copyText(taprootFirstAddress, 'bitcoin-address');
+                  toast({ title: 'Address copied', tone: 'success' });
+                }}
+              />
+            {/if}
+            {#if !saved}
+              <label class="field">
+                <span>{translate($locale, 'First receive address from Bitcoin Core')}</span>
+                <input
+                  bind:value={confirmedTaprootAddress}
+                  maxlength="90"
+                  autocapitalize="off"
+                  spellcheck={false}
+                />
+                <small
+                  >{translate(
+                    $locale,
+                    'Derive the first address independently from the public descriptor. Paste that address to verify the backup.'
+                  )}</small
+                >
+              </label>
+            {/if}
+          {/if}
           <Button
             class="full"
-            disabled={savingDescriptor}
+            disabled={savingDescriptor || (taprootSelected && !saved && !taprootAddressMatches)}
             loading={savingDescriptor}
             loadingLabel={translate($locale, 'Opening save dialog…')}
             onclick={saveDescriptorDraft}
             ><Download size={14} />{translate(
               $locale,
-              saved ? 'Save another copy' : 'Save public descriptor text'
+              saved
+                ? 'Save another copy'
+                : taprootSelected
+                  ? 'Save Groot JSON backup'
+                  : 'Save public descriptor text'
             )}</Button
           >
           {#if combinedDescriptor}
@@ -2821,7 +2982,7 @@
       ><span>{translate($locale, 'Signer label')}</span><input
         aria-label={translate($locale, 'Signer label')}
         bind:value={label}
-        placeholder={translate($locale, 'e.g. Coldcard')}
+        placeholder={translate($locale, taprootSelected ? 'Offline signer' : 'e.g. Coldcard')}
         maxlength="48"
       /><FieldCounter value={label} max={48} /></label
     >
@@ -2839,7 +3000,7 @@
         bind:value={xpub}
         rows="3"
         placeholder={translate($locale, defaultConfig.network === 'mainnet' ? 'xpub…' : 'tpub…')}
-      ></textarea><small>{translate($locale, 'Derivation:')} {MULTISIG_ACCOUNT_PATH}</small></label
+      ></textarea><small>{translate($locale, 'Derivation:')} {signerAccountPath}</small></label
     >
     {#if keyError}<WarningNotice
         tone="danger"

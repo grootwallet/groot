@@ -658,6 +658,9 @@ pub async fn rbf_acceleration_quote(
             .map_err(|_| api_error("acceleration_unavailable", "Enter a valid transaction ID."))?;
         let (incremental_fee, priority) = core_replacement_policy(&app, &state)?;
         let profile = selected_profile(&app)?;
+        if profile.kind == WalletKind::Multisig {
+            require_acceleration_policy(&read_multisig_metadata(&app)?)?;
+        }
         let mut db = match profile.kind {
             WalletKind::Multisig => open_multisig_db(&app)?,
             WalletKind::SingleKey | WalletKind::WatchOnly => open_db(&app)?,
@@ -709,6 +712,9 @@ pub async fn cpfp_acceleration_quote(
             profile_commands::estimate_core_fee(&client, 2, EstimateMode::Economical).ok()
         };
         let profile = selected_profile(&app)?;
+        if profile.kind == WalletKind::Multisig {
+            require_acceleration_policy(&read_multisig_metadata(&app)?)?;
+        }
         let mut db = match profile.kind {
             WalletKind::Multisig => open_multisig_db(&app)?,
             WalletKind::SingleKey | WalletKind::WatchOnly => open_db(&app)?,
@@ -1199,6 +1205,20 @@ pub(crate) struct AccelerationRatePolicy {
     pub(crate) cpfp_quote_request: Option<String>,
 }
 
+fn require_acceleration_policy(metadata: &MultisigWalletDto) -> ApiResult<()> {
+    if metadata
+        .recovery_template
+        .as_ref()
+        .is_some_and(RecoveryTemplate::uses_taproot)
+    {
+        return Err(api_error(
+            "acceleration_unavailable",
+            "Fee acceleration is unavailable for the Taproot Continuity rehearsal.",
+        ));
+    }
+    Ok(())
+}
+
 pub(crate) fn prepare_persisted_multisig_acceleration(
     db: &mut Connection,
     metadata: &MultisigWalletDto,
@@ -1207,6 +1227,7 @@ pub(crate) fn prepare_persisted_multisig_acceleration(
     parent_fee: Option<Amount>,
     rate_policy: AccelerationRatePolicy,
 ) -> ApiResult<MultisigProposalDto> {
+    require_acceleration_policy(metadata)?;
     if let Some(proposal_id) = active_acceleration_proposal_id(db, &txid, method)? {
         return load_multisig_proposal(db, metadata, &proposal_id);
     }
@@ -1510,14 +1531,6 @@ pub async fn tx_sign_and_broadcast(
         let credential_result = decrypt_mnemonic(&app, credential.as_str());
         record_auth_result(&app, &state, &credential_result)?;
         let mnemonic = credential_result?;
-        let master = root_key(&mnemonic, credential.as_str())?;
-        let signing_wallet = Wallet::create(
-            Bip84(master, KeychainKind::External),
-            Bip84(master, KeychainKind::Internal),
-        )
-        .network(network())
-        .create_wallet_no_persist()
-        .map_err(internal)?;
         let mut db = open_db(&app)?;
         let mut proposal = state
             .proposals
@@ -1549,6 +1562,9 @@ pub async fn tx_sign_and_broadcast(
         let profile = selected_profile_of_kind(&app, WalletKind::SingleKey)?;
         let loaded_external = wallet.public_descriptor(KeychainKind::External).to_string();
         let loaded_internal = wallet.public_descriptor(KeychainKind::Internal).to_string();
+        let address_type = SoftwareAddressType::from_receive_descriptor(&loaded_external);
+        address_type.require_supported(network(), cfg!(target_os = "macos"))?;
+        let signing_wallet = software_wallet_for_signing(&mnemonic, credential.as_str(), address_type)?;
         let signing_external = signing_wallet
             .public_descriptor(KeychainKind::External)
             .to_string();

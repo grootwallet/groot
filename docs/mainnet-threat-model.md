@@ -5,6 +5,8 @@ exact commit `f7b4b9935943f0250353a6f77c3d8fca31906fff`; see ADR 0053.
 
 Last reviewed: 2026-10-04
 
+Taproot wallet creation, recovery and spending are gated off on Mainnet. A future activation review must cover BIP86 credential/descriptor binding, BIP371 prevout and signature validation, the exact authorized script path and leaf for any admitted policy, wrong-network and unsupported-device rejection, and independent funded recovery on an isolated test network. Keep any Mainnet approval scoped to the exact reviewed signers, policies, platform and candidate. [Taproot verification](testing/taproot-receiving.md).
+
 ## Scope
 
 This model covers Groot's software single-key wallet, public-only external-signer wallet, multisig coordinator, native/webview boundary, local persistence, restart-bound Regtest/Testnet4/Mainnet selection, Bitcoin Core connection, optional compact-filter P2P discovery, Payjoin V2 URI parsing, HWI process and USB boundary, PSBT/BSMS/UR/file interchange, build pipeline, and recovery lifecycle. It covers confidentiality, signing authorization, transaction integrity, recoverability, privacy, and availability from entropy generation through deletion.

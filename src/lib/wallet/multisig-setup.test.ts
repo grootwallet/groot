@@ -70,6 +70,30 @@ describe('multisig setup presentation policy', () => {
     });
   });
 
+  it('keeps Taproot Continuity roles while selecting the distinct descriptor policy tags', () => {
+    const signers = Array.from({ length: 8 }, (_, index) => ({
+      id: `key-${index}`,
+      label: `Offline ${index}`,
+      fingerprint: index.toString(16).padStart(8, '0'),
+      xpub: `tpub-fixture-${index}`,
+      derivationPath: "m/48'/1'/0'/3'",
+      source: 'manual' as const
+    }));
+    expect(
+      multisigSetupRecoveryTemplate('partner_continuity_v1', signers, undefined, true)
+    ).toMatchObject({
+      type: 'partner_continuity_taproot_v1',
+      owner: { signerIds: ['key-0', 'key-1', 'key-2'] }
+    });
+    expect(
+      multisigSetupRecoveryTemplate('family_continuity_v1', signers.slice(0, 7), undefined, true)
+    ).toMatchObject({
+      type: 'family_continuity_taproot_v1',
+      childAssistance: { signerIds: ['key-2', 'key-3'] },
+      executorSignerId: 'key-6'
+    });
+  });
+
   it('does not persist untouched defaults but keeps every meaningful continuation', () => {
     expect(isMeaningfulMultisigSetupDraft(emptyDraft)).toBe(false);
     expect(isMeaningfulMultisigSetupDraft({ ...emptyDraft, name: 'Family wallet' })).toBe(true);

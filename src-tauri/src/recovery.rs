@@ -1,5 +1,9 @@
-use crate::multisig::{multisig_account_path, CosignerInput};
+use crate::multisig::{CosignerInput, CosignerSource};
 use bdk_wallet::{
+    bitcoin::{
+        bip32::{Fingerprint, Xpub},
+        Network,
+    },
     descriptor::{Descriptor, DescriptorPublicKey},
     miniscript::{
         policy::concrete::{DescriptorCtx, Policy},
@@ -23,6 +27,8 @@ pub const CONTINUITY_ESTATE_BLOCKS: u32 = 52_560;
 pub const EXPECTED_BLOCK_SECONDS: u64 = 600;
 pub const MIN_APPROACHING_BLOCKS: u32 = 1_008;
 const APPROACHING_DELAY_DIVISOR: u32 = 10;
+// BIP341's hash-to-curve NUMS point. No participant controls a key path.
+const TAPROOT_NUMS_KEY: &str = "50929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -152,6 +158,52 @@ pub enum RecoveryTemplate {
         child_inheritance: SpendingPath,
         executor_signer_id: String,
     },
+    PartnerContinuityTaprootV1 {
+        owner: SpendingPath,
+        partner: SpendingPath,
+        estate: SpendingPath,
+    },
+    FamilyContinuityTaprootV1 {
+        parents: SpendingPath,
+        child_assistance: SpendingPath,
+        child_inheritance: SpendingPath,
+        executor_signer_id: String,
+    },
+}
+
+impl RecoveryTemplate {
+    pub fn uses_taproot(&self) -> bool {
+        matches!(
+            self,
+            Self::PartnerContinuityTaprootV1 { .. } | Self::FamilyContinuityTaprootV1 { .. }
+        )
+    }
+
+    pub(crate) fn into_taproot(self) -> Result<Self, RecoveryError> {
+        match self {
+            Self::PartnerContinuityV1 {
+                owner,
+                partner,
+                estate,
+            } => Ok(Self::PartnerContinuityTaprootV1 {
+                owner,
+                partner,
+                estate,
+            }),
+            Self::FamilyContinuityV1 {
+                parents,
+                child_assistance,
+                child_inheritance,
+                executor_signer_id,
+            } => Ok(Self::FamilyContinuityTaprootV1 {
+                parents,
+                child_assistance,
+                child_inheritance,
+                executor_signer_id,
+            }),
+            _ => Err(RecoveryError::InvalidContinuityTemplate),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -197,6 +249,7 @@ pub enum RecoveryError {
     CompilationFailed,
     UnknownPath,
     ImmaturePath,
+    UnsupportedSigner,
 }
 
 impl RecoveryError {
@@ -217,6 +270,7 @@ impl RecoveryError {
             Self::CompilationFailed => "policy_compilation_failed",
             Self::UnknownPath => "unknown_spending_path",
             Self::ImmaturePath => "immature_spending_path",
+            Self::UnsupportedSigner => "hardware_policy_unsupported",
         }
     }
 }
@@ -291,13 +345,10 @@ fn key_for_branch(
     cosigner: &CosignerInput,
     branch: u8,
 ) -> Result<DescriptorPublicKey, RecoveryError> {
-    if cosigner.derivation_path != multisig_account_path() {
-        return Err(RecoveryError::InvalidKey);
-    }
     format!(
         "[{}/{}]{}/{branch}/*",
         cosigner.fingerprint,
-        multisig_account_path().trim_start_matches("m/"),
+        cosigner.derivation_path.trim_start_matches("m/"),
         cosigner.xpub
     )
     .parse()
@@ -417,6 +468,11 @@ fn compile_branch(
             owner,
             partner,
             estate,
+        }
+        | RecoveryTemplate::PartnerContinuityTaprootV1 {
+            owner,
+            partner,
+            estate,
         } => {
             let owner = threshold_policy(keys(&owner.signer_ids)?, owner.threshold)?;
             let mut partner_items = keys(&partner.signer_ids)?
@@ -437,6 +493,12 @@ fn compile_branch(
             binary_or(100, owner, 1, binary_or(10, partner, 1, estate))
         }
         RecoveryTemplate::FamilyContinuityV1 {
+            parents,
+            child_assistance,
+            child_inheritance,
+            executor_signer_id,
+        }
+        | RecoveryTemplate::FamilyContinuityTaprootV1 {
             parents,
             child_assistance,
             child_inheritance,
@@ -476,11 +538,122 @@ fn compile_branch(
     Ok(descriptor)
 }
 
+fn compile_taproot_branch(
+    template: &RecoveryTemplate,
+    paths: &[TimedSpendingPath],
+    cosigners: &HashMap<&str, &CosignerInput>,
+    branch: u8,
+) -> Result<Descriptor<DescriptorPublicKey>, RecoveryError> {
+    let threshold = |k: usize, ids: &[String]| -> Result<String, RecoveryError> {
+        let keys = ids
+            .iter()
+            .map(|id| {
+                cosigners
+                    .get(id.as_str())
+                    .ok_or(RecoveryError::UnknownSigner)
+                    .and_then(|key| key_for_branch(key, branch))
+                    .map(|key| key.to_string())
+            })
+            .collect::<Result<Vec<_>, _>>()?
+            .join(",");
+        Ok(format!("multi_a({k},{keys})"))
+    };
+    let mut leaves = Vec::with_capacity(paths.len());
+    for (index, path) in paths.iter().enumerate() {
+        let delay = path.available_after_blocks;
+        let script = match (template, index) {
+            (
+                RecoveryTemplate::FamilyContinuityTaprootV1 {
+                    parents,
+                    child_assistance,
+                    ..
+                },
+                1,
+            ) => {
+                let parents = threshold(1, &parents.signer_ids)?;
+                let children = threshold(1, &child_assistance.signer_ids)?;
+                format!("and_v(v:{parents},and_v(v:{children},older({delay})))")
+            }
+            _ => {
+                let signers = threshold(path.threshold, &path.signer_ids)?;
+                if delay == 0 {
+                    signers
+                } else {
+                    format!("and_v(v:{signers},older({delay}))")
+                }
+            }
+        };
+        leaves.push(script);
+    }
+    // Left-to-right leaf traversal follows the same ordering as named paths.
+    let tree = match leaves.as_slice() {
+        [a, b, c, d] => format!("{{{{{a},{b}}},{{{c},{d}}}}}"),
+        [a, b, c] => format!("{{{a},{{{b},{c}}}}}"),
+        _ => return Err(RecoveryError::InvalidContinuityTemplate),
+    };
+    let descriptor = format!("tr({TAPROOT_NUMS_KEY},{tree})")
+        .parse::<Descriptor<DescriptorPublicKey>>()
+        .map_err(|_| RecoveryError::CompilationFailed)?;
+    descriptor
+        .sanity_check()
+        .map_err(|_| RecoveryError::CompilationFailed)?;
+    Ok(descriptor)
+}
+
 pub fn analyze_template(
     template: &RecoveryTemplate,
     cosigners: &[CosignerInput],
 ) -> Result<PolicyAnalysis, RecoveryError> {
-    if cosigners
+    analyze_template_for_network(template, cosigners, crate::build_network::network())
+}
+
+pub(crate) fn validate_taproot_cosigner(
+    cosigner: &CosignerInput,
+    network: Network,
+) -> Result<(), RecoveryError> {
+    if cosigner.source != CosignerSource::Manual || cosigner.device_type.is_some() {
+        return Err(RecoveryError::UnsupportedSigner);
+    }
+    cosigner
+        .validate_taproot_account(network)
+        .map_err(|_| RecoveryError::InvalidKey)
+}
+
+fn analyze_template_for_network(
+    template: &RecoveryTemplate,
+    cosigners: &[CosignerInput],
+    network: Network,
+) -> Result<PolicyAnalysis, RecoveryError> {
+    let taproot = template.uses_taproot();
+    if taproot {
+        let expected = match template {
+            RecoveryTemplate::PartnerContinuityTaprootV1 { .. } => 8,
+            _ => 7,
+        };
+        if cosigners.len() != expected {
+            return Err(RecoveryError::InvalidSignerCount);
+        }
+        let mut fingerprints = HashSet::new();
+        let mut public_keys = HashSet::new();
+        for cosigner in cosigners {
+            validate_taproot_cosigner(cosigner, network)?;
+            let fingerprint: Fingerprint = cosigner
+                .fingerprint
+                .trim()
+                .parse()
+                .map_err(|_| RecoveryError::InvalidKey)?;
+            let xpub: Xpub = cosigner
+                .xpub
+                .trim()
+                .parse()
+                .map_err(|_| RecoveryError::InvalidKey)?;
+            if !fingerprints.insert(fingerprint)
+                || !public_keys.insert(xpub.public_key.x_only_public_key().0)
+            {
+                return Err(RecoveryError::DuplicateSigner);
+            }
+        }
+    } else if cosigners
         .iter()
         .any(|cosigner| cosigner.parse_for_validation().is_err())
     {
@@ -570,6 +743,11 @@ pub fn analyze_template(
             owner,
             partner,
             estate,
+        }
+        | RecoveryTemplate::PartnerContinuityTaprootV1 {
+            owner,
+            partner,
+            estate,
         } => {
             validate_path(owner, &known)?;
             validate_path(partner, &known)?;
@@ -606,6 +784,12 @@ pub fn analyze_template(
             ]
         }
         RecoveryTemplate::FamilyContinuityV1 {
+            parents,
+            child_assistance,
+            child_inheritance,
+            executor_signer_id,
+        }
+        | RecoveryTemplate::FamilyContinuityTaprootV1 {
             parents,
             child_assistance,
             child_inheritance,
@@ -669,8 +853,13 @@ pub fn analyze_template(
         .iter()
         .map(|key| (key.id.as_str(), key))
         .collect::<HashMap<_, _>>();
-    let external = compile_branch(template, &paths, &by_id, 0)?;
-    let internal = compile_branch(template, &paths, &by_id, 1)?;
+    let compile = if taproot {
+        compile_taproot_branch
+    } else {
+        compile_branch
+    };
+    let external = compile(template, &paths, &by_id, 0)?;
+    let internal = compile(template, &paths, &by_id, 1)?;
     let max_satisfaction_weight = external
         .max_weight_to_satisfy()
         .map_err(|_| RecoveryError::CompilationFailed)?
@@ -779,6 +968,107 @@ mod tests {
             child_assistance: SpendingPath::new(1, ["key-3", "key-4"]),
             child_inheritance: SpendingPath::new(2, ["key-5", "key-6"]),
             executor_signer_id: "key-7".into(),
+        }
+    }
+
+    #[test]
+    fn taproot_continuity_uses_distinct_network_origins_and_exact_fixed_leaves() {
+        use crate::multisig::taproot_continuity_account_path;
+        use bdk_wallet::{KeychainKind, Wallet};
+        let legacy_partner = partner_continuity_template();
+        assert!(!serde_json::to_string(&legacy_partner)
+            .unwrap()
+            .contains("taproot"));
+        let partner = legacy_partner.into_taproot().unwrap();
+        let family = family_continuity_template().into_taproot().unwrap();
+        assert_eq!(
+            serde_json::to_value(&partner).unwrap()["type"],
+            "partner_continuity_taproot_v1"
+        );
+        assert_eq!(
+            serde_json::to_value(&family).unwrap()["type"],
+            "family_continuity_taproot_v1"
+        );
+        for (network, prefix) in [
+            (Network::Regtest, "bcrt1p"),
+            (Network::Testnet4, "tb1p"),
+            (Network::Bitcoin, "bc1p"),
+        ] {
+            let path = taproot_continuity_account_path(network);
+            let secp = Secp256k1::new();
+            let keys = (1..=8)
+                .map(|index| {
+                    let master = Xpriv::new_master(network, &[index; 32]).unwrap();
+                    let account = master
+                        .derive_priv(&secp, &DerivationPath::from_str(path).unwrap())
+                        .unwrap();
+                    CosignerInput {
+                        id: format!("key-{index}"),
+                        label: format!("Key {index}"),
+                        fingerprint: master.fingerprint(&secp).to_string(),
+                        xpub: Xpub::from_priv(&secp, &account).to_string(),
+                        derivation_path: path.to_owned(),
+                        source: CosignerSource::Manual,
+                        device_type: None,
+                    }
+                })
+                .collect::<Vec<_>>();
+            for (template, count, leaves) in [(&partner, 8, 4), (&family, 7, 3)] {
+                let signers = &keys[..count];
+                let analysis = analyze_template_for_network(template, signers, network).unwrap();
+                let descriptor = analysis
+                    .external_descriptor
+                    .parse::<Descriptor<DescriptorPublicKey>>()
+                    .unwrap();
+                let Descriptor::Tr(tr) = descriptor else {
+                    panic!("expected Taproot descriptor")
+                };
+                assert_eq!(tr.internal_key().to_string(), TAPROOT_NUMS_KEY);
+                assert_eq!(tr.iter_scripts().count(), leaves);
+                let wallet =
+                    Wallet::create(analysis.external_descriptor, analysis.internal_descriptor)
+                        .network(network)
+                        .create_wallet_no_persist()
+                        .unwrap();
+                for index in [0, 5] {
+                    let receive = wallet.peek_address(KeychainKind::External, index).address;
+                    let change = wallet.peek_address(KeychainKind::Internal, index).address;
+                    assert!(receive.to_string().starts_with(prefix));
+                    assert!(change.to_string().starts_with(prefix));
+                    assert_ne!(receive, change);
+                }
+                for source in [
+                    CosignerSource::Usb,
+                    CosignerSource::Qr,
+                    CosignerSource::File,
+                    CosignerSource::Virtual,
+                ] {
+                    let mut unsupported = signers.to_vec();
+                    unsupported[0].source = source;
+                    assert_eq!(
+                        analyze_template_for_network(template, &unsupported, network),
+                        Err(RecoveryError::UnsupportedSigner)
+                    );
+                }
+                let mut invalid = signers.to_vec();
+                invalid[0].device_type = Some("ledger".to_owned());
+                assert_eq!(
+                    analyze_template_for_network(template, &invalid, network),
+                    Err(RecoveryError::UnsupportedSigner)
+                );
+                invalid[0] = signers[0].clone();
+                invalid[0].derivation_path = path.replace("/3'", "/2'");
+                assert_eq!(
+                    analyze_template_for_network(template, &invalid, network),
+                    Err(RecoveryError::InvalidKey)
+                );
+                invalid[0] = signers[0].clone();
+                invalid[0].xpub = signers[1].xpub.clone();
+                assert_eq!(
+                    analyze_template_for_network(template, &invalid, network),
+                    Err(RecoveryError::DuplicateSigner)
+                );
+            }
         }
     }
 

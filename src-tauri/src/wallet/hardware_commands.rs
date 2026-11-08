@@ -1752,6 +1752,13 @@ pub async fn hardware_identify_saved_device(
         let (identity, label) = match selected.kind {
             WalletKind::Multisig => {
                 let saved = read_multisig_metadata(&app)?;
+                if saved
+                    .recovery_template
+                    .as_ref()
+                    .is_some_and(RecoveryTemplate::uses_taproot)
+                {
+                    return Err(hardware_policy_unsupported());
+                }
                 let candidates = saved_cosigner_candidates_for_device(&saved.cosigners, &device)?;
                 let identity = prove_live_cosigner_identity_for_candidates(
                     &hwi,

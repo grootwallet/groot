@@ -179,7 +179,7 @@ fn multisig_tx_prepare_blocking(
             None
         };
         let mut wallet = load_wallet_transaction(&mut transaction)?;
-        let psbt = match coin_selection {
+        let mut psbt = match coin_selection {
             CoinSelectionInput::Auto { strategy } => {
                 label_provenance::reconcile_wallet_outputs(&wallet, &transaction, now())
                     .map_err(internal)?;
@@ -229,6 +229,7 @@ fn multisig_tx_prepare_blocking(
                 builder.finish().map_err(create_tx_api_error)?
             }
         };
+        prepare_taproot_policy_psbt(&wallet, &metadata, 0, &mut psbt)?;
         enforce_change_recovery_gap(&transaction, &wallet, &psbt)?;
         let fee = psbt
             .fee_amount()
@@ -339,7 +340,8 @@ pub async fn multisig_policy_renewal_prepare(
         ));
     }
 
-    let (psbt, destination) = build_policy_renewal(&mut wallet, selected, rate)?;
+    let (mut psbt, destination) = build_policy_renewal(&mut wallet, selected, rate)?;
+    prepare_taproot_policy_psbt(&wallet, &metadata, 0, &mut psbt)?;
     let destination_address = destination.to_string();
     let destination_script = destination.script_pubkey();
     enforce_change_recovery_gap(&transaction, &wallet, &psbt)?;
@@ -1443,6 +1445,7 @@ pub async fn multisig_recovery_create(
     cosigners: Vec<crate::multisig::CosignerInput>,
     credential: String,
     network_setup_source_wallet_id: Option<String>,
+    expected_first_address: Option<String>,
 ) -> ApiResult<MultisigCreationDto> {
     let credential = Zeroizing::new(credential);
     tauri::async_runtime::spawn_blocking(move || {
@@ -1466,32 +1469,44 @@ pub async fn multisig_recovery_create(
             threshold: 2,
             cosigners: cosigners.clone(),
         };
-        policy.preview().map_err(policy_api_error)?;
+        if template.uses_taproot() {
+            require_taproot_continuity_network(network())?;
+            if name.trim().is_empty() || name.chars().count() > 48 {
+                return Err(policy_api_error(crate::multisig::PolicyError::InvalidName));
+            }
+        } else {
+            policy.preview().map_err(policy_api_error)?;
+        }
         let analysis = analyze_template(&template, &cosigners).map_err(recovery_api_error)?;
         if let Some(existing) = find_exact_descriptor_profile(
             &app, &load_registry(&app)?, &analysis.external_descriptor,
         )? {
             return Err(wallet_already_exists(&existing));
         }
-        let threshold = analysis
-            .paths
-            .first()
-            .map(|path| path.threshold)
-            .unwrap_or(2);
-        let policy_type = verified_recovery_policy_type(&template, &analysis.paths);
+        let taproot = template.uses_taproot();
+        let wallet = multisig_recovery_metadata(name, template, cosigners, analysis);
+        if taproot {
+            let first_address = first_multisig_address(&wallet)?;
+            if expected_first_address.as_deref() != Some(first_address.as_str()) {
+                return Err(api_error(
+                    "backup_mismatch",
+                    "Confirm the exact first Taproot address before creating this wallet.",
+                ));
+            }
+        }
         let (id, dir) = prepare_profile_directory(&app)?;
         let result = (|| {
             let permit = database_open_permit_for_new_wallet(&state)?;
             let mut db = open_wallet_database(&dir.join("wallet.sqlite"), &permit)?;
             init_app_schema(&db)?;
             Wallet::create(
-                analysis.external_descriptor.clone(),
-                analysis.internal_descriptor.clone(),
+                wallet.external_descriptor.clone(),
+                wallet.internal_descriptor.clone(),
             )
             .network(network())
             .create_wallet(&mut db)
             .map_err(internal)?;
-            let marker = format!("groot-multisig:{}", analysis.external_descriptor);
+            let marker = format!("groot-multisig:{}", wallet.external_descriptor);
         secure_store::store(
             &dir.join("secret.json"),
             marker.as_bytes(),
@@ -1499,18 +1514,6 @@ pub async fn multisig_recovery_create(
             wallet_secret_context(id),
         )
             .map_err(secure_store_error)?;
-            let wallet = MultisigWalletDto {
-                kind: "multisig".to_owned(),
-                name,
-                threshold,
-                cosigners,
-                external_descriptor: analysis.external_descriptor,
-                internal_descriptor: analysis.internal_descriptor,
-                created_at: now().to_string(),
-                policy_type: policy_type.to_owned(),
-                recovery_template: Some(template),
-                spending_paths: analysis.paths,
-            };
             write_private_json(&dir.join("wallet.json"), &wallet)?;
             let network_setup = profile_commands::copy_network_setup_before_profile_commit(
                 &app,

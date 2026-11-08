@@ -45,6 +45,7 @@
     walletPolicyPresentation
   } from '$lib/wallet/policy';
   import { useWalletShellContext } from '$lib/wallet/shell-context';
+  import { isTaprootContinuityTemplate } from '$lib/wallet/multisig-setup';
 
   const walletShell = useWalletShellContext();
 
@@ -69,6 +70,7 @@
   let observedWalletId: string | null = null;
   const policyPresentation = $derived(wallet ? walletPolicyPresentation(wallet) : null);
   const continuityWallet = $derived(isContinuityPolicyType(wallet?.policyType));
+  const taprootContinuity = $derived(isTaprootContinuityTemplate(wallet?.recoveryTemplate));
   const printablePolicyReady = $derived(
     !continuityWallet || (policyPathLoadState === 'ready' && policyPaths.length > 0)
   );
@@ -679,9 +681,11 @@
             <dd>
               {translate(
                 $locale,
-                policyPresentation?.delayed
-                  ? 'Native SegWit · Miniscript'
-                  : 'Native SegWit · sortedmulti'
+                taprootContinuity
+                  ? 'Taproot · Miniscript'
+                  : policyPresentation?.delayed
+                    ? 'Native SegWit · Miniscript'
+                    : 'Native SegWit · sortedmulti'
               )}
             </dd>
           </div>

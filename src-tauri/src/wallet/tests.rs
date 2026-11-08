@@ -493,11 +493,17 @@ fn multisig_setup_commands_preview_only_public_signers_and_fixed_continuity_path
         let analysis = multisig_setup_commands::recovery_policy_analyze(
             metadata.recovery_template.clone().unwrap(),
             metadata.cosigners.clone(),
+            None,
         )
         .unwrap();
-        assert_eq!(analysis.external_descriptor, metadata.external_descriptor);
-        assert_eq!(analysis.internal_descriptor, metadata.internal_descriptor);
-        assert_eq!(analysis.paths, metadata.spending_paths);
+        let preview = serde_json::to_value(analysis).unwrap();
+        assert_eq!(preview["externalDescriptor"], metadata.external_descriptor);
+        assert_eq!(preview["internalDescriptor"], metadata.internal_descriptor);
+        assert_eq!(
+            preview["paths"],
+            serde_json::to_value(metadata.spending_paths).unwrap()
+        );
+        assert!(preview.get("encodedBackup").is_none());
     }
 
     let mut invalid = standard.cosigners;
@@ -4638,8 +4644,12 @@ fn mnemonic_encryption_rejects_the_wrong_credential() {
 #[test]
 fn persisted_descriptors_are_watch_only() {
     let mnemonic = Mnemonic::parse(WORDS).expect("valid public test mnemonic");
-    let (external, internal_template) =
-        watch_templates(&mnemonic, "public-regtest-pin").expect("templates");
+    let (external, internal_template) = software_wallet_descriptors(
+        &mnemonic,
+        "public-regtest-pin",
+        SoftwareAddressType::NativeSegwit,
+    )
+    .expect("templates");
     let wallet = Wallet::create(external, internal_template)
         .network(network())
         .create_wallet_no_persist()
@@ -4670,14 +4680,127 @@ fn software_descriptor_identity_is_stable_and_bound_to_the_wallet_passphrase() {
         "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
     )
     .unwrap();
-    let first = software_wallet_descriptors(&mnemonic, "wallet passphrase").unwrap();
-    let repeated = software_wallet_descriptors(&mnemonic, "wallet passphrase").unwrap();
-    let alternate = software_wallet_descriptors(&mnemonic, "different passphrase").unwrap();
+    let first = software_wallet_descriptors(
+        &mnemonic,
+        "wallet passphrase",
+        SoftwareAddressType::NativeSegwit,
+    )
+    .unwrap();
+    let repeated = software_wallet_descriptors(
+        &mnemonic,
+        "wallet passphrase",
+        SoftwareAddressType::NativeSegwit,
+    )
+    .unwrap();
+    let alternate = software_wallet_descriptors(
+        &mnemonic,
+        "different passphrase",
+        SoftwareAddressType::NativeSegwit,
+    )
+    .unwrap();
 
     assert_eq!(first, repeated);
     assert_ne!(first, alternate);
     assert!(!first.0.contains("prv"));
     assert!(!first.1.contains("prv"));
+}
+
+#[test]
+fn software_taproot_derivation_matches_bip86_and_preserves_network_boundaries() {
+    let mnemonic = Mnemonic::parse(
+        "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+    )
+    .unwrap();
+    let seed = mnemonic.to_seed("");
+    for (chain, path, prefix) in [
+        (Network::Bitcoin, "86'/0'/0'", "bc1p"),
+        (Network::Testnet4, "86'/1'/0'", "tb1p"),
+        (Network::Regtest, "86'/1'/0'", "bcrt1p"),
+    ] {
+        let master = Xpriv::new_master(chain, &seed).unwrap();
+        let wallet =
+            software_signing_wallet_on_network(master, SoftwareAddressType::Taproot, chain)
+                .unwrap();
+        for keychain in [KeychainKind::External, KeychainKind::Internal] {
+            let descriptor = wallet.public_descriptor(keychain).to_string();
+            assert!(descriptor.starts_with(&format!("tr([73c5da0a/{path}]")));
+            assert!(!descriptor.contains("prv"));
+        }
+        let first = wallet.peek_address(KeychainKind::External, 0).address;
+        assert!(first.to_string().starts_with(prefix));
+        assert_eq!(first.address_type(), Some(AddressType::P2tr));
+        if chain == Network::Bitcoin {
+            assert_eq!(
+                first.to_string(),
+                "bc1p5cyxnuxmeuwuvkwfem96lqzszd02n6xdcjrs20cac6yqjjwudpxqkedrcr"
+            );
+        }
+    }
+    for chain in [Network::Bitcoin, Network::Signet, Network::Testnet] {
+        assert_eq!(
+            SoftwareAddressType::Taproot
+                .require_supported(chain, true)
+                .unwrap_err()
+                .code,
+            "unsupported_operation"
+        );
+    }
+    for chain in [Network::Regtest, Network::Testnet4] {
+        assert!(SoftwareAddressType::Taproot
+            .require_supported(chain, false)
+            .is_err());
+        assert!(SoftwareAddressType::Taproot
+            .require_supported(chain, true)
+            .is_ok());
+        assert!(SoftwareAddressType::NativeSegwit
+            .require_supported(chain, false)
+            .is_ok());
+    }
+}
+
+#[test]
+fn taproot_recovery_descriptor_must_match_the_canonical_key_only_branches() {
+    let mnemonic = Mnemonic::parse(WORDS).unwrap();
+    let descriptor_pair = software_wallet_descriptors(
+        &mnemonic,
+        "public test passphrase",
+        SoftwareAddressType::Taproot,
+    )
+    .unwrap();
+    let backup = software_multipath_descriptor(&descriptor_pair.0, &descriptor_pair.1).unwrap();
+    assert!(backup.starts_with("tr(["));
+    assert!(backup.contains("/<0;1>/*)#"));
+    assert!(validate_software_recovery_descriptor(
+        SoftwareAddressType::Taproot,
+        Some(&backup),
+        &descriptor_pair,
+    )
+    .is_ok());
+    assert_eq!(
+        validate_software_recovery_descriptor(SoftwareAddressType::Taproot, None, &descriptor_pair)
+            .unwrap_err()
+            .code,
+        "invalid_descriptor"
+    );
+    for wrong in [
+        descriptor_pair.0.clone(),
+        backup.replace("<0;1>", "<1;0>"),
+        backup.replace("86'", "84'"),
+        format!("{backup}x"),
+        "x".repeat(513),
+    ] {
+        assert_eq!(
+            validate_software_recovery_descriptor(
+                SoftwareAddressType::Taproot,
+                Some(&wrong),
+                &descriptor_pair,
+            )
+            .unwrap_err()
+            .code,
+            "backup_mismatch"
+        );
+    }
+    assert!(software_multipath_descriptor(&descriptor_pair.0, &descriptor_pair.0).is_err());
 }
 
 #[test]
@@ -5317,7 +5440,12 @@ fn exact_identity_inspection_reads_an_existing_wallet_database_without_mutating_
     let mut writable = open_wallet_database(&path, &permit).unwrap();
     init_app_schema(&writable).unwrap();
     let mnemonic = Mnemonic::parse(WORDS).unwrap();
-    let (external, internal) = watch_templates(&mnemonic, "identity read only").unwrap();
+    let (external, internal) = software_wallet_descriptors(
+        &mnemonic,
+        "identity read only",
+        SoftwareAddressType::NativeSegwit,
+    )
+    .unwrap();
     let wallet = Wallet::create(external, internal)
         .network(network())
         .create_wallet(&mut writable)
@@ -5714,7 +5842,12 @@ fn compact_filter_update_and_app_metadata_roll_back_at_every_commit_stage() {
     let mut db = Connection::open(&database).unwrap();
     init_app_schema(&db).unwrap();
     let mnemonic = Mnemonic::parse(WORDS).unwrap();
-    let (external, internal) = watch_templates(&mnemonic, "atomic compact filters").unwrap();
+    let (external, internal) = software_wallet_descriptors(
+        &mnemonic,
+        "atomic compact filters",
+        SoftwareAddressType::NativeSegwit,
+    )
+    .unwrap();
     let wallet = Wallet::create(external, internal)
         .network(network())
         .create_wallet(&mut db)
@@ -6307,7 +6440,12 @@ fn prepared_wallet_proposal_and_acceleration_roll_back_as_one_unit() {
     let mut db = Connection::open_in_memory().unwrap();
     init_app_schema(&db).unwrap();
     let mnemonic = Mnemonic::parse(WORDS).unwrap();
-    let (external, internal) = watch_templates(&mnemonic, "atomic prepare").unwrap();
+    let (external, internal) = software_wallet_descriptors(
+        &mnemonic,
+        "atomic prepare",
+        SoftwareAddressType::NativeSegwit,
+    )
+    .unwrap();
     Wallet::create(external, internal)
         .network(network())
         .create_wallet(&mut db)
@@ -7782,7 +7920,12 @@ fn failed_profile_cleanup_preserves_a_visible_registry_commit() {
 fn persisted_profile_identity_reopens_all_wallet_kinds_and_rejects_metadata_substitution() {
     let root = std::env::temp_dir().join(format!("groot-profile-identity-{}", Uuid::new_v4()));
     let mnemonic = Mnemonic::parse(WORDS).unwrap();
-    let software = software_wallet_descriptors(&mnemonic, "synthetic passphrase").unwrap();
+    let software = software_wallet_descriptors(
+        &mnemonic,
+        "synthetic passphrase",
+        SoftwareAddressType::NativeSegwit,
+    )
+    .unwrap();
     let multisig = descriptor_backup().wallet;
     let secp = Secp256k1::new();
     let master = Xpriv::new_master(NetworkKind::Test, &[42; 32]).unwrap();

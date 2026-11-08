@@ -43,6 +43,7 @@
   import { toast } from '$lib/stores/toasts';
   import { discreetMode } from '$lib/privacy';
   import { useWalletShellContext } from '$lib/wallet/shell-context';
+  import { isTaprootContinuityTemplate } from '$lib/wallet/multisig-setup';
   const walletShell = useWalletShellContext();
   let label = $state('');
   let selectedLabels = $state<string[]>([]);
@@ -72,6 +73,17 @@
   let awaiting = $derived(awaitingPaymentAddresses(addresses));
   let history = $derived(addresses.filter((address) => address.status !== 'awaiting'));
   let wallet = $state<MultisigWallet | null>(null);
+  let taprootContinuity = $derived(isTaprootContinuityTemplate(wallet?.recoveryTemplate));
+  let walletType = $derived(
+    translate(
+      $locale,
+      taprootContinuity
+        ? 'Taproot · Miniscript'
+        : wallet?.recoveryTemplate
+          ? 'Descriptor · Miniscript'
+          : 'Native SegWit · standard multisig'
+    )
+  );
   let receiveOnDesktop = $state(false);
   let supportsHardwareVerification = $derived(wallet !== null && !wallet.recoveryTemplate);
   let eligibleDeviceTypes = $derived([
@@ -380,7 +392,9 @@
           )}
           body={translate(
             $locale,
-            'Verify the descriptor and address with an independent Miniscript-aware tool. Groot’s pinned HWI release cannot display this policy safely.'
+            taprootContinuity
+              ? 'Verify the descriptor and address independently with a Taproot Miniscript tool before sharing it.'
+              : 'Verify the descriptor and address with an independent Miniscript-aware tool. Groot’s pinned HWI release cannot display this policy safely.'
           )}
         />{/if}
       <button class="insight-toggle" onclick={() => (showDetails = !showDetails)}
@@ -394,14 +408,7 @@
           </div>
           <div>
             <dt>{translate($locale, 'Type')}</dt>
-            <dd>
-              {translate(
-                $locale,
-                wallet?.recoveryTemplate
-                  ? 'Descriptor · Miniscript'
-                  : 'Native SegWit · standard multisig'
-              )}
-            </dd>
+            <dd>{walletType}</dd>
           </div>
           {#if current.hardwareVerifiedAt}<div>
               <dt>{translate($locale, 'Hardware verified')}</dt>
@@ -622,14 +629,7 @@
           </div>
           <div>
             <dt>{translate($locale, 'Address type')}</dt>
-            <dd>
-              {translate(
-                $locale,
-                wallet?.recoveryTemplate
-                  ? 'Descriptor · Miniscript'
-                  : 'Native SegWit · standard multisig'
-              )}
-            </dd>
+            <dd>{walletType}</dd>
           </div>
         </dl>
       </details>
@@ -666,9 +666,7 @@
 <AddressDetailsModal
   address={detailAddress}
   open={Boolean(detailAddress)}
-  walletType={wallet?.recoveryTemplate
-    ? 'Descriptor · Miniscript'
-    : 'Native SegWit · standard multisig'}
+  {walletType}
   onclose={() => (detailAddress = null)}
 />
 

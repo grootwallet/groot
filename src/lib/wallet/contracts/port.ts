@@ -38,6 +38,7 @@ import type {
   RecoveryScanSettings,
   RecoveryScanStatus,
   SupplementalEntropyInput,
+  SoftwareAddressType,
   SoftwareWalletCreation,
   WalletEvent,
   WalletProfile,
@@ -77,11 +78,18 @@ export interface WalletProfilesPort {
     name: string,
     credential: string,
     backupVerified: boolean,
-    networkSetupSourceWalletId?: string
+    networkSetupSourceWalletId?: string,
+    addressType?: SoftwareAddressType
   ): Promise<SoftwareWalletCreation>;
   verifyBackup(credential: string): Promise<boolean>;
   revealAndVerifyBackup(credential: string): Promise<boolean>;
-  recoverWallet(name: string, credential: string): Promise<void>;
+  recoverWallet(
+    name: string,
+    credential: string,
+    addressType?: SoftwareAddressType,
+    expectedDescriptor?: string
+  ): Promise<void>;
+  softwareWalletDescriptor(expectedWalletId: string): Promise<string>;
   unlock(credential: string): Promise<void>;
   lock(): Promise<void>;
   lockAll(): Promise<void>;
@@ -269,7 +277,8 @@ export interface WalletMultisigPort {
   previewMultisig(policy: PolicyDraft): Promise<MultisigPreview>;
   analyzeRecoveryPolicy(
     template: RecoveryTemplate,
-    cosigners: CosignerDraft[]
+    cosigners: CosignerDraft[],
+    walletName?: string
   ): Promise<RecoveryPolicyAnalysis>;
   createMultisig(
     policy: PolicyDraft,
@@ -281,7 +290,8 @@ export interface WalletMultisigPort {
     template: RecoveryTemplate,
     cosigners: CosignerDraft[],
     credential: string,
-    networkSetupSourceWalletId?: string
+    networkSetupSourceWalletId?: string,
+    expectedFirstAddress?: string
   ): Promise<MultisigCreation>;
   multisigWallet(): Promise<MultisigWallet | null>;
   renameMultisigSigner(signerId: string, label: string): Promise<MultisigWallet>;

@@ -1,6 +1,9 @@
 use crate::recovery::{RecoveryTemplate, TimedSpendingPath};
 use bdk_wallet::{
-    bitcoin::bip32::{Fingerprint, Xpub},
+    bitcoin::{
+        bip32::{ChildNumber, Fingerprint, Xpub},
+        Network,
+    },
     descriptor::{Descriptor, DescriptorPublicKey},
 };
 use serde::{Deserialize, Serialize};
@@ -36,20 +39,41 @@ pub struct CosignerInput {
 
 impl CosignerInput {
     pub fn parse_for_validation(&self) -> Result<(), PolicyError> {
+        self.validate_for_account(multisig_account_path(), parameters().network)
+    }
+
+    pub(crate) fn validate_taproot_account(&self, network: Network) -> Result<(), PolicyError> {
+        let xpub = Xpub::from_str(self.xpub.trim()).map_err(|_| PolicyError::InvalidDescriptor)?;
+        if xpub.depth != 4 || xpub.child_number != (ChildNumber::Hardened { index: 3 }) {
+            return Err(PolicyError::InvalidDescriptor);
+        }
+        self.validate_for_account(taproot_continuity_account_path(network), network)
+    }
+
+    fn validate_for_account(&self, path: &str, network: Network) -> Result<(), PolicyError> {
         let account_xpub =
             Xpub::from_str(self.xpub.trim()).map_err(|_| PolicyError::InvalidDescriptor)?;
-        if self.derivation_path != multisig_account_path()
+        if self.derivation_path != path
             || self.id.trim().is_empty()
             || self.id.len() > 128
             || self.label.trim().is_empty()
             || self.label.chars().count() > 48
             || crate::wallet::label_has_unsafe_formatting(&self.label)
             || Fingerprint::from_str(self.fingerprint.trim()).is_err()
-            || account_xpub.network != parameters().extended_key_network
+            || account_xpub.network
+                != crate::build_network::parameters_for(network).extended_key_network
         {
             return Err(PolicyError::InvalidDescriptor);
         }
         Ok(())
+    }
+}
+
+pub(crate) fn taproot_continuity_account_path(network: Network) -> &'static str {
+    if network == Network::Bitcoin {
+        "m/48'/0'/0'/3'"
+    } else {
+        "m/48'/1'/0'/3'"
     }
 }
 

@@ -465,12 +465,16 @@ describe('wallet invariants', () => {
 });
 
 describe('Continuity presentation', () => {
-  for (const family of [false, true]) {
-    it(`keeps primary roles distinct from delayed roles for ${family ? 'Family' : 'Partner'}`, () => {
+  for (const type of [
+    'partner_continuity_v1',
+    'family_continuity_v1',
+    'partner_continuity_taproot_v1',
+    'family_continuity_taproot_v1'
+  ]) {
+    it(`keeps primary roles distinct from delayed roles for ${type}`, () => {
+      const family = type.startsWith('family');
       const primary = { threshold: 2, signerIds: family ? ['p1', 'p2'] : ['o1', 'o2', 'o3'] };
-      const recoveryTemplate = family
-        ? { type: 'family_continuity_v1', parents: primary }
-        : { type: 'partner_continuity_v1', owner: primary };
+      const recoveryTemplate = family ? { type, parents: primary } : { type, owner: primary };
       const result = walletPolicyPresentation({
         recoveryTemplate,
         threshold: 2,

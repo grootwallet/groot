@@ -216,6 +216,7 @@ pub fn run() {
             wallet::profile_commands::wallet_verify_backup,
             wallet::profile_commands::wallet_reveal_and_verify_backup,
             wallet::profile_commands::wallet_recover,
+            wallet::profile_commands::wallet_software_descriptor,
             wallet::profile_commands::wallet_unlock,
             wallet::payment_draft_commands::payment_draft,
             wallet::payment_draft_commands::payment_draft_save,

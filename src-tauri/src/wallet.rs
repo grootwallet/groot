@@ -27,7 +27,7 @@ use bdk_wallet::{
         config::DbConfig, params, Connection, OpenFlags, OptionalExtension,
         Transaction as SqliteTransaction,
     },
-    template::{Bip84, Bip84Public},
+    template::{Bip84, Bip84Public, Bip86, Bip86Public},
     KeychainKind, PersistedWallet, SignOptions, Update, Wallet,
 };
 use bip39::Mnemonic;
@@ -1119,6 +1119,8 @@ pub struct ReceiveAddressDto {
     created: String,
     status: String,
     derivation_path: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    address_type: Option<SoftwareAddressType>,
     hardware_verified_at: Option<String>,
     hardware_verified_by: Option<String>,
 }
@@ -1700,6 +1702,8 @@ pub struct RecoveryDrillDto {
     matches_current_wallet: bool,
     policy_type: Option<String>,
     policy_paths: Vec<PolicyPathDefinitionDto>,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    taproot: bool,
 }
 
 #[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq)]
@@ -4715,34 +4719,170 @@ fn software_wallet_master_fingerprint(mnemonic: &Mnemonic, credential: &str) -> 
         .to_string())
 }
 
-fn watch_templates(
-    mnemonic: &Mnemonic,
-    credential: &str,
-) -> ApiResult<(Bip84Public<Xpub>, Bip84Public<Xpub>)> {
-    let master = root_key(mnemonic, credential)?;
-    let secp = Secp256k1::new();
-    let fingerprint = master.fingerprint(&secp);
-    let account_path = DerivationPath::from_str(singlesig_account_path()).map_err(internal)?;
-    let account_private = master.derive_priv(&secp, &account_path).map_err(internal)?;
-    let account_public = Xpub::from_priv(&secp, &account_private);
-    Ok((
-        Bip84Public(account_public, fingerprint, KeychainKind::External),
-        Bip84Public(account_public, fingerprint, KeychainKind::Internal),
-    ))
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum SoftwareAddressType {
+    #[default]
+    NativeSegwit,
+    Taproot,
+}
+
+impl SoftwareAddressType {
+    fn account_path(self, network: Network) -> &'static str {
+        match (self, network) {
+            (Self::NativeSegwit, _) => {
+                crate::build_network::parameters_for(network).singlesig_account_path
+            }
+            (Self::Taproot, Network::Bitcoin) => "m/86'/0'/0'",
+            (Self::Taproot, _) => "m/86'/1'/0'",
+        }
+    }
+
+    fn from_receive_descriptor(descriptor: &str) -> Self {
+        if descriptor.starts_with("tr(") {
+            Self::Taproot
+        } else {
+            Self::NativeSegwit
+        }
+    }
+
+    fn require_supported(self, network: Network, macos: bool) -> ApiResult<()> {
+        if self == Self::Taproot
+            && !(macos && matches!(network, Network::Regtest | Network::Testnet4))
+        {
+            return Err(api_error(
+                "unsupported_operation",
+                "Software Taproot wallets are available on macOS with Regtest or Testnet4.",
+            ));
+        }
+        Ok(())
+    }
 }
 
 fn software_wallet_descriptors(
     mnemonic: &Mnemonic,
     credential: &str,
+    address_type: SoftwareAddressType,
 ) -> ApiResult<(String, String)> {
-    let (external, internal_template) = watch_templates(mnemonic, credential)?;
-    let wallet = Wallet::create(external, internal_template)
-        .network(network())
-        .create_wallet_no_persist()
-        .map_err(internal)?;
+    let network = network();
+    let master = root_key(mnemonic, credential)?;
+    let secp = Secp256k1::new();
+    let fingerprint = master.fingerprint(&secp);
+    let account_path =
+        DerivationPath::from_str(address_type.account_path(network)).map_err(internal)?;
+    let account_private = master.derive_priv(&secp, &account_path).map_err(internal)?;
+    let account = Xpub::from_priv(&secp, &account_private);
+    let wallet = match address_type {
+        SoftwareAddressType::NativeSegwit => Wallet::create(
+            Bip84Public(account, fingerprint, KeychainKind::External),
+            Bip84Public(account, fingerprint, KeychainKind::Internal),
+        ),
+        SoftwareAddressType::Taproot => Wallet::create(
+            Bip86Public(account, fingerprint, KeychainKind::External),
+            Bip86Public(account, fingerprint, KeychainKind::Internal),
+        ),
+    }
+    .network(network)
+    .create_wallet_no_persist()
+    .map_err(internal)?;
     Ok((
         wallet.public_descriptor(KeychainKind::External).to_string(),
         wallet.public_descriptor(KeychainKind::Internal).to_string(),
+    ))
+}
+
+fn authenticated_software_wallet_descriptors(
+    profile: &WalletProfile,
+    stored: &(String, String),
+    mnemonic: &Mnemonic,
+    credential: &str,
+) -> ApiResult<(String, String)> {
+    let address_type = SoftwareAddressType::from_receive_descriptor(&stored.0);
+    address_type.require_supported(network(), cfg!(target_os = "macos"))?;
+    let derived = software_wallet_descriptors(mnemonic, credential, address_type)?;
+    validate_loaded_descriptors(
+        profile,
+        &stored.0,
+        &stored.1,
+        Some((&derived.0, &derived.1)),
+    )?;
+    Ok(derived)
+}
+
+fn software_wallet_for_signing(
+    mnemonic: &Mnemonic,
+    credential: &str,
+    address_type: SoftwareAddressType,
+) -> ApiResult<Wallet> {
+    let master = root_key(mnemonic, credential)?;
+    software_signing_wallet_on_network(master, address_type, network())
+}
+
+fn software_signing_wallet_on_network(
+    master: Xpriv,
+    address_type: SoftwareAddressType,
+    network: Network,
+) -> ApiResult<Wallet> {
+    match address_type {
+        SoftwareAddressType::NativeSegwit => Wallet::create(
+            Bip84(master, KeychainKind::External),
+            Bip84(master, KeychainKind::Internal),
+        ),
+        SoftwareAddressType::Taproot => Wallet::create(
+            Bip86(master, KeychainKind::External),
+            Bip86(master, KeychainKind::Internal),
+        ),
+    }
+    .network(network)
+    .create_wallet_no_persist()
+    .map_err(internal)
+}
+
+fn software_multipath_descriptor(external: &str, internal_descriptor: &str) -> ApiResult<String> {
+    let external = external
+        .split_once('#')
+        .map(|(body, _)| body)
+        .ok_or_else(|| internal("The software receive descriptor has no checksum."))?;
+    let internal_descriptor = internal_descriptor
+        .split_once('#')
+        .map(|(body, _)| body)
+        .ok_or_else(|| internal("The software change descriptor has no checksum."))?;
+    let account = external
+        .strip_suffix("/0/*)")
+        .filter(|account| internal_descriptor.strip_suffix("/1/*)") == Some(*account))
+        .ok_or_else(|| internal("The software receive and change descriptors do not match."))?;
+    let body = format!("{account}/<0;1>/*)");
+    let checksum =
+        bdk_wallet::miniscript::descriptor::checksum::desc_checksum(&body).map_err(internal)?;
+    Ok(format!("{body}#{checksum}"))
+}
+
+const MAX_SOFTWARE_RECOVERY_DESCRIPTOR_BYTES: usize = 512;
+
+fn validate_software_recovery_descriptor(
+    address_type: SoftwareAddressType,
+    expected: Option<&str>,
+    descriptors: &(String, String),
+) -> ApiResult<()> {
+    match expected {
+        Some(expected) if expected.len() <= MAX_SOFTWARE_RECOVERY_DESCRIPTOR_BYTES => {
+            let derived = software_multipath_descriptor(&descriptors.0, &descriptors.1)?;
+            if expected.trim() == derived {
+                return Ok(());
+            }
+        }
+        None if address_type == SoftwareAddressType::NativeSegwit => return Ok(()),
+        None => {
+            return Err(api_error(
+                "invalid_descriptor",
+                "Enter the saved public Taproot descriptor to recover this wallet.",
+            ));
+        }
+        Some(_) => {}
+    }
+    Err(api_error(
+        "backup_mismatch",
+        "The recovery details do not match the saved public wallet descriptor.",
     ))
 }
 
@@ -4863,6 +5003,13 @@ fn read_multisig_metadata(app: &AppHandle) -> ApiResult<MultisigWalletDto> {
         )
     })?;
     let wallet: MultisigWalletDto = serde_json::from_str(&encoded).map_err(internal)?;
+    if wallet
+        .recovery_template
+        .as_ref()
+        .is_some_and(RecoveryTemplate::uses_taproot)
+    {
+        require_taproot_continuity_network(network())?;
+    }
     let profile = selected_profile_of_kind(app, WalletKind::Multisig)?;
     if descriptor_checksum(&wallet.external_descriptor)? != profile.descriptor_checksum {
         return Err(api_error(
@@ -4922,13 +5069,37 @@ fn verify_external_signer_credential(app: &AppHandle, credential: &str) -> ApiRe
     }
 }
 
+fn multisig_recovery_metadata(
+    name: String,
+    template: RecoveryTemplate,
+    cosigners: Vec<CosignerInput>,
+    analysis: PolicyAnalysis,
+) -> MultisigWalletDto {
+    let threshold = analysis.paths.first().map_or(2, |path| path.threshold);
+    let policy_type = verified_recovery_policy_type(&template, &analysis.paths);
+    MultisigWalletDto {
+        kind: "multisig".to_owned(),
+        name,
+        threshold,
+        cosigners,
+        external_descriptor: analysis.external_descriptor,
+        internal_descriptor: analysis.internal_descriptor,
+        created_at: now().to_string(),
+        policy_type: policy_type.to_owned(),
+        recovery_template: Some(template),
+        spending_paths: analysis.paths,
+    }
+}
+
 fn recovery_policy_type(template: &RecoveryTemplate) -> &'static str {
     match template {
         RecoveryTemplate::Recovery { .. } => "recovery",
         RecoveryTemplate::Decaying { .. } => "decaying",
         RecoveryTemplate::Expanding { .. } => "expanding",
-        RecoveryTemplate::PartnerContinuityV1 { .. } => "partner_continuity_v1",
-        RecoveryTemplate::FamilyContinuityV1 { .. } => "family_continuity_v1",
+        RecoveryTemplate::PartnerContinuityV1 { .. }
+        | RecoveryTemplate::PartnerContinuityTaprootV1 { .. } => "partner_continuity_v1",
+        RecoveryTemplate::FamilyContinuityV1 { .. }
+        | RecoveryTemplate::FamilyContinuityTaprootV1 { .. } => "family_continuity_v1",
     }
 }
 
@@ -5084,6 +5255,9 @@ fn validate_multisig_backup(encoded: &str) -> ApiResult<MultisigBackupDto> {
     }
     let (expected_external, expected_internal, expected_policy_type, expected_paths) =
         if let Some(template) = &backup.wallet.recovery_template {
+            if template.uses_taproot() {
+                require_taproot_continuity_network(network())?;
+            }
             let analysis =
                 analyze_template(template, &backup.wallet.cosigners).map_err(recovery_api_error)?;
             (
@@ -5415,9 +5589,12 @@ fn proposal_dto(
         strategy,
         fee_difference_vs_private,
     ) = row;
-    let psbt = decode_psbt(&encoded).map_err(proposal_api_error)?;
+    let mut psbt = decode_psbt(&encoded).map_err(proposal_api_error)?;
     validate_proposal_fee(&psbt, fee)?;
     let signing = proposal_signing_context(db, metadata, &proposal_id)?;
+    if let Some(index) = signing.path_index {
+        validate_taproot_policy_psbt(wallet, metadata, index, &mut psbt)?;
+    }
     let mut progress = signature_progress(&psbt, &signing.fingerprints, signing.required)
         .map_err(proposal_api_error)?;
     let spending_path_details = if let Some(index) = signing.path_index {
@@ -6376,15 +6553,27 @@ fn persist_secret_material(
         .map_err(secure_store_error)
 }
 
+struct SoftwareWalletSetup<'a> {
+    name: &'a str,
+    credential: &'a str,
+    backup_verified: bool,
+    network_setup_source_wallet_id: Option<&'a str>,
+    descriptors: &'a (String, String),
+}
+
 fn create_from_mnemonic(
     app: &AppHandle,
     state: &State<'_, AppState>,
-    name: String,
     mnemonic: Mnemonic,
-    credential: &str,
-    backup_verified: bool,
-    network_setup_source_wallet_id: Option<&str>,
+    setup: SoftwareWalletSetup<'_>,
 ) -> ApiResult<bool> {
+    let SoftwareWalletSetup {
+        name,
+        credential,
+        backup_verified,
+        network_setup_source_wallet_id,
+        descriptors,
+    } = setup;
     let name = name.trim();
     if name.is_empty() || name.chars().count() > 48 {
         return Err(api_error(
@@ -6395,11 +6584,10 @@ fn create_from_mnemonic(
     validate_wallet_passphrase(credential)?;
     let (id, dir) = prepare_profile_directory(app)?;
     let result = (|| {
-        let (external, internal_template) = watch_templates(&mnemonic, credential)?;
         let permit = database_open_permit_for_new_wallet(state)?;
         let mut db = open_wallet_database(&dir.join("wallet.sqlite"), &permit)?;
         init_app_schema(&db)?;
-        let wallet = Wallet::create(external, internal_template)
+        let wallet = Wallet::create(descriptors.0.clone(), descriptors.1.clone())
             .network(network())
             .create_wallet(&mut db)
             .map_err(internal)?;
@@ -7500,7 +7688,17 @@ fn snapshot_for_view(
     let addresses = if overview_only {
         Vec::new()
     } else {
-        address_rows(db, multisig)?
+        let multisig_account = multisig.then(|| {
+            if matches!(
+                wallet.public_descriptor(KeychainKind::External),
+                Descriptor::Tr(_)
+            ) {
+                crate::multisig::taproot_continuity_account_path(network())
+            } else {
+                multisig_account_path()
+            }
+        });
+        address_rows(db, multisig_account)?
     };
 
     let transactions = activity::transactions_from(wallet, db, &provenance_context)?;

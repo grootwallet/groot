@@ -182,7 +182,13 @@ pub(super) fn proposal_recipient_wallet_details(
             output
                 .bip32_derivation
                 .values()
-                .map(|(_, path)| path.to_string()),
+                .map(|(_, path)| path.to_string())
+                .chain(
+                    output
+                        .tap_key_origins
+                        .values()
+                        .map(|(_, (_, path))| path.to_string()),
+                ),
         ),
     ))
 }
@@ -235,7 +241,13 @@ pub(super) fn proposal_change_derivation_paths(
                 output
                     .bip32_derivation
                     .values()
-                    .map(|(_, path)| path.to_string()),
+                    .map(|(_, path)| path.to_string())
+                    .chain(
+                        output
+                            .tap_key_origins
+                            .values()
+                            .map(|(_, (_, path))| path.to_string()),
+                    ),
             ))
         })
         .collect()
@@ -428,15 +440,22 @@ pub(super) fn proposal_transaction_details(
                     .map_err(internal)?,
             )
             .ok_or_else(|| internal("The proposal weight overflowed."))?;
+        let input = &psbt.inputs[index];
         inputs.push(ProposalInputDto {
             outpoint: txin.previous_output.to_string(),
             amount: utxo.value.to_sat(),
             sequence: txin.sequence.to_consensus_u32(),
             derivation_paths: unique_derivation_paths(
-                psbt.inputs[index]
+                input
                     .bip32_derivation
                     .values()
-                    .map(|(_, path)| path.to_string()),
+                    .map(|(_, path)| path.to_string())
+                    .chain(
+                        input
+                            .tap_key_origins
+                            .values()
+                            .map(|(_, (_, path))| path.to_string()),
+                    ),
             ),
         });
     }

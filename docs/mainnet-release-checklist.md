@@ -18,6 +18,8 @@ before public GitHub publication. The completed checklist below is
 historical first-release evidence; the 5.3.0 package has no transferred
 physical or reproducibility certification.
 
+Before enabling a Taproot wallet on Mainnet, record a dedicated activation ADR, independent threat-model review and exact-candidate recovery, spend, network-isolation and supported-signer evidence. The Testnet4 rehearsal and Mainnet derivation vectors are inputs to that review. [Taproot verification](testing/taproot-receiving.md).
+
 ## Historical first-release approval
 
 Release decision: APPROVED

@@ -53,6 +53,7 @@
   import { toast } from '$lib/stores/toasts';
   import { coldcardPolicyFilename } from '$lib/transfer';
   import { useWalletShellContext } from '$lib/wallet/shell-context';
+  import { isTaprootContinuityTemplate } from '$lib/wallet/multisig-setup';
   import {
     hasMiniscriptPolicy,
     isContinuityPolicyType,
@@ -126,6 +127,7 @@
     snapshot ? policyMaturitySummary(snapshot.utxos, snapshot.chainTip) : null
   );
   const continuityPolicy = $derived(isContinuityPolicyType(wallet?.policyType));
+  const taprootContinuity = $derived(isTaprootContinuityTemplate(wallet?.recoveryTemplate));
   const policyPaths = $derived(snapshot?.policyPaths ?? []);
   const policyRows = (coin: WalletSnapshot['utxos'][number]) =>
     validPolicyPathRows(coin, policyPaths);
@@ -789,7 +791,7 @@
           {/if}
         </div>
         <p>
-          {translate($locale, 'Native SegWit ·')}
+          {translate($locale, taprootContinuity ? 'Taproot ·' : 'Native SegWit ·')}
           {networkName(snapshot?.network ?? defaultConfig.network)}
         </p>
       </div>

@@ -1,6 +1,67 @@
 import type { CatalogSection } from './types';
 
 export const multisigCopy = {
+  Taproot: { fr: 'Taproot', es: 'Taproot' },
+  'Use Taproot · Regtest rehearsal': {
+    fr: 'Utiliser Taproot · essai Regtest',
+    es: 'Usar Taproot · ensayo Regtest'
+  },
+  'Remove the added signers before changing address type.': {
+    fr: 'Retirez les signataires ajoutés avant de changer le type d’adresse.',
+    es: 'Retira los firmantes añadidos antes de cambiar el tipo de dirección.'
+  },
+  'Use independent offline Bitcoin Core signers with Taproot Miniscript PSBT support. Enter each public account manually.':
+    {
+      fr: 'Utilisez des signataires Bitcoin Core indépendants hors ligne compatibles avec les PSBT Taproot Miniscript. Saisissez chaque compte public manuellement.',
+      es: 'Usa firmantes independientes de Bitcoin Core sin conexión compatibles con PSBT de Taproot Miniscript. Introduce cada cuenta pública a mano.'
+    },
+  'Enter a public test-network account key beginning with tpub.': {
+    fr: 'Saisissez une clé de compte publique de test commençant par tpub.',
+    es: 'Introduce una clave de cuenta pública de pruebas que comience por tpub.'
+  },
+  'Groot could not prepare the Taproot recovery backup.': {
+    fr: 'Groot n’a pas pu préparer la sauvegarde de récupération Taproot.',
+    es: 'Groot no pudo preparar la copia de recuperación de Taproot.'
+  },
+  'Save the Groot JSON recovery backup': {
+    fr: 'Enregistrez la sauvegarde de récupération JSON Groot',
+    es: 'Guarda la copia de recuperación JSON de Groot'
+  },
+  'First receive address from Bitcoin Core': {
+    fr: 'Première adresse de réception selon Bitcoin Core',
+    es: 'Primera dirección de recepción de Bitcoin Core'
+  },
+  'Derive the first address independently from the public descriptor. Paste that address to verify the backup.':
+    {
+      fr: 'Dérivez indépendamment la première adresse à partir du descripteur public. Collez-la pour vérifier la sauvegarde.',
+      es: 'Deriva la primera dirección de forma independiente a partir del descriptor público. Pégala para verificar la copia.'
+    },
+  'Save Groot JSON backup': {
+    fr: 'Enregistrer la sauvegarde JSON Groot',
+    es: 'Guardar la copia JSON de Groot'
+  },
+  'Offline signer': { fr: 'Signataire hors ligne', es: 'Firmante sin conexión' },
+  'Taproot Continuity is available only for isolated Regtest rehearsal.': {
+    fr: 'Les politiques de continuité Taproot sont disponibles uniquement pour les essais isolés sur Regtest.',
+    es: 'La continuidad con Taproot solo está disponible para ensayos aislados en Regtest.'
+  },
+  'Taproot ·': { fr: 'Taproot ·', es: 'Taproot ·' },
+  'Taproot · Miniscript': { fr: 'Taproot · Miniscript', es: 'Taproot · Miniscript' },
+  'Verify the descriptor and address independently with a Taproot Miniscript tool before sharing it.':
+    {
+      fr: 'Vérifiez le descripteur et l’adresse avec un outil Taproot Miniscript indépendant avant de partager l’adresse.',
+      es: 'Verifica el descriptor y la dirección con una herramienta independiente de Taproot Miniscript antes de compartir la dirección.'
+    },
+  'Regtest rehearsal only. Keep this exact Groot JSON backup and the independent offline software signers that support Taproot Miniscript PSBTs.':
+    {
+      fr: 'Pour les essais sur Regtest uniquement. Conservez cette sauvegarde JSON Groot exacte et les signataires logiciels indépendants hors ligne compatibles avec les PSBT Taproot Miniscript.',
+      es: 'Solo para ensayos en Regtest. Conserva esta copia JSON exacta de Groot y los firmantes de software independientes sin conexión compatibles con las PSBT de Taproot Miniscript.'
+    },
+  'This saved Taproot setup is for isolated Regtest rehearsal. To start a new wallet, first discard this setup.':
+    {
+      fr: 'Cette configuration Taproot sauvegardée est réservée aux essais isolés sur Regtest. Pour créer un nouveau portefeuille, supprimez d’abord cette configuration.',
+      es: 'Esta configuración guardada de Taproot es para ensayos aislados en Regtest. Para crear una cartera nueva, descarta primero esta configuración.'
+    },
   'Miniscript signer compatibility': {
     fr: 'Compatibilité des signataires Miniscript',
     es: 'Compatibilidad de firmantes Miniscript'

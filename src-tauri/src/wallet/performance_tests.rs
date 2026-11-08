@@ -338,7 +338,7 @@ fn receive_history_query_benchmark() {
     transaction.commit().expect("commit benchmark fixture");
 
     let started = Instant::now();
-    let result = black_box(address_rows(&db, false).expect("read benchmark addresses"));
+    let result = black_box(address_rows(&db, None).expect("read benchmark addresses"));
     let elapsed = started.elapsed();
     assert_eq!(result.len(), rows);
     let _ = writeln!(

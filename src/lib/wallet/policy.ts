@@ -271,8 +271,13 @@ export function validPolicyRenewalRecommendation(
 
 export function walletPolicyPresentation(wallet: MultisigWallet): WalletPolicyPresentation {
   const template = wallet.recoveryTemplate;
-  if (template?.type === 'partner_continuity_v1' || template?.type === 'family_continuity_v1') {
-    const primary = template.type === 'partner_continuity_v1' ? template.owner : template.parents;
+  if (
+    template?.type === 'partner_continuity_v1' ||
+    template?.type === 'family_continuity_v1' ||
+    template?.type === 'partner_continuity_taproot_v1' ||
+    template?.type === 'family_continuity_taproot_v1'
+  ) {
+    const primary = 'owner' in template ? template.owner : template.parents;
     return {
       delayed: true,
       primaryThreshold: primary.threshold,

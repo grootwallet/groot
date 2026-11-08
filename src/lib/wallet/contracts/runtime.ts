@@ -1,5 +1,6 @@
 import type { SupportedNetwork } from '$lib/config';
 import type { Sats, WalletSnapshot } from './transactions';
+export type { SoftwareAddressType } from '$lib/types';
 
 export type MnemonicPresentation =
   { mode: 'native'; backupVerified: boolean } | { mode: 'fixture'; words: string[] };

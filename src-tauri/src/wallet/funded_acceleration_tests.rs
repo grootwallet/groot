@@ -2,6 +2,7 @@ use super::multisig_proposal_commands::{
     build_delayed_policy_sweep, build_policy_renewal, finalized_multisig_proposal_transaction,
     import_multisig_proposal_in_db,
 };
+use super::profile_commands::create_labeled_software_receive;
 use super::transaction_commands::{
     core_incremental_relay_fee, prepare_persisted_multisig_acceleration, validate_fee_rate,
     AccelerationRatePolicy,
@@ -43,8 +44,12 @@ struct TestKey {
 }
 
 fn test_keys_with_count(count: u8) -> Vec<TestKey> {
+    test_keys_for_account(count, multisig_account_path())
+}
+
+fn test_keys_for_account(count: u8, path: &str) -> Vec<TestKey> {
     let secp = Secp256k1::new();
-    let path = DerivationPath::from_str(multisig_account_path()).unwrap();
+    let path = DerivationPath::from_str(path).unwrap();
     (1_u8..=count)
         .map(|index| {
             let mut seed = [0_u8; 32];
@@ -693,6 +698,276 @@ fn clean_storage_descriptor_recovery_restores_known_history_and_survives_reopen(
 
 #[test]
 #[ignore = "requires the isolated Bitcoin Core regtest harness"]
+fn funded_taproot_software_reopens_recovers_and_spends_with_key_path() {
+    assert!(std::env::var_os("GROOT_RUN_REGTEST").is_some());
+    let rpc = Arc::new(rpc());
+    let funding = rpc_at_wallet(Some("groot-dev"));
+    let mnemonic = Mnemonic::from_entropy(&[42; 32]).unwrap();
+    let passphrase = "disposable taproot regtest fixture";
+    let address_type = SoftwareAddressType::Taproot;
+    let descriptors = software_wallet_descriptors(&mnemonic, passphrase, address_type).unwrap();
+    let export = software_multipath_descriptor(&descriptors.0, &descriptors.1).unwrap();
+    assert!(export.starts_with("tr("));
+    assert!(export.contains("/86'/1'/0']"));
+    assert!(export.contains("/<0;1>/*"));
+    let core_export = rpc.get_descriptor_info(&export).unwrap();
+    assert!(core_export.is_range);
+    assert!(core_export.is_solvable);
+    assert!(!core_export.has_private_keys);
+    assert_eq!(
+        core_export.checksum.as_deref(),
+        export.rsplit_once('#').map(|(_, sum)| sum)
+    );
+    let core_receive = rpc.derive_addresses(&descriptors.0, Some([0, 1])).unwrap();
+    let core_change = rpc.derive_addresses(&descriptors.1, Some([0, 0])).unwrap();
+    let expected_change = core_change[0]
+        .clone()
+        .require_network(Network::Regtest)
+        .unwrap();
+
+    let source_database = TemporaryDatabase::new();
+    let mut source_db = Connection::open(&source_database.0).unwrap();
+    init_app_schema(&source_db).unwrap();
+    Wallet::create(descriptors.0.clone(), descriptors.1.clone())
+        .network(Network::Regtest)
+        .create_wallet(&mut source_db)
+        .unwrap();
+    assert_eq!(
+        create_labeled_software_receive(&mut source_db, vec![])
+            .err()
+            .unwrap()
+            .code,
+        "invalid_label"
+    );
+    source_db
+        .execute_batch(
+            "CREATE TEMP TRIGGER reject_receive_assignment BEFORE INSERT ON groot_label_assignments
+         BEGIN SELECT RAISE(ABORT, 'synthetic assignment failure'); END;",
+        )
+        .unwrap();
+    assert!(create_labeled_software_receive(&mut source_db, vec!["Failed label".into()]).is_err());
+    source_db
+        .execute_batch("DROP TRIGGER reject_receive_assignment")
+        .unwrap();
+    assert_eq!(
+        source_db
+            .query_row("SELECT count(*) FROM groot_addresses", [], |row| row
+                .get::<_, u32>(0))
+            .unwrap(),
+        0
+    );
+    assert_eq!(
+        source_db
+            .query_row("SELECT count(*) FROM groot_labels", [], |row| row
+                .get::<_, u32>(0))
+            .unwrap(),
+        0
+    );
+
+    let labels = vec![
+        "Taproot first payment".to_owned(),
+        "Shared label".to_owned(),
+    ];
+    let first = create_labeled_software_receive(&mut source_db, labels.clone()).unwrap();
+    let second =
+        create_labeled_software_receive(&mut source_db, vec!["Shared label".into()]).unwrap();
+    assert_eq!(first.id, 0);
+    assert_eq!(second.id, 1);
+    assert_eq!(first.derivation_path, "m/86'/1'/0'/0/0");
+    assert_eq!(first.labels, labels);
+    for (receive, core_address) in [&first, &second].into_iter().zip(core_receive) {
+        let address = Address::from_str(&receive.address).unwrap();
+        assert!(!address.is_valid_for_network(Network::Testnet4));
+        assert!(!address.is_valid_for_network(Network::Bitcoin));
+        let address = address.require_network(Network::Regtest).unwrap();
+        assert_eq!(address.address_type(), Some(AddressType::P2tr));
+        assert_eq!(
+            address,
+            core_address.require_network(Network::Regtest).unwrap()
+        );
+    }
+
+    let mining = funding
+        .get_new_address(Some("Taproot Regtest funding"), None)
+        .unwrap()
+        .require_network(Network::Regtest)
+        .unwrap();
+    let first_txid: Txid = funding
+        .call(
+            "sendtoaddress",
+            &[serde_json::json!(first.address), serde_json::json!(0.0012)],
+        )
+        .unwrap();
+    let second_txid: Txid = funding
+        .call(
+            "sendtoaddress",
+            &[serde_json::json!(second.address), serde_json::json!(0.0023)],
+        )
+        .unwrap();
+    rpc.generate_to_address(1, &mining).unwrap();
+    drop(source_db);
+    let mut source_db = Connection::open(&source_database.0).unwrap();
+    let mut source = load_wallet(&mut source_db).unwrap();
+    sync(&mut source, &mut source_db, Arc::clone(&rpc));
+    let snapshot = snapshot_from(&source, &source_db, None, false, None).unwrap();
+    assert_eq!(snapshot.balance.confirmed, 350_000);
+    let reopened_first = snapshot
+        .receive_addresses
+        .iter()
+        .find(|address| address.id == 0)
+        .unwrap();
+    assert_eq!(reopened_first.labels, labels);
+    assert_eq!(reopened_first.derivation_path, first.derivation_path);
+
+    let recovered_descriptors =
+        software_wallet_descriptors(&mnemonic, passphrase, address_type).unwrap();
+    assert_eq!(descriptors, recovered_descriptors);
+    validate_software_recovery_descriptor(address_type, Some(&export), &recovered_descriptors)
+        .unwrap();
+    let wrong_passphrase = "different disposable taproot regtest fixture";
+    let wrong_descriptors =
+        software_wallet_descriptors(&mnemonic, wrong_passphrase, address_type).unwrap();
+    assert!(
+        validate_software_recovery_descriptor(address_type, Some(&export), &wrong_descriptors)
+            .is_err()
+    );
+
+    let recovery_database = TemporaryDatabase::new();
+    assert!(!recovery_database.0.exists());
+    let mut recovery_db = Connection::open(&recovery_database.0).unwrap();
+    init_app_schema(&recovery_db).unwrap();
+    let settings = RecoveryScanSettingsDto {
+        birthday_height: 0,
+        gap_limit: 20,
+    };
+    let mut recovered = Wallet::create(
+        recovered_descriptors.0.clone(),
+        recovered_descriptors.1.clone(),
+    )
+    .network(Network::Regtest)
+    .lookahead(settings.gap_limit)
+    .create_wallet(&mut recovery_db)
+    .unwrap();
+    full_rescan_loaded_wallet(
+        Arc::clone(&rpc),
+        None,
+        &mut recovered,
+        &mut recovery_db,
+        &settings,
+        "taproot-clean-recovery",
+        &AtomicBool::new(false),
+    )
+    .unwrap();
+    finish_recovery_scan_record(&recovery_db, "taproot-clean-recovery", "completed").unwrap();
+    assert_eq!(recovered.balance().confirmed, Amount::from_sat(350_000));
+    assert!(recovered.get_tx(first_txid).is_some());
+    assert!(recovered.get_tx(second_txid).is_some());
+
+    let recipient = funding
+        .get_new_address(Some("Taproot Regtest spend"), None)
+        .unwrap()
+        .require_network(Network::Regtest)
+        .unwrap();
+    let amount = 75_000;
+    let rate = FeeRate::from_sat_per_vb(2).unwrap();
+    let inputs = recovered
+        .list_unspent()
+        .map(|coin| coin.outpoint)
+        .collect::<Vec<_>>();
+    let mut builder = recovered.build_tx();
+    builder
+        .add_recipient(recipient.script_pubkey(), Amount::from_sat(amount))
+        .fee_rate(rate)
+        .add_utxos(&inputs)
+        .unwrap()
+        .manually_selected_only();
+    let mut psbt = builder.finish().unwrap();
+    let fee = psbt.fee_amount().unwrap().to_sat();
+    bind_psbt_inputs_to_wallet(&recovered, &mut psbt).unwrap();
+    validate_proposal_fee(&psbt, fee).unwrap();
+    validate_release_spend(&recovered, &psbt, &recipient.to_string(), amount, None).unwrap();
+    let (reviewed_inputs, _, _, _) = proposal_transaction_details(&recovered, &psbt, fee).unwrap();
+    let mut reviewed_paths = reviewed_inputs
+        .into_iter()
+        .flat_map(|input| input.derivation_paths)
+        .collect::<Vec<_>>();
+    reviewed_paths.sort_unstable();
+    assert_eq!(reviewed_paths, ["86'/1'/0'/0/0", "86'/1'/0'/0/1"]);
+    let (change, change_addresses) =
+        proposal_change_details(&recovered, &psbt, &recipient.to_string(), amount).unwrap();
+    assert_eq!(change_addresses, [expected_change.to_string()]);
+    assert_eq!(
+        proposal_change_derivation_paths(&psbt, &change_addresses).unwrap(),
+        [vec!["86'/1'/0'/1/0"]]
+    );
+    assert_eq!(
+        proposal_recipient_wallet_details(&recovered, &psbt, &expected_change.to_string(), change)
+            .unwrap(),
+        (true, vec!["86'/1'/0'/1/0".to_owned()])
+    );
+    assert!(psbt
+        .inputs
+        .iter()
+        .all(|input| input.tap_internal_key.is_some()
+            && input.tap_merkle_root.is_none()
+            && input.tap_scripts.is_empty()));
+    recovered.persist(&mut recovery_db).unwrap();
+    drop(recovered);
+    drop(recovery_db);
+
+    let mut recovery_db = Connection::open(&recovery_database.0).unwrap();
+    let mut recovered = load_wallet(&mut recovery_db).unwrap();
+    let signing = software_wallet_for_signing(&mnemonic, passphrase, address_type).unwrap();
+    for (keychain, descriptor) in [
+        (KeychainKind::External, &descriptors.0),
+        (KeychainKind::Internal, &descriptors.1),
+    ] {
+        assert_eq!(&signing.public_descriptor(keychain).to_string(), descriptor);
+        assert_eq!(
+            &recovered.public_descriptor(keychain).to_string(),
+            descriptor
+        );
+    }
+    bind_psbt_inputs_to_wallet(&recovered, &mut psbt).unwrap();
+    let wrong_signing =
+        software_wallet_for_signing(&mnemonic, wrong_passphrase, address_type).unwrap();
+    assert!(!wrong_signing
+        .sign(&mut psbt.clone(), SignOptions::default())
+        .unwrap());
+    assert!(signing.sign(&mut psbt, SignOptions::default()).unwrap());
+    let transaction = psbt.extract_tx().unwrap();
+    assert_eq!(transaction.input.len(), 2);
+    assert!(transaction
+        .input
+        .iter()
+        .all(|input| input.witness.len() == 1 && input.witness.iter().next().unwrap().len() == 64));
+    let spend_txid = rpc.send_raw_transaction(&transaction).unwrap();
+    assert_eq!(spend_txid, transaction.compute_txid());
+    rpc.generate_to_address(1, &mining).unwrap();
+    sync(&mut recovered, &mut recovery_db, Arc::clone(&rpc));
+    assert_eq!(
+        recovered.balance().confirmed.to_sat(),
+        350_000 - amount - fee
+    );
+    assert_eq!(recovered.list_unspent().count(), 1);
+    assert_eq!(
+        recovered.list_unspent().next().unwrap().txout.script_pubkey,
+        expected_change.script_pubkey()
+    );
+
+    drop(recovered);
+    drop(recovery_db);
+    let mut recovery_db = Connection::open(&recovery_database.0).unwrap();
+    let recovered = load_wallet(&mut recovery_db).unwrap();
+    assert_eq!(
+        recovered.balance().confirmed.to_sat(),
+        350_000 - amount - fee
+    );
+    assert!(recovered.get_tx(spend_txid).is_some());
+}
+
+#[test]
+#[ignore = "requires the isolated Bitcoin Core regtest harness"]
 fn current_tip_initial_scan_allows_later_bitcoin_core_sync() {
     assert!(std::env::var_os("GROOT_RUN_REGTEST").is_some());
     let rpc = Arc::new(rpc());
@@ -1273,7 +1548,11 @@ fn funded_rbf_and_cpfp_cross_groot_proposal_boundaries() {
     );
 }
 
-fn continuity_metadata(keys: &[TestKey], family: bool) -> MultisigWalletDto {
+fn continuity_metadata_with_script(
+    keys: &[TestKey],
+    family: bool,
+    taproot: bool,
+) -> MultisigWalletDto {
     let template = if family {
         RecoveryTemplate::FamilyContinuityV1 {
             parents: SpendingPath::new(2, ["signer-0", "signer-1"]),
@@ -1288,7 +1567,19 @@ fn continuity_metadata(keys: &[TestKey], family: bool) -> MultisigWalletDto {
             estate: SpendingPath::new(2, ["signer-5", "signer-6", "signer-7"]),
         }
     };
+    let template = if taproot {
+        template.into_taproot().unwrap()
+    } else {
+        template
+    };
     let mut metadata = metadata(keys);
+    if taproot {
+        for cosigner in &mut metadata.cosigners {
+            cosigner.derivation_path =
+                crate::multisig::taproot_continuity_account_path(Network::Regtest).to_owned();
+            cosigner.source = CosignerSource::Manual;
+        }
+    }
     let analysis = analyze_template(&template, &metadata.cosigners).unwrap();
     metadata.external_descriptor = analysis.external_descriptor;
     metadata.internal_descriptor = analysis.internal_descriptor;
@@ -1314,6 +1605,23 @@ fn continuity_signing_wallet(metadata: &MultisigWalletDto, key: &TestKey) -> Wal
     .network(Network::Regtest)
     .create_wallet_no_persist()
     .unwrap()
+}
+
+fn continuity_sign_options(psbt: &Psbt) -> SignOptions {
+    use bdk_wallet::{bitcoin::taproot::TapLeafHash, signer::TapLeavesOptions};
+    let leaves = psbt
+        .inputs
+        .iter()
+        .flat_map(|input| input.tap_scripts.values())
+        .map(|(script, version)| TapLeafHash::from_script(script, *version))
+        .collect::<Vec<_>>();
+    SignOptions {
+        trust_witness_utxo: true,
+        try_finalize: false,
+        sign_with_tap_internal_key: false,
+        tap_leaves_options: TapLeavesOptions::Include(leaves),
+        ..Default::default()
+    }
 }
 
 // Exact fixed-delay policies are exercised against real Core using sparse,
@@ -1365,9 +1673,37 @@ fn funded_continuity_all_named_paths_renew_reorg_and_restore() {
         proposal: Option<Psbt>,
     }
     let mut cases = Vec::new();
-    for family in [false, true] {
-        let keys = test_keys_with_count(if family { 7 } else { 8 });
-        let metadata = continuity_metadata(&keys, family);
+    for (family, taproot) in [(false, false), (true, false), (false, true), (true, true)] {
+        let path = if taproot {
+            crate::multisig::taproot_continuity_account_path(Network::Regtest)
+        } else {
+            multisig_account_path()
+        };
+        let keys = test_keys_for_account(if family { 7 } else { 8 }, path);
+        let metadata = continuity_metadata_with_script(&keys, family, taproot);
+        if taproot {
+            let preview = multisig_setup_commands::recovery_policy_analyze(
+                metadata.recovery_template.clone().unwrap(),
+                metadata.cosigners.clone(),
+                Some(metadata.name.clone()),
+            )
+            .unwrap();
+            let preview = serde_json::to_value(preview).unwrap();
+            let backup =
+                validate_multisig_backup(preview["encodedBackup"].as_str().unwrap()).unwrap();
+            assert_eq!(
+                backup.wallet.external_descriptor,
+                metadata.external_descriptor
+            );
+            assert_eq!(
+                backup.wallet.internal_descriptor,
+                metadata.internal_descriptor
+            );
+            assert_eq!(
+                preview["firstAddress"],
+                first_multisig_address(&metadata).unwrap()
+            );
+        }
         let public_wallet = Wallet::create(
             metadata.external_descriptor.clone(),
             metadata.internal_descriptor.clone(),
@@ -1398,12 +1734,47 @@ fn funded_continuity_all_named_paths_renew_reorg_and_restore() {
             .network(Network::Regtest)
             .create_wallet(&mut db)
             .unwrap();
-            let receive = wallet
-                .reveal_addresses_to(KeychainKind::External, case_index as u32)
-                .last()
-                .unwrap()
-                .address;
-            wallet.persist(&mut db).unwrap();
+            let receive = if taproot {
+                use super::multisig_setup_commands::create_multisig_address;
+                assert_eq!(
+                    create_multisig_address(&mut db, &metadata, vec!["  ".to_owned()])
+                        .err()
+                        .unwrap()
+                        .code,
+                    "invalid_label"
+                );
+                let label = "Isolated Taproot Continuity".to_owned();
+                let receive = (0..=case_index)
+                    .map(|index| {
+                        let response =
+                            create_multisig_address(&mut db, &metadata, vec![label.clone()])
+                                .unwrap();
+                        assert_eq!(response.id, index as u32);
+                        assert_eq!(response.labels, vec![label.clone()]);
+                        assert_eq!(response.derivation_path, format!("{path}/0/{index}"));
+                        assert!(response.testnet_alias.is_none());
+                        response
+                    })
+                    .last()
+                    .unwrap();
+                wallet = load_wallet(&mut db).unwrap();
+                let labels =
+                    label_provenance::labels_for_subject(&db, "address", &receive.id.to_string())
+                        .unwrap();
+                assert_eq!(labels[0].text, label);
+                Address::from_str(&receive.address)
+                    .unwrap()
+                    .require_network(Network::Regtest)
+                    .unwrap()
+            } else {
+                let receive = wallet
+                    .reveal_addresses_to(KeychainKind::External, case_index as u32)
+                    .last()
+                    .unwrap()
+                    .address;
+                wallet.persist(&mut db).unwrap();
+                receive
+            };
             let txid: Txid = rpc
                 .call(
                     "sendtoaddress",
@@ -1527,12 +1898,14 @@ fn funded_continuity_all_named_paths_renew_reorg_and_restore() {
             let delay = case.metadata.spending_paths[case.index].available_after_blocks;
             if case.renewal {
                 if age == 1 {
-                    let (renewal, address) = build_policy_renewal(
+                    let (mut renewal, address) = build_policy_renewal(
                         &mut case.wallet,
                         case.outpoint,
                         FeeRate::from_sat_per_vb(2).unwrap(),
                     )
                     .unwrap();
+                    prepare_taproot_policy_psbt(&case.wallet, &case.metadata, 0, &mut renewal)
+                        .unwrap();
                     assert!(case.wallet.is_mine(address.script_pubkey()));
                     assert!(!renewal.unsigned_tx.input[0]
                         .sequence
@@ -1590,9 +1963,16 @@ fn funded_continuity_all_named_paths_renew_reorg_and_restore() {
                     // invalidated block while its invalid flag is retained.
                     let fork_script = bdk_wallet::bitcoin::ScriptBuf::from_bytes(vec![
                         0x6a,
-                        0x02,
+                        0x03,
                         u8::from(case.metadata.policy_type == "family_continuity_v1"),
                         case.index as u8,
+                        u8::from(
+                            case.metadata
+                                .recovery_template
+                                .as_ref()
+                                .unwrap()
+                                .uses_taproot(),
+                        ),
                     ]);
                     let fork_destination = Address::p2wsh(&fork_script, Network::Regtest);
                     rpc.generate_to_address(1, &fork_destination).unwrap();
@@ -1649,15 +2029,90 @@ fn funded_continuity_all_named_paths_renew_reorg_and_restore() {
     }
     for mut case in cases {
         let mut psbt = case.proposal.take().unwrap();
+        let taproot = case
+            .metadata
+            .recovery_template
+            .as_ref()
+            .unwrap()
+            .uses_taproot();
+        if taproot {
+            let original = &case.wallet;
+            let funded_script = &case.funding.output[case.outpoint.vout as usize].script_pubkey;
+            let (_, index) = original.derivation_of_spk(funded_script.clone()).unwrap();
+            let exported = serde_json::to_string(&MultisigBackupDto {
+                version: 1,
+                network: "regtest".to_owned(),
+                wallet: case.metadata.clone(),
+            })
+            .unwrap();
+            case.metadata = validate_multisig_backup(&exported).unwrap().wallet;
+            let database = TemporaryDatabase::new();
+            let mut db = Connection::open(&database.0).unwrap();
+            init_app_schema(&db).unwrap();
+            let mut recovered = Wallet::create(
+                case.metadata.external_descriptor.clone(),
+                case.metadata.internal_descriptor.clone(),
+            )
+            .network(Network::Regtest)
+            .create_wallet(&mut db)
+            .unwrap();
+            recovered
+                .reveal_addresses_to(KeychainKind::External, index)
+                .for_each(drop);
+            if case.renewal {
+                recovered.reveal_next_address(KeychainKind::Internal);
+            }
+            assert_eq!(
+                recovered
+                    .peek_address(KeychainKind::External, index)
+                    .address
+                    .script_pubkey(),
+                *funded_script
+            );
+            recovered.persist(&mut db).unwrap();
+            case.wallet = recovered;
+            case.db = db;
+            case._database = database;
+        }
         let selected = case.metadata.spending_paths[case.index].clone();
         let (_, eligible) =
             signer_fingerprints_for_ids(&case.metadata, &selected.signer_ids).unwrap();
         let signers: Vec<usize> = match (&case.metadata.recovery_template, case.index) {
-            (Some(RecoveryTemplate::PartnerContinuityV1 { .. }), 1) => vec![3, 4],
-            (Some(RecoveryTemplate::PartnerContinuityV1 { .. }), 2) => vec![3],
-            (Some(RecoveryTemplate::PartnerContinuityV1 { .. }), 3) => vec![5, 6],
-            (Some(RecoveryTemplate::FamilyContinuityV1 { .. }), 1) => vec![2, 3, 0],
-            (Some(RecoveryTemplate::FamilyContinuityV1 { .. }), 2) => vec![4, 6],
+            (
+                Some(
+                    RecoveryTemplate::PartnerContinuityV1 { .. }
+                    | RecoveryTemplate::PartnerContinuityTaprootV1 { .. },
+                ),
+                1,
+            ) => vec![3, 4],
+            (
+                Some(
+                    RecoveryTemplate::PartnerContinuityV1 { .. }
+                    | RecoveryTemplate::PartnerContinuityTaprootV1 { .. },
+                ),
+                2,
+            ) => vec![3],
+            (
+                Some(
+                    RecoveryTemplate::PartnerContinuityV1 { .. }
+                    | RecoveryTemplate::PartnerContinuityTaprootV1 { .. },
+                ),
+                3,
+            ) => vec![5, 6],
+            (
+                Some(
+                    RecoveryTemplate::FamilyContinuityV1 { .. }
+                    | RecoveryTemplate::FamilyContinuityTaprootV1 { .. },
+                ),
+                1,
+            ) => vec![2, 3, 0],
+            (
+                Some(
+                    RecoveryTemplate::FamilyContinuityV1 { .. }
+                    | RecoveryTemplate::FamilyContinuityTaprootV1 { .. },
+                ),
+                2,
+            ) => vec![4, 6],
             _ => vec![0, 1],
         };
         observe(&mut case);
@@ -1674,16 +2129,8 @@ fn funded_continuity_all_named_paths_renew_reorg_and_restore() {
         for (position, signer) in signers.into_iter().enumerate() {
             let signing_wallet = continuity_signing_wallet(&case.metadata, &case.keys[signer]);
             let mut returned = psbt.clone();
-            signing_wallet
-                .sign(
-                    &mut returned,
-                    SignOptions {
-                        trust_witness_utxo: true,
-                        try_finalize: false,
-                        ..Default::default()
-                    },
-                )
-                .unwrap();
+            let options = continuity_sign_options(&psbt);
+            signing_wallet.sign(&mut returned, options).unwrap();
             let progress = import_multisig_proposal_in_db(
                 &mut case.db,
                 &case.metadata,
@@ -1694,7 +2141,10 @@ fn funded_continuity_all_named_paths_renew_reorg_and_restore() {
             if (position == 0 && selected.threshold > 1)
                 || (matches!(
                     case.metadata.recovery_template,
-                    Some(RecoveryTemplate::FamilyContinuityV1 { .. })
+                    Some(
+                        RecoveryTemplate::FamilyContinuityV1 { .. }
+                            | RecoveryTemplate::FamilyContinuityTaprootV1 { .. }
+                    )
                 ) && case.index == 1
                     && position == 1)
             {
@@ -1744,6 +2194,24 @@ fn funded_continuity_all_named_paths_renew_reorg_and_restore() {
             .iter()
             .any(|tx| tx.compute_txid() == transaction.compute_txid()));
         // A clean descriptor reconstruction retains exact receive and change scripts.
+        if taproot {
+            let record = DescriptorRecord::from_descriptor_pair(
+                &case.metadata.external_descriptor,
+                &case.metadata.internal_descriptor,
+                &first_multisig_address(&case.metadata).unwrap(),
+            )
+            .unwrap();
+            assert!(record
+                .matches_descriptor_pair(
+                    &case.metadata.external_descriptor,
+                    &case.metadata.internal_descriptor
+                )
+                .unwrap());
+            let witness = &transaction.input[0].witness;
+            assert!(witness.len() >= 3, "script-path witness");
+            let (script, _) = psbt.inputs[0].tap_scripts.values().next().unwrap();
+            assert_eq!(witness.nth(witness.len() - 2).unwrap(), script.as_bytes());
+        }
         let recovered = Wallet::create(
             case.metadata.external_descriptor.clone(),
             case.metadata.internal_descriptor.clone(),
@@ -1780,9 +2248,14 @@ fn funded_continuity_descriptors_restore_history_in_core() {
         .unwrap()
         .require_network(Network::Regtest)
         .unwrap();
-    for family in [false, true] {
-        let keys = test_keys_with_count(if family { 7 } else { 8 });
-        let metadata = continuity_metadata(&keys, family);
+    for (family, taproot) in [(false, false), (true, false), (false, true), (true, true)] {
+        let path = if taproot {
+            crate::multisig::taproot_continuity_account_path(Network::Regtest)
+        } else {
+            multisig_account_path()
+        };
+        let keys = test_keys_for_account(if family { 7 } else { 8 }, path);
+        let metadata = continuity_metadata_with_script(&keys, family, taproot);
         let wallet = Wallet::create(
             metadata.external_descriptor.clone(),
             metadata.internal_descriptor.clone(),
@@ -1801,10 +2274,11 @@ fn funded_continuity_descriptors_restore_history_in_core() {
             )
             .unwrap();
         rpc.generate_to_address(1, &mining).unwrap();
-        let name = if family {
-            "continuity-family-restore"
-        } else {
-            "continuity-partner-restore"
+        let name = match (family, taproot) {
+            (false, false) => "continuity-partner-restore",
+            (true, false) => "continuity-family-restore",
+            (false, true) => "continuity-partner-taproot-restore",
+            (true, true) => "continuity-family-taproot-restore",
         };
         let _: serde_json::Value = rpc
             .call(
@@ -1865,10 +2339,27 @@ fn funded_continuity_descriptors_restore_history_in_core() {
 
 #[test]
 fn fixed_policy_finalization_honors_sequence_when_later_partner_path_is_mature() {
+    verify_fixed_policy_finalization(false);
+}
+
+#[test]
+fn taproot_policy_finalization_binds_the_selected_leaf() {
+    if network() != Network::Regtest {
+        return;
+    }
+    verify_fixed_policy_finalization(true);
+}
+
+fn verify_fixed_policy_finalization(taproot: bool) {
     use bdk_wallet::chain::TxUpdate;
     use bdk_wallet::miniscript::psbt::PsbtExt;
-    let keys = test_keys_with_count(8);
-    let metadata = continuity_metadata(&keys, false);
+    let path = if taproot {
+        crate::multisig::taproot_continuity_account_path(Network::Regtest)
+    } else {
+        multisig_account_path()
+    };
+    let keys = test_keys_for_account(8, path);
+    let metadata = continuity_metadata_with_script(&keys, false, taproot);
     let mut wallet = Wallet::create(
         metadata.external_descriptor.clone(),
         metadata.internal_descriptor.clone(),
@@ -1931,22 +2422,30 @@ fn fixed_policy_finalization_honors_sequence_when_later_partner_path_is_mature()
         13_140
     );
     for (position, signer) in [3, 4].into_iter().enumerate() {
+        let mut returned = psbt.clone();
         continuity_signing_wallet(&metadata, &keys[signer])
-            .sign(
-                &mut psbt,
-                SignOptions {
-                    trust_witness_utxo: true,
-                    try_finalize: false,
-                    ..Default::default()
-                },
-            )
+            .sign(&mut returned, continuity_sign_options(&psbt))
             .unwrap();
+        if taproot {
+            // BDK refreshes PSBT descriptor metadata in the returned file.
+            // Groot keeps its own selected leaf and merges signatures only.
+            let allowed = multisig_fingerprints(&metadata).unwrap();
+            merge_signed_psbt(&mut psbt, returned, &allowed, 2).unwrap();
+        } else {
+            psbt = returned;
+        }
         if position == 0 {
             assert!(!finalize_multisig_policy_psbt(&wallet, &metadata, &mut psbt.clone()).unwrap());
         }
     }
     let mut tampered = psbt.clone();
-    tampered.inputs[0].witness_script = Some(bdk_wallet::bitcoin::ScriptBuf::new());
+    if taproot {
+        assert_eq!(psbt.inputs[0].tap_scripts.len(), 1);
+        assert_eq!(psbt.inputs[0].tap_script_sigs.len(), 2);
+        tampered.inputs[0].tap_scripts.clear();
+    } else {
+        tampered.inputs[0].witness_script = Some(bdk_wallet::bitcoin::ScriptBuf::new());
+    }
     assert_eq!(
         finalize_multisig_policy_psbt(&wallet, &metadata, &mut tampered)
             .unwrap_err()

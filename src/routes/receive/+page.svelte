@@ -65,6 +65,8 @@
   let qrGeneration = 0;
   let discardTarget = $state<ReceiveAddress | null>(null);
   let detailAddress = $state<ReceiveAddress | null>(null);
+  let currentUsesTaproot = $derived(current?.addressType === 'taproot');
+  let detailsUseTaproot = $derived(detailAddress?.addressType === 'taproot');
   let receiveCard = $state<HTMLElement | null>(null);
   let savedSignerDeviceType = $state<string | null>(null);
   let savedSignerFingerprint = $state<string | null>(null);
@@ -401,7 +403,9 @@
           </div>
           <div>
             <dt>{translate($locale, 'Type')}</dt>
-            <dd>{translate($locale, 'Native SegWit · BIP84')}</dd>
+            <dd>
+              {translate($locale, currentUsesTaproot ? 'Taproot · BIP86' : 'Native SegWit · BIP84')}
+            </dd>
           </div>
           {#if current.hardwareVerifiedAt}<div>
               <dt>{translate($locale, 'Hardware verified')}</dt>
@@ -559,6 +563,7 @@
 <AddressDetailsModal
   address={detailAddress}
   open={Boolean(detailAddress)}
+  walletType={translate($locale, detailsUseTaproot ? 'Taproot · BIP86' : 'Native SegWit')}
   onclose={() => (detailAddress = null)}
 />
 <Modal

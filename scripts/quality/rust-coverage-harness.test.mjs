@@ -19,6 +19,7 @@ const libraryScenarios = [
   'funded_rbf_and_cpfp_cross_groot_proposal_boundaries',
   'funded_mobile_cosigner_round_trip_reviews_merges_finalizes_and_broadcasts',
   'clean_storage_descriptor_recovery_restores_known_history_and_survives_reopen',
+  'funded_taproot_software_reopens_recovers_and_spends_with_key_path',
   'current_tip_initial_scan_allows_later_bitcoin_core_sync',
   'explicit_rescan_waits_when_core_falls_behind_the_wallet_checkpoint',
   'birthday_only_checkpoint_recovers_after_a_deep_reorg',
@@ -33,6 +34,7 @@ const descriptorScenarios = [
   'birthday_and_gap_limits_omit_then_restore_known_history',
   'extended_gap_large_history_recovers_within_the_ci_resource_envelope'
 ];
+const coreInvocations = libraryScenarios.length + 1;
 const fixtureScripts = [
   'scripts/quality/check-rust-coverage.sh',
   'scripts/quality/check-rust-full-coverage.sh',
@@ -175,7 +177,7 @@ testBash(
       assertThresholds(events[2], 99, 100, 97);
       assertThresholds(events.at(-1), 62, 59, 59);
       const calls = scenarios(events);
-      assert.equal(calls.length, 12);
+      assert.equal(calls.length, coreInvocations);
       assert.deepEqual(
         calls
           .filter(({ args }) => args.includes('--lib'))
@@ -224,7 +226,6 @@ test('descriptor integration invocation retains its four independently named sce
     (match) => match[1]
   );
   assert.deepEqual(names, descriptorScenarios);
-  assert.equal(libraryScenarios.length + names.length, 15);
 });
 
 for (const phase of ['clean', 'units', 'core-report']) {
@@ -269,7 +270,7 @@ testBash('whole-library threshold failure remains a failure after every Core sce
   withFixture(({ run }) => {
     const { result, events } = run(undefined, { GROOT_STUB_FAIL: 'all-report' });
     assert.equal(result.status, 17, result.stderr);
-    assert.equal(scenarios(events).length, 12);
+    assert.equal(scenarios(events).length, coreInvocations);
     assert.equal(events.at(-1).phase, 'all-report');
   });
 });
@@ -333,7 +334,7 @@ testBash(
       const { result, events } = run('scripts/regtest/test.sh');
       assert.equal(result.status, 0, result.stderr);
       const cargo = events.filter(({ kind }) => kind === 'cargo');
-      assert.equal(cargo.filter(({ args }) => args[0] === 'test').length, 12);
+      assert.equal(cargo.filter(({ args }) => args[0] === 'test').length, coreInvocations);
       const clean = cargo.filter(({ args }) => args[0] === 'clean');
       assert.equal(clean.length, 1);
       assert.deepEqual(clean[0].args.slice(-2), ['--package', 'groot']);

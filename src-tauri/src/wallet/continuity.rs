@@ -1,6 +1,17 @@
 //! Named policy paths are bound by the existing persisted PSBT sequences.
-//! No proposal schema or descriptor changes are needed.
+//! The saved sequence and descriptor-derived leaf bind each Taproot path.
 use super::*;
+
+pub(super) fn require_taproot_continuity_network(network: Network) -> ApiResult<()> {
+    if network == Network::Regtest {
+        require_desktop_key_operation()
+    } else {
+        Err(api_error(
+            "unsupported_wallet_policy",
+            "Taproot Continuity is available only for isolated Regtest rehearsal.",
+        ))
+    }
+}
 use bdk_wallet::descriptor::policy::{PkOrF, Policy};
 
 #[derive(Debug, Clone, Serialize)]
@@ -78,13 +89,41 @@ pub(super) fn path_code(template: &RecoveryTemplate, index: usize) -> String {
     match (template, index) {
         (RecoveryTemplate::Recovery { .. }, 0) => "primary".to_owned(),
         (RecoveryTemplate::Recovery { .. }, 1) => "recovery".to_owned(),
-        (RecoveryTemplate::PartnerContinuityV1 { .. }, 0) => "partner_owner".to_owned(),
-        (RecoveryTemplate::PartnerContinuityV1 { .. }, 1) => "partner_assistance".to_owned(),
-        (RecoveryTemplate::PartnerContinuityV1 { .. }, 2) => "partner_solo".to_owned(),
-        (RecoveryTemplate::PartnerContinuityV1 { .. }, 3) => "partner_estate".to_owned(),
-        (RecoveryTemplate::FamilyContinuityV1 { .. }, 0) => "family_parents".to_owned(),
-        (RecoveryTemplate::FamilyContinuityV1 { .. }, 1) => "family_assistance".to_owned(),
-        (RecoveryTemplate::FamilyContinuityV1 { .. }, 2) => "family_inheritance".to_owned(),
+        (
+            RecoveryTemplate::PartnerContinuityV1 { .. }
+            | RecoveryTemplate::PartnerContinuityTaprootV1 { .. },
+            0,
+        ) => "partner_owner".to_owned(),
+        (
+            RecoveryTemplate::PartnerContinuityV1 { .. }
+            | RecoveryTemplate::PartnerContinuityTaprootV1 { .. },
+            1,
+        ) => "partner_assistance".to_owned(),
+        (
+            RecoveryTemplate::PartnerContinuityV1 { .. }
+            | RecoveryTemplate::PartnerContinuityTaprootV1 { .. },
+            2,
+        ) => "partner_solo".to_owned(),
+        (
+            RecoveryTemplate::PartnerContinuityV1 { .. }
+            | RecoveryTemplate::PartnerContinuityTaprootV1 { .. },
+            3,
+        ) => "partner_estate".to_owned(),
+        (
+            RecoveryTemplate::FamilyContinuityV1 { .. }
+            | RecoveryTemplate::FamilyContinuityTaprootV1 { .. },
+            0,
+        ) => "family_parents".to_owned(),
+        (
+            RecoveryTemplate::FamilyContinuityV1 { .. }
+            | RecoveryTemplate::FamilyContinuityTaprootV1 { .. },
+            1,
+        ) => "family_assistance".to_owned(),
+        (
+            RecoveryTemplate::FamilyContinuityV1 { .. }
+            | RecoveryTemplate::FamilyContinuityTaprootV1 { .. },
+            2,
+        ) => "family_inheritance".to_owned(),
         (_, index) => format!("policy_path_{index}"),
     }
 }
@@ -134,7 +173,11 @@ pub(super) fn policy_path_definition(
                 "recovery"
             },
         )?,
-        (RecoveryTemplate::PartnerContinuityV1 { owner, .. }, 0) => one_signer_group(
+        (
+            RecoveryTemplate::PartnerContinuityV1 { owner, .. }
+            | RecoveryTemplate::PartnerContinuityTaprootV1 { owner, .. },
+            0,
+        ) => one_signer_group(
             metadata,
             "owner_signers",
             "Owner signers",
@@ -142,7 +185,11 @@ pub(super) fn policy_path_definition(
             &owner.signer_ids,
             "owner",
         )?,
-        (RecoveryTemplate::PartnerContinuityV1 { partner, .. }, 1 | 2) => one_signer_group(
+        (
+            RecoveryTemplate::PartnerContinuityV1 { partner, .. }
+            | RecoveryTemplate::PartnerContinuityTaprootV1 { partner, .. },
+            1 | 2,
+        ) => one_signer_group(
             metadata,
             "partner_signers",
             "Partner signers",
@@ -150,7 +197,11 @@ pub(super) fn policy_path_definition(
             &partner.signer_ids,
             "partner",
         )?,
-        (RecoveryTemplate::PartnerContinuityV1 { estate, .. }, 3) => one_signer_group(
+        (
+            RecoveryTemplate::PartnerContinuityV1 { estate, .. }
+            | RecoveryTemplate::PartnerContinuityTaprootV1 { estate, .. },
+            3,
+        ) => one_signer_group(
             metadata,
             "estate_guardians",
             "Estate guardians",
@@ -158,7 +209,11 @@ pub(super) fn policy_path_definition(
             &estate.signer_ids,
             "estate_guardian",
         )?,
-        (RecoveryTemplate::FamilyContinuityV1 { parents, .. }, 0) => one_signer_group(
+        (
+            RecoveryTemplate::FamilyContinuityV1 { parents, .. }
+            | RecoveryTemplate::FamilyContinuityTaprootV1 { parents, .. },
+            0,
+        ) => one_signer_group(
             metadata,
             "parents",
             "Parents",
@@ -168,6 +223,11 @@ pub(super) fn policy_path_definition(
         )?,
         (
             RecoveryTemplate::FamilyContinuityV1 {
+                parents,
+                child_assistance,
+                ..
+            }
+            | RecoveryTemplate::FamilyContinuityTaprootV1 {
                 parents,
                 child_assistance,
                 ..
@@ -197,6 +257,11 @@ pub(super) fn policy_path_definition(
         }
         (
             RecoveryTemplate::FamilyContinuityV1 {
+                child_inheritance,
+                executor_signer_id,
+                ..
+            }
+            | RecoveryTemplate::FamilyContinuityTaprootV1 {
                 child_inheritance,
                 executor_signer_id,
                 ..
@@ -276,6 +341,9 @@ pub(super) fn verified_analysis(metadata: &MultisigWalletDto) -> ApiResult<Polic
             "This wallet has no delayed spending paths.",
         )
     })?;
+    if template.uses_taproot() {
+        require_taproot_continuity_network(network())?;
+    }
     if matches!(
         template,
         RecoveryTemplate::Decaying { .. } | RecoveryTemplate::Expanding { .. }
@@ -309,15 +377,41 @@ pub(super) fn verified_analysis(metadata: &MultisigWalletDto) -> ApiResult<Polic
 
 pub(super) fn path_name(template: &RecoveryTemplate, index: usize) -> &'static str {
     match (template, index) {
-        (RecoveryTemplate::PartnerContinuityV1 { .. }, 0) => "Owner: 2 of 3",
-        (RecoveryTemplate::PartnerContinuityV1 { .. }, 1) => "Both partner signers",
-        (RecoveryTemplate::PartnerContinuityV1 { .. }, 2) => "Either partner signer",
-        (RecoveryTemplate::PartnerContinuityV1 { .. }, 3) => "Estate guardians: 2 of 3",
-        (RecoveryTemplate::FamilyContinuityV1 { .. }, 0) => "Both parents",
-        (RecoveryTemplate::FamilyContinuityV1 { .. }, 1) => {
-            "One parent and one child assistance signer"
-        }
-        (RecoveryTemplate::FamilyContinuityV1 { .. }, 2) => "Inheritance: 2 of 3",
+        (
+            RecoveryTemplate::PartnerContinuityV1 { .. }
+            | RecoveryTemplate::PartnerContinuityTaprootV1 { .. },
+            0,
+        ) => "Owner: 2 of 3",
+        (
+            RecoveryTemplate::PartnerContinuityV1 { .. }
+            | RecoveryTemplate::PartnerContinuityTaprootV1 { .. },
+            1,
+        ) => "Both partner signers",
+        (
+            RecoveryTemplate::PartnerContinuityV1 { .. }
+            | RecoveryTemplate::PartnerContinuityTaprootV1 { .. },
+            2,
+        ) => "Either partner signer",
+        (
+            RecoveryTemplate::PartnerContinuityV1 { .. }
+            | RecoveryTemplate::PartnerContinuityTaprootV1 { .. },
+            3,
+        ) => "Estate guardians: 2 of 3",
+        (
+            RecoveryTemplate::FamilyContinuityV1 { .. }
+            | RecoveryTemplate::FamilyContinuityTaprootV1 { .. },
+            0,
+        ) => "Both parents",
+        (
+            RecoveryTemplate::FamilyContinuityV1 { .. }
+            | RecoveryTemplate::FamilyContinuityTaprootV1 { .. },
+            1,
+        ) => "One parent and one child assistance signer",
+        (
+            RecoveryTemplate::FamilyContinuityV1 { .. }
+            | RecoveryTemplate::FamilyContinuityTaprootV1 { .. },
+            2,
+        ) => "Inheritance: 2 of 3",
         (_, 0) => "Primary signers",
         _ => "Recovery signers",
     }
@@ -397,7 +491,11 @@ fn selectable_policy_path(
     let allowed_key =
         |key: &PkOrF| matches!(key, PkOrF::Fingerprint(value) if allowed.contains(value));
     match &policy.item {
-        SatisfiableItem::EcdsaSignature(key) if allowed_key(key) => Some((PolicyPath::new(), 0)),
+        SatisfiableItem::EcdsaSignature(key) | SatisfiableItem::SchnorrSignature(key)
+            if allowed_key(key) =>
+        {
+            Some((PolicyPath::new(), 0))
+        }
         SatisfiableItem::Multisig { keys, threshold }
             if keys.iter().filter(|key| allowed_key(key)).count() >= *threshold =>
         {
@@ -448,8 +546,28 @@ pub(super) fn named_policy_paths(
                 .policies(keychain)
                 .map_err(internal)?
                 .ok_or_else(|| internal("Missing wallet policy"))?;
-            let (path, delay) =
-                selectable_policy_path(&policy, &allowed, selected.available_after_blocks)
+            let taproot = metadata
+                .recovery_template
+                .as_ref()
+                .is_some_and(RecoveryTemplate::uses_taproot);
+            let selected_leaf = if taproot {
+                match &policy.item {
+                    SatisfiableItem::Thresh {
+                        items,
+                        threshold: 1,
+                    } if items.len() == analysis.paths.len() + 1 => &items[index + 1],
+                    _ => {
+                        return Err(api_error(
+                            "wallet_corrupt",
+                            "The Taproot policy paths do not match the wallet.",
+                        ))
+                    }
+                }
+            } else {
+                &policy
+            };
+            let (mut path, delay) =
+                selectable_policy_path(selected_leaf, &allowed, selected.available_after_blocks)
                     .ok_or_else(|| {
                         api_error(
                             "unknown_spending_path",
@@ -461,6 +579,9 @@ pub(super) fn named_policy_paths(
                     "proposal_mismatch",
                     "The selected path does not match its exact block delay.",
                 ));
+            }
+            if taproot {
+                path.insert(policy.id, vec![index + 1]);
             }
             Ok((keychain, path))
         })
@@ -542,11 +663,18 @@ pub(super) fn path_signature_quorum(
     index: usize,
     signed: &[String],
 ) -> bool {
-    if let Some(RecoveryTemplate::FamilyContinuityV1 {
-        parents,
-        child_assistance,
-        ..
-    }) = &metadata.recovery_template
+    if let Some(
+        RecoveryTemplate::FamilyContinuityV1 {
+            parents,
+            child_assistance,
+            ..
+        }
+        | RecoveryTemplate::FamilyContinuityTaprootV1 {
+            parents,
+            child_assistance,
+            ..
+        },
+    ) = &metadata.recovery_template
     {
         if index == 1 {
             let group_signed = |ids: &[String]| {
@@ -588,7 +716,137 @@ pub(super) fn build_named_policy_sweep(
     for (keychain, path) in paths {
         builder.policy_path(path, keychain);
     }
-    builder.finish().map_err(create_tx_api_error)
+    let mut psbt = builder.finish().map_err(create_tx_api_error)?;
+    prepare_taproot_policy_psbt(wallet, metadata, index, &mut psbt)?;
+    Ok(psbt)
+}
+
+fn bind_taproot_policy_psbt(
+    wallet: &Wallet,
+    metadata: &MultisigWalletDto,
+    index: usize,
+    psbt: &mut Psbt,
+    preparing: bool,
+) -> ApiResult<()> {
+    use bdk_wallet::{
+        bitcoin::{
+            psbt,
+            taproot::{LeafVersion, TapLeafHash},
+        },
+        miniscript::psbt::PsbtInputExt,
+    };
+    if !metadata
+        .recovery_template
+        .as_ref()
+        .is_some_and(RecoveryTemplate::uses_taproot)
+    {
+        return Ok(());
+    }
+    let mismatch = || {
+        api_error(
+            "proposal_mismatch",
+            "The PSBT does not bind the selected Taproot policy leaf and canonical inputs.",
+        )
+    };
+    if wallet.public_descriptor(KeychainKind::External).to_string() != metadata.external_descriptor
+        || wallet.public_descriptor(KeychainKind::Internal).to_string()
+            != metadata.internal_descriptor
+    {
+        return Err(mismatch());
+    }
+    bind_psbt_inputs_to_wallet(wallet, psbt)?;
+    for (txin, input) in psbt.unsigned_tx.input.iter().zip(&mut psbt.inputs) {
+        let output = input
+            .non_witness_utxo
+            .as_ref()
+            .and_then(|tx| tx.output.get(txin.previous_output.vout as usize))
+            .ok_or_else(mismatch)?;
+        let (keychain, derivation_index) = wallet
+            .derivation_of_spk(output.script_pubkey.clone())
+            .ok_or_else(mismatch)?;
+        let descriptor = wallet
+            .public_descriptor(keychain)
+            .at_derivation_index(derivation_index)
+            .map_err(internal)?;
+        let mut canonical = psbt::Input::default();
+        let Descriptor::Tr(derived) = canonical
+            .update_with_descriptor_unchecked(&descriptor)
+            .map_err(internal)?
+        else {
+            return Err(mismatch());
+        };
+        let (_, leaf) = derived.iter_scripts().nth(index).ok_or_else(mismatch)?;
+        let script = leaf.encode();
+        let version = LeafVersion::TapScript;
+        let leaf_hash = TapLeafHash::from_script(&script, version);
+        canonical
+            .tap_scripts
+            .retain(|_, value| value == &(script.clone(), version));
+        canonical.tap_key_origins.retain(|_, (hashes, _)| {
+            hashes.retain(|hash| *hash == leaf_hash);
+            !hashes.is_empty()
+        });
+        if canonical.tap_scripts.len() != 1
+            || canonical.tap_key_origins.is_empty()
+            || input.tap_key_sig.is_some()
+            || !input.partial_sigs.is_empty()
+            || input.final_script_sig.is_some()
+            || input.final_script_witness.is_some()
+        {
+            return Err(mismatch());
+        }
+        if preparing {
+            input.tap_scripts = canonical.tap_scripts;
+            input.tap_key_origins = canonical.tap_key_origins;
+            input.tap_merkle_root = canonical.tap_merkle_root;
+            input.tap_internal_key = canonical.tap_internal_key;
+            input.witness_utxo = Some(output.clone());
+        } else if input.tap_scripts != canonical.tap_scripts
+            || input.tap_key_origins != canonical.tap_key_origins
+            || input.tap_merkle_root != canonical.tap_merkle_root
+            || input.tap_internal_key != canonical.tap_internal_key
+            || input.witness_utxo.as_ref() != Some(output)
+        {
+            return Err(mismatch());
+        }
+    }
+    if preparing {
+        // One BIP371 key type, 32-byte key, 32-byte leaf hash, two length
+        // prefixes and a Schnorr signature with its optional sighash byte.
+        const MAX_SERIALIZED_LEAF_SIGNATURE: usize = 132;
+        let signature_space = psbt
+            .inputs
+            .iter()
+            .map(|input| input.tap_key_origins.len())
+            .sum::<usize>()
+            .saturating_mul(MAX_SERIALIZED_LEAF_SIGNATURE);
+        if Psbt::serialize(psbt).len().saturating_add(signature_space)
+            > crate::proposal::MAX_PSBT_BYTES
+        {
+            return Err(proposal_api_error(
+                crate::proposal::ProposalError::PsbtTooLarge,
+            ));
+        }
+    }
+    Ok(())
+}
+
+pub(super) fn prepare_taproot_policy_psbt(
+    wallet: &Wallet,
+    metadata: &MultisigWalletDto,
+    index: usize,
+    psbt: &mut Psbt,
+) -> ApiResult<()> {
+    bind_taproot_policy_psbt(wallet, metadata, index, psbt, true)
+}
+
+pub(super) fn validate_taproot_policy_psbt(
+    wallet: &Wallet,
+    metadata: &MultisigWalletDto,
+    index: usize,
+    psbt: &mut Psbt,
+) -> ApiResult<()> {
+    bind_taproot_policy_psbt(wallet, metadata, index, psbt, false)
 }
 
 /// Fixed policies must satisfy the transaction's actual CSV/CLTV fields. BDK's
@@ -604,7 +862,9 @@ pub(super) fn finalize_multisig_policy_psbt(
         metadata.recovery_template,
         Some(
             RecoveryTemplate::PartnerContinuityV1 { .. }
+                | RecoveryTemplate::PartnerContinuityTaprootV1 { .. }
                 | RecoveryTemplate::FamilyContinuityV1 { .. }
+                | RecoveryTemplate::FamilyContinuityTaprootV1 { .. }
         )
     ) {
         return wallet
@@ -612,6 +872,30 @@ pub(super) fn finalize_multisig_policy_psbt(
             .map_err(internal);
     }
     let mut candidate = psbt.clone();
+    if metadata
+        .recovery_template
+        .as_ref()
+        .is_some_and(RecoveryTemplate::uses_taproot)
+    {
+        let analysis = verified_analysis(metadata)?;
+        let index = if candidate
+            .unsigned_tx
+            .input
+            .iter()
+            .any(|txin| txin.sequence.is_relative_lock_time())
+        {
+            selected_delayed_index(&analysis, &candidate)?
+        } else {
+            0
+        };
+        validate_taproot_policy_psbt(wallet, metadata, index, &mut candidate)?;
+        let secp = Secp256k1::verification_only();
+        if candidate.finalize_mut(&secp).is_err() || candidate.extract(&secp).is_err() {
+            return Ok(false);
+        }
+        *psbt = candidate;
+        return Ok(true);
+    }
     bind_psbt_inputs_to_wallet(wallet, &mut candidate)?;
     for (index, input) in candidate.inputs.iter().enumerate() {
         let script = input

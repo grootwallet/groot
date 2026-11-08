@@ -28,7 +28,7 @@
   import SetupProgress from '$lib/components/SetupProgress.svelte';
   import { copyText } from '$lib/clipboard';
   import { combineDescriptorBranches } from '$lib/descriptors';
-  import { toast } from '$lib/stores/toasts';
+  import { toast, toasts } from '$lib/stores/toasts';
   import { defaultConfig, networkName } from '$lib/config';
   import {
     MAX_SUPPLEMENTAL_COIN_FLIPS,
@@ -37,6 +37,7 @@
     MIN_SUPPLEMENTAL_DICE_ROLLS,
     walletService,
     type RuntimePlatform,
+    type SoftwareAddressType,
     type SupplementalEntropyInput
   } from '$lib/wallet';
   import { beforeNavigate, goto } from '$app/navigation';
@@ -62,6 +63,9 @@
   let busy = $state(false);
   let error = $state('');
   let walletName = $state('');
+  let addressType = $state<SoftwareAddressType>('nativeSegwit');
+  let expectedDescriptor = $state('');
+  let taprootSelected = $derived(addressType === 'taproot');
   let hasExistingWallet = $state(false);
   let backupAcknowledged = $state(false);
   let backupVerified = $state(false);
@@ -72,6 +76,10 @@
   let supplementalSource = $state<'none' | 'coin' | 'dice'>('none');
   let supplementalOutcomes = $state('');
   let runtimeIdentity = $state<RuntimePlatform | null>(null);
+  let taprootAvailable = $derived(
+    (runtimeIdentity?.platform === 'macos' || runtimeIdentity?.platform === 'browser') &&
+      (runtimeIdentity.network === 'regtest' || runtimeIdentity.network === 'testnet4')
+  );
   let createdMasterFingerprint = $state('');
   let createdWalletDescriptor = $state('');
   let fingerprintCopied = $state(false);
@@ -109,9 +117,17 @@
     passphrase = '';
     confirmation = '';
     supplementalOutcomes = '';
+    expectedDescriptor = '';
     backupAcknowledged = false;
     backupVerified = false;
   });
+
+  function beginSoftwareSetup(next: 'create' | 'recover') {
+    addressType = 'nativeSegwit';
+    expectedDescriptor = '';
+    error = '';
+    mode = next;
+  }
 
   function chooseSupplementalSource(source: 'none' | 'coin' | 'dice') {
     supplementalSource = source;
@@ -227,11 +243,18 @@
     // persistence begin. Some WebKit builds otherwise paint only after IPC.
     await tick();
     try {
-      const creation = await walletService.createWallet(walletName, passphrase, backupVerified);
+      const creation = await walletService.createWallet(
+        walletName,
+        passphrase,
+        backupVerified,
+        undefined,
+        addressType
+      );
       createdMasterFingerprint = creation.masterFingerprint;
       createdWalletDescriptor =
         combineDescriptorBranches(creation.externalDescriptor, creation.internalDescriptor) ??
         creation.externalDescriptor;
+      createdWalletDetailsOpen = taprootSelected;
       mode = 'created';
       words = [];
       passphrase = '';
@@ -250,6 +273,7 @@
       });
     } catch (cause) {
       error = localizedError(cause, $locale, 'Could not create wallet.');
+      toast({ title: 'Could not create wallet.', tone: 'danger' });
     } finally {
       passphrase = '';
       confirmation = '';
@@ -266,21 +290,33 @@
   }
 
   async function copyCreatedDescriptor() {
-    await copyText(createdWalletDescriptor, 'public-wallet-data');
-    descriptorCopied = true;
-    toast({
-      title: translate($locale, 'Wallet descriptor copied'),
-      description: 'Public watch-only descriptor copied.',
-      tone: 'success'
-    });
-    setTimeout(() => (descriptorCopied = false), 1_500);
+    error = '';
+    try {
+      await copyText(createdWalletDescriptor, 'public-wallet-data');
+      descriptorCopied = true;
+      toast({
+        title: translate($locale, 'Wallet descriptor copied'),
+        description: 'Public watch-only descriptor copied.',
+        tone: 'success'
+      });
+      setTimeout(() => (descriptorCopied = false), 1_500);
+    } catch {
+      error = translate($locale, 'Could not copy the public descriptor. Try again.');
+      toast({ title: 'Copy failed', description: error, tone: 'danger' });
+    }
   }
 
   async function recoverWallet() {
     busy = true;
     error = '';
     try {
-      await walletService.recoverWallet(walletName, passphrase);
+      await walletService.recoverWallet(
+        walletName,
+        passphrase,
+        addressType,
+        expectedDescriptor.trim() || undefined
+      );
+      expectedDescriptor = '';
       passphrase = '';
       toast({
         title: 'Wallet recovered',
@@ -290,6 +326,7 @@
       await goto('/?initial=recovered');
     } catch (cause) {
       error = localizedError(cause, $locale, 'Could not recover wallet.');
+      toast({ title: 'Could not recover wallet.', tone: 'danger' });
     } finally {
       passphrase = '';
       busy = false;
@@ -303,7 +340,40 @@
   }
 </script>
 
-<div class="onboarding-overlay" class:welcome-home={mode === 'home'}>
+{#snippet addressTypeField(recovering: boolean)}
+  {#if taprootAvailable}
+    <label class="field">
+      <span id="software-address-type-label">{translate($locale, 'Address type')}</span>
+      <select
+        bind:value={addressType}
+        disabled={busy}
+        aria-labelledby="software-address-type-label"
+        aria-describedby="software-address-type-hint"
+        onchange={() => {
+          expectedDescriptor = '';
+          error = '';
+        }}
+      >
+        <option value="nativeSegwit">{translate($locale, 'Native SegWit · BIP84')}</option>
+        <option value="taproot">{translate($locale, 'Taproot · BIP86')}</option>
+      </select>
+      <small id="software-address-type-hint">
+        {translate(
+          $locale,
+          recovering
+            ? 'Choose the address type recorded with your original wallet backup.'
+            : 'Native SegWit is the default. Taproot is available for software wallets on this test network.'
+        )}
+      </small>
+    </label>
+  {/if}
+{/snippet}
+
+<div
+  class="onboarding-overlay"
+  class:welcome-home={mode === 'home'}
+  class:taproot-toast-clearance={taprootSelected && $toasts.length > 0}
+>
   <header class="onboarding-brand">
     <span class="onboarding-brand-lockup"><BrandLockup /></span><small
       >{networkName(defaultConfig.network).toUpperCase()}</small
@@ -334,7 +404,11 @@
       <div class="onboarding-actions simple">
         <Button size="large" class="full" onclick={() => (mode = 'choose')}
           >{translate($locale, 'Add wallet')}<ArrowRight size={17} /></Button
-        ><Button size="large" variant="secondary" class="full" onclick={() => (mode = 'recover')}
+        ><Button
+          size="large"
+          variant="secondary"
+          class="full"
+          onclick={() => beginSoftwareSetup('recover')}
           >{translate($locale, 'Recover software wallet')}</Button
         >
       </div>
@@ -351,7 +425,7 @@
         {translate($locale, 'Start with what feels right. You can always add another.')}
       </p>
       <div class="wallet-type-grid">
-        <button class="wallet-type-card software" onclick={() => (mode = 'create')}>
+        <button class="wallet-type-card software" onclick={() => beginSoftwareSetup('create')}>
           <span class="wallet-type-icon"><KeyRound size={20} /></span>
           <span class="wallet-type-copy"
             ><strong>{translate($locale, 'Software wallet')}</strong><small
@@ -462,6 +536,7 @@
           'Groot will generate 24 recovery words securely on this device. Write them down in order and\n        keep them offline.'
         )}
       </p>
+      {@render addressTypeField(false)}
       <div class="setup-points">
         <div>
           <ShieldCheck size={18} /><span
@@ -470,13 +545,24 @@
             ></span
           >
         </div>
-        <div>
-          <KeyRound size={18} /><span
-            ><strong>{translate($locale, 'Recovery words are the backup')}</strong><small
-              >{translate($locale, 'Anyone with them can spend your funds.')}</small
-            ></span
-          >
-        </div>
+        {#if taprootSelected}
+          <WarningNotice
+            element="aside"
+            role="note"
+            body={translate(
+              $locale,
+              'Taproot recovery in Groot requires your 24 words, exact passphrase, and public wallet descriptor. Save all three after setup.'
+            )}
+          />
+        {:else}
+          <div>
+            <KeyRound size={18} /><span
+              ><strong>{translate($locale, 'Recovery words are the backup')}</strong><small
+                >{translate($locale, 'Anyone with them can spend your funds.')}</small
+              ></span
+            >
+          </div>
+        {/if}
       </div>
       <details class="supplemental-entropy">
         <summary>{translate($locale, 'Advanced: add physical randomness')}</summary>
@@ -850,9 +936,12 @@
         <p class="fingerprint-check-note">
           {translate(
             $locale,
-            'When restoring elsewhere, a matching fingerprint confirms that the recovery words and passphrase opened the same wallet.'
+            taprootSelected
+              ? 'Save the public descriptor with your 24 words and exact passphrase. A matching fingerprint alone cannot confirm the address type.'
+              : 'When restoring elsewhere, a matching fingerprint confirms that the recovery words and passphrase opened the same wallet.'
           )}
         </p>
+        {#if error}<WarningNotice tone="danger" icon role="alert" body={error} />{/if}
         <details
           bind:open={createdWalletDetailsOpen}
           class="proposal-review-details created-wallet-details"
@@ -899,6 +988,31 @@
           'Your 24 recovery words are entered in a native system window so they never enter Groot’s web\n        interface.'
         )}
       </p>
+      {@render addressTypeField(true)}
+      {#if taprootSelected}
+        <label class="field">
+          <span id="software-restore-descriptor-label"
+            >{translate($locale, 'Public wallet descriptor')}</span
+          >
+          <textarea
+            bind:value={expectedDescriptor}
+            rows="3"
+            maxlength="512"
+            autocapitalize="off"
+            autocomplete="off"
+            spellcheck={false}
+            required
+            disabled={busy}
+            aria-labelledby="software-restore-descriptor-label"
+            aria-describedby="software-restore-descriptor-hint"></textarea>
+          <small id="software-restore-descriptor-hint">
+            {translate(
+              $locale,
+              'Paste the public receive and change descriptor saved with your Taproot wallet.'
+            )}
+          </small>
+        </label>
+      {/if}
       <label class="field"
         ><span>{translate($locale, 'Wallet name')}</span><input
           bind:value={walletName}
@@ -924,7 +1038,10 @@
         />{/if}<Button
         size="large"
         class="full"
-        disabled={!walletName.trim() || !passphrase || !!passphraseError}
+        disabled={!walletName.trim() ||
+          !passphrase ||
+          !!passphraseError ||
+          (taprootSelected && !expectedDescriptor.trim())}
         loading={busy}
         loadingLabel={translate($locale, 'Recovering wallet…')}
         onclick={recoverWallet}
@@ -935,6 +1052,12 @@
 </div>
 
 <style>
+  @media (max-width: 760px) {
+    .onboarding-overlay.taproot-toast-clearance {
+      padding-bottom: calc(280px + env(safe-area-inset-bottom));
+    }
+  }
+
   /* Keep the original cascade weight while constraining these rules to this owner. */
 
   :global(.credential-ack):where(.credential-ack) :global(input) {

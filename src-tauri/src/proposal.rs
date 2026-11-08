@@ -2,8 +2,15 @@ pub mod prevouts;
 
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use bdk_wallet::bitcoin::{
-    bip32::Fingerprint, psbt::Psbt, secp256k1::Secp256k1, sighash::SighashCache, EcdsaSighashType,
+    bip32::Fingerprint,
+    hashes::Hash,
+    psbt::Psbt,
+    secp256k1::{Message, Secp256k1},
+    sighash::{Prevouts, SighashCache},
+    taproot::TapLeafHash,
+    EcdsaSighashType, TapSighashType,
 };
+use bdk_wallet::psbt::PsbtUtils;
 use serde::Serialize;
 use std::{collections::HashSet, fmt};
 
@@ -100,13 +107,43 @@ fn signed_on_input(
         }
         signed.insert(*fingerprint);
     }
+    for (key, leaf) in input.tap_script_sigs.keys() {
+        let (leaves, (fingerprint, _)) = input
+            .tap_key_origins
+            .get(key)
+            .ok_or(ProposalError::UnknownSigner)?;
+        if leaves.as_slice() != [*leaf] || !allowed.contains(fingerprint) {
+            return Err(ProposalError::UnknownSigner);
+        }
+        signed.insert(*fingerprint);
+    }
     Ok(signed)
 }
 
 fn verify_partial_signatures(psbt: &Psbt) -> Result<(), ProposalError> {
     let secp = Secp256k1::verification_only();
     let mut cache = SighashCache::new(&psbt.unsigned_tx);
+    let taproot_prevouts = if psbt
+        .inputs
+        .iter()
+        .any(|input| !input.tap_script_sigs.is_empty())
+    {
+        (0..psbt.inputs.len())
+            .map(|index| {
+                psbt.get_utxo_for(index)
+                    .ok_or(ProposalError::ProposalMismatch)
+            })
+            .collect::<Result<Vec<_>, _>>()?
+    } else {
+        Vec::new()
+    };
     for (input_index, input) in psbt.inputs.iter().enumerate() {
+        if input.tap_key_sig.is_some() {
+            return Err(ProposalError::InvalidSignature);
+        }
+        if !input.tap_script_sigs.is_empty() {
+            verify_taproot_signatures(input, input_index, &taproot_prevouts, &mut cache)?;
+        }
         if input.partial_sigs.is_empty() {
             continue;
         }
@@ -122,6 +159,54 @@ fn verify_partial_signatures(psbt: &Psbt) -> Result<(), ProposalError> {
             secp.verify_ecdsa(&message, &signature.signature, &public_key.inner)
                 .map_err(|_| ProposalError::InvalidSignature)?;
         }
+    }
+    Ok(())
+}
+
+fn verify_taproot_signatures(
+    input: &bdk_wallet::bitcoin::psbt::Input,
+    index: usize,
+    prevouts: &[bdk_wallet::bitcoin::TxOut],
+    cache: &mut SighashCache<&bdk_wallet::bitcoin::Transaction>,
+) -> Result<(), ProposalError> {
+    let (script, version) = input
+        .tap_scripts
+        .values()
+        .next()
+        .filter(|_| input.tap_scripts.len() == 1)
+        .ok_or(ProposalError::ProposalMismatch)?;
+    if !prevouts[index].script_pubkey.is_p2tr() || !input.partial_sigs.is_empty() {
+        return Err(ProposalError::ProposalMismatch);
+    }
+    let leaf = TapLeafHash::from_script(script, *version);
+    let secp = Secp256k1::verification_only();
+    for ((key, signed_leaf), signature) in &input.tap_script_sigs {
+        if *signed_leaf != leaf || !input.tap_key_origins.contains_key(key) {
+            return Err(ProposalError::UnknownSigner);
+        }
+        if !matches!(
+            signature.sighash_type,
+            TapSighashType::Default | TapSighashType::All
+        ) || input
+            .sighash_type
+            .is_some_and(|sighash| sighash.taproot_hash_ty() != Ok(signature.sighash_type))
+        {
+            return Err(ProposalError::UnsupportedSighash);
+        }
+        let hash = cache
+            .taproot_script_spend_signature_hash(
+                index,
+                &Prevouts::All(prevouts),
+                leaf,
+                signature.sighash_type,
+            )
+            .map_err(|_| ProposalError::InvalidSignature)?;
+        secp.verify_schnorr(
+            &signature.signature,
+            &Message::from_digest(hash.to_byte_array()),
+            key,
+        )
+        .map_err(|_| ProposalError::InvalidSignature)?;
     }
     Ok(())
 }
@@ -219,6 +304,8 @@ fn imported_signature_response(reviewed: &Psbt, returned: Psbt) -> Result<Psbt, 
     let mut signatures_only = reviewed.clone();
     for (normalized, imported_input) in signatures_only.inputs.iter_mut().zip(returned.inputs) {
         normalized.partial_sigs = imported_input.partial_sigs;
+        normalized.tap_script_sigs = imported_input.tap_script_sigs;
+        normalized.tap_key_sig = imported_input.tap_key_sig;
     }
     Ok(signatures_only)
 }
@@ -294,6 +381,13 @@ pub fn discard_signer_signature(
 
     let mut updated = original.clone();
     for input in &mut updated.inputs {
+        let tap_count = input.tap_script_sigs.len();
+        input.tap_script_sigs.retain(|(key, _), _| {
+            !input
+                .tap_key_origins
+                .get(key)
+                .is_some_and(|(_, (fingerprint, _))| *fingerprint == signer)
+        });
         let signer_keys = input
             .partial_sigs
             .keys()
@@ -305,7 +399,7 @@ pub fn discard_signer_signature(
             })
             .copied()
             .collect::<Vec<_>>();
-        if signer_keys.is_empty() {
+        if signer_keys.is_empty() && input.tap_script_sigs.len() == tap_count {
             return Err(ProposalError::SignatureNotFound);
         }
         for public_key in signer_keys {

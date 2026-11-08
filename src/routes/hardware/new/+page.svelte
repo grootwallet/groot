@@ -389,6 +389,7 @@
           >
         </p>
       </div>
+      <p>{translate($locale, 'Groot imports Native SegWit (BIP84) hardware accounts.')}</p>
       <label class="field"
         ><span>{translate($locale, 'Wallet name')}</span><input
           bind:value={label}
