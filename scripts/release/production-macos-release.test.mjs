@@ -5,6 +5,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
+import { finderLayoutFor } from './macos-dmg-layout.mjs';
 import { validateCameraEntitlements, verifyMacosCameraAccess } from './verify-macos-camera.mjs';
 import { verifyNativeFrontendOutput } from './verify-native-frontend-output.mjs';
 import { validateSignedHwiSignatureMetadata } from './verify-signed-hwi.mjs';
@@ -166,6 +167,27 @@ test('macOS DMG presents a compact branded drag-to-Applications layout', () => {
     createHash('sha256').update(finderLayout).digest('hex'),
     '26e006bf8e4965f75c976fea86e219abc109763673e0685650576cc303d65ec7'
   );
+  assert.deepEqual(finderLayoutFor(finderLayout, 'Groot.app'), finderLayout);
+  const positionKey = (name) =>
+    Buffer.concat([Buffer.from(name, 'utf16le').swap16(), Buffer.from('Ilocblob')]);
+  const assertPosition = (layout, name, x) => {
+    const key = positionKey(name);
+    const offset = layout.indexOf(key);
+    assert.ok(offset >= 4, `Missing Finder position for ${name}`);
+    assert.equal(layout.readUInt32BE(offset - 4), name.length);
+    assert.equal(layout.readUInt32BE(offset + key.length + 4), x);
+    assert.equal(layout.readUInt32BE(offset + key.length + 8), 205);
+  };
+  for (const appName of ['Groot RC.app', 'Groot Mainnet RC.app']) {
+    const layout = finderLayoutFor(finderLayout, appName);
+    assert.equal(layout.length, finderLayout.length);
+    assert.equal(layout.includes(positionKey('Groot.app')), false);
+    assertPosition(layout, appName, 285);
+    assertPosition(layout, 'Applications', 615);
+  }
+  assert.throws(() => finderLayoutFor(finderLayout, 'Unreviewed.app'), /Unreviewed/);
+  assert.throws(() => finderLayoutFor(Buffer.alloc(10_244), 'Groot RC.app'), /reviewed template/);
+  assert.match(source, /readFileSync\(join\(mounted, '\.DS_Store'\)\)\.equals\(finderLayout\)/);
 });
 
 test('packaged app build uses the same reproducible Rust environment as evidence', () => {

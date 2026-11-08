@@ -65,7 +65,7 @@ const internalTextOverrides = new Map([
   ],
   [
     'scripts/release/create-macos-dmg.mjs',
-    'a04e04d3d2032dc71e21faf222269b3941eec1093d7014299c1cdb56214f6bfe'
+    'd123326538470c2f82845d866b0d761faf026825b769b1e0d57aa96a30d335a3'
   ],
   [
     'scripts/release/verify-packaged-hwi.mjs',

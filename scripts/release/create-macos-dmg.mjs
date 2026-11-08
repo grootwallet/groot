@@ -8,12 +8,14 @@ import {
   mkdtempSync,
   mkdirSync,
   readFileSync,
+  readlinkSync,
   rmSync,
   symlinkSync,
   writeFileSync
 } from 'node:fs';
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { finderLayoutFor } from './macos-dmg-layout.mjs';
 
 const repoRoot = resolve(fileURLToPath(new URL('../../', import.meta.url)));
 const [appArgument, outputArgument, volumeName = 'Groot'] = process.argv.slice(2);
@@ -32,8 +34,8 @@ if (!appArgument || !outputArgument || !isAbsolute(appArgument) || !isAbsolute(o
 }
 const app = resolve(appArgument);
 const appFileName = basename(app);
-const branded = appFileName === 'Groot.app';
 const output = resolve(outputArgument);
+const backgroundPath = '.background/groot-dmg-background.png';
 const backgroundBytes = readFileSync(
   join(repoRoot, 'scripts/release/assets/groot-dmg-background.png')
 );
@@ -44,6 +46,10 @@ if (backgroundDigest !== 'a6360c8591eb889ebfbd07cf185db40b8d46e438baa6ae09efc6da
 if (!app.endsWith('.app') || !existsSync(app)) fail('the app bundle is missing');
 if (existsSync(output)) fail(`output already exists: ${output}`);
 if (volumeName !== 'Groot') fail('the release DMG volume name must be exactly Groot');
+const finderLayout = finderLayoutFor(
+  readFileSync(join(repoRoot, 'scripts/release/assets/groot-dmg.DS_Store')),
+  appFileName
+);
 mkdirSync(dirname(output), { recursive: true });
 
 const temporaryRoot = mkdtempSync(join(process.env.TMPDIR ?? '/tmp', 'groot-styled-dmg.'));
@@ -62,14 +68,9 @@ try {
   });
   run('codesign', ['--verify', '--deep', '--strict', stagedApp]);
   symlinkSync('/Applications', join(staging, 'Applications'));
-  if (branded) {
-    mkdirSync(join(staging, '.background'), { mode: 0o755 });
-    writeFileSync(join(staging, '.background/groot-dmg-background.png'), backgroundBytes);
-    writeFileSync(
-      join(staging, '.DS_Store'),
-      readFileSync(join(repoRoot, 'scripts/release/assets/groot-dmg.DS_Store'))
-    );
-  }
+  mkdirSync(join(staging, '.background'), { mode: 0o755 });
+  writeFileSync(join(staging, backgroundPath), backgroundBytes);
+  writeFileSync(join(staging, '.DS_Store'), finderLayout);
   run('hdiutil', [
     'create',
     '-volname',
@@ -95,6 +96,13 @@ try {
   mkdirSync(mounted, { mode: 0o700 });
   run('hdiutil', ['attach', '-readonly', '-nobrowse', '-mountpoint', mounted, output]);
   try {
+    if (
+      readlinkSync(join(mounted, 'Applications')) !== '/Applications' ||
+      !readFileSync(join(mounted, '.DS_Store')).equals(finderLayout) ||
+      !readFileSync(join(mounted, backgroundPath)).equals(backgroundBytes)
+    ) {
+      fail('the mounted DMG is missing its branded drag-to-Applications layout');
+    }
     run('codesign', ['--verify', '--deep', '--strict', join(mounted, appFileName)]);
   } finally {
     run('hdiutil', ['detach', mounted]);
