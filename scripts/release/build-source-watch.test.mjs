@@ -17,7 +17,7 @@ test('source watcher enumerates the same repository paths from the native crate'
       return source.slice(start, next < 0 ? undefined : next);
     };
     const harness = join(directory, 'watcher.rs');
-    const executable = join(directory, 'watcher');
+    const executable = join(directory, process.platform === 'win32' ? 'watcher.exe' : 'watcher');
     writeFileSync(
       harness,
       `${functionSource('git_output')}\n${functionSource('watch_repository_sources')}\nfn main() { watch_repository_sources(); }\n`

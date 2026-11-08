@@ -212,13 +212,16 @@ test('rejects on-disk Git object alternates', () => {
 });
 
 test('rejects ignored Vite environment files that can alter packaged configuration', () => {
-  const { root, commit } = fixture();
+  const { root } = fixture();
   try {
     writeFileSync(join(root, '.gitignore'), '.env*\n');
+    writeFileSync(join(root, '.env.testnet4'), 'PUBLIC_BITCOIN_NETWORK=testnet4\n');
     git(root, ['add', '.gitignore']);
+    git(root, ['add', '--force', '.env.testnet4']);
     git(root, ['commit', '--quiet', '-m', 'ignore local Vite environment']);
     const approvedCommit = git(root, ['rev-parse', 'HEAD']);
     git(root, ['checkout', '--quiet', '--detach', approvedCommit]);
+    assert.doesNotThrow(() => requireInternalCandidateSource(root, environment(approvedCommit)));
     for (const relativePath of [
       '.env.testnet4.local',
       '.env.mainnet.local',

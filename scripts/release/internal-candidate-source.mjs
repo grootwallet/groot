@@ -176,8 +176,13 @@ function trackedEntries(repoRoot, objectFormat, sourceTree, environment) {
     });
 }
 
-function rejectUntrackedViteEnvironmentFiles(repoRoot, entries) {
-  const trackedPaths = new Set(entries.map((entry) => entry.relativePath));
+function rejectUntrackedViteEnvironmentFiles(repoRoot, sourceTree, environment) {
+  const trackedPaths = new Set(
+    git(repoRoot, ['ls-tree', '-rz', '--name-only', sourceTree], environment)
+      .toString('utf8')
+      .split('\0')
+      .filter(Boolean)
+  );
   for (const relativePath of readdirSync(repoRoot)) {
     const normalizedPath = relativePath.toLowerCase();
     if (normalizedPath !== '.env' && !normalizedPath.startsWith('.env.')) continue;
@@ -218,6 +223,9 @@ function readSourceIdentity(repoRoot, environment) {
     throw new Error('Internal candidate checkout does not match the externally accepted commit');
   }
   const sourceTree = commitTree(repoRoot, candidateCommit, environment);
+  // Check root Vite environment files before the general clean-checkout gate so
+  // case-sensitive and case-insensitive filesystems reject them identically.
+  rejectUntrackedViteEnvironmentFiles(repoRoot, sourceTree, environment);
   const status = git(
     repoRoot,
     ['status', '--porcelain=v1', '-z', '--untracked-files=all'],
@@ -236,7 +244,6 @@ function readSourceIdentity(repoRoot, environment) {
       `Internal candidate checkout has hidden index state: ${unsafeIndexFlag.slice(2)}`
     );
   }
-
   const objectFormat = git(repoRoot, ['rev-parse', '--show-object-format'], environment, {
     encoding: 'utf8'
   }).trim();
@@ -244,7 +251,6 @@ function readSourceIdentity(repoRoot, environment) {
     throw new Error(`Unsupported Git object format: ${objectFormat}`);
   }
   const entries = trackedEntries(repoRoot, objectFormat, sourceTree, environment);
-  rejectUntrackedViteEnvironmentFiles(repoRoot, entries);
   const sourceSnapshotSha256 = createHash('sha256');
   for (const entry of entries) {
     sourceSnapshotSha256.update(entry.mode);
