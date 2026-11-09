@@ -313,9 +313,11 @@ describe('hardware receive verification UI', () => {
     expect(multisigSetup).toContain(
       "{#if templateKind === 'standard'}<button onclick={scanHardware}"
     );
-    expect(multisigSetup).toContain('Limited signer support');
-    expect(multisigSetup).toContain('Offline PSBT only');
-    expect(multisigSetup).toContain('Unsupported: Coldcard, Trezor, phone signers');
+    expect(multisigSetup).toContain("label={translate($locale, 'Signer compatibility')}");
+    expect(multisigSetup).toContain('Sign offline by exchanging transaction files.');
+    expect(multisigSetup).toContain(
+      'USB signing, phone pairing, Coldcard and Trezor are unavailable.'
+    );
     expect(multisigSetup).toContain("if (templateKind !== 'standard')");
     expect(multisigReceive).toContain(
       '{#if !wallet?.recoveryTemplate}<HardwareReceiveVerification'

@@ -340,32 +340,37 @@
   }
 </script>
 
-{#snippet addressTypeField(recovering: boolean)}
+{#snippet addressOptions(recovering: boolean)}
   {#if taprootAvailable}
-    <label class="field">
-      <span id="software-address-type-label">{translate($locale, 'Address type')}</span>
-      <select
-        bind:value={addressType}
-        disabled={busy}
-        aria-labelledby="software-address-type-label"
-        aria-describedby="software-address-type-hint"
-        onchange={() => {
-          expectedDescriptor = '';
-          error = '';
-        }}
-      >
-        <option value="nativeSegwit">{translate($locale, 'Native SegWit · BIP84')}</option>
-        <option value="taproot">{translate($locale, 'Taproot · BIP86')}</option>
-      </select>
-      <small id="software-address-type-hint">
-        {translate(
-          $locale,
-          recovering
-            ? 'Choose the address type recorded with your original wallet backup.'
-            : 'Native SegWit is the default. Taproot is available for software wallets on this test network.'
-        )}
-      </small>
-    </label>
+    <details class="proposal-review-details">
+      <summary>{translate($locale, 'Address options')}</summary>
+      <div class="field">
+        <span class="field-label">
+          <label for="software-address-type">{translate($locale, 'Address type')}</label>
+          <InsightTip
+            label={translate($locale, 'About address type')}
+            text={translate(
+              $locale,
+              recovering
+                ? 'Match the type in your backup. A different type opens a different wallet.'
+                : 'Native SegWit is the default. Taproot uses a different address format.'
+            )}
+          />
+        </span>
+        <select
+          id="software-address-type"
+          bind:value={addressType}
+          disabled={busy}
+          onchange={() => {
+            expectedDescriptor = '';
+            error = '';
+          }}
+        >
+          <option value="nativeSegwit">{translate($locale, 'Native SegWit (default)')}</option>
+          <option value="taproot">{translate($locale, 'Taproot')}</option>
+        </select>
+      </div>
+    </details>
   {/if}
 {/snippet}
 
@@ -536,7 +541,7 @@
           'Groot will generate 24 recovery words securely on this device. Write them down in order and\n        keep them offline.'
         )}
       </p>
-      {@render addressTypeField(false)}
+      {@render addressOptions(false)}
       <div class="setup-points">
         <div>
           <ShieldCheck size={18} /><span
@@ -551,7 +556,7 @@
             role="note"
             body={translate(
               $locale,
-              'Taproot recovery in Groot requires your 24 words, exact passphrase, and public wallet descriptor. Save all three after setup.'
+              'Save your 24 words, exact passphrase, and public descriptor to recover this wallet.'
             )}
           />
         {:else}
@@ -937,7 +942,7 @@
           {translate(
             $locale,
             taprootSelected
-              ? 'Save the public descriptor with your 24 words and exact passphrase. A matching fingerprint alone cannot confirm the address type.'
+              ? 'Save the public descriptor with your 24 words and exact passphrase.'
               : 'When restoring elsewhere, a matching fingerprint confirms that the recovery words and passphrase opened the same wallet.'
           )}
         </p>
@@ -988,7 +993,7 @@
           'Your 24 recovery words are entered in a native system window so they never enter Groot’s web\n        interface.'
         )}
       </p>
-      {@render addressTypeField(true)}
+      {@render addressOptions(true)}
       {#if taprootSelected}
         <label class="field">
           <span id="software-restore-descriptor-label"
@@ -1006,10 +1011,7 @@
             aria-labelledby="software-restore-descriptor-label"
             aria-describedby="software-restore-descriptor-hint"></textarea>
           <small id="software-restore-descriptor-hint">
-            {translate(
-              $locale,
-              'Paste the public receive and change descriptor saved with your Taproot wallet.'
-            )}
+            {translate($locale, 'Paste the public descriptor from your Taproot backup.')}
           </small>
         </label>
       {/if}

@@ -25,28 +25,40 @@ export const onboardingCopy = {
     fr: 'Les informations de récupération ne correspondent pas au descripteur public sauvegardé.',
     es: 'Los datos de recuperación no coinciden con el descriptor público guardado.'
   },
+  Taproot: { fr: 'Taproot', es: 'Taproot' },
   'Taproot · BIP86': { fr: 'Taproot · BIP86', es: 'Taproot · BIP86' },
-  'Choose the address type recorded with your original wallet backup.': {
-    fr: 'Choisissez le type d’adresse indiqué dans la sauvegarde de votre portefeuille.',
-    es: 'Elige el tipo de dirección que anotaste con la copia de seguridad de tu cartera.'
+  'Address options': { fr: 'Options d’adresse', es: 'Opciones de dirección' },
+  'About address type': {
+    fr: 'À propos du type d’adresse',
+    es: 'Acerca del tipo de dirección'
   },
-  'Native SegWit is the default. Taproot is available for software wallets on this test network.': {
-    fr: 'SegWit natif est le choix par défaut. Taproot est disponible pour les portefeuilles logiciels sur ce réseau de test.',
-    es: 'SegWit nativo es la opción predeterminada. Taproot está disponible para carteras de software en esta red de prueba.'
+  'This is how your wallet receives bitcoin. Use the same address type to recover it.': {
+    fr: 'C’est le format utilisé pour recevoir des bitcoins. Utilisez le même type d’adresse pour restaurer votre portefeuille.',
+    es: 'Es el formato que usa tu cartera para recibir bitcoin. Usa el mismo tipo de dirección para recuperarla.'
   },
-  'Taproot recovery in Groot requires your 24 words, exact passphrase, and public wallet descriptor. Save all three after setup.':
-    {
-      fr: 'Pour restaurer un portefeuille Taproot dans Groot, il faut vos 24 mots, votre phrase secrète exacte et le descripteur public. Conservez les trois après la configuration.',
-      es: 'Para recuperar una cartera Taproot en Groot necesitas tus 24 palabras, la frase de contraseña exacta y el descriptor público. Guarda los tres al terminar.'
-    },
-  'Save the public descriptor with your 24 words and exact passphrase. A matching fingerprint alone cannot confirm the address type.':
-    {
-      fr: 'Conservez le descripteur public avec vos 24 mots et votre phrase secrète exacte. L’empreinte seule ne suffit pas à confirmer le type d’adresse.',
-      es: 'Guarda el descriptor público con tus 24 palabras y la frase de contraseña exacta. La huella por sí sola no confirma el tipo de dirección.'
-    },
-  'Paste the public receive and change descriptor saved with your Taproot wallet.': {
-    fr: 'Collez le descripteur public de réception et de monnaie rendue que vous avez sauvegardé pour ce portefeuille Taproot.',
-    es: 'Pega el descriptor público de recepción y cambio que guardaste para tu cartera Taproot.'
+  'Native SegWit (default)': {
+    fr: 'SegWit natif (par défaut)',
+    es: 'SegWit nativo (predeterminado)'
+  },
+  'Native SegWit is the default. Taproot uses a different address format.': {
+    fr: 'SegWit natif est le choix par défaut. Taproot utilise un autre format d’adresse.',
+    es: 'SegWit nativo es la opción predeterminada. Taproot usa otro formato de dirección.'
+  },
+  'Match the type in your backup. A different type opens a different wallet.': {
+    fr: 'Choisissez le type de votre sauvegarde. Un autre type ouvre un autre portefeuille.',
+    es: 'Usa el tipo de tu copia de seguridad. Un tipo distinto abre otra cartera.'
+  },
+  'Save your 24 words, exact passphrase, and public descriptor to recover this wallet.': {
+    fr: 'Conservez vos 24 mots, votre phrase secrète exacte et le descripteur public pour restaurer ce portefeuille.',
+    es: 'Guarda tus 24 palabras, la frase de contraseña exacta y el descriptor público para recuperar esta cartera.'
+  },
+  'Save the public descriptor with your 24 words and exact passphrase.': {
+    fr: 'Conservez le descripteur public avec vos 24 mots et votre phrase secrète exacte.',
+    es: 'Guarda el descriptor público con tus 24 palabras y la frase de contraseña exacta.'
+  },
+  'Paste the public descriptor from your Taproot backup.': {
+    fr: 'Collez le descripteur public de votre sauvegarde Taproot.',
+    es: 'Pega el descriptor público de tu copia de seguridad Taproot.'
   },
   'Could not copy the public descriptor. Try again.': {
     fr: 'Impossible de copier le descripteur public. Réessayez.',

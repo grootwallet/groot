@@ -1,5 +1,6 @@
 <script lang="ts">
   import { locale } from '$lib/i18n';
+  import InsightTip from '$lib/components/InsightTip.svelte';
   import { translate, localizedError } from '$lib/i18n-catalog';
   import {
     Check,
@@ -67,6 +68,7 @@
   let detailAddress = $state<ReceiveAddress | null>(null);
   let currentUsesTaproot = $derived(current?.addressType === 'taproot');
   let detailsUseTaproot = $derived(detailAddress?.addressType === 'taproot');
+  let discardUsesTaproot = $derived(discardTarget?.addressType === 'taproot');
   let receiveCard = $state<HTMLElement | null>(null);
   let savedSignerDeviceType = $state<string | null>(null);
   let savedSignerFingerprint = $state<string | null>(null);
@@ -402,7 +404,16 @@
             <dd><code>{current.derivationPath}</code></dd>
           </div>
           <div>
-            <dt>{translate($locale, 'Type')}</dt>
+            <dt class="field-label">
+              {translate($locale, 'Address type')}
+              <InsightTip
+                label={translate($locale, 'About address type')}
+                text={translate(
+                  $locale,
+                  'This is how your wallet receives bitcoin. Use the same address type to recover it.'
+                )}
+              />
+            </dt>
             <dd>
               {translate($locale, currentUsesTaproot ? 'Taproot · BIP86' : 'Native SegWit · BIP84')}
             </dd>
@@ -612,8 +623,17 @@
             <dd><code>{discardTarget.derivationPath}</code></dd>
           </div>
           <div>
-            <dt>{translate($locale, 'Address type')}</dt>
-            <dd>{translate($locale, 'Native SegWit')}</dd>
+            <dt class="field-label">
+              {translate($locale, 'Address type')}
+              <InsightTip
+                label={translate($locale, 'About address type')}
+                text={translate(
+                  $locale,
+                  'This is how your wallet receives bitcoin. Use the same address type to recover it.'
+                )}
+              />
+            </dt>
+            <dd>{translate($locale, discardUsesTaproot ? 'Taproot · BIP86' : 'Native SegWit')}</dd>
           </div>
         </dl>
       </details>

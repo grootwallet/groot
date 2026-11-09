@@ -36,9 +36,8 @@ describe('native PDF backup presentation', () => {
 
   it('keeps the policy summary concise and spaces the amount unit', () => {
     expect(policyRoute).toContain('<Amount value={snapshot?.balance.total ?? 0} />');
-    expect(policyRoute).toContain(
-      "{translate($locale, taprootContinuity ? 'Taproot ·' : 'Native SegWit ·')}"
-    );
+    expect(policyRoute).not.toContain("'Native SegWit ·'");
+    expect(policyRoute).not.toContain("'Taproot ·'");
     expect(policyRoute).toContain('{networkName(snapshot?.network ?? defaultConfig.network)}');
     expect(policyRoute).not.toContain(' · Spending policy');
     expect(policyRoute).not.toContain('Native SegWit · sortedmulti');

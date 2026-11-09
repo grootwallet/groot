@@ -297,10 +297,7 @@
           role="note"
           icon
           title={translate($locale, 'Taproot · Miniscript')}
-          body={translate(
-            $locale,
-            'Regtest rehearsal only. Keep this exact Groot JSON backup and the independent offline software signers that support Taproot Miniscript PSBTs.'
-          )}
+          body={translate($locale, 'Regtest only. Keep this JSON backup and your offline signers.')}
         />
       {/if}
       <div class="drill-result passed">

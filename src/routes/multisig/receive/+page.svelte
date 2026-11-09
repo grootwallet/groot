@@ -1,5 +1,6 @@
 <script lang="ts">
   import { locale } from '$lib/i18n';
+  import InsightTip from '$lib/components/InsightTip.svelte';
   import { translate, localizedError } from '$lib/i18n-catalog';
   import {
     Check,
@@ -393,7 +394,7 @@
           body={translate(
             $locale,
             taprootContinuity
-              ? 'Verify the descriptor and address independently with a Taproot Miniscript tool before sharing it.'
+              ? 'Compare this address with Bitcoin Core before sharing it.'
               : 'Verify the descriptor and address with an independent Miniscript-aware tool. Groot’s pinned HWI release cannot display this policy safely.'
           )}
         />{/if}
@@ -407,7 +408,16 @@
             <dd><code>{current.derivationPath}</code></dd>
           </div>
           <div>
-            <dt>{translate($locale, 'Type')}</dt>
+            <dt class="field-label">
+              {translate($locale, 'Address type')}
+              <InsightTip
+                label={translate($locale, 'About address type')}
+                text={translate(
+                  $locale,
+                  'This is how your wallet receives bitcoin. Use the same address type to recover it.'
+                )}
+              />
+            </dt>
             <dd>{walletType}</dd>
           </div>
           {#if current.hardwareVerifiedAt}<div>
@@ -628,7 +638,16 @@
             <dd><code>{discardTarget.derivationPath}</code></dd>
           </div>
           <div>
-            <dt>{translate($locale, 'Address type')}</dt>
+            <dt class="field-label">
+              {translate($locale, 'Address type')}
+              <InsightTip
+                label={translate($locale, 'About address type')}
+                text={translate(
+                  $locale,
+                  'This is how your wallet receives bitcoin. Use the same address type to recover it.'
+                )}
+              />
+            </dt>
             <dd>{walletType}</dd>
           </div>
         </dl>

@@ -1484,6 +1484,21 @@
   }
 </script>
 
+{#snippet signerCompatibility()}
+  <span class="field-label">
+    <span>{translate($locale, 'Signer compatibility')}</span>
+    <InsightTip
+      label={translate($locale, 'Signer compatibility')}
+      text={translate(
+        $locale,
+        taprootSelected
+          ? 'Regtest only. Sign offline with Bitcoin Core.'
+          : 'Sign offline by exchanging transaction files. Hardware support is still in testing. USB signing, phone pairing, Coldcard and Trezor are unavailable.'
+      )}
+    />
+  </span>
+{/snippet}
+
 <div class="page coordinator-page">
   <header class="page-header">
     <div>
@@ -1502,12 +1517,7 @@
           href="/multisig/recover"
           aria-label={translate($locale, 'Recover from backup')}
           ><FileUp size={15} />{translate($locale, 'Recover')}</a
-        >{/if}<span class="network-chip"
-        >{networkName(defaultConfig.network)} · {translate(
-          $locale,
-          taprootSelected ? 'Taproot' : 'Native SegWit'
-        )}</span
-      >
+        >{/if}<span class="network-chip">{networkName(defaultConfig.network)}</span>
     </div>
   </header>
   <SetupProgress
@@ -1536,10 +1546,7 @@
       role="note"
       icon
       title={translate($locale, 'Taproot · Miniscript')}
-      body={translate(
-        $locale,
-        'This saved Taproot setup is for isolated Regtest rehearsal. To start a new wallet, first discard this setup.'
-      )}
+      body={translate($locale, 'This Taproot setup needs Regtest. Discard it to start over.')}
     />
   {:else if stage === 'policy'}
     <div class="coordinator-grid policy-only-grid">
@@ -1618,32 +1625,28 @@
                 >{/if}</button
             >
           </div>
-          {#if templateKind !== 'standard' && !taprootSelected}<WarningNotice
-              title={translate($locale, 'Limited signer support')}
-              body={translate(
-                $locale,
-                'Regtest and Testnet4 only. Offline PSBT only. Candidates pending exact-model certification: Ledger, Jade/Jade Plus, BitBox02, BitBox02 Nova. Unsupported: Coldcard, Trezor, phone signers.'
-              )}
-            />{/if}
           <div class="policy-choice-insight">
-            <span>{translate($locale, 'About this plan')}</span><InsightTip
-              label={translate(
-                $locale,
-                templateKind === 'standard'
-                  ? 'How Standard multisig works'
-                  : templateKind === 'partner_continuity_v1'
-                    ? 'How Partner continuity works'
-                    : 'How Family continuity works'
-              )}
-              text={translate(
-                $locale,
-                templateKind === 'standard'
-                  ? 'Choose how many independent keys must sign each payment. No single key can spend alone.'
-                  : templateKind === 'partner_continuity_v1'
-                    ? 'Your 2-of-3 remains available. After three months your partner uses both partner keys, after nine months either partner key works, and after twelve months two estate guardians can recover. Renewing moves every delayed path back.'
-                    : 'Both parents sign now. After three months either parent can sign with either child assistance key. After about twelve months, any 2 of the 3 inheritance signers—the two child inheritance keys and the executor—can recover. Renewing moves the delayed paths back.'
-              )}
-            />
+            {#if fixedTemplate}{@render signerCompatibility()}{/if}
+            <span class="field-label">
+              <span>{translate($locale, 'About this plan')}</span><InsightTip
+                label={translate(
+                  $locale,
+                  templateKind === 'standard'
+                    ? 'How Standard multisig works'
+                    : templateKind === 'partner_continuity_v1'
+                      ? 'How Partner continuity works'
+                      : 'How Family continuity works'
+                )}
+                text={translate(
+                  $locale,
+                  templateKind === 'standard'
+                    ? 'Choose how many independent keys must sign each payment. No single key can spend alone.'
+                    : templateKind === 'partner_continuity_v1'
+                      ? 'Your 2-of-3 remains available. After three months your partner uses both partner keys, after nine months either partner key works, and after twelve months two estate guardians can recover. Renewing moves every delayed path back.'
+                      : 'Both parents sign now. After three months either parent can sign with either child assistance key. After about twelve months, any 2 of the 3 inheritance signers—the two child inheritance keys and the executor—can recover. Renewing moves the delayed paths back.'
+                )}
+              />
+            </span>
           </div>
           <div class="coordinator-actions">
             <Button variant="secondary" href="/settings"
@@ -1746,24 +1749,50 @@
             {/if}
           {:else if fixedTemplate}
             {#if taprootSetupAvailable}
-              <label class="backup-confirmation">
-                <input
-                  type="checkbox"
-                  bind:checked={taprootSelected}
-                  disabled={cosigners.length > 0}
-                />
-                <span>
-                  <strong>{translate($locale, 'Use Taproot · Regtest rehearsal')}</strong>
-                  <small
-                    >{translate(
-                      $locale,
-                      cosigners.length
-                        ? 'Remove the added signers before changing address type.'
-                        : 'Use independent offline Bitcoin Core signers with Taproot Miniscript PSBT support. Enter each public account manually.'
-                    )}</small
+              <details class="proposal-review-details">
+                <summary>{translate($locale, 'Address options')}</summary>
+                <div class="field">
+                  <span class="field-label">
+                    <label for="continuity-address-type">{translate($locale, 'Address type')}</label
+                    >
+                    <InsightTip
+                      label={translate($locale, 'About address type')}
+                      text={translate(
+                        $locale,
+                        'Choose the format for this wallet’s receive and change addresses.'
+                      )}
+                    />
+                  </span>
+                  <select
+                    id="continuity-address-type"
+                    value={taprootSelected ? 'taproot' : 'nativeSegwit'}
+                    disabled={cosigners.length > 0}
+                    aria-describedby={taprootSelected || cosigners.length > 0
+                      ? 'continuity-address-type-help'
+                      : undefined}
+                    onchange={(event) =>
+                      (taprootSelected = event.currentTarget.value === 'taproot')}
                   >
-                </span>
-              </label>
+                    <option value="nativeSegwit"
+                      >{translate($locale, 'Native SegWit (default)')}</option
+                    >
+                    <option value="taproot">{translate($locale, 'Taproot')}</option>
+                  </select>
+                  {#if taprootSelected || cosigners.length > 0}
+                    <small id="continuity-address-type-help">
+                      {#if taprootSelected}
+                        {translate($locale, 'Regtest only. Sign offline with Bitcoin Core.')}
+                      {/if}
+                      {#if cosigners.length > 0}
+                        {translate(
+                          $locale,
+                          'Remove the added signers before changing address type.'
+                        )}
+                      {/if}
+                    </small>
+                  {/if}
+                </div>
+              </details>
             {/if}
             <div
               class="path-visual continuity-path-visual"
@@ -1827,16 +1856,7 @@
               )}
             </p>
             {#if !taprootSelected}
-              <div class="recovery-separation">
-                <ShieldCheck size={15} /><span
-                  ><strong>{translate($locale, 'Offline PSBT only')}</strong><small
-                    >{translate(
-                      $locale,
-                      'Candidates pending exact-model certification: Ledger, Jade/Jade Plus, BitBox02, BitBox02 Nova. Unsupported: Coldcard, Trezor, phone signers.'
-                    )}</small
-                  ></span
-                >
-              </div>
+              <div class="optional-insight">{@render signerCompatibility()}</div>
             {/if}
           {:else}<div class="path-visual">
               <span
@@ -2074,6 +2094,14 @@
           <li>{translate($locale, 'Save the wallet descriptor.')}</li>
           <li>{translate($locale, 'Verify keys on each signer.')}</li>
           <li>{translate($locale, 'Store signers separately.')}</li>
+          {#if fixedTemplate}
+            <li>
+              {translate(
+                $locale,
+                taprootSelected ? 'Use offline Bitcoin Core signers.' : 'Sign offline.'
+              )}
+            </li>
+          {/if}
         </ul>
         {#if !taprootSelected}
           <button class="hardware-help-card" onclick={() => openHardwareHelp()}
@@ -2102,15 +2130,6 @@
                   : '2 of 3 primary keys + recovery key later',
             { threshold, total: cosigners.length }
           )}</strong
-        ><span
-          >{translate(
-            $locale,
-            taprootSelected
-              ? 'Taproot · Miniscript'
-              : templateKind === 'standard'
-                ? 'wsh · sortedmulti · BIP48'
-                : 'wsh · Miniscript · BIP48'
-          )}</span
         >
       </div>
       <div class="review-signers">
@@ -2148,15 +2167,6 @@
                   : '2 of 3 primary keys + recovery key later',
             { threshold, total: cosigners.length }
           )}</strong
-        ><span
-          >{translate(
-            $locale,
-            taprootSelected
-              ? 'Taproot · Miniscript'
-              : templateKind === 'standard'
-                ? 'wsh · sortedmulti · BIP48'
-                : 'wsh · Miniscript · BIP48'
-          )}</span
         >
       </div>
       <div class="backup-setup-sections">
@@ -2195,7 +2205,7 @@
                 <small
                   >{translate(
                     $locale,
-                    'Derive the first address independently from the public descriptor. Paste that address to verify the backup.'
+                    'Derive the first address from the public descriptor in Bitcoin Core and paste it here.'
                   )}</small
                 >
               </label>
@@ -2246,6 +2256,17 @@
               class="descriptor-block descriptor-viewer"
               data-testid="descriptor-preview"
             >
+              <p class="optional-insight">
+                {translate($locale, 'Address type')}
+                <strong>{translate($locale, taprootSelected ? 'Taproot' : 'Native SegWit')}</strong>
+                <InsightTip
+                  label={translate($locale, 'About address type')}
+                  text={translate(
+                    $locale,
+                    'This is how your wallet receives bitcoin. Use the same address type to recover it.'
+                  )}
+                />
+              </p>
               {#if combinedDescriptor}<section class="descriptor-primary">
                   <div>
                     <span>{translate($locale, 'Portable wallet descriptor')}</span><small
@@ -3626,10 +3647,6 @@
     color: var(--text);
     font-size: 13px;
   }
-  :global(.policy-summary):where(.policy-summary) :global(span) {
-    color: var(--muted);
-    font-size: var(--font-size-meta);
-  }
   :global(.backup-setup-sections):where(.backup-setup-sections) {
     display: grid;
     gap: 14px;
@@ -3989,9 +4006,10 @@
   :global(.policy-choice-insight):where(.policy-choice-insight) {
     min-height: 34px;
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     justify-content: flex-end;
-    gap: 5px;
+    gap: 4px 12px;
     margin-top: 8px;
     color: var(--muted);
     font-size: var(--font-size-meta);

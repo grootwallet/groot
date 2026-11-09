@@ -4,6 +4,21 @@ async function expectNoHorizontalOverflow(page: Page) {
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 }
 
+async function openAddressOptions(page: Page) {
+  const addressType = page.getByRole('combobox', { name: 'Address type' });
+  await expect(addressType).toBeHidden();
+  await page.getByText('Address options', { exact: true }).click();
+  await expect(addressType).toHaveValue('nativeSegwit');
+  return addressType;
+}
+
+async function expectAddressTypeExplanation(page: Page, copy: string) {
+  await page.getByRole('button', { name: 'About address type' }).click();
+  await expect(page.getByRole('tooltip')).toHaveText(copy);
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('tooltip')).toBeHidden();
+}
+
 test('chooses Taproot explicitly, saves its descriptor, and creates a permanently labelled request', async ({
   page
 }) => {
@@ -28,12 +43,21 @@ test('chooses Taproot explicitly, saves its descriptor, and creates a permanentl
   await page.goto('/welcome?fixture-empty=1');
   await page.getByRole('button', { name: 'Add wallet' }).click();
   await page.getByRole('button', { name: /Software wallet/ }).click();
-  const addressType = page.getByRole('combobox', { name: 'Address type' });
-  await expect(addressType).toHaveValue('nativeSegwit');
+  await expect(page.getByRole('button', { name: 'Generate 24 recovery words' })).toBeEnabled();
+  await expect(page.getByText('Address options', { exact: true })).toBeVisible();
+  await page.screenshot({ path: test.info().outputPath('software-default-dark.png') });
+  const addressType = await openAddressOptions(page);
+  await expectAddressTypeExplanation(
+    page,
+    'Native SegWit is the default. Taproot uses a different address format.'
+  );
   await addressType.selectOption('taproot');
-  await expect(page.getByRole('note')).toContainText('public wallet descriptor');
+  await expect(page.getByRole('note')).toContainText('public descriptor');
   await expectNoHorizontalOverflow(page);
   await page.screenshot({ path: test.info().outputPath('taproot-create-dark.png') });
+  await page.getByText('Address options', { exact: true }).click();
+  await expect(addressType).toBeHidden();
+  await expect(page.getByRole('note')).toContainText('public descriptor');
   await page.getByRole('button', { name: 'Generate 24 recovery words' }).click();
   await page.getByRole('button', { name: /Reveal words/i }).click();
   await page.getByRole('button', { name: 'I wrote them down' }).click();
@@ -73,10 +97,20 @@ test('chooses Taproot explicitly, saves its descriptor, and creates a permanentl
   await page.getByLabel('Label', { exact: true }).fill('Taproot fixture payment');
   await generate.click();
   await expect(page.getByRole('button', { name: /View Taproot fixture payment/ })).toBeVisible();
+  await expect(page.getByText('Taproot · BIP86', { exact: true })).toBeHidden();
   await page.getByRole('button', { name: 'Show address details' }).click();
   await expect(page.getByText('Taproot · BIP86', { exact: true })).toBeVisible();
   await expect(page.getByText("m/86'/1'/0'/0/0", { exact: true })).toBeVisible();
   expect(await page.evaluate(() => navigator.clipboard.readText())).toMatch(/^bcrt1pdummy/);
+  await expectAddressTypeExplanation(
+    page,
+    'This is how your wallet receives bitcoin. Use the same address type to recover it.'
+  );
+  await page.getByRole('button', { name: 'Discard', exact: true }).click();
+  const discard = page.getByRole('dialog', { name: 'Discard Taproot fixture payment?' });
+  await discard.getByText('Show address details', { exact: true }).click();
+  await expect(discard.getByText('Taproot · BIP86', { exact: true })).toBeVisible();
+  await discard.getByRole('button', { name: 'Keep address' }).click();
   await expectNoHorizontalOverflow(page);
 });
 
@@ -86,9 +120,14 @@ test('requires a public Taproot recovery descriptor and permits retry without re
   await page.addInitScript(() => localStorage.setItem('groot-theme', 'light'));
   await page.goto('/welcome?fixture-empty=1');
   await page.getByRole('button', { name: 'Recover software wallet' }).click();
-  const addressType = page.getByRole('combobox', { name: 'Address type' });
   const descriptor = page.getByRole('textbox', { name: 'Public wallet descriptor' });
-  await expect(addressType).toHaveValue('nativeSegwit');
+  await expect(page.getByText('Address options', { exact: true })).toBeVisible();
+  await page.screenshot({ path: test.info().outputPath('recovery-default-light.png') });
+  const addressType = await openAddressOptions(page);
+  await expectAddressTypeExplanation(
+    page,
+    'Match the type in your backup. A different type opens a different wallet.'
+  );
   await expect(descriptor).toHaveCount(0);
   await addressType.selectOption('taproot');
   await expect(descriptor).toBeVisible();
@@ -99,6 +138,8 @@ test('requires a public Taproot recovery descriptor and permits retry without re
   await expect(submit).toBeDisabled();
   await expectNoHorizontalOverflow(page);
   await page.screenshot({ path: test.info().outputPath('taproot-recover-light.png') });
+  await page.getByText('Address options', { exact: true }).click();
+  await expect(descriptor).toBeVisible();
   await descriptor.fill('synthetic-invalid-descriptor');
   await submit.click();
   await expect(page.getByRole('alert')).toContainText(
@@ -106,6 +147,7 @@ test('requires a public Taproot recovery descriptor and permits retry without re
   );
   await expect(passphrase).toHaveValue('');
 
+  await page.getByText('Address options', { exact: true }).click();
   await addressType.selectOption('nativeSegwit');
   await addressType.selectOption('taproot');
   await expect(descriptor).toHaveValue('');
@@ -122,7 +164,7 @@ test('keeps Taproot hidden on the native phone flow and discloses the hardware a
   await page.getByRole('button', { name: 'Add wallet' }).click();
   await page.getByRole('button', { name: /Software wallet/ }).click();
   await expect(page.getByRole('heading', { name: 'Generate wallet' })).toBeVisible();
-  await expect(page.getByRole('combobox', { name: 'Address type' })).toHaveCount(0);
+  await expect(page.getByText('Address options', { exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'Back' }).click();
   await page.getByRole('button', { name: /Hardware signer/ }).click();
   await expect(
@@ -168,11 +210,31 @@ test('Regtest Continuity rehearsal uses manual accounts and requires the exact r
     await route.fulfill({ response, body: `${original}\n${setupFixture}` });
   });
   await page.goto('/multisig/new');
+  await page.getByRole('button', { name: /^Partner continuity/ }).click();
+  await page.getByRole('button', { name: 'Continue', exact: true }).click();
+  const partnerType = await openAddressOptions(page);
+  await partnerType.selectOption('taproot');
+  await expect(page.getByText('Regtest only. Sign offline with Bitcoin Core.')).toBeVisible();
+  await partnerType.selectOption('nativeSegwit');
+  await page.getByRole('button', { name: 'Back', exact: true }).click();
+
   await page.getByRole('button', { name: /^Family continuity/ }).click();
   await page.getByRole('button', { name: 'Continue', exact: true }).click();
-  const chooseTaproot = page.getByRole('checkbox', { name: /Use Taproot/ });
-  await expect(chooseTaproot).not.toBeChecked();
-  await chooseTaproot.check();
+  await expect(page.getByText('Address options', { exact: true })).toBeVisible();
+  await page.screenshot({ path: test.info().outputPath('continuity-default.png') });
+  const familyType = await openAddressOptions(page);
+  await expectAddressTypeExplanation(
+    page,
+    'Choose the format for this wallet’s receive and change addresses.'
+  );
+  await familyType.selectOption('taproot');
+  const requirement = page.getByText('Regtest only. Sign offline with Bitcoin Core.');
+  await expect(requirement).toBeVisible();
+  await expect(page.getByText('Offline PSBT only', { exact: true })).toHaveCount(0);
+  const note = await requirement.boundingBox();
+  const timeline = await page.locator('.continuity-path-visual').boundingBox();
+  expect(timeline!.y - (note!.y + note!.height)).toBeGreaterThanOrEqual(16);
+  await page.screenshot({ path: test.info().outputPath('continuity-taproot.png') });
   await page.getByLabel('Wallet name').fill('Offline family fixture');
   await page.getByRole('button', { name: 'Continue to signers' }).click();
   for (let index = 0; index < 7; index++) {

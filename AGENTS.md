@@ -63,6 +63,7 @@ If code and documentation disagree, stop and resolve the mismatch in the same ch
 - Keep network endpoints configurable. Signet is the integration default, regtest is for deterministic automation, and Testnet4 is the public rehearsal network.
 - Prefer pure functions for policy. Add or update a unit test when changing a rule.
 - New feature UI must compose the repository's existing reusable components. Before creating a new reusable component, verify that no existing component can satisfy the requirement, explain the verified gap to the user, and obtain the user's explicit approval. Do not create the component before that approval.
+- Keep routine flows simple and copy concise. Use safe defaults, hide optional choices behind existing disclosures, and explain them with the existing tooltip. Put short requirements next to the action they affect.
 - Keep components small and accessible. Important actions need an inline result and a toast; a toast alone is not durable state.
 - Avoid speculative abstractions. Add one boundary when it protects secrets, platform differences, or a stable domain contract.
 

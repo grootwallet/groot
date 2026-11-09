@@ -1,20 +1,26 @@
 import type { CatalogSection } from './types';
 
 export const multisigCopy = {
-  Taproot: { fr: 'Taproot', es: 'Taproot' },
-  'Use Taproot · Regtest rehearsal': {
-    fr: 'Utiliser Taproot · essai Regtest',
-    es: 'Usar Taproot · ensayo Regtest'
-  },
   'Remove the added signers before changing address type.': {
     fr: 'Retirez les signataires ajoutés avant de changer le type d’adresse.',
     es: 'Retira los firmantes añadidos antes de cambiar el tipo de dirección.'
   },
-  'Use independent offline Bitcoin Core signers with Taproot Miniscript PSBT support. Enter each public account manually.':
-    {
-      fr: 'Utilisez des signataires Bitcoin Core indépendants hors ligne compatibles avec les PSBT Taproot Miniscript. Saisissez chaque compte public manuellement.',
-      es: 'Usa firmantes independientes de Bitcoin Core sin conexión compatibles con PSBT de Taproot Miniscript. Introduce cada cuenta pública a mano.'
-    },
+  'Regtest only. Sign offline with Bitcoin Core.': {
+    fr: 'Regtest uniquement. Signez hors ligne avec Bitcoin Core.',
+    es: 'Solo en Regtest. Firma sin conexión con Bitcoin Core.'
+  },
+  'Use offline Bitcoin Core signers.': {
+    fr: 'Utilisez des signataires Bitcoin Core hors ligne.',
+    es: 'Usa firmantes Bitcoin Core sin conexión.'
+  },
+  'Sign offline.': {
+    fr: 'Signez hors ligne.',
+    es: 'Firma sin conexión.'
+  },
+  'Choose the format for this wallet’s receive and change addresses.': {
+    fr: 'Choisissez le format des adresses de réception et de monnaie rendue de ce portefeuille.',
+    es: 'Elige el formato de las direcciones de recepción y cambio de esta cartera.'
+  },
   'Enter a public test-network account key beginning with tpub.': {
     fr: 'Saisissez une clé de compte publique de test commençant par tpub.',
     es: 'Introduce una clave de cuenta pública de pruebas que comience por tpub.'
@@ -31,11 +37,10 @@ export const multisigCopy = {
     fr: 'Première adresse de réception selon Bitcoin Core',
     es: 'Primera dirección de recepción de Bitcoin Core'
   },
-  'Derive the first address independently from the public descriptor. Paste that address to verify the backup.':
-    {
-      fr: 'Dérivez indépendamment la première adresse à partir du descripteur public. Collez-la pour vérifier la sauvegarde.',
-      es: 'Deriva la primera dirección de forma independiente a partir del descriptor público. Pégala para verificar la copia.'
-    },
+  'Derive the first address from the public descriptor in Bitcoin Core and paste it here.': {
+    fr: 'Dérivez la première adresse du descripteur public dans Bitcoin Core, puis collez-la ici.',
+    es: 'Deriva la primera dirección del descriptor público en Bitcoin Core y pégala aquí.'
+  },
   'Save Groot JSON backup': {
     fr: 'Enregistrer la sauvegarde JSON Groot',
     es: 'Guardar la copia JSON de Groot'
@@ -45,40 +50,27 @@ export const multisigCopy = {
     fr: 'Les politiques de continuité Taproot sont disponibles uniquement pour les essais isolés sur Regtest.',
     es: 'La continuidad con Taproot solo está disponible para ensayos aislados en Regtest.'
   },
-  'Taproot ·': { fr: 'Taproot ·', es: 'Taproot ·' },
   'Taproot · Miniscript': { fr: 'Taproot · Miniscript', es: 'Taproot · Miniscript' },
-  'Verify the descriptor and address independently with a Taproot Miniscript tool before sharing it.':
-    {
-      fr: 'Vérifiez le descripteur et l’adresse avec un outil Taproot Miniscript indépendant avant de partager l’adresse.',
-      es: 'Verifica el descriptor y la dirección con una herramienta independiente de Taproot Miniscript antes de compartir la dirección.'
-    },
-  'Regtest rehearsal only. Keep this exact Groot JSON backup and the independent offline software signers that support Taproot Miniscript PSBTs.':
-    {
-      fr: 'Pour les essais sur Regtest uniquement. Conservez cette sauvegarde JSON Groot exacte et les signataires logiciels indépendants hors ligne compatibles avec les PSBT Taproot Miniscript.',
-      es: 'Solo para ensayos en Regtest. Conserva esta copia JSON exacta de Groot y los firmantes de software independientes sin conexión compatibles con las PSBT de Taproot Miniscript.'
-    },
-  'This saved Taproot setup is for isolated Regtest rehearsal. To start a new wallet, first discard this setup.':
-    {
-      fr: 'Cette configuration Taproot sauvegardée est réservée aux essais isolés sur Regtest. Pour créer un nouveau portefeuille, supprimez d’abord cette configuration.',
-      es: 'Esta configuración guardada de Taproot es para ensayos aislados en Regtest. Para crear una cartera nueva, descarta primero esta configuración.'
-    },
-  'Miniscript signer compatibility': {
-    fr: 'Compatibilité des signataires Miniscript',
-    es: 'Compatibilidad de firmantes Miniscript'
+  'Compare this address with Bitcoin Core before sharing it.': {
+    fr: 'Comparez cette adresse avec Bitcoin Core avant de la partager.',
+    es: 'Compara esta dirección con Bitcoin Core antes de compartirla.'
   },
-  'Limited signer support': {
-    fr: 'Prise en charge limitée des signataires',
-    es: 'Compatibilidad limitada con firmantes'
+  'Regtest only. Keep this JSON backup and your offline signers.': {
+    fr: 'Regtest uniquement. Conservez cette sauvegarde JSON et vos signataires hors ligne.',
+    es: 'Solo en Regtest. Guarda esta copia JSON y tus firmantes sin conexión.'
   },
-  'Regtest and Testnet4 only. Offline PSBT only. Candidates pending exact-model certification: Ledger, Jade/Jade Plus, BitBox02, BitBox02 Nova. Unsupported: Coldcard, Trezor, phone signers.':
+  'This Taproot setup needs Regtest. Discard it to start over.': {
+    fr: 'Cette configuration Taproot nécessite Regtest. Supprimez-la pour recommencer.',
+    es: 'Esta configuración de Taproot requiere Regtest. Descártala para volver a empezar.'
+  },
+  'Signer compatibility': {
+    fr: 'Compatibilité des signataires',
+    es: 'Compatibilidad de firmantes'
+  },
+  'Sign offline by exchanging transaction files. Hardware support is still in testing. USB signing, phone pairing, Coldcard and Trezor are unavailable.':
     {
-      fr: 'Regtest et Testnet4 uniquement. PSBT hors ligne uniquement. Candidats en attente de certification du modèle exact : Ledger, Jade/Jade Plus, BitBox02, BitBox02 Nova. Non pris en charge : Coldcard, Trezor, signataires téléphone.',
-      es: 'Solo Regtest y Testnet4. Solo PSBT sin conexión. Candidatos pendientes de certificar el modelo exacto: Ledger, Jade/Jade Plus, BitBox02, BitBox02 Nova. No compatibles: Coldcard, Trezor, firmantes de teléfono.'
-    },
-  'Partner and Family continuity are experimental on Regtest and Testnet4. Ledger, Jade/Jade Plus, BitBox02 and BitBox02 Nova are Miniscript candidates only; no direct USB Miniscript workflow is certified in Groot. Coldcard and Trezor are unsupported for delayed policies through this integration. Phone pairing supports standard multisig only.':
-    {
-      fr: 'Les modèles de continuité Partenaire et Famille sont expérimentaux sur Regtest et Testnet4. Ledger, Jade/Jade Plus, BitBox02 et BitBox02 Nova sont uniquement des candidats Miniscript ; aucun flux USB Miniscript direct n’est certifié dans Groot. Coldcard et Trezor ne sont pas pris en charge pour les politiques différées via cette intégration. Le jumelage du téléphone prend en charge uniquement le multisig standard.',
-      es: 'Las plantillas de continuidad Pareja y Familia son experimentales en Regtest y Testnet4. Ledger, Jade/Jade Plus, BitBox02 y BitBox02 Nova son solo candidatos Miniscript; ningún flujo USB Miniscript directo está certificado en Groot. Coldcard y Trezor no son compatibles con políticas diferidas mediante esta integración. El emparejamiento del teléfono solo admite multisig estándar.'
+      fr: 'Signez hors ligne en échangeant des fichiers de transaction. La compatibilité matérielle est encore en cours de test. La signature USB, le jumelage téléphonique, Coldcard et Trezor sont indisponibles.',
+      es: 'Firma sin conexión intercambiando archivos de transacción. La compatibilidad con dispositivos todavía está en pruebas. La firma por USB, el emparejamiento con el teléfono, Coldcard y Trezor no están disponibles.'
     },
   '{walletName} Review': {
     fr: 'Vérification de {walletName}',
@@ -1141,15 +1133,6 @@ export const multisigCopy = {
     es: 'Renueva cerca de los seis meses para retrasar de nuevo cada vía.'
   },
   'Fixed, reviewed roles': { fr: 'Rôles fixes et vérifiés', es: 'Roles fijos y revisados' },
-  'Offline PSBT only': {
-    fr: 'PSBT hors ligne uniquement',
-    es: 'Solo PSBT sin conexión'
-  },
-  'Candidates pending exact-model certification: Ledger, Jade/Jade Plus, BitBox02, BitBox02 Nova. Unsupported: Coldcard, Trezor, phone signers.':
-    {
-      fr: 'Candidats en attente de certification du modèle exact : Ledger, Jade/Jade Plus, BitBox02, BitBox02 Nova. Non pris en charge : Coldcard, Trezor, signataires téléphone.',
-      es: 'Candidatos pendientes de certificar el modelo exacto: Ledger, Jade/Jade Plus, BitBox02, BitBox02 Nova. No compatibles: Coldcard, Trezor, firmantes de teléfono.'
-    },
   'Only Ledger, Jade/Jade Plus, BitBox02, and BitBox02 Nova are Miniscript candidates; each exact setup still requires certification.':
     {
       fr: 'Seuls Ledger, Jade/Jade Plus, BitBox02 et BitBox02 Nova sont candidats Miniscript ; chaque configuration exacte doit encore être certifiée.',

@@ -3,7 +3,9 @@
 ## Rules
 
 - Compose existing UI from `src/lib/components/`. Device differences are content/actions, not bespoke fonts, cards, badges or identifier views. Before creating a new reusable component or font style, explain the verified gap and obtain the owner's approval.
-- One primary action per state. Use plain, short, action-led copy; state a security consequence once. Put optional protocol detail behind disclosure.
+- Give the default path one clear next action. Keep optional controls collapsed by default using the existing blue disclosure. Explain a revealed option in plain language with the existing `InsightTip`.
+- Keep UI copy short and action-led. Put one requirement or consequence next to the action it affects. Put protocol acronyms, commands and device lists in help or the runbook. Use a warning for a concrete requirement or consequence on the current path.
+- Give an expanded optional control a visible gap before the next section. Review both states at desktop and phone widths.
 - Durable page/dialog result plus toast. Empty, loading, offline, invalid and retry states are first-class; no artificial delay after a read completes.
 - Rust owns financial and security facts. UI must not infer transaction ownership, signer identity, policy readiness or derivation.
 

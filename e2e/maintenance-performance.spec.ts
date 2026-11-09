@@ -86,16 +86,20 @@ test('Miniscript compatibility appears only for continuity wallets in both theme
     await page.evaluate((value) => localStorage.setItem('groot-theme', value), theme);
     await page.reload();
     await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
-    await expect(page.getByText('Limited signer support', { exact: true })).toHaveCount(0);
+    const signerHelp = page.getByRole('button', { name: 'Signer compatibility', exact: true });
+    await expect(signerHelp).toHaveCount(0);
     await page.getByRole('button', { name: /^Partner continuity/ }).click();
-    await expect(page.getByText('Limited signer support', { exact: true })).toBeVisible();
-    await expect(page.getByText(/Offline PSBT only/)).toBeVisible();
-    await expect(page.getByText(/Unsupported: Coldcard, Trezor, phone signers/)).toBeVisible();
+    await expect(signerHelp).toBeVisible();
+    await expect(page.getByText(/Sign offline by exchanging transaction files/)).toHaveCount(0);
+    await signerHelp.click();
+    await expect(page.getByRole('tooltip')).toContainText(
+      'Sign offline by exchanging transaction files.'
+    );
     await expect(page.locator('body')).toHaveJSProperty('scrollWidth', page.viewportSize()!.width);
-    await page.getByText('Limited signer support', { exact: true }).scrollIntoViewIfNeeded();
     await page.screenshot({
       path: test.info().outputPath(`miniscript-compatibility-${theme}.png`)
     });
+    await page.keyboard.press('Escape');
     const next = page.getByRole('button', { name: 'Continue', exact: true });
     await next.evaluate((element) =>
       element.scrollIntoView({ block: 'center', behavior: 'instant' })
