@@ -145,6 +145,8 @@
   let preparing = $state(false);
   let available = $state(0);
   let estimates = $state<FeeEstimates | null>(null);
+  let feeLoading = $state(false);
+  let feeChoiceRevision = 0;
   let feeEstimateError = $state('');
   let draftError = $state('');
   let paymentScanOpen = $state(false);
@@ -338,6 +340,7 @@
   let walletLoadError = $state('');
   let walletLoading = $state(true);
   let walletLoadGeneration = 0;
+  let nextPaymentRequested = false;
   onMount(() => {
     if (initialAcceleration) {
       void walletShell.pauseAutomaticSync().then(() => {
@@ -393,8 +396,68 @@
     deviceOpen = false;
     hardwareCancelRequested = true;
   }
+  async function savedProposal(proposalId: string | null) {
+    if (externalSigner) {
+      const proposals = await walletService.externalSignerProposals();
+      return proposalId
+        ? (proposals.find((item) => item.proposalId === proposalId) ?? null)
+        : latestActiveProposal(proposals);
+    }
+    const proposals = await walletService.paymentProposals();
+    return proposalId
+      ? (proposals.find((item) => item.proposalId === proposalId) ?? null)
+      : (proposals[0] ?? null);
+  }
+  function restoreProposal(active: PaymentProposal | MultisigProposal) {
+    externalProposal = 'canFinalize' in active ? active : null;
+    proposal = active;
+    address = active.recipient;
+    selectedLabels = active.labels ?? [active.label];
+    label = '';
+    amount = String(active.amount);
+    step = externalProposal?.canFinalize ? 3 : 2;
+  }
+  async function loadFeeEstimates(current: () => boolean) {
+    const feeChoice = feeChoiceRevision;
+    feeLoading = true;
+    feeEstimateError = '';
+    try {
+      const next = await walletService.estimateFees();
+      if (current()) estimates = next;
+    } catch (cause) {
+      if (!current()) return;
+      feeEstimateError = localizedError(
+        cause,
+        $locale,
+        'Bitcoin Core fee estimates are unavailable.'
+      );
+      if (!hasPaymentDraft && feeChoice === feeChoiceRevision) speed = 'custom';
+      toast({
+        title: 'Fee estimates unavailable',
+        description: feeEstimateError,
+        tone: 'warning'
+      });
+    } finally {
+      if (current()) feeLoading = false;
+    }
+  }
   async function loadWallet() {
     const generation = ++walletLoadGeneration;
+    let walletId = walletShell.selectedWalletId();
+    const current = () => {
+      const selected = walletShell.selectedWalletId();
+      return (
+        !sendDestroyed &&
+        generation === walletLoadGeneration &&
+        (!walletId || !selected || walletId === selected)
+      );
+    };
+    const params = page.url.searchParams;
+    const requestedProposalId = params.get('proposal');
+    const acceleration = params.get('accelerate');
+    const accelerationTxid = params.get('txid');
+    const acceleratedEntry =
+      accelerationTxid && (acceleration === 'rbf' || acceleration === 'cpfp');
     let dataLoaded = false;
     walletLoadError = '';
     walletLoading = true;
@@ -406,7 +469,8 @@
         shellWallets.length && shellSelectedWalletId
           ? { wallets: shellWallets, selectedWalletId: shellSelectedWalletId }
           : await walletService.profiles();
-      if (generation !== walletLoadGeneration) return;
+      if (!current()) return;
+      walletId = registry.selectedWalletId;
       externalSigner =
         registry.wallets.find((profile) => profile.id === registry.selectedWalletId)?.kind ===
         'watch_only';
@@ -415,21 +479,34 @@
       // It never asserts that a physical device is currently connected.
       const identity = externalSigner
         ? walletService.externalSignerWallet().then((value) => {
-            if (generation !== walletLoadGeneration) return;
+            if (!current()) return;
             externalWallet = value;
             signerSummaryReady = true;
           })
         : Promise.resolve().then(() => {
-            signerSummaryReady = true;
+            if (current()) signerSummaryReady = true;
           });
-      if (initialAcceleration) await walletService.sync().catch(() => undefined);
+      // The persisted review already includes its amount, fee and inputs.
+      // Only saved acceleration proposals need transaction history to tell
+      // whether the original has confirmed.
+      const explicitResume = requestedProposalId && !acceleratedEntry;
+      const [requestedProposal] = explicitResume
+        ? await Promise.all([savedProposal(requestedProposalId), identity])
+        : [null];
+      if (!current()) return;
+      if (requestedProposal && !requestedProposal.acceleration) {
+        if (draftWalletId) await walletService.clearPaymentDraft();
+        if (current()) restoreProposal(requestedProposal);
+        return;
+      }
+      if (acceleratedEntry) await walletService.sync().catch(() => undefined);
+      if (!current()) return;
       const [snapshot] = await Promise.all([walletService.snapshot(), identity]);
-      if (generation !== walletLoadGeneration) return;
+      if (!current()) return;
       dataLoaded = true;
       coins = snapshot.utxos;
       labelSuggestions = snapshot.labelSuggestions;
-      const requested =
-        new URL(window.location.href).searchParams.get('coins')?.split(',').filter(Boolean) ?? [];
+      const requested = params.get('coins')?.split(',').filter(Boolean) ?? [];
       selectedCoins = requested.filter((outpoint) =>
         snapshot.utxos.some((coin) => coin.outpoint === outpoint && !coin.frozen)
       );
@@ -438,72 +515,35 @@
           (coin) => !coin.frozen && (!selectedCoins.length || selectedCoins.includes(coin.outpoint))
         )
         .reduce((total, coin) => total + coin.amount, 0);
-      try {
-        estimates = await walletService.estimateFees();
-      } catch (cause) {
-        feeEstimateError = localizedError(
-          cause,
-          $locale,
-          'Bitcoin Core fee estimates are unavailable.'
-        );
-        speed = 'custom';
-        toast({
-          title: 'Fee estimates unavailable',
-          description: feeEstimateError,
-          tone: 'warning'
-        });
-      }
-      if (generation !== walletLoadGeneration) return;
-      const url = new URL(window.location.href);
-      const requestedProposalId = url.searchParams.get('proposal');
-      const acceleration = url.searchParams.get('accelerate');
-      const accelerationTxid = url.searchParams.get('txid');
       if (accelerationTxid && (acceleration === 'rbf' || acceleration === 'cpfp')) {
         accelerationMethod = acceleration;
         accelerationRequest = { txid: accelerationTxid, method: acceleration };
+        await loadFeeEstimates(current);
+        if (!current()) return;
         if (acceleration === 'rbf') {
-          rbfQuote = await walletService.quoteRbf(accelerationTxid);
+          const quote = await walletService.quoteRbf(accelerationTxid);
+          if (!current()) return;
+          rbfQuote = quote;
           customFee = String(rbfQuote.targetFeeRate);
           speed = 'custom';
           accelerationQuoteFailed = false;
         } else if (estimates) {
-          cpfpQuote = await walletService.quoteCpfp(accelerationTxid);
+          const quote = await walletService.quoteCpfp(accelerationTxid);
+          if (!current()) return;
+          cpfpQuote = quote;
           customFee = String(cpfpQuote.targetFeeRate);
           speed = 'custom';
           accelerationQuoteFailed = false;
         } else {
           customFee = '';
         }
-      } else if (externalSigner) {
-        const proposals = await walletService.externalSignerProposals();
-        if (generation !== walletLoadGeneration) return;
-        const activeProposal = requestedProposalId
-          ? (proposals.find((item) => item.proposalId === requestedProposalId) ?? null)
-          : latestActiveProposal(proposals);
-        if (activeProposal) {
+      } else if (!nextPaymentRequested) {
+        const active = explicitResume ? requestedProposal : await savedProposal(null);
+        if (!current()) return;
+        if (active) {
           if (draftWalletId) await walletService.clearPaymentDraft();
-          externalProposal = activeProposal;
-          proposal = activeProposal;
-          address = activeProposal.recipient;
-          selectedLabels = activeProposal.labels ?? [activeProposal.label];
-          label = '';
-          amount = String(activeProposal.amount);
-          step = activeProposal.canFinalize ? 3 : 2;
-        }
-      } else {
-        const proposals = await walletService.paymentProposals();
-        if (generation !== walletLoadGeneration) return;
-        const activeProposal = requestedProposalId
-          ? (proposals.find((item) => item.proposalId === requestedProposalId) ?? null)
-          : (proposals[0] ?? null);
-        if (activeProposal) {
-          if (draftWalletId) await walletService.clearPaymentDraft();
-          proposal = activeProposal;
-          address = activeProposal.recipient;
-          selectedLabels = activeProposal.labels ?? [activeProposal.label];
-          label = '';
-          amount = String(activeProposal.amount);
-          step = 2;
+          if (!current()) return;
+          restoreProposal(active);
         }
       }
       if (
@@ -514,10 +554,9 @@
       ) {
         markAccelerationConfirmed();
       }
-      if (!proposal && !accelerationRequest && draftWalletId) {
-        if (generation !== walletLoadGeneration) return;
-        const savedDraft = await walletService.paymentDraft();
-        if (generation !== walletLoadGeneration) return;
+      if (!proposal && !accelerationRequest) {
+        const savedDraft = draftWalletId ? await walletService.paymentDraft() : null;
+        if (!current()) return;
         if (savedDraft?.kind === 'single_key') {
           hasPaymentDraft = true;
           address = savedDraft.address;
@@ -540,9 +579,10 @@
             )
             .reduce((total, coin) => total + coin.amount, 0);
         }
+        void loadFeeEstimates(current);
       }
     } catch (cause) {
-      if (generation !== walletLoadGeneration) return;
+      if (!current()) return;
       walletLoadError =
         accelerationRequest && dataLoaded
           ? ''
@@ -559,7 +599,7 @@
         toast({ title: 'Could not load wallet', description, tone: 'danger' });
       }
     } finally {
-      if (generation === walletLoadGeneration) {
+      if (current()) {
         accelerationLoading = false;
         walletLoading = false;
       }
@@ -742,8 +782,9 @@
   }
 
   function updateFeeRate(rate: number) {
+    feeChoiceRevision += 1;
     const refreshMaximum = maxSpendActive;
-    const match = Object.entries(fees).find(([, value]) => value === rate);
+    const match = Object.entries(fees).find(([, value]) => value > 0 && value === rate);
     if (match) speed = match[0];
     else {
       speed = 'custom';
@@ -894,6 +935,32 @@
     } finally {
       broadcasting = false;
     }
+  }
+  async function startNextPayment() {
+    nextPaymentRequested = true;
+    step = 1;
+    draftStep = 1;
+    address = '';
+    label = '';
+    selectedLabels = [];
+    amount = '';
+    passphrase = '';
+    proposal = null;
+    externalProposal = null;
+    txid = '';
+    sentAmount = 0;
+    balanceSyncPending = false;
+    persistencePending = false;
+    accelerationMethod = null;
+    accelerationRequest = null;
+    broadcastExplorerError = '';
+    if (accelerationSyncPaused) {
+      walletShell.resumeAutomaticSync();
+      accelerationSyncPaused = false;
+    }
+    walletLoading = true;
+    if (page.url.search) await goto('/send', { replaceState: true });
+    if (!sendDestroyed) await loadWallet();
   }
   async function copyBroadcastTxid() {
     if (!txid) return;
@@ -1401,14 +1468,14 @@
         ><Button variant="secondary" size="small" href="/">{translate($locale, 'Back')}</Button>
       </div>{/if}
   </header>
-  {#if walletLoading && !initialAcceleration}
+  {#if walletLoading && !accelerationMethod}
     <div class="send-flow-layout" class:with-signers={signerSummaryReady}>
       <div class="send-flow-content"><WalletSkeleton /></div>
       {#if signerSummaryReady}<aside class="signer-side-panel">
           <SignerSummary signers={signerItems} loading={false} />
         </aside>{/if}
     </div>
-  {:else if walletLoadError && !initialAcceleration}
+  {:else if walletLoadError && !accelerationMethod}
     <LoadFailure
       title={translate($locale, 'Wallet details are unavailable')}
       description={walletLoadError}
@@ -1858,6 +1925,7 @@
             </div>
             <FeeSelector
               {estimates}
+              loading={feeLoading}
               value={selectedFeeRate}
               estimatedFee={fee}
               error={feeEstimateError}
@@ -2249,22 +2317,8 @@
               >{#if broadcastTxidCopied}<Check size={16} />{:else}<Copy size={16} />{/if}</button
             >
             <div class="success-actions">
-              <Button
-                disabled={persistencePending}
-                onclick={() => {
-                  step = 1;
-                  address = '';
-                  label = '';
-                  amount = '';
-                  passphrase = '';
-                  proposal = null;
-                  txid = '';
-                  sentAmount = 0;
-                  balanceSyncPending = false;
-                  persistencePending = false;
-                  accelerationMethod = null;
-                  broadcastExplorerError = '';
-                }}>{translate($locale, 'Make another payment')}</Button
+              <Button disabled={persistencePending} onclick={startNextPayment}
+                >{translate($locale, 'Make another payment')}</Button
               ><Button variant="secondary" href="/activity"
                 >{translate($locale, 'View transaction')}</Button
               >

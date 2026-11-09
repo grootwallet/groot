@@ -34,7 +34,7 @@ Creation offers no other-wallet network-copy option. Existing Settings reuse rem
 
 Wallet UUIDs, databases and credentials are isolated. Exact canonical receive descriptors determine duplicate identity; checksums do not. A duplicate opens its authoritative existing profile. Local wallet/signer names are editable without changing identity or keys.
 
-Each wallet has an independent inactivity session. Switching does not lock other wallets; background reads do not extend idle deadlines. Explicit lock cancels coordinated activity before exposing the locked route. One native process owns each app-data root.
+Each wallet has an independent inactivity session. Switching does not lock other wallets; background reads do not extend idle deadlines. Explicit lock immediately hides wallet details and cancels coordinated activity. Groot opens the unlock screen after native lock succeeds. One native process owns each app-data root.
 
 The multi-network desktop app switches Regtest/Testnet4/Mainnet through global Settings and a confirmed restart. Each network owns separate wallet/node state. Global appearance, build identity and cached public network status remain available while locked; wallet operations and node credentials require unlock.
 
@@ -69,6 +69,8 @@ Use integer satoshis and positive validated sat/vB rates. Economy/Standard/Prior
 Coin selection offers automatic strategies or exact eligible inputs. Frozen coins never enter either path. Review explains amounts, fees, change and source linkage from the actual unsigned PSBT. Self-transfers show Rust-proven **Consolidating** totals and a fee-only wallet debit; labels do not prove ownership.
 
 Proposals and collected signatures persist across restart. Leaving signing preserves the proposal; discarding requires confirmation. Each imported partial signature must cryptographically verify against the unchanged proposal. Final authorization rechecks wallet/session identity, canonical prevouts, outputs and policy before broadcast. A successful broadcast remains success if later sync fails; show the pending refresh separately. If local recording fails after Core accepts it, retain the accepted transaction ID with a durable warning, no fabricated snapshot, and no invitation to resend. Sync reconciles the exact saved proposal with canonical wallet history; the pending-result screen directs the user to sync instead of resending (ADR 0090).
+
+Resuming a saved proposal shows the fee from its persisted PSBT review. Live estimates belong to new payment preparation. Overview loads verified local history separately from optional details and labels an actual node admission check explicitly. These responsiveness changes have no BIP or storage-format impact.
 
 RBF preserves the intended recipient amount; CPFP spends an eligible wallet output. Failed or stale quotes block signing. Before final submission verify the original is still in the configured mempool. A confirmed original leaves the saved proposal read-only with explicit discard; never erase the confirmed payment. Separate RPC checks and submission are not atomic.
 

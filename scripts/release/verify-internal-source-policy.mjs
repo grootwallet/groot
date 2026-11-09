@@ -38,18 +38,30 @@ const internalTextOverrides = new Map([
     '2b6be467444dc413cb72f593fd2d87ffe3f649bc475ab934d56a32e05e0df915'
   ],
   ['src-tauri/src/proposal.rs', '20a1b4b60af932819948b48c5405c38289b2c2693f73fd4fb94f1b1da601e0a0'],
-  ['src-tauri/src/wallet.rs', '2e052576dbc0a645af397c2db96b54ee0b2b6d3d76c803703c15399fcb5168ab'],
+  ['src-tauri/src/wallet.rs', '9bc581b2b93785fe26d75dcd2ea93fdb8047e6469ccf534b70cd123365d90993'],
   [
     'src-tauri/src/wallet/export_commands.rs',
     '81221e759733bf6f905f8386c420b0b587a9c815fbda2dec87a5a9402f3a5998'
   ],
   [
     'src-tauri/src/wallet/multisig_setup_commands.rs',
-    'd140a941bbc9b070c6d1ae11ec469461e8b76260d9d13943d48ce9f02e529279'
+    '65a62066114cec993bb31768ac99a3e411636b5b1113f3e78578fbb233730a06'
+  ],
+  [
+    'src-tauri/src/wallet/hardware_commands.rs',
+    '1394eadb81e9ac8781bf62ace9ec06a8fc14252b703f9b12f09feb648c6e46df'
+  ],
+  [
+    'src-tauri/src/wallet/multisig_proposal_commands.rs',
+    'c4d4c79e11213e7720f22726f7e5652e71ecdf8ce001644a853ed9c8151b011a'
+  ],
+  [
+    'src-tauri/src/wallet/transaction_commands.rs',
+    '0326ed737ca825b5c7d8a80636386d7a359533166049e777ea33e46f4adcae70'
   ],
   [
     'src-tauri/src/wallet/profile_commands.rs',
-    '439398bb34eda41745a49b9dda86712e532d376f401355062e6dc62723689520'
+    '26d5b6fbc0ed13b2eeb2630a60688ff5953ad77a4cbd510741e63abaf0dd0a08'
   ],
   [
     'scripts/release/package-macos-ga.mjs',
@@ -73,8 +85,17 @@ const internalTextOverrides = new Map([
   ],
   ['src/lib/release-notes.ts', '619a9397c1012603575d56e1055546c17415695488149c4456e4f08ef36a8260'],
   [
+    'src/lib/components/AppShell.svelte',
+    '7de098a448787ed57d96465d4779e898565363921f2aab147f87dcea1e90d146'
+  ],
+  [
+    'src/lib/wallet/live-sync.ts',
+    '6dfb771e83c4a6db7dedfef3667ebe026f99ca41a4db1f0b650c14a9d003be15'
+  ],
+  ['src/routes/+page.svelte', '9d11aa21aee7d1fcd7bd4822be9ac0219ab74005c7685b5b0fa273b82214c346'],
+  [
     'src/routes/settings/+page.svelte',
-    '33b9bf338bc1898130aeac6cee137efb09743fc26a3a33f5d488132669cccfec'
+    '188eb46a8980ca831b629bb7a4149de8a4d90eaca140f27e75e3172105ea79d5'
   ],
   [
     'src/routes/multisig/new/+page.svelte',

@@ -895,10 +895,6 @@
       }
     }
   }
-  async function lockNow() {
-    await walletService.lock();
-    await goto('/unlock');
-  }
   async function saveInactivityTimeout(minutes: number) {
     const previous = inactivityTimeoutMinutes;
     inactivityTimeoutMinutes = minutes;
@@ -1544,7 +1540,7 @@
     <section class="settings-group immediate-security">
       <h2>{translate($locale, 'Security')}</h2>
       <div class="settings-list" class:timeout-menu-open={timeoutMenuOpen}>
-        <button onclick={lockNow}
+        <button onclick={walletShell.lockSelectedWallet}
           ><span class="setting-icon"><LockKeyhole size={18} /></span><span
             ><strong
               >{translate($locale, 'Lock {walletName} now', {

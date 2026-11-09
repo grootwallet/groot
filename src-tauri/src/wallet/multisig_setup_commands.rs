@@ -835,26 +835,39 @@ pub fn recovery_policy_analyze(
 
 #[tauri::command]
 pub async fn multisig_wallet(app: AppHandle) -> ApiResult<Option<MultisigWalletDto>> {
+    let registry = load_registry(&app)?;
+    let Some(wallet_id) = registry.selected_wallet_id else {
+        return Ok(None);
+    };
+    let profile = registry
+        .wallets
+        .iter()
+        .find(|wallet| wallet.id == wallet_id)
+        .ok_or_else(|| registry_api_error(RegistryError::UnknownSelection))?;
+    if profile.kind != WalletKind::Multisig {
+        return Ok(None);
+    }
+    let session_id = app
+        .state::<AppState>()
+        .unlocked_wallets
+        .lock()
+        .map_err(internal)?
+        .identity(wallet_id);
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<AppState>();
-        let _operation = operation_guard(&state)?;
-        let registry = load_registry(&app)?;
-        let Some(selected) = registry.selected_wallet_id else {
-            return Ok(None);
-        };
-        let Some(profile) = registry.wallets.iter().find(|wallet| wallet.id == selected) else {
-            return Err(registry_api_error(RegistryError::UnknownSelection));
-        };
-        if profile.kind != WalletKind::Multisig {
-            return Ok(None);
-        }
+        let session_id = validate_read_session(session_id, None)?;
+        let _operation = metadata_operation_guard(&state, wallet_id)?;
+        require_wallet_read_context(&app, &state, wallet_id, Some(session_id))?;
         require_unlocked(&app, &state)?;
         let path = multisig_metadata_path(&app)?;
-        if !path.exists() {
-            return Ok(None);
-        }
-        let encoded = read_private_text(&path)?;
-        serde_json::from_str(&encoded).map(Some).map_err(internal)
+        let wallet = if path.exists() {
+            let encoded = read_private_text(&path)?;
+            Some(serde_json::from_str(&encoded).map_err(internal)?)
+        } else {
+            None
+        };
+        require_wallet_read_context(&app, &state, wallet_id, Some(session_id))?;
+        Ok(wallet)
     })
     .await
     .map_err(internal)?

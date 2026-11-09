@@ -168,6 +168,14 @@ export const componentCopy = {
     fr: 'Vérification du verrouillage du portefeuille',
     es: 'Comprobando el bloqueo de la cartera'
   },
+  'Could not stop hardware operation': {
+    fr: 'Impossible d’arrêter l’opération du signataire',
+    es: 'No se pudo detener la operación del firmante'
+  },
+  'Locking wallet…': {
+    fr: 'Verrouillage du portefeuille…',
+    es: 'Bloqueando la cartera…'
+  },
   'Coldcard cannot learn this multisig policy automatically over Groot’s USB signing connection.': {
     fr: 'Coldcard ne peut pas apprendre automatiquement cette politique multisignature via la connexion de signature USB de Groot.',
     es: 'Coldcard no puede aprender automáticamente esta política multifirma mediante la conexión USB de firma de Groot.'
@@ -254,6 +262,10 @@ export const componentCopy = {
   'Groot could not verify the wallet lock state.': {
     fr: 'Groot n’a pas pu vérifier l’état de verrouillage du portefeuille.',
     es: 'Groot no pudo verificar el estado de bloqueo de la cartera.'
+  },
+  'Groot could not open the unlock screen.': {
+    fr: 'Groot n’a pas pu ouvrir l’écran de déverrouillage.',
+    es: 'Groot no pudo abrir la pantalla de desbloqueo.'
   },
   'Groot could not verify this app build. Rebuild and reinstall the native app.': {
     fr: 'Groot n’a pas pu vérifier cette version de l’application. Recompilez et réinstallez l’application native.',

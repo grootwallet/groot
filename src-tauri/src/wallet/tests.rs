@@ -1432,6 +1432,46 @@ fn foreground_sync_read_gate_closes_before_the_writer_commits() {
 }
 
 #[test]
+fn explicit_lock_cancels_only_the_selected_sync_and_fences_its_commit() {
+    let state = AppState::default();
+    let wallet_id = Uuid::new_v4();
+    let cancel = Arc::new(AtomicBool::new(false));
+    let reads_safe = Arc::new(AtomicBool::new(true));
+    let _sync_operation = state.operations.lock().unwrap();
+    state
+        .foreground_sync
+        .lock()
+        .unwrap()
+        .replace(ActiveForegroundSync {
+            wallet_id,
+            cancel: Arc::clone(&cancel),
+            persisted_reads_safe: Arc::clone(&reads_safe),
+        });
+
+    assert!(foreground_sync_read_gate(&state, Uuid::new_v4(), true)
+        .unwrap()
+        .is_none());
+    assert!(ensure_foreground_sync_not_cancelled(Some(&cancel)).is_ok());
+    let lock_fence = foreground_sync_read_gate(&state, wallet_id, true)
+        .unwrap()
+        .unwrap();
+    assert!(state.persisted_sync_reads.try_write().is_err());
+    assert!(state.metadata_operations.try_lock().is_ok());
+    drop(lock_fence);
+
+    let _commit_fence = stop_persisted_sync_reads(&state).unwrap();
+    assert_eq!(
+        ensure_foreground_sync_not_cancelled(Some(&cancel))
+            .unwrap_err()
+            .code,
+        "sync_cancelled"
+    );
+    assert!(foreground_sync_read_gate(&state, wallet_id, true)
+        .unwrap()
+        .is_none());
+}
+
+#[test]
 fn metadata_operations_do_not_wait_for_the_selected_wallet_sync() {
     let state = AppState::default();
     let wallet_id = Uuid::new_v4();
@@ -6665,6 +6705,7 @@ fn restored_mainnet_node_auth_requires_fresh_verification_before_database_open()
         tor_proxy: None,
     };
     let mut session = NodeAuthSession {
+        identity: Uuid::new_v4(),
         config: config.clone(),
         password: Zeroizing::new("secret".to_owned()),
         mainnet_node_verified: false,
@@ -7901,6 +7942,7 @@ fn profile_attempt_cleanup_clears_only_failed_auth_and_preserves_uncertain_commi
         state.node_auth.lock().unwrap().insert(
             wallet_id,
             NodeAuthSession {
+                identity: Uuid::new_v4(),
                 config: CoreNodeConfig {
                     backend: ChainBackend::LocalCore {
                         url: "http://127.0.0.1:18443".into(),

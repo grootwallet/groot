@@ -64,6 +64,8 @@ Core owns chain/mempool truth, fees and broadcast. The temporary fee-estimate DT
 
 Initial genesis scans need explicit privacy consent. Shell-owned pause/resume prevents automatic sync races; saved scan status can reattach after route changes, lock or restart. Only atomic completion is verified history. Normal selected-wallet foreground sync runs every 35 seconds after each settled attempt.
 
+A saved proposal opens from its persisted review without a fresh fee quote. Ordinary proposal lists can read the last committed state during Core refresh. Continuity retains the serialized maturity check. New-payment fee RPCs use a separate serialized worker lane so an unreachable node does not queue local wallet reads behind them. Rust binds the request to the selected wallet, unlock session and saved node credentials and verifies that binding again before publishing an observation. During Core's staged refresh, explicit lock can cancel the refresh and revoke the session through the persisted-read gate. The refresh rechecks cancellation after closing that gate and before starting its database transaction.
+
 ## Hardware and interchange
 
 macOS discovery is passive bounded OS inventory, not HWI/vendor sessions. Short-lived opaque capabilities select one exact device path. Each account operation still proves full saved fingerprint/origin/xpub identity under a coordinated lease. Cancellation/switch/timeout revokes capabilities. Model-specific PIN/reconnect paths must retain their native guards (ADRs 0041/0048/0075).

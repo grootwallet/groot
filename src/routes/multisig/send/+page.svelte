@@ -142,6 +142,8 @@
   let wallet = $state<MultisigWallet | null>(null),
     proposal = $state<MultisigProposal | null>(null),
     estimates = $state<FeeEstimates | null>(null);
+  let feeLoading = $state(false);
+  let feeChoiceRevision = 0;
   let address = $state(''),
     label = $state(''),
     amount = $state(''),
@@ -541,6 +543,33 @@
     deviceOpen = false;
     hardwareCancelRequested = true;
   }
+  async function loadFeeEstimates(current: () => boolean, restoredPaymentDraft: boolean) {
+    const feeChoice = feeChoiceRevision;
+    feeLoading = true;
+    feeEstimateError = '';
+    try {
+      const next = await walletService.estimateFees();
+      if (!current()) return;
+      estimates = next;
+      if (!restoredPaymentDraft && feeChoice === feeChoiceRevision) {
+        selectedRate = Number(estimates.standard);
+      }
+    } catch (cause) {
+      if (!current()) return;
+      feeEstimateError = localizedError(
+        cause,
+        $locale,
+        'Bitcoin Core fee estimates are unavailable.'
+      );
+      toast({
+        title: 'Fee estimates unavailable',
+        description: feeEstimateError,
+        tone: 'danger'
+      });
+    } finally {
+      if (current()) feeLoading = false;
+    }
+  }
   async function loadWallet() {
     const generation = ++walletLoadGeneration;
     const walletId = walletShell.selectedWalletId();
@@ -551,13 +580,21 @@
     walletLoading = true;
     walletLoadError = '';
     if (accelerationRequest) accelerationQuoteFailed = false;
+    const params = page.url.searchParams,
+      requested = params.get('coins')?.split(',').filter(Boolean) ?? [],
+      requestedProposalId = params.get('proposal'),
+      renewalRequested = params.get('renewProtection') === '1',
+      delayedSpendRequested = params.get('delayedSpend') === '1',
+      method = params.get('accelerate'),
+      txid = params.get('txid');
+    const acceleratedEntry = txid && (method === 'rbf' || method === 'cpfp');
     try {
-      const [loadedWallet, snapshot, proposals, registry] = await Promise.all([
+      const [loadedWallet, preloadedSnapshot, proposals, registry] = await Promise.all([
         walletService.multisigWallet().then((value) => {
           if (current()) wallet = value;
           return value;
         }),
-        walletService.multisigSnapshot(),
+        requestedProposalId && !acceleratedEntry ? null : walletService.multisigSnapshot(),
         walletService.multisigProposals(),
         walletService.profiles()
       ]);
@@ -567,8 +604,27 @@
         (profile) => profile.id === registry.selectedWalletId
       );
       draftWalletId = selectedProfile?.kind === 'multisig' ? selectedProfile.id : '';
-      coins = snapshot.utxos;
-      labelSuggestions = snapshot.labelSuggestions;
+      const active = acceleratedEntry
+        ? null
+        : requestedProposalId
+          ? (proposals.find((item) => item.proposalId === requestedProposalId) ?? null)
+          : latestActiveProposal(proposals);
+      // A standard saved review already has authoritative amounts and inputs.
+      // Special policies still need coin maturity and acceleration needs the
+      // saved original's confirmation status.
+      const standardReview =
+        loadedWallet &&
+        active?.spendPath === 'primary' &&
+        !active.acceleration &&
+        !loadedWallet.recoveryTemplate &&
+        (!loadedWallet.policyType || loadedWallet.policyType === 'standard');
+      const snapshot =
+        preloadedSnapshot ?? (standardReview ? null : await walletService.multisigSnapshot());
+      if (!current()) return;
+      if (snapshot) {
+        coins = snapshot.utxos;
+        labelSuggestions = snapshot.labelSuggestions;
+      }
       void walletService
         .multisigSignerPolicyVerifications()
         .then((verifications) => {
@@ -581,17 +637,10 @@
           if (current()) policyAddress = verificationAddress;
         })
         .catch(() => undefined);
-      const url = new URL(window.location.href),
-        requested = url.searchParams.get('coins')?.split(',').filter(Boolean) ?? [],
-        requestedProposalId = url.searchParams.get('proposal'),
-        renewalRequested = url.searchParams.get('renewProtection') === '1',
-        delayedSpendRequested = url.searchParams.get('delayedSpend') === '1',
-        method = url.searchParams.get('accelerate'),
-        txid = url.searchParams.get('txid');
       selectedCoins = requested.filter((outpoint) =>
         coins.some((coin) => coin.outpoint === outpoint && !coin.frozen)
       );
-      const snapshotCurrent = snapshot.chainTip.status === 'recent';
+      const snapshotCurrent = snapshot?.chainTip.status === 'recent';
       if (renewalRequested && proposals.length === 0 && selectedCoins.length === 1) {
         const candidate = coins.find((coin) => coin.outpoint === selectedCoins[0]) ?? null;
         const maturity = candidate ? validPolicyMaturity(candidate) : null;
@@ -649,17 +698,15 @@
           });
         }
       }
-      if (!txid || (method !== 'rbf' && method !== 'cpfp')) {
-        proposal = requestedProposalId
-          ? (proposals.find((item) => item.proposalId === requestedProposalId) ?? null)
-          : latestActiveProposal(proposals);
-        if (proposal) {
+      if (!acceleratedEntry) {
+        if (active) {
           if (draftWalletId) await walletService.clearPaymentDraft();
           if (!current()) return;
-          address = proposal.recipient;
-          selectedLabels = proposal.labels ?? [proposal.label];
+          proposal = active;
+          address = active.recipient;
+          selectedLabels = active.labels ?? [active.label];
           label = '';
-          amount = String(proposal.amount);
+          amount = String(active.amount);
           draftStep = 2;
         } else if (requestedProposalId) {
           error = translate($locale, 'This saved payment is no longer available.');
@@ -668,7 +715,7 @@
       if (
         accelerationOriginalConfirmed(
           proposal?.acceleration?.originalTxid ?? txid,
-          snapshot.transactions
+          snapshot?.transactions ?? []
         )
       ) {
         markAccelerationConfirmed();
@@ -694,24 +741,13 @@
         }
       }
       updateAvailable();
-      try {
-        const nextestimates = await walletService.estimateFees();
-        if (!current()) return;
-        estimates = nextestimates;
-        if (!restoredPaymentDraft) selectedRate = Number(estimates.standard);
-      } catch (cause) {
-        if (!current()) return;
-        feeEstimateError = localizedError(
-          cause,
-          $locale,
-          'Bitcoin Core fee estimates are unavailable.'
-        );
-        toast({
-          title: 'Fee estimates unavailable',
-          description: feeEstimateError,
-          tone: 'danger'
-        });
+      if (proposal) return;
+      if (!acceleratedEntry && !renewalMode && !delayedSpendMode) {
+        void loadFeeEstimates(current, restoredPaymentDraft);
+        return;
       }
+      await loadFeeEstimates(current, restoredPaymentDraft);
+      if (!current()) return;
       if (txid && (method === 'rbf' || method === 'cpfp')) {
         accelerationRequest = { txid, method };
         if (method === 'rbf') {
@@ -995,6 +1031,7 @@
     setDenomination(next);
   }
   function updatePaymentFeeRate(rate: number) {
+    feeChoiceRevision += 1;
     const refreshMaximum = maxSpendActive;
     selectedRate = rate;
     clearDraftError();
@@ -2695,6 +2732,7 @@
               </div>{/if}
             <FeeSelector
               {estimates}
+              loading={feeLoading}
               value={selectedRateNumber}
               {estimatedFee}
               error={feeEstimateError}

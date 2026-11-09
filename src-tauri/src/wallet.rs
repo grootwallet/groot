@@ -432,11 +432,22 @@ fn foreground_persisted_read_guard(
     state: &AppState,
     wallet_id: Uuid,
 ) -> ApiResult<Option<RwLockReadGuard<'_, ()>>> {
+    foreground_sync_read_gate(state, wallet_id, false)
+}
+
+fn foreground_sync_read_gate(
+    state: &AppState,
+    wallet_id: Uuid,
+    cancel_for_lock: bool,
+) -> ApiResult<Option<RwLockReadGuard<'_, ()>>> {
     let active = state.foreground_sync.lock().map_err(internal)?;
-    let safe = active.as_ref().is_some_and(|sync| {
-        sync.wallet_id == wallet_id && sync.persisted_reads_safe.load(Ordering::Acquire)
-    });
-    if safe {
+    let Some(sync) = active.as_ref().filter(|sync| sync.wallet_id == wallet_id) else {
+        return Ok(None);
+    };
+    if cancel_for_lock {
+        sync.cancel.store(true, Ordering::Release);
+    }
+    if sync.persisted_reads_safe.load(Ordering::Acquire) {
         Ok(Some(state.persisted_sync_reads.read().map_err(internal)?))
     } else {
         Ok(None)
@@ -611,6 +622,54 @@ fn require_wallet_read_context(
     validate_read_session(current, session_id)
 }
 
+// A saved proposal is reviewed from the last committed wallet state. Its
+// signing and broadcast commands still serialize with sync and revalidate.
+async fn with_selected_proposal_db<T: Send + 'static>(
+    app: AppHandle,
+    multisig: bool,
+    read: impl FnOnce(&AppHandle, &mut Connection) -> ApiResult<T> + Send + 'static,
+) -> ApiResult<T> {
+    let wallet_id = selected_profile(&app)?.id;
+    let session_id = app
+        .state::<AppState>()
+        .unlocked_wallets
+        .lock()
+        .map_err(internal)?
+        .identity(wallet_id);
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let session_id = validate_read_session(session_id, None)?;
+        let mut persisted = foreground_persisted_read_guard(&state, wallet_id)?;
+        if persisted.is_some() && multisig {
+            require_wallet_read_context(&app, &state, wallet_id, Some(session_id))?;
+            // Continuity computes path maturity through the ordinary snapshot
+            // pipeline, which reconciles provenance. Keep that on the writer.
+            if read_multisig_metadata(&app)?.recovery_template.is_some() {
+                drop(persisted.take());
+            }
+        }
+        let _operation = if persisted.is_none() {
+            Some(operation_guard(&state)?)
+        } else {
+            None
+        };
+        require_wallet_read_context(&app, &state, wallet_id, Some(session_id))?;
+        require_unlocked(&app, &state)?;
+        let mut db = if persisted.is_some() {
+            open_selected_db_for_persisted_read(&app, multisig)?
+        } else if multisig {
+            open_multisig_db(&app)?
+        } else {
+            open_db(&app)?
+        };
+        let result = read(&app, &mut db)?;
+        require_wallet_read_context(&app, &state, wallet_id, Some(session_id))?;
+        Ok(result)
+    })
+    .await
+    .map_err(internal)?
+}
+
 fn validate_read_wallet(current: Uuid, expected: Uuid) -> ApiResult<()> {
     if current != expected {
         return Err(api_error(
@@ -663,6 +722,7 @@ fn lock_wallet(state: &State<'_, AppState>, wallet_id: Uuid) -> ApiResult<()> {
 pub struct AppState {
     operations: Mutex<()>,
     metadata_operations: Mutex<()>,
+    fee_estimate_request: Mutex<()>,
     foreground_sync: Mutex<Option<ActiveForegroundSync>>,
     persisted_sync_reads: RwLock<()>,
     proposals: Mutex<HashMap<String, PendingProposal>>,
@@ -868,6 +928,7 @@ struct ActiveForegroundSync {
 }
 
 struct NodeAuthSession {
+    identity: Uuid,
     config: CoreNodeConfig,
     password: Zeroizing<String>,
     mainnet_node_verified: bool,
@@ -2542,6 +2603,7 @@ fn load_node_auth_session(
             ));
         }
         Some(NodeAuthSession {
+            identity: Uuid::new_v4(),
             config,
             password,
             mainnet_node_verified: false,
@@ -2584,12 +2646,25 @@ fn rpc_client_with_timeout(
     timeout: Duration,
 ) -> ApiResult<Client> {
     let config = read_node_config(app)?;
+    let client = configured_rpc_client(app, state, &config, timeout)?;
+    validate_first_mainnet_rpc_backend(&client, &config.backend)?;
+    Ok(client)
+}
+
+// Constructs a transport from the saved configuration. The caller must
+// verify the remote chain before using it for any wallet operation.
+fn configured_rpc_client(
+    app: &AppHandle,
+    state: &State<'_, AppState>,
+    config: &CoreNodeConfig,
+    timeout: Duration,
+) -> ApiResult<Client> {
     validate_first_mainnet_rpc_endpoint(&config.backend)?;
     let url = config
         .validate()
         .map_err(network_config_api_error)?
         .to_string();
-    let client = match config.auth {
+    match config.auth {
         RpcAuthMode::Cookie => {
             if !is_regtest() {
                 return Err(api_error(
@@ -2615,7 +2690,7 @@ fn rpc_client_with_timeout(
                     "Unlock the wallet again to load its protected RPC credentials.",
                 )
             })?;
-            if session.config != config {
+            if session.config != *config {
                 return Err(api_error(
                     "invalid_node_config",
                     "The Bitcoin Core connection changed after unlock. Review and save it again before connecting.",
@@ -2629,9 +2704,7 @@ fn rpc_client_with_timeout(
                 timeout,
             )
         }
-    }?;
-    validate_first_mainnet_rpc_backend(&client, &config.backend)?;
-    Ok(client)
+    }
 }
 
 fn candidate_rpc_client(config: &CoreNodeConfig, password: &str) -> ApiResult<Client> {
@@ -6810,6 +6883,9 @@ fn sync_wallet_with_core(
     );
     ensure_foreground_sync_not_cancelled(cancel)?;
     let _readers = stop_persisted_sync_reads(state)?;
+    // A lock can cancel this refresh while holding the read gate, just
+    // before the writer acquires it. Never commit a staged result after that.
+    ensure_foreground_sync_not_cancelled(cancel)?;
     let transaction = db.transaction().map_err(internal)?;
     mark_observed_addresses(&wallet, &transaction)?;
     label_provenance::reconcile_wallet_outputs(&wallet, &transaction, now()).map_err(internal)?;

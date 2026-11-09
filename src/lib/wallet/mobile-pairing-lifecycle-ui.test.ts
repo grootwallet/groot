@@ -246,7 +246,7 @@ describe('mobile pairing lifecycle UI', () => {
   });
 
   it('surfaces staged pairing on overview before the user returns to the pairing route', () => {
-    expect(overviewSource).toContain('walletService.pendingMobilePairings()');
+    expect(overviewSource).toMatch(/walletService\s*\.pendingMobilePairings\(\)/);
     expect(overviewSource).toContain("translate($locale, 'Wallet pairing in progress')");
     expect(overviewSource).toContain('href="/mobile/pair"');
   });

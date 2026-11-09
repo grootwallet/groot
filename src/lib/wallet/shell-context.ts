@@ -8,6 +8,7 @@ export type WalletShellContext = {
   selectedWalletId: () => string | null;
   refreshProfiles: () => Promise<void>;
   selectWallet: (walletId: string) => Promise<void>;
+  lockSelectedWallet: () => Promise<void>;
   beginHardwareReview: () => () => void;
   requestInitialHistoryApproval: (force?: boolean) => void;
   initialHistoryScanRunning: (walletId: string) => boolean;

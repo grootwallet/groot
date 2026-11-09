@@ -641,11 +641,24 @@ pub async fn wallet_unlock(app: AppHandle, credential: String) -> ApiResult<()> 
 pub async fn wallet_lock(app: AppHandle) -> ApiResult<()> {
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<AppState>();
-        cancel_foreground_sync(&state)?;
-        let _operation = operation_guard(&state)?;
+        let profile = selected_profile(&app)?;
+        // During Core's staged read-only phase, the sync owns the operation
+        // lock and cannot commit while we hold this read gate. Revoke now
+        // instead of waiting for an already-dispatched node request.
+        let staged_sync = foreground_sync_read_gate(&state, profile.id, true)?;
+        let _operation = if staged_sync.is_none() {
+            Some(operation_guard(&state)?)
+        } else {
+            None
+        };
+        let _metadata = if staged_sync.is_some() {
+            Some(state.metadata_operations.lock().map_err(internal)?)
+        } else {
+            None
+        };
+        validate_read_wallet(selected_profile(&app)?.id, profile.id)?;
         state.pending_mnemonic.lock().map_err(internal)?.take();
         state.proposals.lock().map_err(internal)?.clear();
-        let profile = selected_profile(&app)?;
         lock_wallet(&state, profile.id)?;
         diagnostics::record(
             &app,
@@ -1179,22 +1192,22 @@ pub(crate) fn current_mempool_fee_rate(
 
 #[tauri::command]
 pub async fn fees_estimate(app: AppHandle) -> ApiResult<FeeEstimatesDto> {
-    let expected_wallet_id = if is_regtest() {
+    let expected_session = if is_regtest() {
         None
     } else {
-        Some(selected_profile(&app)?.id)
+        let wallet_id = selected_profile(&app)?.id;
+        let session_id = app
+            .state::<AppState>()
+            .unlocked_wallets
+            .lock()
+            .map_err(internal)?
+            .identity(wallet_id);
+        Some((wallet_id, validate_read_session(session_id, None)?))
     };
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<AppState>();
-        let _operation = operation_guard(&state)?;
-        if expected_wallet_id.is_some() && Some(selected_profile(&app)?.id) != expected_wallet_id {
-            return Err(api_error(
-                "wallet_selection_changed",
-                "The selected wallet changed. Retry in the current wallet.",
-            ));
-        }
-
-        if is_regtest() {
+        let Some((wallet_id, session_id)) = expected_session else {
+            let _operation = operation_guard(&state)?;
             let estimates = FeeEstimatesDto {
                 economy: Some(1.0),
                 standard: Some(2.0),
@@ -1203,39 +1216,97 @@ pub async fn fees_estimate(app: AppHandle) -> ApiResult<FeeEstimatesDto> {
             };
             update_public_network_status(&app, estimates.priority, None)?;
             return Ok(estimates);
-        }
-        require_unlocked(&app, &state)?;
-        let client = rpc_client(&app, &state)?;
-        checked_chain_identity(&client)?;
-        let mut estimates = partial_fee_estimates(
-            estimate_core_fee(&client, 144, EstimateMode::Economical).ok(),
-            estimate_core_fee(&client, 6, EstimateMode::Economical).ok(),
-            estimate_core_fee(&client, 2, EstimateMode::Economical).ok(),
-        )?;
-        // Retain the existing bounded current-mempool adjustment only when all
-        // historical targets are available. Never fill a missing target.
-        if let (Some(economy), Some(_), Some(_)) =
-            (estimates.economy, estimates.standard, estimates.priority)
-        {
-            let current = client.get_raw_mempool_verbose().ok().and_then(|entries| {
-                current_mempool_fee_rate(
-                    entries
-                        .into_values()
-                        .map(|entry| (entry.vsize, entry.fees.modified.to_sat())),
-                    economy,
-                )
-            });
-            if let Some(rate) = current {
-                estimates.economy = Some(rate);
-                estimates.standard = Some(rate);
-                estimates.priority = Some(rate);
+        };
+        // Queue concurrent fee reads on their own worker lock. Neither the
+        // queue nor a slow node response blocks local wallet operations.
+        let _fee_request = state.fee_estimate_request.lock().map_err(internal)?;
+        let auth_identity = || -> ApiResult<Option<Uuid>> {
+            Ok(state
+                .node_auth
+                .lock()
+                .map_err(internal)?
+                .get(&wallet_id)
+                .map(|auth| auth.identity))
+        };
+        let (config, client, expected_auth) = {
+            let _operation = operation_guard(&state)?;
+            require_wallet_read_context(&app, &state, wallet_id, Some(session_id))?;
+            require_unlocked(&app, &state)?;
+            let config = read_node_config(&app)?;
+            let client = configured_rpc_client(&app, &state, &config, RPC_TIMEOUT)?;
+            (config, client, auth_identity()?)
+        };
+
+        // These RPCs read public chain and fee data. Do not keep the wallet
+        // operation lock while the remote node responds.
+        let still_authorized = || {
+            validate_read_wallet(selected_profile(&app)?.id, wallet_id)?;
+            let current_session = state
+                .unlocked_wallets
+                .lock()
+                .map_err(internal)?
+                .identity(wallet_id);
+            validate_read_session(current_session, Some(session_id))?;
+            if auth_identity()? != expected_auth {
+                return Err(api_error(
+                    "invalid_node_config",
+                    "The Bitcoin Core connection changed while estimating fees. Retry the estimate.",
+                ));
             }
+            Ok(())
+        };
+        let result = estimate_core_fees(&client, &config.backend, still_authorized);
+
+        let _operation = operation_guard(&state)?;
+        require_wallet_read_context(&app, &state, wallet_id, Some(session_id))?;
+        if read_node_config(&app)? != config || auth_identity()? != expected_auth {
+            return Err(api_error(
+                "invalid_node_config",
+                "The Bitcoin Core connection changed while estimating fees. Retry the estimate.",
+            ));
         }
+        let estimates = result?;
         update_public_network_status(&app, estimates.priority, None)?;
         Ok(estimates)
     })
     .await
     .map_err(internal)?
+}
+
+fn estimate_core_fees(
+    client: &Client,
+    backend: &ChainBackend,
+    still_authorized: impl Fn() -> ApiResult<()>,
+) -> ApiResult<FeeEstimatesDto> {
+    still_authorized()?;
+    validate_first_mainnet_rpc_backend(client, backend)?;
+    still_authorized()?;
+    checked_chain_identity(client)?;
+    let estimate = |blocks| -> ApiResult<Option<f64>> {
+        still_authorized()?;
+        Ok(estimate_core_fee(client, blocks, EstimateMode::Economical).ok())
+    };
+    let mut estimates = partial_fee_estimates(estimate(144)?, estimate(6)?, estimate(2)?)?;
+    // Retain the current-mempool adjustment only when every target exists.
+    if let (Some(economy), Some(_), Some(_)) =
+        (estimates.economy, estimates.standard, estimates.priority)
+    {
+        still_authorized()?;
+        let current = client.get_raw_mempool_verbose().ok().and_then(|entries| {
+            current_mempool_fee_rate(
+                entries
+                    .into_values()
+                    .map(|entry| (entry.vsize, entry.fees.modified.to_sat())),
+                economy,
+            )
+        });
+        if let Some(rate) = current {
+            estimates.economy = Some(rate);
+            estimates.standard = Some(rate);
+            estimates.priority = Some(rate);
+        }
+    }
+    Ok(estimates)
 }
 
 #[tauri::command]
@@ -1482,6 +1553,7 @@ fn persist_mainnet_node_admission(
     state.node_auth.lock().map_err(internal)?.insert(
         destination,
         NodeAuthSession {
+            identity: Uuid::new_v4(),
             config: pending.config,
             password: pending.password,
             mainnet_node_verified: true,
@@ -1845,6 +1917,7 @@ pub(super) fn adopt_network_setup_for_new_profile(
         sessions.insert(
             destination,
             NodeAuthSession {
+                identity: Uuid::new_v4(),
                 config,
                 password,
                 mainnet_node_verified: true,
