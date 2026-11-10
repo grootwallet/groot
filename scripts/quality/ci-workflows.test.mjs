@@ -275,6 +275,18 @@ test('internal packages use structured release-stop validation and preserve Wind
       step.uses?.startsWith('actions/upload-artifact@') && step.with?.name?.startsWith('groot-')
   );
   assert.ok(buildIndex < attestationIndex && attestationIndex < packageUploadIndex);
+  for (const [os, script] of [
+    ['Linux', 'smoke-linux-internal.sh'],
+    ['Windows', 'smoke-windows-internal.ps1']
+  ]) {
+    const smokeIndex = steps.findIndex((step) => step.run?.includes(script));
+    assert.ok(
+      buildIndex < smokeIndex && smokeIndex < attestationIndex,
+      `${os} must install and launch the candidate before attestation or upload`
+    );
+    assert.equal(steps[smokeIndex].if, `runner.os == '${os}'`);
+    assert.match(steps[smokeIndex].run, /RUNNER_TEMP.*groot-\$\{\{ matrix\.platform \}\}/);
+  }
   assert.equal(steps[attestationIndex].name, 'Attest protected candidate artifacts');
   assert.deepEqual(steps[attestationIndex].with, {
     'subject-path': '${{ runner.temp }}/groot-${{ matrix.platform }}/**/*'
