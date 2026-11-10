@@ -3,7 +3,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   verifyIosFoundationBuild,
-  verifyIosArchiveResources
+  verifyIosArchiveResources,
+  verifyIosSceneManifest
 } from '../../../scripts/dev/verify-ios-foundation-build.mjs';
 import { prepareIosProject } from '../../../scripts/dev/prepare-ios-project.mjs';
 import { describe, expect, it } from 'vitest';
@@ -41,6 +42,40 @@ describe('isolated Testnet4 iOS development build', () => {
     expect(build.indexOf('verify-ios-foundation-build.mjs')).toBeGreaterThan(
       build.indexOf('pnpm tauri ios build')
     );
+  });
+});
+
+describe('iOS window scene launch configuration', () => {
+  const configuration = {
+    UISceneConfigurationName: 'Default Configuration',
+    UISceneClassName: 'UIWindowScene',
+    UISceneDelegateClassName: 'TaoSceneDelegate'
+  };
+  const manifest = (supportsMultipleScenes: boolean, applications = [configuration]) => ({
+    UIApplicationSceneManifest: {
+      UIApplicationSupportsMultipleScenes: supportsMultipleScenes,
+      UISceneConfigurations: { UIWindowSceneSessionRoleApplication: applications }
+    }
+  });
+
+  it('accepts one scene managed by Tao with iPad multi-window disabled', () => {
+    expect(() => verifyIosSceneManifest(manifest(false))).not.toThrow();
+    const plist = read('src-tauri/Info.ios.plist');
+    expect(plist).toMatch(/<key>UIApplicationSupportsMultipleScenes<\/key>\s*<false\/>/);
+    expect(plist).toMatch(
+      /<key>UISceneDelegateClassName<\/key>\s*<string>TaoSceneDelegate<\/string>/
+    );
+  });
+
+  it.each([
+    {},
+    { UIApplicationSceneManifest: {} },
+    manifest(false, []),
+    manifest(false, [configuration, configuration]),
+    manifest(false, [{ ...configuration, UISceneDelegateClassName: 'OtherDelegate' }]),
+    manifest(true)
+  ])('rejects missing or conflicting archived scene declarations', (info) => {
+    expect(() => verifyIosSceneManifest(info)).toThrow('Do not install this archive.');
   });
 });
 

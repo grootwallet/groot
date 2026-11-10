@@ -16,8 +16,8 @@ const internalTextOverrides = new Map([
     'src-tauri/src/wallet/activity.rs',
     '86a9b616c973fe9542d81ba8de8ca34c0c6e2dc5c20f7249a1bb574bf2b88d13'
   ],
-  ['package.json', '0c3943a2460b39d8bd73573e3903a85e146cefca380949c9aa62dae5817c9f30'],
-  ['src-tauri/Cargo.toml', 'eb3d0832e5bfdc24b804da02d25e386c7ad4e6570521ef175c662f15504a2355'],
+  ['package.json', '518f06a995e6455df0a0d8937f6d3cf320bb05bea9b32e9b55c666e4bcbc83ac'],
+  ['src-tauri/Cargo.toml', 'ea61d9677e470e3ee20c6c78538240bb068d9845e97c2d1a3166e5b1071a5644'],
   ['src-tauri/tauri.conf.json', 'dcfc61fef779c1a0df714a95c843b9dc42276381bbe066ef9a1c72266c38c56f'],
   ['src-tauri/src/lib.rs', '685e0df112f35055faf33fa13093ff0ef29449606016642223a3aa992d91f72d'],
   ['src-tauri/src/updates.rs', '8aae1d632077bd2bc92a0ee36be238e4a1dad563c36864ef670fca4d7034f0b8'],
