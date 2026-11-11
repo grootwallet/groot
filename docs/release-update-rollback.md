@@ -24,6 +24,32 @@ Starting with the restored line, update comparison maps only the historical
 This blocks replay of those signed historical packages to `0.5.4` clients. Test
 both transition directions whenever updater or version policy changes.
 
+### Manual macOS upgrade from v5.3.0
+
+1. Verify each wallet’s recovery backup and quit Groot. Keep a copy of the
+   `v5.3.0` app and copy the entire `~/Library/Application Support/app.groot.wallet`
+   folder to encrypted backup storage. The full folder includes the network
+   selection and every wallet namespace.
+2. Get the signed `Groot-0.5.4-macos-arm64.dmg`, manifest, and signature for the
+   approved release. Verify them as described in [Produce and verify](#produce-and-verify).
+   Mount the DMG and check the mounted `Groot.app` with
+   [the macOS package verifier](../scripts/release/verify-macos-package.sh).
+   Confirm its bundle identifier is `app.groot.wallet`.
+3. Drag `Groot.app` into Applications and choose **Replace**. Leave the app-data
+   folder in place. Open Groot, confirm version `0.5.4` and the expected
+   network, then unlock and check the wallet list, history, labels, saved
+   proposals, and known receive address before resuming use.
+
+Before public distribution, rehearse the sequence on a disposable macOS
+installation using an existing `v5.3.0` Testnet4 wallet and the exact signed
+release candidate. Record the candidate commit and confirm the expected data
+persists after restarting. To rehearse rollback to `v5.3.0` when the signed
+manifest allows it, quit, set aside the upgraded app and data, and restore
+the verified old app with its complete pre-upgrade folder. Confirm that it
+unlocks and shows the original wallet and known receive address. If any wallet
+activity occurred after the backup, preserve both copies and reconcile that
+activity before using the restored wallet.
+
 ## Rollback
 
 Rollback is never silent. It is allowed only to a version named in the signed manifest, whose artifact and database compatibility are reverified from a clean copy. Preserve the original user data, never downgrade it in place without a tested migration path, and explain why the rollback is required. A signing-key or updater compromise requires incident response and a new trust decision, not a manifest generated with the suspected key.

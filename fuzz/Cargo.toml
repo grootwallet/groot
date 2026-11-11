@@ -18,6 +18,7 @@ base64 = "=0.22.1"
 serde_json = "=1.0.150"
 
 [patch.crates-io]
+bdk_chain = { path = "../src-tauri/vendor/bdk-chain" }
 security-framework-sys = { path = "../src-tauri/vendor/security-framework-sys" }
 
 [[bin]]

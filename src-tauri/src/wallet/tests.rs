@@ -5324,6 +5324,15 @@ fn private_json_is_atomic_owner_only_and_bounded() {
 }
 
 #[test]
+fn bundled_sqlite_includes_the_wal_page_size_fix() {
+    let version = bdk_wallet::rusqlite::version_number();
+    assert!(
+        version >= 3_054_000,
+        "SQLite 3.54.0 or later is required, linked version is {version}"
+    );
+}
+
+#[test]
 fn wallet_database_is_owner_only_and_uses_defensive_settings() {
     let dir = std::env::temp_dir().join(format!("groot-db-test-{}", Uuid::new_v4()));
     fs::create_dir_all(&dir).unwrap();
