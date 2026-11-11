@@ -132,7 +132,7 @@ fn continuity_policy_projection_for_1_000_coins_is_bounded_and_database_free() {
         assert_eq!(
             ffi::sqlite3_trace_v2(
                 db.handle(),
-                ffi::SQLITE_TRACE_STMT as u32,
+                ffi::SQLITE_TRACE_STMT,
                 Some(count_snapshot_statement),
                 std::ptr::null_mut()
             ),
@@ -245,7 +245,7 @@ fn snapshot_history_fixture(rows: usize, samples: usize, report: bool) {
         assert_eq!(
             ffi::sqlite3_trace_v2(
                 db.handle(),
-                ffi::SQLITE_TRACE_STMT as u32,
+                ffi::SQLITE_TRACE_STMT,
                 Some(count_snapshot_statement),
                 std::ptr::null_mut()
             ),
