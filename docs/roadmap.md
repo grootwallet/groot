@@ -9,7 +9,7 @@ The current public baseline is the historical **v5.3.0 macOS Apple-silicon deskt
 - Validate the exact `0.5.4-rc01` candidate with the full automated harness and preserve the frozen public-release approval gate.
 - Complete physical iPhone pairing, fixed Continuity/Miniscript and Windows/Linux signer acceptance before expanding support claims.
 - Reduce maintenance risk through the [code cleanup plan](engineering-roadmap.md), continuing the small frontend and native ownership extractions already under test.
-- Define and test the explicit manual or bridge update from historical `v5.3.0` to final `v0.5.4` before release.
+- Rehearse the [manual upgrade from v5.3.0 to v0.5.4](release-update-rollback.md#manual-macos-upgrade-from-v530) with the final signed candidate before release.
 - Sign Windows/Linux packages only after packaging, filesystem, trusted HWI and per-device acceptance. Download signatures do not replace platform or runtime-helper verification.
 
 ## Later, separately reviewed

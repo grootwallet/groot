@@ -18,7 +18,7 @@ const message = `${sourcePath} changed after the mainnet-candidate policy snapsh
 const pinTest = 'pins every reviewed mainnet-critical source byte';
 const macTest =
   'macOS inspection rejects the released signing shape and accepts camera-only signing';
-const fileCounts = [1, 4, 11, 1, 11];
+const fileCounts = [1, 6, 11, 1, 11];
 const root = new URL('../../', import.meta.url);
 const read = (p) => readFileSync(new URL(p, root), 'utf8');
 const bytes = (p) => readFileSync(new URL(p, root));
@@ -90,10 +90,10 @@ test('internal release files match the canonical mandatory release command', () 
   );
 });
 
-test('permits only the typed frozen pin assertion with all 28 real-test outcomes', () => {
+test('permits only the typed frozen pin assertion with all 30 real-test outcomes', () => {
   assert.deepEqual(classifyReleaseTests(fixture(), 'darwin'), {
-    tests: 28,
-    passed: 27,
+    tests: 30,
+    passed: 29,
     sourceApproval: 'pending',
     skipped: 0
   });
@@ -221,8 +221,8 @@ test('rejects cancellations, todos, missing summaries, containers and wrong asse
 test('only the named macOS compiler fixture may skip on other systems', () => {
   const e = fixture('linux');
   assert.deepEqual(classifyReleaseTests(e, 'linux'), {
-    tests: 28,
-    passed: 26,
+    tests: 30,
+    passed: 28,
     sourceApproval: 'pending',
     skipped: 1
   });

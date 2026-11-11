@@ -18,7 +18,7 @@ const macTest =
 
 // Review this inventory whenever a mandatory release test is added or removed.
 const releaseTestCounts = new Map(
-  releaseTestFiles.map((file, index) => [file, [1, 4, 11, 1, 11][index]])
+  releaseTestFiles.map((file, index) => [file, [1, 6, 11, 1, 11][index]])
 );
 
 export function classifyReleaseTests(events, platform = process.platform) {
@@ -82,7 +82,7 @@ export function classifyReleaseTests(events, platform = process.platform) {
   const counts = countOutcomes(outcomes);
   assertCounts(total[0].data.counts, counts);
   if (
-    counts.tests !== 28 ||
+    counts.tests !== 30 ||
     counts.failed !== 1 ||
     counts.skipped !== (platform === 'darwin' ? 0 : 1)
   ) {

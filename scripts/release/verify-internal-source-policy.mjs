@@ -32,6 +32,10 @@ const internalTextOverrides = new Map([
     'ad8e61d95bcabf072a66a44fe5efec66864d423419610fdd94ad5978e6c74676'
   ],
   ['src-tauri/src/hardware.rs', '6e2e76679ff522ec5237cdb1c12fa64a4529856bf8fd66a9bf2a88468bf86e65'],
+  [
+    'scripts/release/assert-public-release-authorized.mjs',
+    '02c24afe01df8c03e3475f750cc4db96719b46237ec06c7b5469d7c71121cc9e'
+  ],
   ['src-tauri/src/registry.rs', 'c94f4c70ea2f72fa74ef8350bb4f7751b24569d41eb6db7edee02af1dda84aa6'],
   [
     'src-tauri/src/secure_store.rs',
