@@ -1,0 +1,18 @@
+{
+  "artifact": {
+    "filename": "hwi.exe",
+    "sha256": "e068d91b664597425a8ead02d7b86a02ad6c4b72746c42961f58a58b08f9fd79"
+  },
+  "license": {
+    "filename": "LICENSE",
+    "sha256": "fd02c0dfea382dd4c42bcf87f1d638fcc5962238a319447d3ca035074bcd07f7"
+  },
+  "name": "Bitcoin Core HWI",
+  "schemaVersion": 1,
+  "source": {
+    "filename": "hwi-3.2.0.tar.gz",
+    "sha256": "4a225a2e22990fa114066feafcd3cb66a6ecaa3711a0d8a0cad61e7f8c507455"
+  },
+  "updatePolicy": "bundled-and-replaced-only-by-signed-groot-release",
+  "version": "3.2.0"
+}

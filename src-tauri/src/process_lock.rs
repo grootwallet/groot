@@ -104,6 +104,15 @@ fn ensure_private_directory(path: &Path) -> Result<(), ProcessLockError> {
 }
 
 fn open_regular_lock_file(path: &Path) -> Result<File, ProcessLockError> {
+    match fs::symlink_metadata(path) {
+        Ok(metadata) => {
+            if metadata.file_type().is_symlink() || !metadata.is_file() {
+                return Err(ProcessLockError::UnsafePath);
+            }
+        }
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+        Err(_) => return Err(ProcessLockError::Io),
+    }
     let mut create = OpenOptions::new();
     create.read(true).write(true).create_new(true);
     prevent_windows_path_replacement(&mut create);

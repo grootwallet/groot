@@ -1,4 +1,7 @@
 use super::*;
+use crate::recovery::{
+    CONTINUITY_ASSISTANCE_BLOCKS, CONTINUITY_ESTATE_BLOCKS, PARTNER_SOLO_BLOCKS,
+};
 use std::{hint::black_box, io::Write, time::Instant};
 
 const DEFAULT_ADDRESS_ROWS: usize = 10_000;
@@ -21,12 +24,16 @@ unsafe extern "C" fn count_snapshot_statement(
 
 #[test]
 #[ignore = "synthetic snapshot benchmark; run alone with --ignored --nocapture"]
-fn snapshot_history_benchmark() {
+fn snapshot_history_benchmark() -> Result<(), &'static str> {
+    if cfg!(debug_assertions) {
+        return Err("Use the production profile for timing");
+    }
     snapshot_history_fixture(
         benchmark_size("GROOT_BENCH_TRANSACTIONS", 100).min(1_000),
-        4,
+        105,
         true,
     );
+    Ok(())
 }
 
 #[test]
@@ -34,6 +41,163 @@ fn independent_receive_snapshots_keep_a_linear_statement_budget() {
     for rows in [10, 100] {
         snapshot_history_fixture(rows, 2, false);
     }
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PolicyCoinProjectionFixture {
+    coin_index: usize,
+    policy_path_statuses: Vec<PolicyPathCoinStatusDto>,
+    policy_renewal_recommendation: Option<PolicyRenewalRecommendationDto>,
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PolicyProjectionFixture {
+    policy_paths: Vec<PolicyPathDefinitionDto>,
+    coins: Vec<PolicyCoinProjectionFixture>,
+}
+
+fn performance_policy_path(
+    index: usize,
+    code: &str,
+    name: &str,
+    required: usize,
+    signer_count: usize,
+    available_after_blocks: u32,
+) -> PolicyPathDefinitionDto {
+    let signers = (0..signer_count)
+        .map(|signer_index| PolicyPathSignerDto {
+            label: format!("Signer {}", signer_index + 1),
+            fingerprint: format!("{:08x}", index * 16 + signer_index),
+            role: code.to_owned(),
+        })
+        .collect::<Vec<_>>();
+    PolicyPathDefinitionDto {
+        index,
+        code: code.to_owned(),
+        name: name.to_owned(),
+        required,
+        eligible_signer_fingerprints: signers
+            .iter()
+            .map(|signer| signer.fingerprint.clone())
+            .collect(),
+        signer_groups: vec![PolicySignerGroupDto {
+            code: format!("{code}_signers"),
+            label: "Eligible signers".to_owned(),
+            required,
+            signers,
+        }],
+        available_after_blocks,
+    }
+}
+
+#[test]
+fn continuity_policy_projection_for_1_000_coins_is_bounded_and_database_free() {
+    use bdk_wallet::rusqlite::ffi;
+
+    const COINS: usize = 1_000;
+    const MAX_SERIALIZED_BYTES: usize = 1_500_000;
+    let policy_paths = vec![
+        performance_policy_path(0, "partner_owner", "Owner: 2 of 3", 2, 3, 0),
+        performance_policy_path(
+            1,
+            "partner_assistance",
+            "Both partner signers",
+            2,
+            2,
+            CONTINUITY_ASSISTANCE_BLOCKS,
+        ),
+        performance_policy_path(
+            2,
+            "partner_solo",
+            "Either partner signer",
+            1,
+            2,
+            PARTNER_SOLO_BLOCKS,
+        ),
+        performance_policy_path(
+            3,
+            "partner_estate",
+            "Estate guardians: 2 of 3",
+            2,
+            3,
+            CONTINUITY_ESTATE_BLOCKS,
+        ),
+    ];
+    let db = Connection::open_in_memory().unwrap();
+    // The projection helpers accept only in-memory values. SQLite tracing makes a
+    // future accidental query in this bounded pass visible without timing it.
+    unsafe {
+        assert_eq!(
+            ffi::sqlite3_trace_v2(
+                db.handle(),
+                ffi::SQLITE_TRACE_STMT,
+                Some(count_snapshot_statement),
+                std::ptr::null_mut()
+            ),
+            ffi::SQLITE_OK
+        );
+    }
+    SNAPSHOT_STATEMENTS.with(|count| count.set(0));
+    let mut status_calculations = 0;
+    let coins = (0..COINS)
+        .map(|coin_index| {
+            let confirmations = match coin_index % 5 {
+                0 => 0,
+                1 => CONTINUITY_ASSISTANCE_BLOCKS - 1,
+                2 => CONTINUITY_RENEWAL_BLOCKS,
+                3 => PARTNER_SOLO_BLOCKS,
+                _ => CONTINUITY_ESTATE_BLOCKS,
+            };
+            let statuses = policy_paths
+                .iter()
+                .map(|path| {
+                    status_calculations += 1;
+                    policy_path_coin_status(
+                        path,
+                        confirmations,
+                        100_000,
+                        coin_index % 17 != 0,
+                        coin_index % 29 == 0,
+                    )
+                    .unwrap()
+                })
+                .collect();
+            PolicyCoinProjectionFixture {
+                coin_index,
+                policy_path_statuses: statuses,
+                policy_renewal_recommendation: policy_renewal_recommendation(
+                    "partner_continuity_v1",
+                    confirmations,
+                    100_000,
+                )
+                .unwrap(),
+            }
+        })
+        .collect::<Vec<_>>();
+    let statements = SNAPSHOT_STATEMENTS.with(std::cell::Cell::get);
+    unsafe {
+        ffi::sqlite3_trace_v2(db.handle(), 0, None, std::ptr::null_mut());
+    }
+
+    assert_eq!(coins.len(), COINS);
+    assert_eq!(status_calculations, COINS * policy_paths.len());
+    assert_eq!(statements, 0, "policy projection must remain database-free");
+    let bytes = serde_json::to_vec(&PolicyProjectionFixture {
+        policy_paths,
+        coins,
+    })
+    .unwrap()
+    .len();
+    assert!(
+        bytes <= MAX_SERIALIZED_BYTES,
+        "1,000-coin policy projection grew to {bytes} bytes"
+    );
+    let _ = writeln!(
+        std::io::stderr(),
+        "continuity_policy_projection coins={COINS} paths=4 status_calculations={status_calculations} sql_statements={statements} serialized_bytes={bytes}"
+    );
 }
 
 fn snapshot_history_fixture(rows: usize, samples: usize, report: bool) {
@@ -81,7 +245,7 @@ fn snapshot_history_fixture(rows: usize, samples: usize, report: bool) {
         assert_eq!(
             ffi::sqlite3_trace_v2(
                 db.handle(),
-                ffi::SQLITE_TRACE_STMT as u32,
+                ffi::SQLITE_TRACE_STMT,
                 Some(count_snapshot_statement),
                 std::ptr::null_mut()
             ),
@@ -124,7 +288,7 @@ fn snapshot_history_fixture(rows: usize, samples: usize, report: bool) {
             activity_statements <= 13 * rows as u64 + 10,
             "independent receive page exceeded SQL budget: {activity_statements} for {rows}"
         );
-        if report {
+        if report && sample >= 5 {
             let _ = writeln!(std::io::stderr(),
             "snapshot_history rows={rows} sample={sample} elapsed_us={} statements={statements}",
             elapsed.as_micros());
@@ -227,4 +391,49 @@ fn latest_signer_evidence_query_benchmark() {
         elapsed.as_millis(),
         elapsed.as_nanos() / signers as u128
     );
+}
+
+#[test]
+#[ignore = "opt-in production-profile queue and durable registry measurements"]
+fn measure_operation_lock_and_registry_save() -> Result<(), &'static str> {
+    assert_eq!(std::env::var("GROOT_MEASURE_NATIVE").as_deref(), Ok("1"));
+    if cfg!(debug_assertions) {
+        return Err("Use cargo test --release");
+    }
+    let directory = std::env::temp_dir().join(format!("groot-measure-registry-{}", Uuid::new_v4()));
+    fs::create_dir_all(&directory).unwrap();
+    let state = AppState::default();
+    let registry = WalletRegistry::default();
+    let mut lock_ns = Vec::new();
+    let mut save_us = Vec::new();
+    for sample in 0..105 {
+        let started = Instant::now();
+        let guard = operation_guard(&state).unwrap();
+        let acquired = started.elapsed().as_nanos();
+        let started = Instant::now();
+        registry::save_atomic(&directory.join("registry.json"), &registry).unwrap();
+        let saved = started.elapsed().as_micros();
+        drop(guard);
+        if sample >= 5 {
+            lock_ns.push(acquired);
+            save_us.push(saved);
+        }
+    }
+    assert_eq!(
+        registry::load(&directory.join("registry.json")).unwrap(),
+        registry
+    );
+    fs::remove_dir_all(directory).unwrap();
+    for (operation, unit, mut values) in [
+        ("uncontended_operation_lock", "ns", lock_ns),
+        ("empty_registry_atomic_save", "us", save_us),
+    ] {
+        values.sort_unstable();
+        println!(
+            "{}",
+            serde_json::json!({"kind":"synthetic-native-core", "operation":operation, "unit":unit,
+            "warmups":5, "samples":100, "min":values[0], "median":values[49], "p95":values[94], "max":values[99], "result":"ok"})
+        );
+    }
+    Ok(())
 }

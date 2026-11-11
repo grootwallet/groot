@@ -71,10 +71,15 @@ const hardwareTransport = readFileSync(
   new URL('../../../src-tauri/src/hardware.rs', import.meta.url),
   'utf8'
 );
-const nativeWallet = readFileSync(
-  new URL('../../../src-tauri/src/wallet.rs', import.meta.url),
-  'utf8'
-);
+const nativeWallet =
+  readFileSync(new URL('../../../src-tauri/src/wallet.rs', import.meta.url), 'utf8') +
+  '\n' +
+  readFileSync(new URL('../../../src-tauri/src/wallet/profiles.rs', import.meta.url), 'utf8') +
+  '\n' +
+  readFileSync(
+    new URL('../../../src-tauri/src/wallet/notification_delivery.rs', import.meta.url),
+    'utf8'
+  );
 
 describe('hardware receive verification UI', () => {
   it('catalogs every native hardware device status message', () => {
@@ -308,7 +313,9 @@ describe('hardware receive verification UI', () => {
     expect(multisigSetup).toContain(
       "{#if templateKind === 'standard'}<button onclick={scanHardware}"
     );
-    expect(multisigSetup).toContain('Jade/Jade Plus, BitBox02, and BitBox02 Nova');
+    expect(multisigSetup).toContain('Limited signer support');
+    expect(multisigSetup).toContain('Offline PSBT only');
+    expect(multisigSetup).toContain('Unsupported: Coldcard, Trezor, phone signers');
     expect(multisigSetup).toContain("if (templateKind !== 'standard')");
     expect(multisigReceive).toContain(
       '{#if !wallet?.recoveryTemplate}<HardwareReceiveVerification'
@@ -698,6 +705,15 @@ describe('hardware receive verification UI', () => {
     expect(signerSummary).toContain('aria-busy={loading}');
     expect(signerSummary).toContain('class="send-signer-placeholder"');
     expect(appCss).toContain('.send-signers.loading::after');
+  });
+
+  it('keeps structured path groups visible while multisig signatures are collected', () => {
+    expect(signerSummary).toContain('signerGroups?: PolicySignerGroup[]');
+    expect(signerSummary).toContain('signerGroupRequirement(group)');
+    expect(signerSummary).toContain('signerGroupSignedCount(group)');
+    expect(multisigSend).toContain(
+      'signerGroups={proposal.spendingPathDetails?.signerGroups ?? []}'
+    );
   });
 
   it('keeps the single-key transaction review visible while choosing a signing transport', () => {

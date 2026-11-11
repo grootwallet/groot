@@ -2,20 +2,15 @@ use super::*;
 
 #[tauri::command]
 pub async fn tx_proposals(app: AppHandle) -> ApiResult<Vec<PaymentProposalDto>> {
-    tauri::async_runtime::spawn_blocking(move || {
-        let state = app.state::<AppState>();
-        let _operation = operation_guard(&state)?;
-        require_unlocked(&app, &state)?;
-        let mut db = open_db(&app)?;
-        let wallet = load_wallet(&mut db)?;
-        let proposal_ids = active_payment_proposal_ids(&db)?;
+    with_selected_proposal_db(app, false, |_, db| {
+        let wallet = load_wallet(db)?;
+        let proposal_ids = active_payment_proposal_ids(db)?;
         proposal_ids
             .iter()
-            .map(|proposal_id| load_payment_proposal_dto(&db, &wallet, proposal_id))
+            .map(|proposal_id| load_payment_proposal_dto(db, &wallet, proposal_id))
             .collect()
     })
     .await
-    .map_err(internal)?
 }
 
 #[tauri::command]

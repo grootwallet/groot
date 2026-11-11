@@ -1,9 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdtempSync, writeFileSync, symlinkSync, rmSync, chmodSync, realpathSync } from 'node:fs';
+import {
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  realpathSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync
+} from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, sep } from 'node:path';
 import {
   copyHwiRuntime,
   readHwiRuntimeArchive,
@@ -13,12 +21,21 @@ import {
 } from './prepare-hwi-runtime.mjs';
 
 const digest = (bytes) => createHash('sha256').update(bytes).digest('hex');
-function archive(name = 'Python', kind = 'n', contents = 'Python.framework/Versions/3.9/Python\0') {
+function archive(
+  name = 'Python',
+  kind = 'n',
+  contents = 'Python.framework/Versions/3.9/Python\0',
+  pythonLibrary = 'Python'
+) {
   const entries = [
     [kind, name, Buffer.from(contents)],
-    ...(name === 'Python'
+    ...(name === pythonLibrary
       ? []
-      : [['n', 'Python', Buffer.from('Python.framework/Versions/3.9/Python\0')]]),
+      : [
+          pythonLibrary === 'Python'
+            ? ['n', 'Python', Buffer.from('Python.framework/Versions/3.9/Python\0')]
+            : ['b', pythonLibrary, Buffer.from('runtime-library')]
+        ]),
     ['o', 'pyi-contents-directory _internal', Buffer.alloc(0)]
   ];
   let position = 0;
@@ -43,7 +60,7 @@ function archive(name = 'Python', kind = 'n', contents = 'Python.framework/Versi
   cookie.writeUInt32BE(position, 12);
   cookie.writeUInt32BE(table.length, 16);
   cookie.writeUInt32BE(309, 20);
-  cookie.write('Python\0', 24);
+  cookie.write(`${pythonLibrary}\0`, 24);
   return Buffer.concat([Buffer.from('fixture bootloader'), ...data, table, cookie]);
 }
 
@@ -51,7 +68,16 @@ test('archive extraction requires exact pinned bytes and bounded paths', () => {
   const bytes = archive();
   assert.equal(readHwiRuntimeArchive(bytes, digest(bytes))[0].name, 'Python');
   assert.throws(() => readHwiRuntimeArchive(bytes, '0'.repeat(64)));
-  for (const name of ['../Python', '/Python', 'a/../Python', 'a//Python']) {
+  for (const name of [
+    '../Python',
+    '/Python',
+    'a/../Python',
+    'a//Python',
+    '..\\Python',
+    '\\Python',
+    'a\\..\\Python',
+    'a\\\\Python'
+  ]) {
     const bytes = archive(name);
     assert.throws(() => readHwiRuntimeArchive(bytes, digest(bytes)));
   }
@@ -60,9 +86,21 @@ test('archive extraction requires exact pinned bytes and bounded paths', () => {
   assert.throws(() => readHwiRuntimeArchive(bytes2, digest(bytes2)));
 });
 
+test('archive parser admits only the pinned Linux and Windows Python layouts', () => {
+  for (const library of ['libpython3.9.so.1.0', 'python39.dll']) {
+    const bytes = archive(library, 'b', 'runtime-library', library);
+    assert.equal(readHwiRuntimeArchive(bytes, digest(bytes))[0].name, library);
+  }
+  const windows = archive('drivers\\native.dll', 'b', 'driver', 'python39.dll');
+  assert.equal(readHwiRuntimeArchive(windows, digest(windows))[0].name, 'drivers/native.dll');
+  const unknown = archive('python310.dll', 'b', 'runtime-library', 'python310.dll');
+  assert.throws(() => readHwiRuntimeArchive(unknown, digest(unknown)));
+});
+
 test('runtime inventory detects modified, extra and writable files and escaping links', () => {
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'groot-runtime-test-')));
   const copied = `${root}-copy`;
+  const outside = `${root}-outside`;
   try {
     writeFileSync(join(root, 'Python'), 'fixture', { mode: 0o644 });
     symlinkSync('Python', join(root, 'alias'));
@@ -83,14 +121,44 @@ test('runtime inventory detects modified, extra and writable files and escaping 
     assert.throws(check);
     rmSync(join(root, 'extra'));
     chmodSync(join(root, 'Python'), 0o666);
-    assert.throws(check);
+    // Node cannot model POSIX group/world write bits through chmod on Windows.
+    if (process.platform === 'win32') assert.doesNotThrow(check);
+    else assert.throws(check);
     chmodSync(join(root, 'Python'), 0o644);
     rmSync(join(root, 'alias'));
-    symlinkSync('/etc/hosts', join(root, 'alias'));
+    writeFileSync(outside, 'outside');
+    symlinkSync(outside, join(root, 'alias'));
     assert.throws(check);
   } finally {
     rmSync(root, { recursive: true, force: true });
     rmSync(copied, { recursive: true, force: true });
+    rmSync(outside, { force: true });
+  }
+});
+
+test('runtime inventory uses portable nested paths and enforces its depth bound', () => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'groot-runtime-depth-test-')));
+  try {
+    const levels = Array.from({ length: 16 }, (_, index) => `level-${index + 1}`);
+    const directory = join(root, ...levels);
+    mkdirSync(directory, { recursive: true });
+    writeFileSync(join(directory, 'native.dll'), 'driver', { mode: 0o644 });
+    assert.deepEqual(
+      runtimeInventory(root).files.map(({ path }) => path),
+      [`${levels.join('/')}/native.dll`]
+    );
+
+    if (sep === '/') {
+      const invalid = join(root, 'invalid\\name');
+      writeFileSync(invalid, 'invalid', { mode: 0o644 });
+      assert.throws(() => runtimeInventory(root));
+      rmSync(invalid);
+    }
+
+    mkdirSync(join(root, ...levels, 'level-17'), { recursive: true });
+    assert.throws(() => runtimeInventory(root));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
   }
 });
 

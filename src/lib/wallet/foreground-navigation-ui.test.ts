@@ -3,10 +3,16 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 const appShell = readFileSync(new URL('../components/AppShell.svelte', import.meta.url), 'utf8');
-const profileCommands = readFileSync(
-  new URL('../../../src-tauri/src/wallet/profile_commands.rs', import.meta.url),
-  'utf8'
-);
+const profileCommands =
+  readFileSync(
+    new URL('../../../src-tauri/src/wallet/profile_commands.rs', import.meta.url),
+    'utf8'
+  ) +
+  '\n' +
+  readFileSync(
+    new URL('../../../src-tauri/src/wallet/recovery_commands.rs', import.meta.url),
+    'utf8'
+  );
 const multisigCommands = readFileSync(
   new URL('../../../src-tauri/src/wallet/multisig_setup_commands.rs', import.meta.url),
   'utf8'
@@ -16,10 +22,15 @@ const settings = readFileSync(
   new URL('../../routes/settings/+page.svelte', import.meta.url),
   'utf8'
 );
-const walletCore = readFileSync(
-  new URL('../../../src-tauri/src/wallet.rs', import.meta.url),
-  'utf8'
-);
+const walletCore =
+  readFileSync(new URL('../../../src-tauri/src/wallet.rs', import.meta.url), 'utf8') +
+  '\n' +
+  readFileSync(new URL('../../../src-tauri/src/wallet/profiles.rs', import.meta.url), 'utf8') +
+  '\n' +
+  readFileSync(
+    new URL('../../../src-tauri/src/wallet/notification_delivery.rs', import.meta.url),
+    'utf8'
+  );
 const unlock = readFileSync(new URL('../../routes/unlock/+page.svelte', import.meta.url), 'utf8');
 const activity = readFileSync(
   new URL('../../routes/activity/+page.svelte', import.meta.url),
@@ -153,7 +164,7 @@ describe('foreground wallet navigation', () => {
     expect(overview).toContain('const generation = ++syncStatusReadGeneration');
     expect(overview).toContain('if (generation !== syncStatusReadGeneration) return syncStatus;');
     expect(unlock).toContain('walletShell.requestUnlockSync(selectedWalletId)');
-    expect(overview).toContain('walletShell.consumeUnlockSync(selectedProfile.id)');
+    expect(overview).toContain('walletShell.consumeUnlockSync(profile.id)');
     expect(overview).not.toContain('setTimeout(resolve, 1_000)');
     expect(overview).toContain('syncAge(snapshot?.syncedAt ?? null, syncClock)');
     expect(overview).toContain("status.failureCode === 'invalid_node_config'");
@@ -233,30 +244,33 @@ describe('foreground wallet navigation', () => {
     expect(overview).toContain("const isMainnet = defaultConfig.network === 'mainnet'");
     expect(overview).toContain('walletService.networkSetupSources()');
     expect(overview).not.toContain('isMainnet ? Promise.resolve([])');
-    expect(overview).toContain('if (isMainnet && nodeReady && unlockSyncRequested)');
+    const unlockAdmission =
+      'if (isMainnet && unlockSyncRequested && (await resolveNodeReadiness())) await checkNode()';
+    expect(overview).toContain(unlockAdmission);
     expect(overview).toContain('await walletService.testNodeConnection()');
     expect(overview.indexOf("multisig = selectedProfile?.kind === 'multisig'")).toBeLessThan(
-      overview.indexOf('if (isMainnet && nodeReady && unlockSyncRequested)')
+      overview.indexOf(unlockAdmission)
     );
     expect(overview).toContain("await goto('/settings?networkSetup=1')");
-    expect(overview.indexOf('if (isMainnet && nodeReady && unlockSyncRequested)')).toBeLessThan(
+    expect(overview.indexOf(unlockAdmission)).toBeLessThan(
       overview.indexOf('walletService.paymentDraft()')
     );
-    expect(overview.indexOf('if (isMainnet && nodeReady && unlockSyncRequested)')).toBeLessThan(
-      overview.indexOf('walletService.overview(selectedProfile.id)')
+    expect(overview.indexOf(unlockAdmission)).toBeLessThan(
+      overview.indexOf('walletService.overview(profile.id)')
     );
     expect(overview).toContain("cause.code === 'node_admission_required'");
     expect(overview).toContain('admissionRestored = true');
     expect(overview).toMatch(
-      /cause\.code === 'node_admission_required'[\s\S]*walletService\.testNodeConnection\(\)[\s\S]*walletService\.overview\(selectedProfile\.id\)/
+      /cause\.code === 'node_admission_required'[\s\S]*await checkNode\(\)[\s\S]*walletService\.overview\(profile\.id\)/
     );
+    expect(overview).toContain('if (firstHistory) await resolveNodeReadiness()');
+    expect(overview).toContain('if (firstHistory) await loadRecoveryState(generation)');
     expect(overview).toContain('(unlockSyncRequested || admissionRestored)');
   });
 
   it('shows a saved-node outage instead of claiming a gated wallet never synced', () => {
-    expect(overview).toContain(
-      "if (initialDataLoading) return translate($locale, isMainnet ? 'Checking node…' : 'Loading…')"
-    );
+    expect(overview).toContain("if (checkingNode) return translate($locale, 'Checking node…')");
+    expect(overview).toContain("if (initialDataLoading) return translate($locale, 'Loading…')");
     expect(overview).toContain(
       "if (loadErrorCode === 'network_unavailable') return translate($locale, 'Node unavailable')"
     );
@@ -271,7 +285,7 @@ describe('foreground wallet navigation', () => {
   it('does not start a second post-unlock scan after reattaching to an inherited scan', () => {
     expect(overview).toContain('if (syncStatusIsActive(nextStatus)) inheritedSyncObserved = true;');
     expect(overview).toMatch(
-      /walletShell\.consumeUnlockSync\(selectedProfile\.id\)[\s\S]*!inheritedSyncObserved/
+      /walletShell\.consumeUnlockSync\(profile\.id\)[\s\S]*!inheritedSyncObserved/
     );
   });
 

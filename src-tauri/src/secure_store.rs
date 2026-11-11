@@ -234,10 +234,8 @@ fn write_owner_only(path: &Path, bytes: &[u8]) -> Result<(), SecureStoreError> {
         file.write_all(bytes)
             .map_err(|_| SecureStoreError::Unavailable)?;
         file.sync_all().map_err(|_| SecureStoreError::Unavailable)?;
-        fs::rename(&temporary, path).map_err(|_| SecureStoreError::Unavailable)?;
-        #[cfg(unix)]
-        File::open(parent)
-            .and_then(|directory| directory.sync_all())
+        crate::durable_file::replace(&temporary, path)
+            .and_then(|()| crate::durable_file::sync_parent(parent))
             .map_err(|_| SecureStoreError::Unavailable)?;
         Ok(())
     })();

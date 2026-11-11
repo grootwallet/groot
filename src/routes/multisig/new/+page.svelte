@@ -1527,13 +1527,13 @@
                 >{/if}</button
             >
           </div>
-          <WarningNotice
-            title={translate($locale, 'Miniscript signer compatibility')}
-            body={translate(
-              $locale,
-              'Recovery and inheritance are not enabled yet. Ledger, Jade/Jade Plus and BitBox02 models are candidates only; no direct USB Miniscript workflow is certified in Groot. Standard multisig and phone pairing keep their existing support.'
-            )}
-          />
+          {#if templateKind !== 'standard'}<WarningNotice
+              title={translate($locale, 'Limited signer support')}
+              body={translate(
+                $locale,
+                'Regtest and Testnet4 only. Offline PSBT only. Candidates pending exact-model certification: Ledger, Jade/Jade Plus, BitBox02, BitBox02 Nova. Unsupported: Coldcard, Trezor, phone signers.'
+              )}
+            />{/if}
           <div class="policy-choice-insight">
             <span>{translate($locale, 'About this plan')}</span><InsightTip
               label={translate(
@@ -1550,7 +1550,7 @@
                   ? 'Choose how many independent keys must sign each payment. No single key can spend alone.'
                   : templateKind === 'partner_continuity_v1'
                     ? 'Your 2-of-3 remains available. After three months your partner uses both partner keys, after nine months either partner key works, and after twelve months two estate guardians can recover. Renewing moves every delayed path back.'
-                    : 'Both parents sign now. After three months either parent can sign with either child assistance key. After twelve months two of the children’s inheritance role keys and the executor can recover. Renewing moves the delayed paths back.'
+                    : 'Both parents sign now. After three months either parent can sign with either child assistance key. After about twelve months, any 2 of the 3 inheritance signers—the two child inheritance keys and the executor—can recover. Renewing moves the delayed paths back.'
               )}
             />
           </div>
@@ -1717,10 +1717,10 @@
             </p>
             <div class="recovery-separation">
               <ShieldCheck size={15} /><span
-                ><strong>{translate($locale, 'Fixed, reviewed roles')}</strong><small
+                ><strong>{translate($locale, 'Offline PSBT only')}</strong><small
                   >{translate(
                     $locale,
-                    'Only Ledger, Jade/Jade Plus, BitBox02, and BitBox02 Nova are Miniscript candidates; each exact setup still requires certification.'
+                    'Candidates pending exact-model certification: Ledger, Jade/Jade Plus, BitBox02, BitBox02 Nova. Unsupported: Coldcard, Trezor, phone signers.'
                   )}</small
                 ></span
               >
@@ -1992,9 +1992,13 @@
         >
       </div>
       <div class="review-signers">
-        {#each preview.cosigners as signer}<div>
+        {#each preview.cosigners as signer, i}<div>
             <Check size={14} /><span
-              ><strong>{signer.label}</strong><small>{signer.fingerprint}</small></span
+              ><strong>{signer.label}</strong><small
+                >{#if templateKind === 'partner_continuity_v1' || templateKind === 'family_continuity_v1'}<span
+                    class="review-signer-role">{translate($locale, policyRole(i))}</span
+                  >{/if}<code>{signer.fingerprint}</code></small
+              ></span
             >
           </div>{/each}
       </div>
@@ -2880,6 +2884,37 @@
     .path-visual.continuity-path-visual,
     .path-visual.family-continuity-path {
       grid-template-columns: 1fr;
+      gap: 0;
+      padding: 4px 0 2px 14px;
+      border-left: 2px solid var(--border-strong);
+    }
+    .path-visual.continuity-path-visual > span,
+    .path-visual.family-continuity-path > span,
+    .path-visual.continuity-path-visual > span:last-child,
+    .path-visual.family-continuity-path > span:last-child {
+      position: relative;
+      min-height: 0;
+      padding: 7px 0 15px 17px;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+    }
+    .path-visual.continuity-path-visual > span::before,
+    .path-visual.family-continuity-path > span::before {
+      content: '';
+      position: absolute;
+      top: 11px;
+      left: -20px;
+      width: 8px;
+      height: 8px;
+      border: 2px solid var(--panel);
+      border-radius: 50%;
+      background: var(--fr-blue);
+      box-shadow: 0 0 0 1px var(--border-strong);
+    }
+    .path-visual.continuity-path-visual > i,
+    .path-visual.family-continuity-path > i {
+      display: none;
     }
   }
 
@@ -3527,6 +3562,19 @@
   :global(.review-signers):where(.review-signers) :global(small) {
     color: var(--muted);
     font-size: var(--font-size-meta);
+  }
+  :global(.review-signers):where(.review-signers) :global(small:has(.review-signer-role)) {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3px 6px;
+  }
+  :global(.review-signer-role):where(.review-signer-role) {
+    color: var(--text-soft);
+    font-weight: 650;
+  }
+  :global(.review-signers):where(.review-signers) :global(code) {
+    color: var(--muted);
+    font-size: inherit;
   }
   :global(.cosigner-step-heading):where(.cosigner-step-heading) :global(.setup-step) {
     display: block;

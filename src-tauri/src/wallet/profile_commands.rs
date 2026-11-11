@@ -641,11 +641,24 @@ pub async fn wallet_unlock(app: AppHandle, credential: String) -> ApiResult<()> 
 pub async fn wallet_lock(app: AppHandle) -> ApiResult<()> {
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<AppState>();
-        cancel_foreground_sync(&state)?;
-        let _operation = operation_guard(&state)?;
+        let profile = selected_profile(&app)?;
+        // During Core's staged read-only phase, the sync owns the operation
+        // lock and cannot commit while we hold this read gate. Revoke now
+        // instead of waiting for an already-dispatched node request.
+        let staged_sync = foreground_sync_read_gate(&state, profile.id, true)?;
+        let _operation = if staged_sync.is_none() {
+            Some(operation_guard(&state)?)
+        } else {
+            None
+        };
+        let _metadata = if staged_sync.is_some() {
+            Some(state.metadata_operations.lock().map_err(internal)?)
+        } else {
+            None
+        };
+        validate_read_wallet(selected_profile(&app)?.id, profile.id)?;
         state.pending_mnemonic.lock().map_err(internal)?.take();
         state.proposals.lock().map_err(internal)?.clear();
-        let profile = selected_profile(&app)?;
         lock_wallet(&state, profile.id)?;
         diagnostics::record(
             &app,
@@ -1179,22 +1192,22 @@ pub(crate) fn current_mempool_fee_rate(
 
 #[tauri::command]
 pub async fn fees_estimate(app: AppHandle) -> ApiResult<FeeEstimatesDto> {
-    let expected_wallet_id = if is_regtest() {
+    let expected_session = if is_regtest() {
         None
     } else {
-        Some(selected_profile(&app)?.id)
+        let wallet_id = selected_profile(&app)?.id;
+        let session_id = app
+            .state::<AppState>()
+            .unlocked_wallets
+            .lock()
+            .map_err(internal)?
+            .identity(wallet_id);
+        Some((wallet_id, validate_read_session(session_id, None)?))
     };
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<AppState>();
-        let _operation = operation_guard(&state)?;
-        if expected_wallet_id.is_some() && Some(selected_profile(&app)?.id) != expected_wallet_id {
-            return Err(api_error(
-                "wallet_selection_changed",
-                "The selected wallet changed. Retry in the current wallet.",
-            ));
-        }
-
-        if is_regtest() {
+        let Some((wallet_id, session_id)) = expected_session else {
+            let _operation = operation_guard(&state)?;
             let estimates = FeeEstimatesDto {
                 economy: Some(1.0),
                 standard: Some(2.0),
@@ -1203,39 +1216,97 @@ pub async fn fees_estimate(app: AppHandle) -> ApiResult<FeeEstimatesDto> {
             };
             update_public_network_status(&app, estimates.priority, None)?;
             return Ok(estimates);
-        }
-        require_unlocked(&app, &state)?;
-        let client = rpc_client(&app, &state)?;
-        checked_chain_identity(&client)?;
-        let mut estimates = partial_fee_estimates(
-            estimate_core_fee(&client, 144, EstimateMode::Economical).ok(),
-            estimate_core_fee(&client, 6, EstimateMode::Economical).ok(),
-            estimate_core_fee(&client, 2, EstimateMode::Economical).ok(),
-        )?;
-        // Retain the existing bounded current-mempool adjustment only when all
-        // historical targets are available. Never fill a missing target.
-        if let (Some(economy), Some(_), Some(_)) =
-            (estimates.economy, estimates.standard, estimates.priority)
-        {
-            let current = client.get_raw_mempool_verbose().ok().and_then(|entries| {
-                current_mempool_fee_rate(
-                    entries
-                        .into_values()
-                        .map(|entry| (entry.vsize, entry.fees.modified.to_sat())),
-                    economy,
-                )
-            });
-            if let Some(rate) = current {
-                estimates.economy = Some(rate);
-                estimates.standard = Some(rate);
-                estimates.priority = Some(rate);
+        };
+        // Queue concurrent fee reads on their own worker lock. Neither the
+        // queue nor a slow node response blocks local wallet operations.
+        let _fee_request = state.fee_estimate_request.lock().map_err(internal)?;
+        let auth_identity = || -> ApiResult<Option<Uuid>> {
+            Ok(state
+                .node_auth
+                .lock()
+                .map_err(internal)?
+                .get(&wallet_id)
+                .map(|auth| auth.identity))
+        };
+        let (config, client, expected_auth) = {
+            let _operation = operation_guard(&state)?;
+            require_wallet_read_context(&app, &state, wallet_id, Some(session_id))?;
+            require_unlocked(&app, &state)?;
+            let config = read_node_config(&app)?;
+            let client = configured_rpc_client(&app, &state, &config, RPC_TIMEOUT)?;
+            (config, client, auth_identity()?)
+        };
+
+        // These RPCs read public chain and fee data. Do not keep the wallet
+        // operation lock while the remote node responds.
+        let still_authorized = || {
+            validate_read_wallet(selected_profile(&app)?.id, wallet_id)?;
+            let current_session = state
+                .unlocked_wallets
+                .lock()
+                .map_err(internal)?
+                .identity(wallet_id);
+            validate_read_session(current_session, Some(session_id))?;
+            if auth_identity()? != expected_auth {
+                return Err(api_error(
+                    "invalid_node_config",
+                    "The Bitcoin Core connection changed while estimating fees. Retry the estimate.",
+                ));
             }
+            Ok(())
+        };
+        let result = estimate_core_fees(&client, &config.backend, still_authorized);
+
+        let _operation = operation_guard(&state)?;
+        require_wallet_read_context(&app, &state, wallet_id, Some(session_id))?;
+        if read_node_config(&app)? != config || auth_identity()? != expected_auth {
+            return Err(api_error(
+                "invalid_node_config",
+                "The Bitcoin Core connection changed while estimating fees. Retry the estimate.",
+            ));
         }
+        let estimates = result?;
         update_public_network_status(&app, estimates.priority, None)?;
         Ok(estimates)
     })
     .await
     .map_err(internal)?
+}
+
+fn estimate_core_fees(
+    client: &Client,
+    backend: &ChainBackend,
+    still_authorized: impl Fn() -> ApiResult<()>,
+) -> ApiResult<FeeEstimatesDto> {
+    still_authorized()?;
+    validate_first_mainnet_rpc_backend(client, backend)?;
+    still_authorized()?;
+    checked_chain_identity(client)?;
+    let estimate = |blocks| -> ApiResult<Option<f64>> {
+        still_authorized()?;
+        Ok(estimate_core_fee(client, blocks, EstimateMode::Economical).ok())
+    };
+    let mut estimates = partial_fee_estimates(estimate(144)?, estimate(6)?, estimate(2)?)?;
+    // Retain the current-mempool adjustment only when every target exists.
+    if let (Some(economy), Some(_), Some(_)) =
+        (estimates.economy, estimates.standard, estimates.priority)
+    {
+        still_authorized()?;
+        let current = client.get_raw_mempool_verbose().ok().and_then(|entries| {
+            current_mempool_fee_rate(
+                entries
+                    .into_values()
+                    .map(|entry| (entry.vsize, entry.fees.modified.to_sat())),
+                economy,
+            )
+        });
+        if let Some(rate) = current {
+            estimates.economy = Some(rate);
+            estimates.standard = Some(rate);
+            estimates.priority = Some(rate);
+        }
+    }
+    Ok(estimates)
 }
 
 #[tauri::command]
@@ -1482,6 +1553,7 @@ fn persist_mainnet_node_admission(
     state.node_auth.lock().map_err(internal)?.insert(
         destination,
         NodeAuthSession {
+            identity: Uuid::new_v4(),
             config: pending.config,
             password: pending.password,
             mainnet_node_verified: true,
@@ -1539,377 +1611,6 @@ pub async fn wallet_sync_source_save(
     })
     .await
     .map_err(internal)?
-}
-
-#[tauri::command]
-pub async fn recovery_scan_settings(app: AppHandle) -> ApiResult<RecoveryScanSettingsDto> {
-    tauri::async_runtime::spawn_blocking(move || {
-        let state = app.state::<AppState>();
-        require_unlocked(&app, &state)?;
-        let profile = selected_profile(&app)?;
-        let db = match profile.kind {
-            WalletKind::Multisig => open_multisig_db(&app)?,
-            WalletKind::SingleKey | WalletKind::WatchOnly => open_db(&app)?,
-        };
-        load_recovery_scan_settings(&db)
-    })
-    .await
-    .map_err(internal)?
-}
-
-#[tauri::command]
-pub async fn recovery_scan_settings_save(
-    app: AppHandle,
-    birthday_height: u32,
-    gap_limit: u32,
-    credential: String,
-    expected_wallet_id: Option<Uuid>,
-) -> ApiResult<RecoveryScanSettingsDto> {
-    let credential = Zeroizing::new(credential);
-    tauri::async_runtime::spawn_blocking(move || {
-        let state = app.state::<AppState>();
-        cancel_foreground_sync(&state)?;
-        let _operation = operation_guard(&state)?;
-        require_unlocked(&app, &state)?;
-        validate_recovery_gap_limit(gap_limit)?;
-        if birthday_height != 0 {
-            let tip = checked_block_height(&rpc_client(&app, &state)?)?;
-            validate_recovery_birthday(birthday_height, tip)?;
-        }
-        let profile = selected_profile(&app)?;
-        if expected_wallet_id.is_some_and(|id| id != profile.id) { return Err(api_error("wallet_selection_changed", "The selected wallet changed. Approve its scan again.")); }
-        let mut db = match profile.kind {
-            WalletKind::Multisig => open_multisig_db(&app)?,
-            WalletKind::SingleKey | WalletKind::WatchOnly => open_db(&app)?,
-        };
-        if credential.is_empty() {
-            validate_credential_free_scan_settings(has_completed_sync(&db)?, expected_wallet_id.is_some(), birthday_height)?;
-        } else {
-            check_auth_throttle(&app, &state)?;
-            let verified = verify_selected_credential(&app, credential.as_str());
-            record_auth_result(&app, &state, &verified)?;
-            verified?;
-        }
-        let external_required = required_recovery_gap(&db, None)?;
-        let wallet = load_wallet(&mut db)?;
-        let internal_required = wallet
-            .derivation_index(KeychainKind::Internal)
-            .map(|index| required_keychain_gap(&wallet, KeychainKind::Internal, index))
-            .transpose()?
-            .unwrap_or(0);
-        let required = external_required.max(internal_required);
-        let gap_limit = if credential.is_empty() && expected_wallet_id.is_some() {
-            let effective = gap_limit.max(required);
-            validate_recovery_gap_limit(effective)?;
-            effective
-        } else { gap_limit };
-        if gap_limit < required {
-            return Err(api_error(
-                "invalid_scan_settings",
-                format!(
-                    "This wallet has revealed addresses that require a gap limit of at least {required}."
-                ),
-            ));
-        }
-        db.execute(
-            "INSERT INTO groot_recovery_settings (singleton, birthday_height, gap_limit) VALUES (1, ?1, ?2)
-         ON CONFLICT(singleton) DO UPDATE SET birthday_height = excluded.birthday_height, gap_limit = excluded.gap_limit",
-            params![birthday_height, gap_limit],
-        )
-        .map_err(internal)?;
-        state.approved_initial_scans.lock().map_err(internal)?.insert(profile.id);
-        Ok(RecoveryScanSettingsDto {
-            birthday_height,
-            gap_limit,
-        })
-    })
-    .await
-    .map_err(internal)?
-}
-
-pub(crate) fn validate_recovery_gap_limit(gap_limit: u32) -> ApiResult<()> {
-    if !(MIN_RECOVERY_GAP_LIMIT..=MAX_RECOVERY_GAP_LIMIT).contains(&gap_limit) {
-        return Err(api_error(
-            "invalid_scan_settings",
-            "Gap limit must be between 20 and 1,000 addresses.",
-        ));
-    }
-    Ok(())
-}
-
-pub(crate) fn validate_recovery_birthday(birthday_height: u32, tip: u64) -> ApiResult<()> {
-    if u64::from(birthday_height) > tip {
-        return Err(api_error(
-            "invalid_scan_settings",
-            "Wallet birthday cannot be above the node's current block height.",
-        ));
-    }
-    Ok(())
-}
-
-#[tauri::command]
-pub async fn recovery_scan_status(app: AppHandle) -> ApiResult<RecoveryScanStatusDto> {
-    tauri::async_runtime::spawn_blocking(move || {
-        let state = app.state::<AppState>();
-        require_unlocked(&app, &state)?;
-        let profile = selected_profile(&app)?;
-        let db = match profile.kind {
-            WalletKind::Multisig => open_multisig_db(&app)?,
-            WalletKind::SingleKey | WalletKind::WatchOnly => open_db(&app)?,
-        };
-        let settings = load_recovery_scan_settings(&db)?;
-        let active_run_id = state
-            .recovery_scans
-            .lock()
-            .map_err(internal)?
-            .get(&profile.id)
-            .map(|active| active.run_id.clone());
-        let Some(record) = reconcile_recovery_scan_record(&db, active_run_id.as_deref())? else {
-            return Ok(idle_recovery_scan_status(&settings));
-        };
-        Ok(record.status)
-    })
-    .await
-    .map_err(internal)?
-}
-
-#[tauri::command]
-pub async fn wallet_full_rescan_cancel(app: AppHandle) -> ApiResult<RecoveryScanStatusDto> {
-    tauri::async_runtime::spawn_blocking(move || {
-        let state = app.state::<AppState>();
-        require_unlocked(&app, &state)?;
-        let profile = selected_profile(&app)?;
-        let (run_id, cancel) = {
-            let scans = state.recovery_scans.lock().map_err(internal)?;
-            let active = scans.get(&profile.id).ok_or_else(|| {
-                api_error(
-                    "scan_not_running",
-                    "There is no active recovery scan to cancel.",
-                )
-            })?;
-            (active.run_id.clone(), Arc::clone(&active.cancel))
-        };
-        cancel.store(true, Ordering::Release);
-        let db = match profile.kind {
-            WalletKind::Multisig => open_multisig_db(&app)?,
-            WalletKind::SingleKey | WalletKind::WatchOnly => open_db(&app)?,
-        };
-        db.execute(
-            "UPDATE groot_recovery_scans SET status = 'cancelling', updated_at = ?1
-         WHERE singleton = 1 AND run_id = ?2 AND status = 'running'",
-            params![now(), run_id],
-        )
-        .map_err(internal)?;
-        load_recovery_scan_record(&db)?
-            .map(|record| record.status)
-            .ok_or_else(|| internal("The recovery scan status is unavailable."))
-    })
-    .await
-    .map_err(internal)?
-}
-
-#[tauri::command]
-pub async fn wallet_full_rescan(
-    app: AppHandle,
-    credential: String,
-    expected_wallet_id: Option<Uuid>,
-) -> ApiResult<WalletSnapshotDto> {
-    let credential = Zeroizing::new(credential);
-    let diagnostic_app = app.clone();
-    let context = diagnostics::DiagnosticContext {
-        trigger: diagnostics::DiagnosticTrigger::Recovery,
-        ..Default::default()
-    };
-    diagnostics::record(
-        &app,
-        &app.state::<AppState>(),
-        diagnostics::DiagnosticEventKind::RecoveryScan,
-        diagnostics::DiagnosticOutcome::Started,
-        context,
-        None,
-    );
-    diagnostics::record(
-        &app,
-        &app.state::<AppState>(),
-        diagnostics::DiagnosticEventKind::RecoveryScan,
-        diagnostics::DiagnosticOutcome::Progress,
-        diagnostics::DiagnosticContext {
-            progress_percent: Some(0),
-            ..context
-        },
-        None,
-    );
-    let result = tauri::async_runtime::spawn_blocking(move || {
-        let state = app.state::<AppState>();
-        cancel_foreground_sync(&state)?;
-        let (
-            profile,
-            mut db,
-            mut wallet,
-            is_multisig,
-            settings,
-            run_id,
-            cancel,
-            rpc,
-            remote_scan_rpc,
-            managed_history,
-            delayed_policy,
-        ) = {
-            let _operation = operation_guard(&state)?;
-            require_unlocked(&app, &state)?;
-            let profile = selected_profile(&app)?;
-            if expected_wallet_id.is_some_and(|id| id != profile.id) { return Err(api_error("wallet_selection_changed", "The selected wallet changed. Approve its scan again.")); }
-            let (mut db, is_multisig) = match profile.kind {
-                WalletKind::Multisig => (open_multisig_db(&app)?, true),
-                WalletKind::SingleKey | WalletKind::WatchOnly => (open_db(&app)?, false),
-            };
-            if credential.is_empty() {
-                if has_completed_sync(&db)? && expected_wallet_id.is_none() {
-                    return Err(api_error(
-                        "invalid_credential",
-                        "Enter the wallet credential before starting another full rescan.",
-                    ));
-                }
-                if !state.approved_initial_scans.lock().map_err(internal)?.contains(&profile.id) {
-                    return Err(api_error("initial_scan_required", "Approve the first wallet-history scan before sending wallet scripts to the configured node."));
-                }
-                if !has_saved_recovery_scan_settings(&db)? {
-                    return Err(api_error(
-                        "initial_scan_required",
-                        "Choose where wallet history begins before starting the first scan.",
-                    ));
-                }
-            } else {
-                check_auth_throttle(&app, &state)?;
-                let verified = verify_selected_credential(&app, credential.as_str());
-                record_auth_result(&app, &state, &verified)?;
-                verified?;
-            }
-            let settings = load_recovery_scan_settings(&db)?;
-            let run_id = Uuid::new_v4().to_string();
-            let cancel = Arc::new(AtomicBool::new(false));
-            let rpc = Arc::new(rpc_client(&app, &state)?);
-            let node_config = read_node_config(&app)?;
-            let remote_core = matches!(&node_config.backend, ChainBackend::RemoteCore { .. });
-            let managed_history =
-                remote_core && crate::managed_gateway::is_managed_config(&node_config);
-            if remote_core {
-                ensure_remote_core_sync_capabilities(rpc.as_ref(), managed_history)?;
-            }
-            let remote_scan_rpc = if remote_core {
-                Some(rpc_client_with_timeout(
-                    &app,
-                    &state,
-                    REMOTE_CORE_SCAN_RPC_TIMEOUT,
-                )?)
-            } else {
-                None
-            };
-            let wallet = load_wallet(&mut db)?;
-            let delayed_policy = if is_multisig {
-                selected_delayed_policy_context(&app)?
-            } else {
-                None
-            };
-            {
-                let mut scans = state.recovery_scans.lock().map_err(internal)?;
-                if scans.contains_key(&profile.id) {
-                    return Err(api_error(
-                        "scan_in_progress",
-                        "A recovery scan is already running for this wallet.",
-                    ));
-                }
-                scans.insert(
-                    profile.id,
-                    ActiveRecoveryScan {
-                        run_id: run_id.clone(),
-                        cancel: Arc::clone(&cancel),
-                    },
-                );
-            }
-            (
-                profile,
-                db,
-                wallet,
-                is_multisig,
-                settings,
-                run_id,
-                cancel,
-                rpc,
-                remote_scan_rpc,
-                managed_history,
-                delayed_policy,
-            )
-        };
-        let scan_result: ApiResult<WalletSnapshotDto> = (|| {
-            let remote_core = remote_scan_rpc.is_some();
-            let remote_history = remote_scan_rpc.as_ref().map(|scan_rpc| {
-                if managed_history {
-                    RemoteHistorySource::Managed
-                } else {
-                    RemoteHistorySource::CoreScan(scan_rpc)
-                }
-            });
-            let mempool_snapshot = full_rescan_loaded_wallet(
-                rpc,
-                remote_history,
-                &mut wallet,
-                &mut db,
-                &settings,
-                &run_id,
-                &cancel,
-            )?;
-            if remote_core {
-                forget_core_mempool_snapshot(&state, profile.id);
-            } else {
-                remember_core_mempool_snapshot(&state, profile.id, Some(mempool_snapshot));
-            }
-            let persisted = db.transaction().map_err(internal)?;
-            let reconciled = reconcile_broadcast_proposals(&wallet, &persisted)?;
-            let snapshot = snapshot_from(
-                &wallet,
-                &persisted,
-                Some(now().to_string()),
-                is_multisig,
-                delayed_policy.as_ref(),
-            )?;
-            enqueue_snapshot_notifications(&persisted, &snapshot)?;
-            enqueue_reconciled_broadcasts(&persisted, &reconciled, snapshot.balance.total)?;
-            persisted.commit().map_err(internal)?;
-            Ok(snapshot)
-        })();
-        let finish_result = load_recovery_scan_record(&db).and_then(|record| {
-            if record.is_some_and(|record| record.run_id == run_id) {
-                match &scan_result {
-                    Ok(_) => finish_recovery_scan_record(&db, &run_id, "completed"),
-                    Err(_) => discard_recovery_scan_record(&db, &run_id),
-                }
-            } else {
-                Ok(())
-            }
-        });
-        state
-            .recovery_scans
-            .lock()
-            .map_err(internal)?
-            .remove(&profile.id);
-        match (scan_result, finish_result) {
-            (Ok(snapshot), Ok(())) => Ok(snapshot),
-            (Err(error), _) => Err(error),
-            (Ok(_), Err(error)) => Err(error),
-        }
-    })
-    .await
-    .map_err(internal)?;
-    let state = diagnostic_app.state::<AppState>();
-    diagnostics::record_result(
-        &diagnostic_app,
-        &state,
-        diagnostics::DiagnosticEventKind::RecoveryScan,
-        context,
-        &result,
-    );
-    result
 }
 
 #[tauri::command]
@@ -2216,6 +1917,7 @@ pub(super) fn adopt_network_setup_for_new_profile(
         sessions.insert(
             destination,
             NodeAuthSession {
+                identity: Uuid::new_v4(),
                 config,
                 password,
                 mainnet_node_verified: true,
@@ -2351,3 +2053,8 @@ pub async fn node_connection_test(app: AppHandle) -> ApiResult<NodeStatusDto> {
     .await
     .map_err(internal)?
 }
+
+#[cfg(test)]
+pub(crate) use super::recovery_commands::{
+    validate_recovery_birthday, validate_recovery_gap_limit,
+};

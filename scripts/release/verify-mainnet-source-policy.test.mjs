@@ -8,6 +8,7 @@ import {
   validateCompiledNetworkSource,
   validateCrateDatabaseOpenSources,
   validateMainnetSourcePolicy,
+  normalizeRepositoryPath,
   validateReleasePolicySource,
   validateUpdateKeyPair,
   validateWalletOpenGuardSource
@@ -324,6 +325,14 @@ ${guarded(
 });
 
 test('database opens are rejected across the production Rust crate', () => {
+  assert.equal(
+    normalizeRepositoryPath('src-tauri/src/wallet\\funded_acceleration_tests.rs', 'win32'),
+    'src-tauri/src/wallet/funded_acceleration_tests.rs'
+  );
+  assert.equal(
+    normalizeRepositoryPath('src-tauri/src/wallet\\funded_acceleration_tests.rs', 'linux'),
+    'src-tauri/src/wallet\\funded_acceleration_tests.rs'
+  );
   assert.doesNotThrow(() =>
     validateCrateDatabaseOpenSources([
       ['src-tauri/src/lib.rs', 'fn harmless() {}'],

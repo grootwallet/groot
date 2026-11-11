@@ -1,9 +1,12 @@
+import { execFileSync } from 'node:child_process';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
+import { finderLayoutFor } from './macos-dmg-layout.mjs';
+import { validateCameraEntitlements, verifyMacosCameraAccess } from './verify-macos-camera.mjs';
 import { verifyNativeFrontendOutput } from './verify-native-frontend-output.mjs';
 import { validateSignedHwiSignatureMetadata } from './verify-signed-hwi.mjs';
 
@@ -93,8 +96,11 @@ test('production package binds the exact reproduced payload before signing', () 
     'const authorization = verifyPublicReleaseAuthorization({ repoRoot, commit })'
   );
   const comparison = source.indexOf("digest(builtExecutable) !== digest(join(evidence, 'Groot'))");
-  const appSigning = source.indexOf("run('codesign', ['--force', '--sign', identity");
+  const appSigning = source.indexOf("run('codesign', [");
   assert.ok(authorization >= 0 && comparison > authorization && appSigning > comparison);
+  assert.match(source, /'--entitlements',[\s\S]*?'src-tauri\/Entitlements\.camera\.plist'/);
+  assert.equal(tauriConfig.bundle.macOS.entitlements, 'Entitlements.camera.plist');
+  assert.match(read('./verify-macos-package.sh'), /verify-macos-camera\.mjs/);
   assert.doesNotMatch(
     source,
     /normalize-macho-uuid\.mjs', builtExecutable|--verify', '--strict', builtExecutable/
@@ -161,6 +167,27 @@ test('macOS DMG presents a compact branded drag-to-Applications layout', () => {
     createHash('sha256').update(finderLayout).digest('hex'),
     '26e006bf8e4965f75c976fea86e219abc109763673e0685650576cc303d65ec7'
   );
+  assert.deepEqual(finderLayoutFor(finderLayout, 'Groot.app'), finderLayout);
+  const positionKey = (name) =>
+    Buffer.concat([Buffer.from(name, 'utf16le').swap16(), Buffer.from('Ilocblob')]);
+  const assertPosition = (layout, name, x) => {
+    const key = positionKey(name);
+    const offset = layout.indexOf(key);
+    assert.ok(offset >= 4, `Missing Finder position for ${name}`);
+    assert.equal(layout.readUInt32BE(offset - 4), name.length);
+    assert.equal(layout.readUInt32BE(offset + key.length + 4), x);
+    assert.equal(layout.readUInt32BE(offset + key.length + 8), 205);
+  };
+  for (const appName of ['Groot RC.app', 'Groot Mainnet RC.app']) {
+    const layout = finderLayoutFor(finderLayout, appName);
+    assert.equal(layout.length, finderLayout.length);
+    assert.equal(layout.includes(positionKey('Groot.app')), false);
+    assertPosition(layout, appName, 285);
+    assertPosition(layout, 'Applications', 615);
+  }
+  assert.throws(() => finderLayoutFor(finderLayout, 'Unreviewed.app'), /Unreviewed/);
+  assert.throws(() => finderLayoutFor(Buffer.alloc(10_244), 'Groot RC.app'), /reviewed template/);
+  assert.match(source, /readFileSync\(join\(mounted, '\.DS_Store'\)\)\.equals\(finderLayout\)/);
 });
 
 test('packaged app build uses the same reproducible Rust environment as evidence', () => {
@@ -245,3 +272,60 @@ test('HWI signing is isolated to its reviewed entitlement and does not notarize'
     'node scripts/release/prepare-signed-hwi.mjs'
   );
 });
+
+const camera = '<plist><dict><key>com.apple.security.device.camera</key><true/></dict></plist>';
+test('requires exactly enabled camera access and rejects unrelated app privileges', () => {
+  assert.doesNotThrow(() => validateCameraEntitlements(camera));
+  for (const value of [
+    '',
+    '<plist><dict/></plist>',
+    camera.replace('<true/>', '<false/>'),
+    camera.replace('</dict>', '<key>com.apple.security.device.audio-input</key><true/></dict>'),
+    camera.replace(
+      '</dict>',
+      '<key>com.apple.security.cs.disable-library-validation</key><true/></dict>'
+    )
+  ]) {
+    assert.throws(() => validateCameraEntitlements(value), /exactly the camera entitlement/);
+  }
+});
+
+test(
+  'macOS inspection rejects the released signing shape and accepts camera-only signing',
+  { skip: process.platform !== 'darwin' },
+  () => {
+    const root = mkdtempSync(join(tmpdir(), 'groot-camera-signing-'));
+    const app = join(root, 'Synthetic.app');
+    try {
+      mkdirSync(join(app, 'Contents/MacOS'), { recursive: true });
+      writeFileSync(join(root, 'main.c'), 'int main(void) { return 0; }\n');
+      execFileSync('cc', [join(root, 'main.c'), '-o', join(app, 'Contents/MacOS/Synthetic')]);
+      const plist = join(app, 'Contents/Info.plist');
+      const info =
+        '<plist version="1.0"><dict><key>CFBundleExecutable</key><string>Synthetic</string><key>CFBundleIdentifier</key><string>app.groot.synthetic.camera</string><key>NSCameraUsageDescription</key><string>Synthetic QR test</string></dict></plist>';
+      writeFileSync(plist, info);
+      const sign = (extra = []) =>
+        execFileSync('codesign', [
+          '--force',
+          '--sign',
+          '-',
+          '--options',
+          'runtime',
+          '--timestamp=none',
+          ...extra,
+          app
+        ]);
+      sign();
+      assert.throws(() => verifyMacosCameraAccess(app), /exactly the camera entitlement/);
+      const entitlements = join(root, 'camera.plist');
+      writeFileSync(entitlements, camera);
+      sign(['--entitlements', entitlements]);
+      assert.doesNotThrow(() => verifyMacosCameraAccess(app));
+      writeFileSync(plist, info.replace('<string>Synthetic QR test</string>', '<string></string>'));
+      sign(['--entitlements', entitlements]);
+      assert.throws(() => verifyMacosCameraAccess(app), /explain camera access/);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }
+);

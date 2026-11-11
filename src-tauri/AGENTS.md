@@ -10,4 +10,4 @@ This file extends the root `AGENTS.md` for `src-tauri/`.
 - Production code must not `unwrap`, panic on untrusted state, log payloads, or silently fall back. Tests may use `unwrap` for fixtures.
 - New policy logic should be pure and exhaustively unit-tested before command/integration/E2E coverage.
 - After changes run `cargo fmt --check`, `cargo clippy --locked --all-targets --all-features -- -D warnings`, `cargo test --locked --all-features`, and the relevant isolated real-Core Regtest integration. Never point the integration harness at a funded physical-certification profile.
-- Mainnet remains locked by ADR 0012 and `pnpm test:release-gate`.
+- Public Mainnet packages require exact source/version/tag authorization and `pnpm test:release-gate`. The historical v5.3.0 authorization (ADR 0105) does not approve the 0.5.4 candidate (ADR 0107); preserve the frozen source pins.

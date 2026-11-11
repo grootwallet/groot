@@ -166,7 +166,15 @@ for (const theme of ['light', 'dark']) {
       'Recovery backup verified'
     );
     await capture('phone-backup-verified');
-    await page.getByRole('button', { name: 'View Synthetic phone details', exact: true }).click();
+    await expect(page.locator('.toast-region .toast')).toHaveCount(0, { timeout: 10_000 });
+    const phoneDetails = page.getByRole('button', {
+      name: 'View Synthetic phone details',
+      exact: true
+    });
+    await phoneDetails.evaluate((element) =>
+      element.scrollIntoView({ block: 'center', behavior: 'instant' })
+    );
+    await phoneDetails.click();
     const signerDialog = page.getByRole('dialog');
     await expect(
       signerDialog.locator('.connection-detail').getByText('QR connection', { exact: true })

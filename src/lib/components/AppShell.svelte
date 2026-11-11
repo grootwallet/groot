@@ -218,7 +218,7 @@
   let commandModifier = false;
   let desktopPlatform = false;
   let currentZoom = 1;
-  let shortcutLockPending = false;
+  let shortcutLockPending = $state(false);
   let walletSelectionTask: Promise<void> | undefined;
   let mobileRuntime = $state(false);
   let pendingUnlockSyncWalletId: string | null = null;
@@ -242,7 +242,12 @@
     lockedRoute || ((settingsRoute || diagnosticsRoute) && walletLocked)
   );
   let syncPausedRoute = $derived(
-    onboardingRoute || lockedRoute || diagnosticsRoute || walletLocked || mobileSetupRoute
+    onboardingRoute ||
+      lockedRoute ||
+      diagnosticsRoute ||
+      walletLocked ||
+      mobileSetupRoute ||
+      shortcutLockPending
   );
   const showQuickActions = $derived(
     !restrictedUtilityRoute && (page.url.pathname === '/' || page.url.pathname === '/coins')
@@ -380,6 +385,7 @@
     }
     if (
       startupState !== 'ready' ||
+      shortcutLockPending ||
       onboardingRoute ||
       walletLocked ||
       diagnosticsRoute ||
@@ -399,7 +405,7 @@
       return;
 
     if (shortcut.id === 'lock') {
-      if (isPrototypeWallet || !desktopPlatform || navigationPending || shortcutLockPending) return;
+      if (isPrototypeWallet || !desktopPlatform || navigationPending) return;
       event.preventDefault();
       void lockSelectedWallet();
       return;
@@ -431,25 +437,42 @@
   }
 
   async function lockSelectedWallet() {
+    if (shortcutLockPending) return;
+    const resumeAutomaticSync = !isPrototypeWallet && !syncPausedRoute;
     shortcutLockPending = true;
-    const resumeAutomaticSync = !syncPausedRoute;
     liveSync?.stop();
     try {
-      // A wallet switch that began before this shortcut must settle first so
+      // A wallet switch that began before lock must settle first so
       // the native lock always applies to the wallet selected at lock time.
       await walletSelectionTask?.catch(() => undefined);
-      liveSync?.stop();
-      await walletService.cancelHardwareOperations();
-      await walletService.cancelSync().catch(() => undefined);
+      await Promise.all([
+        walletService.cancelSync().catch(() => undefined),
+        walletService.cancelHardwareOperations().catch((cause) => {
+          toast({
+            title: 'Could not stop hardware operation',
+            description: localizedError(cause, $locale),
+            tone: 'warning'
+          });
+        })
+      ]);
       await walletService.lock();
-      await goto('/unlock');
     } catch (cause) {
-      if (resumeAutomaticSync) liveSync?.restart();
+      shortcutLockPending = false;
+      if (resumeAutomaticSync && automaticSyncPauseCount === 0) liveSync?.restart();
       toast({
         title: 'Wallet not locked',
         description: localizedError(cause, $locale, 'Could not lock this wallet.'),
         tone: 'danger'
       });
+      return;
+    }
+    selectedWalletUnlocked = false;
+    try {
+      await goto('/unlock');
+    } catch {
+      // Native lock succeeded. Keep private routes unmounted if navigation fails.
+      startupFailure = translate($locale, 'Groot could not open the unlock screen.');
+      startupState = 'failed';
     } finally {
       shortcutLockPending = false;
     }
@@ -516,12 +539,16 @@
 
   async function resumeAfterWalletCreation(profileRefresh: Promise<void>) {
     await profileRefresh;
+    if (shortcutLockPending || lockedRoute) return;
     let selection: WalletSelection;
+    const walletId = selectedWalletId;
+    const isCurrent = () => !shortcutLockPending && !lockedRoute && walletId === selectedWalletId;
     try {
       selection = await walletService.session();
+      if (!isCurrent()) return;
       selectedWalletUnlocked = selection.unlocked;
     } catch {
-      selectedWalletUnlocked = false;
+      if (isCurrent()) selectedWalletUnlocked = false;
       return;
     }
     if (
@@ -538,6 +565,7 @@
   beforeNavigate(({ to }) => {
     navigationPending = Boolean(to && to.url.href !== page.url.href);
     pendingDestination = navigationPending && to ? to.url.pathname : '';
+    if (shortcutLockPending) return;
     const preserveMainnetAdmission = Boolean(
       defaultConfig.network === 'mainnet' && to && walletSetupRoutes.has(to.url.pathname)
     );
@@ -557,6 +585,7 @@
     }
     navigationPending = false;
     pendingDestination = '';
+    if (shortcutLockPending) return;
     const previousPath = from?.url?.pathname;
     // Routine navigation must not repeat registry and setup-draft reads that
     // every destination performs independently. Refresh only after a flow that
@@ -567,10 +596,16 @@
         : Promise.resolve();
     if (previousPath === '/multisig/new') void refreshSetupDraft();
     if (previousPath === '/unlock') {
+      const walletId = selectedWalletId;
+      const isCurrent = () => !shortcutLockPending && !lockedRoute && walletId === selectedWalletId;
       void walletService
         .session()
-        .then((selection) => (selectedWalletUnlocked = selection.unlocked))
-        .catch(() => (selectedWalletUnlocked = false));
+        .then((selection) => {
+          if (isCurrent()) selectedWalletUnlocked = selection.unlocked;
+        })
+        .catch(() => {
+          if (isCurrent()) selectedWalletUnlocked = false;
+        });
     }
     if (!liveSync) return;
     if (previousPath && profileMutatingRoutes.has(previousPath)) {
@@ -622,7 +657,7 @@
       selectedWalletId = selection.profile.id;
       selectedWalletUnlocked = selection.unlocked;
       await goto(selection.unlocked ? '/' : '/unlock');
-      if (!isPrototypeWallet && selection.unlocked && automaticSyncPauseCount === 0) {
+      if (!isPrototypeWallet && !syncPausedRoute && automaticSyncPauseCount === 0) {
         liveSync?.restart();
       } else {
         liveSync?.stop();
@@ -676,6 +711,7 @@
     selectedWalletId: () => selectedWalletId,
     refreshProfiles,
     selectWallet,
+    lockSelectedWallet,
     beginHardwareReview,
     requestUnlockSync,
     requestInitialHistoryApproval,
@@ -876,6 +912,7 @@
       async (selection) => {
         if (
           selection.profile.id !== selectedWalletId ||
+          shortcutLockPending ||
           mobileSetupRoute ||
           lockedRoute ||
           settingsRoute ||
@@ -885,10 +922,11 @@
         selectedWalletUnlocked = false;
         liveSync?.stop();
         await walletService.cancelSync().catch(() => undefined);
-        await goto('/unlock');
+        if (!shortcutLockPending) await goto('/unlock');
       },
       () =>
         startupState !== 'ready' ||
+        shortcutLockPending ||
         (isPrototypeWallet && !mobileRuntime) ||
         onboardingRoute ||
         mobileSetupRoute ||
@@ -943,10 +981,12 @@
   class:locked-setup-visible={showSetupResume && lockedRoute}
   class:navigation-pending={navigationPending}
 >
-  {#if startupState !== 'ready'}
+  {#if startupState !== 'ready' || shortcutLockPending}
     <div class="startup-gate" role="status" aria-live="polite">
       <BrandLockup animated />
-      {#if startupState === 'failed'}
+      {#if shortcutLockPending}
+        <p>{translate($locale, 'Locking wallet…')}</p>
+      {:else if startupState === 'failed'}
         <p>{startupFailure}</p>
         <button
           class="button secondary"
@@ -1116,14 +1156,15 @@
       }}
       onconfirm={discardSetupDraft}
     />
-    {#if !initialApprovalWalletId && !notesOpen && !updatesOpen}<ToastHost />{/if}
+    {#if (!initialApprovalWalletId || walletLocked) && !notesOpen && !updatesOpen}<ToastHost />{/if}
   {/if}
 </div>
 
 <Modal
   open={Boolean(initialApprovalWalletId) &&
     selectedWalletId === initialApprovalWalletId &&
-    !walletLocked}
+    !walletLocked &&
+    !shortcutLockPending}
   title={translate($locale, 'Approve wallet-history scan')}
   description={translate(
     $locale,
@@ -1200,7 +1241,7 @@
   </div>
 </Modal>
 
-{#if updateOffer && !otherModal && !notesOpen && !updatesOpen && !initialApprovalWalletId}
+{#if updateOffer && !otherModal && !notesOpen && !updatesOpen && !initialApprovalWalletId && !shortcutLockPending}
   <div class="app-update-action">
     <Button
       size="sm"
@@ -1212,7 +1253,11 @@
   </div>
 {/if}
 <Modal
-  open={notesOpen && !updatesOpen && !otherModal && !initialApprovalWalletId}
+  open={notesOpen &&
+    !updatesOpen &&
+    !otherModal &&
+    !initialApprovalWalletId &&
+    !shortcutLockPending}
   title={translate($locale, 'What’s new')}
   description={APP_VERSION}
   onclose={dismissNotes}
@@ -1228,7 +1273,7 @@
   </div>
 </Modal>
 <Modal
-  open={updatesOpen && !otherModal && !initialApprovalWalletId}
+  open={updatesOpen && !otherModal && !initialApprovalWalletId && !shortcutLockPending}
   title={translate($locale, 'Updates')}
   onclose={closeUpdates}
 >

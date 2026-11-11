@@ -12,7 +12,9 @@ test('shows security-accurate delayed-policy state across overview, coins, and p
 
   const timelineNote = page.locator('.coin-list > .warning-notice.coin-timeline-note');
   await expect(timelineNote).toContainText('Each coin has its own protection timeline.');
-  await expect(timelineNote).toContainText('Your normal keys keep working.');
+  await expect(timelineNote).toContainText(
+    'Recovery-key access becomes available separately for each coin. Your normal keys keep working.'
+  );
   await expect(page.getByText('Recovery key can spend', { exact: true }).first()).toBeVisible();
   await expect(page.getByText('Backup key protected', { exact: true }).first()).toBeVisible();
   await expect(page.getByText('Wait starts after confirmation', { exact: true })).toBeVisible();
@@ -25,14 +27,22 @@ test('shows security-accurate delayed-policy state across overview, coins, and p
     .getByRole('button', { name: /Show details for/ })
     .click();
   await expect(page.getByText(/820 blocks remaining/).first()).toBeVisible();
+  await expect(page.getByText('This coin does not expire', { exact: true }).first()).toBeVisible();
   await expect(
-    page
-      .getByText(
-        'Recovery key cannot spend this coin yet. Your normal 2-of-3 keys work now and remain available later.',
-        { exact: true }
-      )
-      .first()
-  ).toBeVisible();
+    page.getByRole('article', { name: 'Primary signers · Available now' }).first()
+  ).toContainText('2 of 3 Primary signers');
+  await expect(
+    page.getByRole('article', { name: 'Recovery signers · Waiting for blocks' }).first()
+  ).toContainText('1 of 1 Recovery signer');
+  const recoverySigners = page
+    .getByRole('article', { name: 'Recovery signers · Waiting for blocks' })
+    .first()
+    .locator('details.coin-policy-signers');
+  await expect(recoverySigners).not.toHaveAttribute('open', '');
+  await expect(recoverySigners.getByText('Recovery key', { exact: true })).toBeHidden();
+  await recoverySigners.getByText('Who can sign', { exact: true }).click();
+  await expect(recoverySigners.getByText('Recovery key', { exact: true })).toBeVisible();
+  await expect(page.getByText('Block 250,821', { exact: true })).toBeVisible();
 
   await page.goto('/multisig?fixture-policy-maturity=1');
   await expect(page.getByText('2 of 3 primary keys', { exact: true })).toBeVisible();
@@ -132,16 +142,21 @@ test('organizes optional coin details for recovery and inheritance wallets', asy
       query: 'fixture-policy-maturity=1',
       badge: 'Recovery key can spend',
       delayedAction: 'Use recovery key',
-      renewalAction: 'Restart recovery wait'
+      renewalAction: 'Restart recovery wait',
+      timeline:
+        'Recovery-key access becomes available separately for each coin. Your normal keys keep working.'
     },
     {
       query: 'fixture-policy-inheritance=1',
       badge: 'Heir key can spend',
       delayedAction: 'Use heir key',
-      renewalAction: 'Postpone heir access'
+      renewalAction: 'Postpone heir access',
+      timeline:
+        'Heir access becomes available separately for each coin. Your normal keys keep working.'
     }
   ]) {
     await page.goto(`/coins?${fixture.query}`);
+    await expect(page.locator('.coin-timeline-note')).toContainText(fixture.timeline);
     const coin = page.locator('.coin-row').filter({ hasText: fixture.badge });
     await coin.getByRole('button', { name: /Show details for/ }).click();
     await expect(coin.locator('.coin-detail-chevron')).toHaveCount(2);
@@ -170,7 +185,10 @@ test('spends one mature coin with only its recovery key', async ({ page }) => {
   const matureCoin = page.locator('.coin-row').filter({ hasText: 'Recovery key can spend' });
   await matureCoin.getByRole('button', { name: /Show details for/ }).click();
   await expect(matureCoin.getByText('No action is required')).toBeVisible();
-  await expect(matureCoin.getByText('Spending access', { exact: true })).toBeVisible();
+  await expect(matureCoin.getByText('Spending paths', { exact: true })).toBeVisible();
+  await expect(
+    matureCoin.getByRole('article', { name: 'Recovery signers · Available now' })
+  ).toContainText('Recovery key');
   await expect(matureCoin.getByText('Privacy & history', { exact: true })).toBeVisible();
   await expect(matureCoin.getByText('Technical details', { exact: true })).toBeVisible();
   await matureCoin.getByRole('link', { name: 'Use recovery key' }).click();
@@ -215,8 +233,11 @@ test('pauses exact countdowns when the verified chain tip is stale', async ({ pa
   await expect(page.getByText(/available in .* blocks/)).toHaveCount(0);
   const details = page.getByRole('button', { name: /Show details for/ }).first();
   await details.click();
-  await expect(page.getByText(/Paused · last verified at block/).first()).toBeVisible();
-  await expect(page.getByText('Approximate time')).toHaveCount(0);
+  await expect(page.locator('.coin-policy-observed')).toContainText('Last checked');
+  await expect(
+    page.getByRole('article', { name: 'Recovery signers · Sync to verify' })
+  ).toContainText('Sync this wallet before checking spending paths.');
+  await expect(page.getByText('Calendar estimate')).toHaveCount(0);
 });
 
 test('localizes maturity state without layout overflow', async ({ page }) => {
@@ -230,6 +251,13 @@ test('localizes maturity state without layout overflow', async ({ page }) => {
   await expect(
     page.getByText('Les clés normales fonctionnent toujours pour les 4 pièces.')
   ).toBeVisible();
+  await page.goto('/coins?fixture-policy-maturity=1');
+  await expect(page.locator('.coin-timeline-note')).toContainText(
+    'L’accès par la clé de récupération devient disponible séparément pour chaque pièce. Vos clés normales continuent de fonctionner.'
+  );
+  const coin = page.locator('.coin-row').first();
+  await coin.getByRole('button', { name: /Afficher les détails de/ }).click();
+  await expect(coin.getByText('Qui peut signer', { exact: true }).first()).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
     true
   );

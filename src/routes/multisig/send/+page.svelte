@@ -60,13 +60,14 @@
     type SignerPolicyVerification,
     type WalletErrorCode
   } from '$lib/wallet';
-  import type { LabelSuggestion, Utxo } from '$lib/types';
+  import type { LabelSuggestion, PolicySignerGroup, Utxo } from '$lib/types';
   import { defaultConfig, networkName, transactionExplorerUrl } from '$lib/config';
   import {
     addressPrefixForNetwork,
     hasAddressPrefixForNetwork,
     normalizePermanentLabel,
     isContinuityPolicyType,
+    policySignerRoleLabel,
     validPolicyMaturity,
     walletPolicyPresentation
   } from '$lib/wallet/policy';
@@ -129,6 +130,8 @@
   import { latestActiveProposal, proposalInputsUnavailable } from '$lib/wallet/proposal-resume';
   import { useWalletShellContext } from '$lib/wallet/shell-context';
 
+  import { requestAccelerationQuote } from '$lib/wallet/acceleration-quotes';
+
   const walletShell = useWalletShellContext();
   const initialAcceleration: { txid: string; method: 'rbf' | 'cpfp' } | null = (() => {
     const method = page.url.searchParams.get('accelerate');
@@ -139,6 +142,8 @@
   let wallet = $state<MultisigWallet | null>(null),
     proposal = $state<MultisigProposal | null>(null),
     estimates = $state<FeeEstimates | null>(null);
+  let feeLoading = $state(false);
+  let feeChoiceRevision = 0;
   let address = $state(''),
     label = $state(''),
     amount = $state(''),
@@ -337,6 +342,12 @@
   const selectedNamedPath = $derived(
     namedPaths.find((path) => path.index === Number(namedPathIndex))
   );
+  const pathGroupRequirement = (group: PolicySignerGroup) =>
+    translate($locale, '{count} of {total} {group}', {
+      count: group.required,
+      total: group.signers.length,
+      group: translate($locale, group.label)
+    });
   const delayedSpendMaturity = $derived(
     delayedSpendCoin ? validPolicyMaturity(delayedSpendCoin) : null
   );
@@ -461,6 +472,7 @@
     error = '';
   }
   let walletLoadActive = true;
+  let walletLoadGeneration = 0;
   let walletLoading = $state(true);
   let walletLoadError = $state('');
   onDestroy(() => {
@@ -531,47 +543,104 @@
     deviceOpen = false;
     hardwareCancelRequested = true;
   }
+  async function loadFeeEstimates(current: () => boolean, restoredPaymentDraft: boolean) {
+    const feeChoice = feeChoiceRevision;
+    feeLoading = true;
+    feeEstimateError = '';
+    try {
+      const next = await walletService.estimateFees();
+      if (!current()) return;
+      estimates = next;
+      if (!restoredPaymentDraft && feeChoice === feeChoiceRevision) {
+        selectedRate = Number(estimates.standard);
+      }
+    } catch (cause) {
+      if (!current()) return;
+      feeEstimateError = localizedError(
+        cause,
+        $locale,
+        'Bitcoin Core fee estimates are unavailable.'
+      );
+      toast({
+        title: 'Fee estimates unavailable',
+        description: feeEstimateError,
+        tone: 'danger'
+      });
+    } finally {
+      if (current()) feeLoading = false;
+    }
+  }
   async function loadWallet() {
+    const generation = ++walletLoadGeneration;
+    const walletId = walletShell.selectedWalletId();
+    const current = () =>
+      walletLoadActive &&
+      generation === walletLoadGeneration &&
+      walletId === walletShell.selectedWalletId();
     walletLoading = true;
     walletLoadError = '';
     if (accelerationRequest) accelerationQuoteFailed = false;
+    const params = page.url.searchParams,
+      requested = params.get('coins')?.split(',').filter(Boolean) ?? [],
+      requestedProposalId = params.get('proposal'),
+      renewalRequested = params.get('renewProtection') === '1',
+      delayedSpendRequested = params.get('delayedSpend') === '1',
+      method = params.get('accelerate'),
+      txid = params.get('txid');
+    const acceleratedEntry = txid && (method === 'rbf' || method === 'cpfp');
     try {
-      const [loadedWallet, snapshot, proposals, registry] = await Promise.all([
+      const [loadedWallet, preloadedSnapshot, proposals, registry] = await Promise.all([
         walletService.multisigWallet().then((value) => {
-          if (walletLoadActive) wallet = value;
+          if (current()) wallet = value;
           return value;
         }),
-        walletService.multisigSnapshot(),
+        requestedProposalId && !acceleratedEntry ? null : walletService.multisigSnapshot(),
         walletService.multisigProposals(),
         walletService.profiles()
       ]);
-      if (!walletLoadActive) return;
+      if (!current()) return;
       wallet = loadedWallet;
       const selectedProfile = registry.wallets.find(
         (profile) => profile.id === registry.selectedWalletId
       );
       draftWalletId = selectedProfile?.kind === 'multisig' ? selectedProfile.id : '';
-      coins = snapshot.utxos;
-      labelSuggestions = snapshot.labelSuggestions;
+      const active = acceleratedEntry
+        ? null
+        : requestedProposalId
+          ? (proposals.find((item) => item.proposalId === requestedProposalId) ?? null)
+          : latestActiveProposal(proposals);
+      // A standard saved review already has authoritative amounts and inputs.
+      // Special policies still need coin maturity and acceleration needs the
+      // saved original's confirmation status.
+      const standardReview =
+        loadedWallet &&
+        active?.spendPath === 'primary' &&
+        !active.acceleration &&
+        !loadedWallet.recoveryTemplate &&
+        (!loadedWallet.policyType || loadedWallet.policyType === 'standard');
+      const snapshot =
+        preloadedSnapshot ?? (standardReview ? null : await walletService.multisigSnapshot());
+      if (!current()) return;
+      if (snapshot) {
+        coins = snapshot.utxos;
+        labelSuggestions = snapshot.labelSuggestions;
+      }
       void walletService
         .multisigSignerPolicyVerifications()
-        .then((verifications) => (policyVerifications = verifications))
+        .then((verifications) => {
+          if (current()) policyVerifications = verifications;
+        })
         .catch(() => undefined);
       void walletService
         .multisigPolicyVerificationAddress()
-        .then((verificationAddress) => (policyAddress = verificationAddress))
+        .then((verificationAddress) => {
+          if (current()) policyAddress = verificationAddress;
+        })
         .catch(() => undefined);
-      const url = new URL(window.location.href),
-        requested = url.searchParams.get('coins')?.split(',').filter(Boolean) ?? [],
-        requestedProposalId = url.searchParams.get('proposal'),
-        renewalRequested = url.searchParams.get('renewProtection') === '1',
-        delayedSpendRequested = url.searchParams.get('delayedSpend') === '1',
-        method = url.searchParams.get('accelerate'),
-        txid = url.searchParams.get('txid');
       selectedCoins = requested.filter((outpoint) =>
         coins.some((coin) => coin.outpoint === outpoint && !coin.frozen)
       );
-      const snapshotCurrent = snapshot.chainTip.status === 'recent';
+      const snapshotCurrent = snapshot?.chainTip.status === 'recent';
       if (renewalRequested && proposals.length === 0 && selectedCoins.length === 1) {
         const candidate = coins.find((coin) => coin.outpoint === selectedCoins[0]) ?? null;
         const maturity = candidate ? validPolicyMaturity(candidate) : null;
@@ -612,7 +681,9 @@
         ) {
           delayedSpendMode = true;
           delayedSpendCoin = candidate;
-          namedPaths = await walletService.multisigSpendingPaths(candidate.outpoint);
+          const nextnamedPaths = await walletService.multisigSpendingPaths(candidate.outpoint);
+          if (!current()) return;
+          namedPaths = nextnamedPaths;
           namedPathIndex = namedPaths.find((path) => path.index > 0 && path.available)?.index ?? 1;
         } else {
           toast({
@@ -627,16 +698,15 @@
           });
         }
       }
-      if (!txid || (method !== 'rbf' && method !== 'cpfp')) {
-        proposal = requestedProposalId
-          ? (proposals.find((item) => item.proposalId === requestedProposalId) ?? null)
-          : latestActiveProposal(proposals);
-        if (proposal) {
+      if (!acceleratedEntry) {
+        if (active) {
           if (draftWalletId) await walletService.clearPaymentDraft();
-          address = proposal.recipient;
-          selectedLabels = proposal.labels ?? [proposal.label];
+          if (!current()) return;
+          proposal = active;
+          address = active.recipient;
+          selectedLabels = active.labels ?? [active.label];
           label = '';
-          amount = String(proposal.amount);
+          amount = String(active.amount);
           draftStep = 2;
         } else if (requestedProposalId) {
           error = translate($locale, 'This saved payment is no longer available.');
@@ -645,13 +715,14 @@
       if (
         accelerationOriginalConfirmed(
           proposal?.acceleration?.originalTxid ?? txid,
-          snapshot.transactions
+          snapshot?.transactions ?? []
         )
       ) {
         markAccelerationConfirmed();
       }
       if (!proposal && !renewalMode && !delayedSpendMode && !accelerationRequest && draftWalletId) {
         const savedDraft = await walletService.paymentDraft();
+        if (!current()) return;
         if (savedDraft?.kind === 'multisig') {
           restoredPaymentDraft = true;
           hasPaymentDraft = true;
@@ -670,29 +741,25 @@
         }
       }
       updateAvailable();
-      try {
-        estimates = await walletService.estimateFees();
-        if (!restoredPaymentDraft) selectedRate = Number(estimates.standard);
-      } catch (cause) {
-        feeEstimateError = localizedError(
-          cause,
-          $locale,
-          'Bitcoin Core fee estimates are unavailable.'
-        );
-        toast({
-          title: 'Fee estimates unavailable',
-          description: feeEstimateError,
-          tone: 'danger'
-        });
+      if (proposal) return;
+      if (!acceleratedEntry && !renewalMode && !delayedSpendMode) {
+        void loadFeeEstimates(current, restoredPaymentDraft);
+        return;
       }
+      await loadFeeEstimates(current, restoredPaymentDraft);
+      if (!current()) return;
       if (txid && (method === 'rbf' || method === 'cpfp')) {
         accelerationRequest = { txid, method };
         if (method === 'rbf') {
-          rbfQuote = await walletService.quoteRbf(txid);
+          const nextrbfQuote = await walletService.quoteRbf(txid);
+          if (!current()) return;
+          rbfQuote = nextrbfQuote;
           selectedRate = Number(rbfQuote.targetFeeRate);
           accelerationQuoteFailed = false;
         } else if (estimates) {
-          cpfpQuote = await walletService.quoteCpfp(txid);
+          const nextcpfpQuote = await walletService.quoteCpfp(txid);
+          if (!current()) return;
+          cpfpQuote = nextcpfpQuote;
           selectedRate = Number(cpfpQuote.targetFeeRate);
           accelerationQuoteFailed = false;
         } else {
@@ -700,6 +767,7 @@
         }
       }
     } catch (cause) {
+      if (!current()) return;
       if (accelerationRequest) {
         accelerationQuoteFailed = true;
         if (accelerationRequest.method === 'rbf' && !rbfQuote) selectedRate = '';
@@ -710,8 +778,10 @@
         );
       } else walletLoadError = localizedError(cause, $locale, 'Could not load wallet.');
     } finally {
-      accelerationLoading = false;
-      walletLoading = false;
+      if (current()) {
+        accelerationLoading = false;
+        walletLoading = false;
+      }
     }
   }
   function submitIntentOnEnter(event: KeyboardEvent) {
@@ -961,6 +1031,7 @@
     setDenomination(next);
   }
   function updatePaymentFeeRate(rate: number) {
+    feeChoiceRevision += 1;
     const refreshMaximum = maxSpendActive;
     selectedRate = rate;
     clearDraftError();
@@ -978,45 +1049,32 @@
   async function refreshAccelerationQuote(revision = ++accelerationQuoteRevision) {
     const request = accelerationRequest;
     if (!request || !customFeeValid) return;
-    try {
-      if (request.method === 'rbf') {
-        const quote = await walletService.quoteRbf(request.txid, feeRate(selectedRateNumber));
-        if (
-          revision !== accelerationQuoteRevision ||
-          accelerationRequest?.txid !== request.txid ||
-          accelerationRequest.method !== request.method
-        )
-          return;
-        rbfQuote = quote;
-        selectedRate = Number(quote.targetFeeRate);
-      } else {
-        const quote = await walletService.quoteCpfp(request.txid, feeRate(selectedRateNumber));
-        if (
-          revision !== accelerationQuoteRevision ||
-          accelerationRequest?.txid !== request.txid ||
-          accelerationRequest.method !== request.method
-        )
-          return;
-        cpfpQuote = quote;
-        selectedRate = Number(quote.targetFeeRate);
-      }
-      feeEstimateError = '';
-      accelerationQuoteFailed = false;
-    } catch (cause) {
-      if (
-        revision !== accelerationQuoteRevision ||
-        accelerationRequest?.txid !== request.txid ||
-        accelerationRequest.method !== request.method
-      )
-        return;
-      if (cause instanceof WalletError && cause.code === 'transaction_confirmed') {
+    const result = await requestAccelerationQuote(
+      walletService,
+      request,
+      feeRate(selectedRateNumber),
+      () =>
+        revision === accelerationQuoteRevision &&
+        accelerationRequest?.txid === request.txid &&
+        accelerationRequest.method === request.method
+    );
+    if (!result) return;
+    if (result.status === 'failed') {
+      if (result.cause instanceof WalletError && result.cause.code === 'transaction_confirmed') {
         markAccelerationConfirmed();
         return;
       }
       accelerationQuoteFailed = true;
-      feeEstimateError = accelerationUnavailableDescription(request.method, cause, $locale);
+      feeEstimateError = accelerationUnavailableDescription(request.method, result.cause, $locale);
+      return;
     }
+    if (result.method === 'rbf') rbfQuote = result.quote;
+    else cpfpQuote = result.quote;
+    selectedRate = Number(result.quote.targetFeeRate);
+    feeEstimateError = '';
+    accelerationQuoteFailed = false;
   }
+
   function scheduleAccelerationQuote() {
     const revision = ++accelerationQuoteRevision;
     if (accelerationQuoteTimer) clearTimeout(accelerationQuoteTimer);
@@ -2243,10 +2301,25 @@
               </label>
               {#if selectedNamedPath}<WarningNotice
                   title={translate($locale, selectedNamedPath.name)}
-                  body={translate($locale, 'Required signatures: {count}', {
-                    count: selectedNamedPath.required
-                  })}
-                />{/if}
+                  body={translate(
+                    $locale,
+                    'Only the signer groups shown below can authorize this path.'
+                  )}
+                />
+                <div class="named-path-groups">
+                  {#each selectedNamedPath.signerGroups ?? [] as group (group.code)}<div>
+                      <strong>{pathGroupRequirement(group)}</strong>
+                      <ul>
+                        {#each group.signers as signer (signer.fingerprint)}<li>
+                            <span
+                              ><strong>{signer.label}</strong><small
+                                >{translate($locale, policySignerRoleLabel(signer.role))}</small
+                              ></span
+                            ><code>{signer.fingerprint}</code>
+                          </li>{/each}
+                      </ul>
+                    </div>{/each}
+                </div>{/if}
             {/if}
             <div class="renewal-coin-summary">
               <span>{translate($locale, 'Coin available')}</span>
@@ -2659,6 +2732,7 @@
               </div>{/if}
             <FeeSelector
               {estimates}
+              loading={feeLoading}
               value={selectedRateNumber}
               {estimatedFee}
               error={feeEstimateError}
@@ -2748,12 +2822,30 @@
               {#if proposal.spendingPathDetails}<WarningNotice
                   title={translate($locale, 'Spending path')}
                   body={`${translate($locale, proposal.spendingPathDetails.name)} · ${proposal.spendingPathDetails.availableAfterBlocks} ${translate($locale, 'blocks')}`}
-                />{/if}
+                />
+                <div class="named-path-groups review-path-groups">
+                  {#each proposal.spendingPathDetails.signerGroups ?? [] as group (group.code)}<div>
+                      <strong>{pathGroupRequirement(group)}</strong>
+                      <ul>
+                        {#each group.signers as signer (signer.fingerprint)}<li>
+                            <span
+                              ><strong>{signer.label}</strong><small
+                                >{translate($locale, policySignerRoleLabel(signer.role))}</small
+                              ></span
+                            ><code>{signer.fingerprint}</code>
+                          </li>{/each}
+                      </ul>
+                    </div>{/each}
+                </div>{/if}
               {#if delayedSpendMode}<div class="selection-review renewal-review">
                   <strong
-                    >{translate($locale, 'Signed by the {key}', {
-                      key: delayedSpendKeyName
-                    })}</strong
+                    >{translate(
+                      $locale,
+                      isContinuityPolicyType(wallet?.policyType)
+                        ? 'Signed with the selected path’s signer groups'
+                        : 'Signed by the {key}',
+                      { key: delayedSpendKeyName }
+                    )}</strong
                   >
                   <span
                     >{translate(
@@ -2942,6 +3034,7 @@
                   signers={signerItems}
                   required={proposal.required}
                   signedFingerprints={proposal.signedFingerprints}
+                  signerGroups={proposal.spendingPathDetails?.signerGroups ?? []}
                   collecting
                   ondiscard={accelerationConfirmed
                     ? undefined
@@ -3658,6 +3751,67 @@
     grid-column: 2;
     align-self: center;
     font-size: 13px;
+  }
+  :global(.named-path-groups):where(.named-path-groups) {
+    display: grid;
+    gap: 7px;
+    margin: -7px 0 18px;
+  }
+  :global(.named-path-groups):where(.named-path-groups) > :global(div) {
+    min-width: 0;
+    display: grid;
+    gap: 3px;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+    background: var(--surface-inset);
+  }
+  :global(.named-path-groups):where(.named-path-groups) :global(strong) {
+    font-size: var(--font-size-meta);
+  }
+  :global(.named-path-groups):where(.named-path-groups) :global(ul) {
+    display: grid;
+    gap: 4px;
+    margin: 3px 0 0;
+    padding: 0;
+    list-style: none;
+  }
+  :global(.named-path-groups):where(.named-path-groups) :global(li) {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  :global(.named-path-groups):where(.named-path-groups) :global(li span) {
+    min-width: 0;
+    display: grid;
+    gap: 1px;
+  }
+  :global(.named-path-groups):where(.named-path-groups) :global(li strong),
+  :global(.named-path-groups):where(.named-path-groups) :global(li small) {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  :global(.named-path-groups):where(.named-path-groups) :global(li strong) {
+    font-weight: 550;
+  }
+  :global(.named-path-groups):where(.named-path-groups) :global(li small),
+  :global(.named-path-groups):where(.named-path-groups) :global(code) {
+    overflow-wrap: anywhere;
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+    line-height: 1.45;
+  }
+  :global(.named-path-groups):where(.named-path-groups) :global(li small) {
+    font-size: 11px;
+  }
+  :global(.named-path-groups):where(.named-path-groups) :global(code) {
+    flex: 0 0 auto;
+  }
+  :global(.review-path-groups):where(.review-path-groups) {
+    margin-top: -3px;
   }
   :global(.renewal-review):where(.renewal-review) {
     border-color: color-mix(in srgb, var(--link) 24%, var(--border));

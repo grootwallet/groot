@@ -1,6 +1,18 @@
 import type { CatalogSection } from './types';
 
 export const componentCopy = {
+  'Camera access requires Groot’s secure app connection. Reopen the scanner in Groot.': {
+    fr: 'La caméra nécessite la connexion sécurisée de Groot. Rouvrez le scanner dans Groot.',
+    es: 'La cámara necesita la conexión segura de Groot. Vuelve a abrir el escáner en Groot.'
+  },
+  'The camera is being used by another app. Close its camera, then try again.': {
+    fr: 'Une autre application utilise la caméra. Fermez sa caméra, puis réessayez.',
+    es: 'Otra aplicación está usando la cámara. Cierra su cámara e inténtalo de nuevo.'
+  },
+  'Groot could not start the camera. Check its system permission, then try again.': {
+    fr: 'Groot n’a pas pu démarrer la caméra. Vérifiez son autorisation dans les réglages système, puis réessayez.',
+    es: 'Groot no pudo iniciar la cámara. Comprueba su permiso en los ajustes del sistema e inténtalo de nuevo.'
+  },
   '{count} unique frame scanned': {
     fr: '{count} image unique analysée',
     es: '{count} fotograma único escaneado'
@@ -17,9 +29,9 @@ export const componentCopy = {
     fr: 'Trop d’images QR. Relancez l’analyse.',
     es: 'Demasiados fotogramas QR. Reinicia el escaneo.'
   },
-  'Camera access was denied. Allow camera access for Groot, then reopen this scanner.': {
-    fr: 'L’accès à la caméra a été refusé. Autorisez Groot à l’utiliser, puis rouvrez ce scanner.',
-    es: 'Se denegó el acceso a la cámara. Permite el acceso a Groot y vuelve a abrir este escáner.'
+  'Camera access was denied. Allow camera access for Groot, then try again.': {
+    fr: 'L’accès à la caméra a été refusé. Autorisez Groot à l’utiliser, puis réessayez.',
+    es: 'Se denegó el acceso a la cámara. Permite el acceso a Groot e inténtalo de nuevo.'
   },
   'No usable camera is available. Connect a camera or import the signed PSBT file instead.': {
     fr: 'Aucune caméra utilisable. Connectez une caméra ou importez le fichier PSBT signé.',
@@ -156,6 +168,14 @@ export const componentCopy = {
     fr: 'Vérification du verrouillage du portefeuille',
     es: 'Comprobando el bloqueo de la cartera'
   },
+  'Could not stop hardware operation': {
+    fr: 'Impossible d’arrêter l’opération du signataire',
+    es: 'No se pudo detener la operación del firmante'
+  },
+  'Locking wallet…': {
+    fr: 'Verrouillage du portefeuille…',
+    es: 'Bloqueando la cartera…'
+  },
   'Coldcard cannot learn this multisig policy automatically over Groot’s USB signing connection.': {
     fr: 'Coldcard ne peut pas apprendre automatiquement cette politique multisignature via la connexion de signature USB de Groot.',
     es: 'Coldcard no puede aprender automáticamente esta política multifirma mediante la conexión USB de firma de Groot.'
@@ -242,6 +262,10 @@ export const componentCopy = {
   'Groot could not verify the wallet lock state.': {
     fr: 'Groot n’a pas pu vérifier l’état de verrouillage du portefeuille.',
     es: 'Groot no pudo verificar el estado de bloqueo de la cartera.'
+  },
+  'Groot could not open the unlock screen.': {
+    fr: 'Groot n’a pas pu ouvrir l’écran de déverrouillage.',
+    es: 'Groot no pudo abrir la pantalla de desbloqueo.'
   },
   'Groot could not verify this app build. Rebuild and reinstall the native app.': {
     fr: 'Groot n’a pas pu vérifier cette version de l’application. Recompilez et réinstallez l’application native.',

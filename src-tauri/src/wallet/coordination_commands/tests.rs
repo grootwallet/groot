@@ -692,8 +692,7 @@ fn hardware_sign(wallet: &MultisigWalletDto, key: &HardwareKey, psbt: &Psbt) -> 
     returned
 }
 
-#[test]
-fn mobile_signing_adds_only_the_expected_signatures_without_private_descriptors() {
+fn mobile_signing_fixture() -> (Mnemonic, MultisigWalletDto, CoordinationMetadata, Psbt) {
     use bdk_wallet::bitcoin::{
         absolute::LockTime, hashes::Hash, transaction::Version, OutPoint, ScriptBuf, Sequence,
         Transaction, TxIn, TxOut, Witness,
@@ -738,6 +737,12 @@ fn mobile_signing_adds_only_the_expected_signatures_without_private_descriptors(
         .add_recipient(destination.script_pubkey(), Amount::from_sat(50_000))
         .fee_rate(FeeRate::from_sat_per_vb(2).unwrap());
     let unsigned = builder.finish().unwrap();
+    (mnemonic, metadata, coordination, unsigned)
+}
+
+#[test]
+fn mobile_signing_adds_only_the_expected_signatures_without_private_descriptors() {
+    let (mnemonic, metadata, coordination, unsigned) = mobile_signing_fixture();
     let encoded = encode_psbt(&unsigned);
     let review = review_mobile_psbt_for(&metadata, &coordination, &encoded).unwrap();
 
@@ -959,4 +964,744 @@ fn phone_key_health_check_is_bound_to_the_saved_wallet_identity() {
         .unwrap();
     local.xpub = foreign_xpub;
     assert!(!mobile_signer_matches_wallet(&wallet, expected, &mnemonic).unwrap());
+}
+
+#[test]
+fn mobile_review_and_signing_authenticate_all_prevouts_without_mutation() {
+    use bdk_wallet::bitcoin::{
+        absolute::LockTime, hashes::Hash, transaction::Version, OutPoint, ScriptBuf, Sequence,
+        Transaction, TxIn, TxOut, Witness,
+    };
+    let (mnemonic, hardware, metadata, coordination) = coordinated_wallet();
+    let mut coordinator = Wallet::create(
+        metadata.external_descriptor.clone(),
+        metadata.internal_descriptor.clone(),
+    )
+    .network(Network::Regtest)
+    .create_wallet_no_persist()
+    .unwrap();
+    let receive = coordinator.reveal_next_address(KeychainKind::External);
+    let funding = Transaction {
+        version: Version::TWO,
+        lock_time: LockTime::ZERO,
+        input: vec![TxIn {
+            previous_output: OutPoint::new(Txid::from_byte_array([93; 32]), 0),
+            script_sig: ScriptBuf::new(),
+            sequence: Sequence::MAX,
+            witness: Witness::new(),
+        }],
+        output: vec![
+            TxOut {
+                value: Amount::from_sat(100_000),
+                script_pubkey: receive.address.script_pubkey()
+            };
+            2
+        ],
+    };
+    let outpoints = [
+        OutPoint::new(funding.compute_txid(), 0),
+        OutPoint::new(funding.compute_txid(), 1),
+    ];
+    coordinator.apply_unconfirmed_txs([(funding, 1)]);
+    let secp = Secp256k1::new();
+    let key = hardware[0]
+        .account_private
+        .derive_priv(&secp, &DerivationPath::from_str("m/0/7").unwrap())
+        .unwrap();
+    let destination = Address::p2wpkh(
+        &bdk_wallet::bitcoin::CompressedPublicKey(key.private_key.public_key(&secp)),
+        Network::Regtest,
+    );
+    let mut builder = coordinator.build_tx();
+    builder
+        .add_utxos(&outpoints)
+        .unwrap()
+        .manually_selected_only()
+        .add_recipient(destination.script_pubkey(), Amount::from_sat(100_000))
+        .fee_rate(FeeRate::from_sat_per_vb(2).unwrap());
+    let original = builder.finish().unwrap();
+    assert_eq!(original.inputs.len(), 2);
+    let encoded = encode_psbt(&original);
+    let review = review_mobile_psbt_for(&metadata, &coordination, &encoded).unwrap();
+    assert!(sign_mobile_psbt_for(&metadata, &mnemonic, &encoded, review.revision_id).is_ok());
+    // A fresh revision for each retry must not allow alternate claimed input values.
+    for index in 0..2 {
+        let mut altered = original.clone();
+        altered.inputs[index].witness_utxo.as_mut().unwrap().value = Amount::from_sat(99_900);
+        let encoded = encode_psbt(&altered);
+        assert_eq!(
+            review_mobile_psbt_for(&metadata, &coordination, &encoded)
+                .unwrap_err()
+                .code,
+            "proposal_mismatch"
+        );
+        assert_eq!(
+            sign_mobile_psbt_for(&metadata, &mnemonic, &encoded, psbt_revision(&altered))
+                .unwrap_err()
+                .code,
+            "proposal_mismatch"
+        );
+        assert!(altered
+            .inputs
+            .iter()
+            .all(|input| input.partial_sigs.is_empty()));
+    }
+    let mut variants = Vec::new();
+    let mut missing = original.clone();
+    missing.inputs[0].non_witness_utxo = None;
+    variants.push((missing, "malformed_psbt"));
+    let mut missing = original.clone();
+    missing.inputs[0].witness_utxo = None;
+    variants.push((missing, "malformed_psbt"));
+    let mut wrong = original.clone();
+    wrong.inputs[0].non_witness_utxo.as_mut().unwrap().lock_time = LockTime::from_consensus(1);
+    variants.push((wrong, "proposal_mismatch"));
+    let mut outside = original.clone();
+    outside.unsigned_tx.input[0].previous_output.vout = u32::MAX;
+    variants.push((outside, "proposal_mismatch"));
+    let mut duplicate = original.clone();
+    duplicate.unsigned_tx.input[1].previous_output = duplicate.unsigned_tx.input[0].previous_output;
+    variants.push((duplicate, "proposal_mismatch"));
+    let mut wrong = original.clone();
+    wrong.inputs[0].witness_utxo.as_mut().unwrap().script_pubkey = destination.script_pubkey();
+    variants.push((wrong, "proposal_mismatch"));
+    for (variant, code) in variants {
+        let before = encode_psbt(&variant);
+        assert_eq!(
+            review_mobile_psbt_for(&metadata, &coordination, &before)
+                .unwrap_err()
+                .code,
+            code
+        );
+        assert_eq!(
+            sign_mobile_psbt_for(&metadata, &mnemonic, &before, psbt_revision(&variant))
+                .unwrap_err()
+                .code,
+            code
+        );
+        assert_eq!(encode_psbt(&variant), before);
+    }
+    assert_eq!(encode_psbt(&original), encoded);
+}
+
+#[test]
+fn mobile_prevout_authentication_rejects_empty_and_mismatched_input_maps() {
+    use bdk_wallet::bitcoin::{absolute::LockTime, transaction::Version, Transaction, TxIn};
+    let mut empty = Psbt::from_unsigned_tx(Transaction {
+        version: Version::TWO,
+        lock_time: LockTime::ZERO,
+        input: vec![],
+        output: vec![],
+    })
+    .unwrap();
+    assert_eq!(
+        authenticate_mobile_prevouts(&empty).unwrap_err().code,
+        "malformed_psbt"
+    );
+    empty.unsigned_tx.input.push(TxIn::default());
+    let before = empty.clone();
+    assert_eq!(
+        authenticate_mobile_prevouts(&empty).unwrap_err().code,
+        "malformed_psbt"
+    );
+    assert_eq!(empty, before);
+    empty.inputs.resize(2, Default::default());
+    let before = empty.clone();
+    assert_eq!(
+        authenticate_mobile_prevouts(&empty).unwrap_err().code,
+        "malformed_psbt"
+    );
+    assert_eq!(empty, before);
+}
+
+#[test]
+fn mobile_reply_budget_reserves_signature_growth_before_secret_access() {
+    use bdk_wallet::bitcoin::{
+        absolute::LockTime, psbt::raw, transaction::Version, Transaction, TxIn,
+    };
+    let (_, _, wallet, _) = coordinated_wallet();
+    let mut psbt = Psbt::from_unsigned_tx(Transaction {
+        version: Version::TWO,
+        lock_time: LockTime::ZERO,
+        input: vec![TxIn::default()],
+        output: vec![],
+    })
+    .unwrap();
+    let key = raw::Key {
+        type_value: 0x50,
+        key: vec![1],
+    };
+    psbt.unknown.insert(key.clone(), vec![0; 70_000]);
+    let overhead = psbt.serialize().len() - 70_000;
+    for delta in [-1_isize, 0, 1] {
+        let length = (MOBILE_REPLY_PSBT_BYTES as isize + delta) as usize
+            - overhead
+            - MOBILE_SIGNATURE_ENTRY_BYTES;
+        psbt.unknown.insert(key.clone(), vec![0; length]);
+        let before = psbt.clone();
+        let result = validate_mobile_psbt_work_budget(&psbt, &wallet);
+        if delta > 0 {
+            assert_eq!(result.unwrap_err().code, "psbt_too_large");
+        } else {
+            result.unwrap();
+        }
+        assert_eq!(psbt, before);
+    }
+    let source = include_str!("../coordination_commands.rs");
+    let signing = source
+        .split("fn mobile_sign_psbt_inner(")
+        .nth(1)
+        .unwrap()
+        .split("fn sign_mobile_psbt_for(")
+        .next()
+        .unwrap();
+    assert!(
+        signing.find("review_mobile_psbt_for").unwrap()
+            < signing.find("secure_store::load").unwrap()
+    );
+}
+
+#[test]
+#[ignore = "opt-in production-profile timing with synthetic wallet data"]
+fn measure_mobile_review_and_signing() -> Result<(), &'static str> {
+    assert_eq!(std::env::var("GROOT_MEASURE_NATIVE").as_deref(), Ok("1"));
+    if cfg!(debug_assertions) {
+        return Err("Measure with cargo test --release");
+    }
+    let (mnemonic, metadata, coordination, psbt) = mobile_signing_fixture();
+    let encoded = encode_psbt(&psbt);
+    let mut review_us = Vec::new();
+    let mut signing_us = Vec::new();
+    for repeat in 0..105 {
+        let started = Instant::now();
+        let review = review_mobile_psbt_for(&metadata, &coordination, &encoded).unwrap();
+        let reviewed = started.elapsed().as_micros();
+        let started = Instant::now();
+        let result =
+            sign_mobile_psbt_for(&metadata, &mnemonic, &encoded, review.revision_id).unwrap();
+        let signed = started.elapsed().as_micros();
+        assert!(!result.frames.is_empty());
+        if repeat >= 5 {
+            review_us.push(reviewed);
+            signing_us.push(signed);
+        }
+    }
+    for (operation, mut values) in [
+        ("phone_review", review_us),
+        ("phone_sign_and_encode", signing_us),
+    ] {
+        values.sort_unstable();
+        println!(
+            "{}",
+            serde_json::json!({"kind":"synthetic-native-core", "operation":operation,
+            "samples":values.len(), "warmups":5, "median_us":values[50], "p95_us":values[94],
+            "min_us":values[0], "max_us":values[99], "inputs":psbt.inputs.len(),
+            "signers":metadata.cosigners.len(), "result":"ok"})
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn mobile_work_budget_checks_policy_and_each_metadata_map_without_mutation() {
+    use bdk_wallet::bitcoin::{secp256k1::SecretKey, PublicKey};
+    let (mnemonic, metadata, coordination, original) = mobile_signing_fixture();
+    for count in [2, 3, 8, 9] {
+        let mut wallet = metadata.clone();
+        wallet
+            .cosigners
+            .resize(count, metadata.cosigners[0].clone());
+        let result = validate_mobile_psbt_work_budget(&original, &wallet);
+        if (3..=8).contains(&count) {
+            result.unwrap();
+        } else {
+            assert_eq!(result.unwrap_err().code, "signing_unavailable");
+        }
+    }
+    let mut unsupported = metadata.clone();
+    unsupported.policy_type = "delayed".into();
+    assert_eq!(
+        validate_mobile_psbt_work_budget(&original, &unsupported)
+            .unwrap_err()
+            .code,
+        "signing_unavailable"
+    );
+    let encoded = encode_psbt(&original);
+    let review = review_mobile_psbt_for(&metadata, &coordination, &encoded).unwrap();
+    let signed = sign_mobile_psbt_for(&metadata, &mnemonic, &encoded, review.revision_id).unwrap();
+    let signed = decode_psbt(&signed.signed_psbt).unwrap();
+    let signature = *signed.inputs[0].partial_sigs.values().next().unwrap();
+    let source = original.inputs[0]
+        .bip32_derivation
+        .values()
+        .next()
+        .unwrap()
+        .clone();
+    let secp = Secp256k1::new();
+    for map in ["input_derivation", "input_signature", "output_derivation"] {
+        for count in [3, 4] {
+            let mut psbt = original.clone();
+            psbt.inputs[0].bip32_derivation.clear();
+            psbt.inputs[0].partial_sigs.clear();
+            psbt.outputs[0].bip32_derivation.clear();
+            for index in 1..=count {
+                let key = SecretKey::from_slice(&[index; 32])
+                    .unwrap()
+                    .public_key(&secp);
+                match map {
+                    "input_derivation" => {
+                        psbt.inputs[0].bip32_derivation.insert(key, source.clone());
+                    }
+                    "input_signature" => {
+                        psbt.inputs[0]
+                            .partial_sigs
+                            .insert(PublicKey::new(key), signature);
+                    }
+                    "output_derivation" => {
+                        psbt.outputs[0].bip32_derivation.insert(key, source.clone());
+                    }
+                    _ => unreachable!(),
+                }
+            }
+            let before = psbt.clone();
+            let result = validate_mobile_psbt_work_budget(&psbt, &metadata);
+            if count == 3 {
+                result.unwrap();
+            } else {
+                assert_eq!(result.unwrap_err().code, "psbt_too_large", "{map}");
+            }
+            assert_eq!(psbt, before);
+        }
+    }
+}
+
+#[test]
+fn mobile_review_sign_and_qr_roundtrip_at_reply_budget() {
+    use bdk_wallet::bitcoin::psbt::raw;
+    let (mnemonic, metadata, coordination, mut psbt) = mobile_signing_fixture();
+    let key = raw::Key {
+        type_value: 0x50,
+        key: vec![1],
+    };
+    psbt.unknown.insert(key.clone(), vec![0; 70_000]);
+    let overhead = psbt.serialize().len() - 70_000;
+    psbt.unknown.insert(
+        key,
+        vec![0; MOBILE_REPLY_PSBT_BYTES - MOBILE_SIGNATURE_ENTRY_BYTES - overhead],
+    );
+    let encoded = encode_psbt(&psbt);
+    let before = psbt.clone();
+    let review = review_mobile_psbt_for(&metadata, &coordination, &encoded).unwrap();
+    let signed = sign_mobile_psbt_for(&metadata, &mnemonic, &encoded, review.revision_id).unwrap();
+    assert_eq!(psbt, before);
+    let decoded = ur_transport::decode_psbt(&signed.frames).unwrap();
+    assert_eq!(decoded, signed.signed_psbt);
+    assert!(decode_psbt(&decoded).unwrap().serialize().len() <= MOBILE_REPLY_PSBT_BYTES);
+    assert_eq!(signed.frames.len(), ur_transport::MAX_UR_FRAMES);
+}
+
+#[test]
+fn mobile_completion_faults_reconcile_against_reopened_registry_without_key_loss() {
+    // Exercise the completion helper used by mobile_complete_inner, actual
+    // registry rename, and startup reconciliation. This is storage composition,
+    // not an OS keychain/UI authorization test.
+    for failure in ["before_registry", "after_rename", "cleanup"] {
+        let root = TemporaryPairingDirectory::new();
+        let id = Uuid::new_v4();
+        let session = Uuid::new_v4().to_string();
+        let wallets = root.0.join("wallets");
+        let profile = wallets.join(id.to_string());
+        let pending = root.0.join("pending-mobile-pairings");
+        fs::create_dir_all(&profile).unwrap();
+        fs::create_dir_all(&pending).unwrap();
+        let marker = consuming_mobile_secret_path_in(&pending, &session, id).unwrap();
+        fs::write(&marker, b"synthetic staging envelope").unwrap();
+        let registry_path = root.0.join("wallet-registry.json");
+        registry::save_atomic(&registry_path, &WalletRegistry::default()).unwrap();
+        let result = complete_mobile_profile_with(
+            &profile,
+            &pending,
+            &session,
+            id,
+            || {
+                fs::write(
+                    profile.join("mobile-signer.json"),
+                    b"synthetic encrypted envelope",
+                )
+                .unwrap();
+                fs::write(
+                    profile.join("coordination.json"),
+                    serde_json::to_vec(&CoordinationMetadata {
+                        version: 1,
+                        wallet_id: id.to_string(),
+                        role: DeviceRole::MobileCosigner,
+                        mobile_signer_fingerprint: Some("12345678".into()),
+                        key_protection: "synthetic".into(),
+                        paired_at: 1,
+                        pairing_session_id: Some(session.clone()),
+                    })
+                    .unwrap(),
+                )
+                .unwrap();
+                if failure == "before_registry" {
+                    return Err(api_error("internal_error", "Injected pre-commit failure"));
+                }
+                let mut registry = registry::load(&registry_path).unwrap();
+                registry
+                    .add(WalletProfile {
+                        id,
+                        name: "Synthetic".into(),
+                        network: name().into(),
+                        kind: WalletKind::Multisig,
+                        descriptor_checksum: "12345678".into(),
+                        created_at: 1,
+                        backup_verified: true,
+                    })
+                    .unwrap();
+                if failure == "after_rename" {
+                    registry::save_atomic_failing_directory_sync(&registry_path, &registry)
+                        .map_err(registry_api_error)
+                } else {
+                    registry::save_atomic(&registry_path, &registry).map_err(registry_api_error)
+                }
+            },
+            |_| Err(api_error("internal_error", "Injected cleanup failure")),
+        );
+        let reopened = registry::load(&registry_path).unwrap();
+        let registered = reopened
+            .wallets
+            .iter()
+            .map(|wallet| wallet.id)
+            .collect::<HashSet<_>>();
+        let committed = reopened
+            .wallets
+            .iter()
+            .map(|wallet| {
+                let metadata: CoordinationMetadata = serde_json::from_slice(
+                    &fs::read(
+                        wallets
+                            .join(wallet.id.to_string())
+                            .join("coordination.json"),
+                    )
+                    .unwrap(),
+                )
+                .unwrap();
+                (metadata.pairing_session_id.unwrap(), wallet.id)
+            })
+            .collect::<HashSet<_>>();
+        reconcile_mobile_pairing_directory(&pending, &wallets, &registered, &committed).unwrap();
+        // Restart reconciliation is idempotent; committed staging cannot replay.
+        reconcile_mobile_pairing_directory(&pending, &wallets, &registered, &committed).unwrap();
+        assert!(!marker.exists());
+        if failure == "before_registry" {
+            assert!(result.is_err());
+            assert!(reopened.wallets.is_empty());
+            assert!(!profile.exists());
+            assert_eq!(
+                active_mobile_pairing_sessions(&pending).unwrap(),
+                vec![session]
+            );
+        } else {
+            assert_eq!(result.is_ok(), failure == "cleanup");
+            assert_eq!(reopened.wallets.len(), 1);
+            assert_eq!(
+                fs::read(profile.join("mobile-signer.json")).unwrap(),
+                b"synthetic encrypted envelope"
+            );
+            assert!(active_mobile_pairing_sessions(&pending).unwrap().is_empty());
+            assert!(
+                consuming_mobile_secret_paths_for_session(&pending, &session)
+                    .unwrap()
+                    .is_empty()
+            );
+        }
+    }
+}
+
+#[test]
+fn mobile_review_accepts_recipient_only_payment_and_signs_the_reviewed_fee() {
+    let (mnemonic, metadata, coordination, mut psbt) = mobile_signing_fixture();
+    let recipient = psbt
+        .outputs
+        .iter()
+        .position(|output| output.bip32_derivation.is_empty())
+        .unwrap();
+    psbt.unsigned_tx.output = vec![psbt.unsigned_tx.output[recipient].clone()];
+    psbt.outputs = vec![psbt.outputs[recipient].clone()];
+    psbt.unsigned_tx.output[0].value = Amount::from_sat(149_000);
+    let encoded = encode_psbt(&psbt);
+    let review = review_mobile_psbt_for(&metadata, &coordination, &encoded).unwrap();
+    assert_eq!(review.recipients.len(), 1);
+    assert_eq!(review.recipients[0].amount_sats, 149_000);
+    assert!(review.change.is_empty());
+    assert_eq!(review.fee_sats, 1_000);
+    let signed = sign_mobile_psbt_for(&metadata, &mnemonic, &encoded, review.revision_id).unwrap();
+    let returned = decode_psbt(&signed.signed_psbt).unwrap();
+    assert_eq!(returned.unsigned_tx, psbt.unsigned_tx);
+    assert_eq!(returned.inputs[0].partial_sigs.len(), 1);
+    assert_eq!(encode_psbt(&psbt), encoded);
+}
+
+#[test]
+fn mobile_review_rejects_change_only_payment() {
+    let (_, metadata, coordination, mut psbt) = mobile_signing_fixture();
+    let change = psbt
+        .outputs
+        .iter()
+        .position(|output| !output.bip32_derivation.is_empty())
+        .unwrap();
+    psbt.unsigned_tx.output = vec![psbt.unsigned_tx.output[change].clone()];
+    psbt.outputs = vec![psbt.outputs[change].clone()];
+    psbt.unsigned_tx.output[0].value = Amount::from_sat(149_000);
+    let encoded = encode_psbt(&psbt);
+    let error = review_mobile_psbt_for(&metadata, &coordination, &encoded).unwrap_err();
+    assert_eq!(error.code, "proposal_mismatch");
+    assert_eq!(
+        error.message,
+        "The PSBT contains no independently reviewable recipient output."
+    );
+    assert!(psbt
+        .inputs
+        .iter()
+        .all(|input| input.partial_sigs.is_empty()));
+    assert_eq!(encode_psbt(&psbt), encoded);
+}
+
+#[test]
+fn mobile_review_rejects_authenticated_amount_overflow_and_negative_fee() {
+    let (_, metadata, coordination, original) = mobile_signing_fixture();
+    assert_eq!(original.inputs.len(), 1);
+    assert_eq!(original.outputs.len(), 2);
+    let mut input_overflow = original.clone();
+    let mut previous = original.inputs[0].non_witness_utxo.clone().unwrap();
+    let referenced = original.unsigned_tx.input[0].previous_output.vout as usize;
+    previous.output = vec![previous.output[referenced].clone(); 2];
+    previous.output[0].value = Amount::from_sat(u64::MAX);
+    previous.output[1].value = Amount::from_sat(1);
+    input_overflow.inputs = vec![original.inputs[0].clone(); 2];
+    input_overflow.unsigned_tx.input = vec![original.unsigned_tx.input[0].clone(); 2];
+    for index in 0..2 {
+        input_overflow.unsigned_tx.input[index].previous_output =
+            bdk_wallet::bitcoin::OutPoint::new(previous.compute_txid(), index as u32);
+        input_overflow.inputs[index].non_witness_utxo = Some(previous.clone());
+        input_overflow.inputs[index].witness_utxo = Some(previous.output[index].clone());
+    }
+    let mut output_overflow = original.clone();
+    output_overflow.unsigned_tx.output[0].value = Amount::from_sat(u64::MAX);
+    output_overflow.unsigned_tx.output[1].value = Amount::from_sat(1);
+    let mut negative_fee = original.clone();
+    negative_fee.unsigned_tx.output[0].value = Amount::from_sat(150_001);
+    negative_fee.unsigned_tx.output[1].value = Amount::ZERO;
+    for (psbt, message) in [
+        (input_overflow, "The PSBT input total overflowed."),
+        (output_overflow, "The PSBT output total overflowed."),
+        (
+            negative_fee,
+            "The PSBT outputs exceed its authenticated input values.",
+        ),
+    ] {
+        // The deliberately impossible monetary values must reach checked arithmetic,
+        // rather than pass this regression through unrelated prevout rejection.
+        authenticate_mobile_prevouts(&psbt).unwrap();
+        let encoded = encode_psbt(&psbt);
+        let error = review_mobile_psbt_for(&metadata, &coordination, &encoded).unwrap_err();
+        assert_eq!(error.code, "malformed_psbt");
+        assert_eq!(error.message, message);
+        assert!(psbt
+            .inputs
+            .iter()
+            .all(|input| input.partial_sigs.is_empty()));
+        assert_eq!(encode_psbt(&psbt), encoded);
+    }
+}
+
+#[test]
+fn pairing_storage_entrypoints_reject_untrusted_session_paths_before_io() {
+    let missing = std::env::temp_dir().join(format!("groot-missing-pairing-{}", Uuid::new_v4()));
+    let session = Uuid::new_v4();
+    let wallet = Uuid::new_v4();
+    assert_eq!(staging_session_uuid(&session.to_string()).unwrap(), session);
+    for invalid in ["", "../outside", "/absolute", "not-a-uuid"] {
+        assert_eq!(
+            staging_session_uuid(invalid).unwrap_err().code,
+            "invalid_coordination_payload"
+        );
+        assert_eq!(
+            pending_mobile_secret_path_in(&missing, invalid)
+                .unwrap_err()
+                .code,
+            "invalid_coordination_payload"
+        );
+        assert_eq!(
+            consuming_mobile_secret_path_in(&missing, invalid, wallet)
+                .unwrap_err()
+                .code,
+            "invalid_coordination_payload"
+        );
+        assert_eq!(
+            consuming_mobile_secret_paths_for_session(&missing, invalid)
+                .unwrap_err()
+                .code,
+            "invalid_coordination_payload"
+        );
+    }
+    assert!(!missing.exists());
+}
+
+#[test]
+fn watch_only_commands_validate_the_complete_qr_import_path() {
+    let secp = Secp256k1::new();
+    let path = crate::external_signer::singlesig_account_path();
+    let master = Xpriv::new_master(NetworkKind::Test, &[42; 32]).unwrap();
+    let account = master
+        .derive_priv(&secp, &DerivationPath::from_str(path).unwrap())
+        .unwrap();
+    let signer = crate::external_signer::ExternalSignerInput {
+        label: "Synthetic hardware".into(),
+        fingerprint: master.fingerprint(&secp).to_string(),
+        xpub: Xpub::from_priv(&secp, &account).to_string(),
+        derivation_path: path.into(),
+        source: crate::external_signer::SignerSource::Qr,
+        device_type: None,
+    };
+    let (content, _) = crate::external_signer::descriptors(&signer).unwrap();
+    let frames = coordination_watch_only_encode(content.clone()).unwrap();
+    assert_eq!(coordination_watch_only_decode(frames).unwrap(), content);
+    for invalid in [
+        "not a public export",
+        "{\"seed\":\"synthetic forbidden material\"}",
+    ] {
+        assert!(coordination_watch_only_encode(invalid.into()).is_err());
+        let frames = encode_coordination(CoordinationUrType::Wallet, invalid.as_bytes()).unwrap();
+        assert!(coordination_watch_only_decode(frames).is_err());
+    }
+    let private = r#"{"seed":"synthetic forbidden material"}"#;
+    assert_eq!(
+        coordination_watch_only_encode(private.into())
+            .unwrap_err()
+            .code,
+        "private_material_rejected"
+    );
+    let private_frames =
+        encode_coordination(CoordinationUrType::Wallet, private.as_bytes()).unwrap();
+    assert_eq!(
+        coordination_watch_only_decode(private_frames)
+            .unwrap_err()
+            .code,
+        "private_material_rejected"
+    );
+    let wrong_type =
+        encode_coordination(CoordinationUrType::Invitation, content.as_bytes()).unwrap();
+    assert!(coordination_watch_only_decode(wrong_type).is_err());
+    let frames = encode_coordination(CoordinationUrType::Wallet, &[0xff]).unwrap();
+    assert_eq!(
+        coordination_watch_only_decode(frames).unwrap_err().code,
+        "invalid_coordination_payload"
+    );
+    assert!(coordination_watch_only_decode(vec!["ur:crypto-psbt/invalid".into()]).is_err());
+}
+
+#[test]
+fn phone_recovery_inspection_validates_qr_policy_and_exact_mobile_manifest() {
+    let (_, _, wallet, _) = coordinated_wallet();
+    let record = mobile_public_wallet_record(&wallet);
+    let inspect = |public: &PublicWalletRecord| {
+        mobile_recovery_inspect_inner(
+            encode_coordination(
+                CoordinationUrType::Wallet,
+                &serde_json::to_vec(public).unwrap(),
+            )
+            .unwrap(),
+        )
+    };
+    let result = inspect(&record).unwrap();
+    assert_eq!(result.wallet_name, wallet.name);
+    assert_eq!(result.threshold, wallet.threshold);
+    assert_eq!(result.signer_count, wallet.cosigners.len());
+    assert_eq!(
+        Some(result.mobile_signer_fingerprint),
+        record.mobile_signer_fingerprint
+    );
+    let mut wrong = record.clone();
+    wrong.role = DeviceRole::DesktopCoordinator;
+    assert!(inspect(&wrong).is_err());
+    let mut wrong = record.clone();
+    wrong.mobile_signer_fingerprint = None;
+    assert!(inspect(&wrong).is_err());
+    let mut wrong = record.clone();
+    wrong.signers[0].xpub = wrong.signers[1].xpub.clone();
+    assert!(inspect(&wrong).is_err());
+    let mut wrong = record.clone();
+    wrong
+        .signers
+        .iter_mut()
+        .for_each(|signer| signer.device_type = None);
+    assert!(inspect(&wrong).is_err());
+    let mut wrong = record;
+    wrong
+        .signers
+        .iter_mut()
+        .for_each(|signer| signer.device_type = Some(MOBILE_DEVICE_TYPE.into()));
+    assert!(inspect(&wrong).is_err());
+    let malformed = encode_coordination(CoordinationUrType::Wallet, b"{truncated").unwrap();
+    assert!(mobile_recovery_inspect_inner(malformed).is_err());
+}
+
+#[test]
+fn pairing_rejects_malformed_qr_records_without_consuming_the_pending_session() {
+    let current_time = 1_000;
+    let expected = invitation(current_time + 60);
+    let session_id = expected.session_id.clone();
+    let valid_frames = response_frames(&expected);
+    let mut sessions = HashMap::from([(
+        session_id.clone(),
+        PendingDesktopPairing {
+            invitation: expected,
+            accepted_signer: None,
+        },
+    )]);
+    for payload in [
+        b"{truncated".as_slice(),
+        br#"{"version":1}"#.as_slice(),
+        br#"{"version":2,"sessionId":"invalid","encryptedRecord":"invalid"}"#.as_slice(),
+    ] {
+        let frames = encode_coordination(CoordinationUrType::Bsms, payload).unwrap();
+        assert_eq!(
+            accept_desktop_response(&mut sessions, &frames, current_time)
+                .unwrap_err()
+                .code,
+            "invalid_coordination_payload"
+        );
+        assert_eq!(sessions.len(), 1);
+        assert!(sessions[&session_id].accepted_signer.is_none());
+    }
+    // Malformed input must not make a legitimate retry impossible.
+    let signer = accept_desktop_response(&mut sessions, &valid_frames, current_time).unwrap();
+    assert_eq!(
+        sessions[&session_id].accepted_signer.as_ref(),
+        Some(&signer)
+    );
+    assert_eq!(
+        accept_desktop_response(&mut sessions, &valid_frames, current_time)
+            .unwrap_err()
+            .code,
+        "pairing_replay"
+    );
+
+    let malformed_invitation =
+        encode_coordination(CoordinationUrType::Invitation, b"{truncated").unwrap();
+    assert_eq!(
+        coordination_decode_invitation(malformed_invitation)
+            .unwrap_err()
+            .code,
+        "invalid_coordination_payload"
+    );
+    let malformed_wallet =
+        encode_coordination(CoordinationUrType::Wallet, br#"{"version":2}"#).unwrap();
+    assert_eq!(
+        mobile_recovery_inspect_inner(malformed_wallet)
+            .unwrap_err()
+            .code,
+        "invalid_coordination_payload"
+    );
 }

@@ -118,6 +118,7 @@
   let verifying = $state(false);
   let revealingBackup = $state(false);
   let initialDataLoading = $state(true);
+  let checkingNode = $state(false);
   let syncSource = $state<WalletSyncSource | null>(null);
   let syncStatus = $state<WalletSyncStatus | null>(null);
   let mobileRuntime = $state(false);
@@ -231,7 +232,8 @@
   let syncInProgress = $derived(syncing || syncStatusIsActive(syncStatus));
   let syncAgeValue = $derived(syncAge(snapshot?.syncedAt ?? null, syncClock));
   let syncButtonLabel = $derived.by(() => {
-    if (initialDataLoading) return translate($locale, isMainnet ? 'Checking node…' : 'Loading…');
+    if (checkingNode) return translate($locale, 'Checking node…');
+    if (initialDataLoading) return translate($locale, 'Loading…');
     if (automaticInitialScanPending || walletAwaitingAutomaticScan)
       return translate($locale, 'Syncing');
     if (loadErrorCode === 'network_unavailable') return translate($locale, 'Node unavailable');
@@ -399,32 +401,36 @@
   });
   async function loadSnapshot() {
     const generation = ++loadGeneration;
+    const selectedWalletId = walletShell.selectedWalletId();
+    const current = () =>
+      generation === loadGeneration && selectedWalletId === walletShell.selectedWalletId();
     let unlockSyncRequested = false;
     let admissionRestored = false;
     loadError = '';
     loadErrorCode = '';
     networkSetupRequired = false;
     initialDataLoading = true;
+    checkingNode = false;
+    nodeReady = false;
     try {
-      const pendingPairingsPromise = walletService.pendingMobilePairings().catch(() => []);
       // Profile-mutating routes refresh the shell after navigation. Read the
       // authoritative registry here so this route cannot race that refresh and
       // query the newly selected wallet using the previous wallet's kind.
       const registry = await walletService.profiles();
-      if (generation !== loadGeneration) return;
+      if (!current()) return;
       if (!registry.wallets.length || !registry.selectedWalletId) {
-        if (!(await walletService.exists())) {
+        const exists = await walletService.exists();
+        if (!current()) return;
+        if (!exists) {
           await goto('/welcome');
           return;
         }
       }
-      const [nextSyncSource, runtime, networkSetupSources] = await Promise.all([
+      const [nextSyncSource, runtime] = await Promise.all([
         walletService.syncSource(),
-        walletService.runtimePlatform(),
-        walletService.networkSetupSources()
+        walletService.runtimePlatform()
       ]);
-      if (generation !== loadGeneration) return;
-      pendingMobilePairingCount = (await pendingPairingsPromise).length;
+      if (!current()) return;
       syncSource = nextSyncSource;
       mobileRuntime = runtime.mobile && runtime.platform !== 'browser';
       nodeConfig = null;
@@ -434,29 +440,35 @@
       // a retry after an offline preflight uses the single-key command for a
       // selected multisig wallet and returns `wrong_wallet_kind`.
       multisig = selectedProfile?.kind === 'multisig';
-      phoneBackupUnverified = Boolean(
-        multisig &&
-        !selectedProfile?.backupVerified &&
-        (await walletService.coordinationStatus()).role === 'mobile_cosigner'
-      );
-      unlockSyncRequested = Boolean(
-        selectedProfile && walletShell.consumeUnlockSync(selectedProfile.id)
-      );
-      nodeReady = Boolean(
-        selectedProfile &&
-        networkSetupSources.some(
-          (source) => source.walletId === selectedProfile?.id && source.ready
-        )
-      );
-      // Mainnet admission is required once after unlock, not whenever the user
-      // returns to Overview. The admitted wallet session remains authoritative.
-      if (isMainnet && nodeReady && unlockSyncRequested) await walletService.testNodeConnection();
-      if (generation !== loadGeneration) return;
       if (!selectedProfile)
         throw new WalletError('wallet_not_found', 'The selected wallet does not exist.');
+      const profile = selectedProfile;
+      unlockSyncRequested = walletShell.consumeUnlockSync(profile.id);
+      // Source availability is needed for a first-history decision or to
+      // restore admission, but not to paint committed history on navigation.
+      let readiness: ReturnType<typeof walletService.networkSetupSources> | undefined;
+      async function resolveNodeReadiness() {
+        const sources = await (readiness ??= walletService.networkSetupSources());
+        if (!current()) return false;
+        nodeReady = sources.some((source) => source.walletId === profile.id && source.ready);
+        return nodeReady;
+      }
+      async function checkNode() {
+        if (!current()) return;
+        checkingNode = true;
+        try {
+          await walletService.testNodeConnection();
+        } finally {
+          if (current()) checkingNode = false;
+        }
+      }
+      // Mainnet admission is required once after unlock, not whenever the user
+      // returns to Overview. The admitted wallet session remains authoritative.
+      if (isMainnet && unlockSyncRequested && (await resolveNodeReadiness())) await checkNode();
+      if (!current()) return;
       let nextSnapshot: WalletOverview;
       try {
-        nextSnapshot = await walletService.overview(selectedProfile.id);
+        nextSnapshot = await walletService.overview(profile.id);
       } catch (cause) {
         // The shell's unlock-sync handoff is deliberately ephemeral. If route
         // timing consumes or misses that hint, recover the native Mainnet
@@ -464,26 +476,30 @@
         // it had no Bitcoin Core connection.
         if (!(
           isMainnet &&
-          nodeReady &&
           cause instanceof WalletError &&
-          cause.code === 'node_admission_required'
+          cause.code === 'node_admission_required' &&
+          current() &&
+          (await resolveNodeReadiness())
         ))
           throw cause;
-        await walletService.testNodeConnection();
+        await checkNode();
+        if (!current()) return;
         admissionRestored = true;
-        nextSnapshot = await walletService.overview(selectedProfile.id);
+        nextSnapshot = await walletService.overview(profile.id);
       }
-      if (generation !== loadGeneration) return;
+      if (!current()) return;
+      const firstHistory = nextSyncSource.type === 'bitcoin_core' && !nextSnapshot.syncedAt;
+      if (firstHistory) await resolveNodeReadiness();
+      if (!current()) return;
       automaticInitialScanPending = false;
       snapshot = nextSnapshot;
       initialDataLoading = false;
       void loadSecondaryDetails(generation);
-      if (syncSource.type === 'bitcoin_core' && !snapshot?.syncedAt) {
-        await loadRecoveryState();
-      }
-      if ((unlockSyncRequested || admissionRestored) && !inheritedSyncObserved) void sync(false);
+      if (firstHistory) await loadRecoveryState(generation);
+      if (current() && (unlockSyncRequested || admissionRestored) && !inheritedSyncObserved)
+        void sync(false);
     } catch (cause) {
-      if (generation !== loadGeneration) return;
+      if (!current()) return;
       if (unlockSyncRequested && selectedProfile) walletShell.requestUnlockSync(selectedProfile.id);
       if (cause instanceof WalletError && cause.code === 'wallet_locked') {
         await goto('/unlock');
@@ -527,7 +543,19 @@
     secondaryError = '';
     const current = () =>
       generation === loadGeneration && profile.id === walletShell.selectedWalletId();
+    void walletService
+      .pendingMobilePairings()
+      .catch(() => [])
+      .then((value) => {
+        if (current()) pendingMobilePairingCount = value.length;
+      });
     const results = await Promise.allSettled([
+      (profile.kind === 'multisig' && !profile.backupVerified
+        ? walletService.coordinationStatus().then((status) => status.role === 'mobile_cosigner')
+        : Promise.resolve(false)
+      ).then((value) => {
+        if (current()) phoneBackupUnverified = value;
+      }),
       // Connection hints must not block cached wallet data or the separate
       // fail-closed wallet-history privacy disclosure.
       (mobileRuntime ? walletService.nodeConfig() : Promise.resolve(null)).then((config) => {
@@ -610,7 +638,11 @@
   }
   onMount(() =>
     walletService.subscribe((event) => {
-      if (event.type === 'wallet_updated' && event.walletId === walletShell.selectedWalletId()) {
+      if (
+        event.type === 'wallet_updated' &&
+        event.walletId === walletShell.selectedWalletId() &&
+        (!initialDataLoading || event.snapshot.syncedAt)
+      ) {
         multisig = event.walletKind === 'multisig';
         snapshot = event.snapshot;
         loadError = '';
@@ -651,18 +683,23 @@
       return null;
     }
   }
-  async function loadRecoveryState() {
+  async function loadRecoveryState(generation: number) {
+    const profile = selectedProfile;
+    if (!profile) return;
+    const current = () =>
+      generation === loadGeneration && profile.id === walletShell.selectedWalletId();
     try {
       const [settings, status] = await Promise.all([
         walletService.recoveryScanSettings(),
         walletService.recoveryScanStatus()
       ]);
+      if (!current()) return;
       recoverySettings = settings;
       recoveryStatus = status;
       if (recoveryScanIsActive(status)) {
         automaticInitialScanPending = false;
         startRecoveryStatusPolling();
-      } else if (selectedProfile && walletShell.initialHistoryScanRunning(selectedProfile.id)) {
+      } else if (walletShell.initialHistoryScanRunning(profile.id)) {
         automaticInitialScanPending = true;
         startRecoveryStatusPolling(true);
       } else if (!snapshot?.syncedAt && nodeReady) {
@@ -670,6 +707,7 @@
         walletShell.requestInitialHistoryApproval();
       }
     } catch (cause) {
+      if (!current()) return;
       automaticInitialScanPending = false;
       initialScanError = localizedError(
         cause,

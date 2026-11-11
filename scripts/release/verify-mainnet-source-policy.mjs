@@ -398,6 +398,25 @@ const pinnedBinaryPolicySources = new Map([
   ]
 ]);
 
+const sourceApprovalCode = 'ERR_SOURCE_APPROVAL_REQUIRED';
+const sourceApprovalSuffix = ' changed after the mainnet-candidate policy snapshot was reviewed';
+
+function sourceApprovalError(sourcePath) {
+  return new Error(`${sourcePath}${sourceApprovalSuffix}`, {
+    cause: { code: sourceApprovalCode, sourcePath }
+  });
+}
+
+export function isSourceApprovalRequired(error) {
+  const sourcePath = error?.cause?.sourcePath;
+  return Boolean(
+    error?.cause?.code === sourceApprovalCode &&
+    typeof sourcePath === 'string' &&
+    (pinnedPolicySources.has(sourcePath) || pinnedBinaryPolicySources.has(sourcePath)) &&
+    error.message === `${sourcePath}${sourceApprovalSuffix}`
+  );
+}
+
 export function validatePinnedPolicySources(read, readBytes) {
   if (typeof readBytes !== 'function') {
     throw new Error('the mainnet source policy requires a binary-safe source reader');
@@ -405,14 +424,58 @@ export function validatePinnedPolicySources(read, readBytes) {
   for (const [path, expected] of pinnedPolicySources) {
     const actual = createHash('sha256').update(read(path)).digest('hex');
     if (actual !== expected) {
-      throw new Error(`${path} changed after the mainnet-candidate policy snapshot was reviewed`);
+      throw sourceApprovalError(path);
     }
   }
   for (const [path, expected] of pinnedBinaryPolicySources) {
     const actual = createHash('sha256').update(readBytes(path)).digest('hex');
     if (actual !== expected) {
-      throw new Error(`${path} changed after the mainnet-candidate policy snapshot was reviewed`);
+      throw sourceApprovalError(path);
     }
+  }
+}
+
+function validateSnapshotOverrides(overrides, pinned, kind) {
+  if (!(overrides instanceof Map)) {
+    throw new Error(`the reviewed internal ${kind} overrides must be a Map`);
+  }
+  for (const [path, expected] of overrides) {
+    if (!pinned.has(path)) {
+      throw new Error(`unknown reviewed internal ${kind} source: ${path}`);
+    }
+    if (!/^[a-f0-9]{64}$/.test(expected)) {
+      throw new Error(`invalid reviewed internal ${kind} digest: ${path}`);
+    }
+    if (expected === pinned.get(path)) {
+      throw new Error(`stale reviewed internal ${kind} override: ${path}`);
+    }
+  }
+}
+
+export function validatePinnedPolicySourceSnapshot(
+  read,
+  readBytes,
+  textOverrides = new Map(),
+  binaryOverrides = new Map()
+) {
+  if (typeof read !== 'function' || typeof readBytes !== 'function') {
+    throw new Error('the reviewed internal source snapshot requires text and binary-safe readers');
+  }
+  validateSnapshotOverrides(textOverrides, pinnedPolicySources, 'text');
+  validateSnapshotOverrides(binaryOverrides, pinnedBinaryPolicySources, 'binary');
+  const mismatches = [];
+  for (const [path, publicDigest] of pinnedPolicySources) {
+    const expected = textOverrides.get(path) ?? publicDigest;
+    const actual = createHash('sha256').update(read(path)).digest('hex');
+    if (actual !== expected) mismatches.push(path);
+  }
+  for (const [path, publicDigest] of pinnedBinaryPolicySources) {
+    const expected = binaryOverrides.get(path) ?? publicDigest;
+    const actual = createHash('sha256').update(readBytes(path)).digest('hex');
+    if (actual !== expected) mismatches.push(path);
+  }
+  if (mismatches.length > 0) {
+    throw new Error(`reviewed internal source snapshot mismatch: ${mismatches.join(', ')}`);
   }
 }
 
@@ -668,6 +731,10 @@ export function validateCrateDatabaseOpenSources(sources) {
   }
 }
 
+export function normalizeRepositoryPath(path, platform = process.platform) {
+  return platform === 'win32' ? path.replaceAll('\\', '/') : path;
+}
+
 function crateRustSources() {
   const root = resolve(repoRoot, 'src-tauri/src');
   const excluded = new Set([
@@ -681,7 +748,7 @@ function crateRustSources() {
       const absolute = resolve(directory, entry.name);
       if (entry.isDirectory()) visit(absolute);
       if (!entry.isFile() || !entry.name.endsWith('.rs')) continue;
-      const path = `src-tauri/src/${absolute.slice(root.length + 1)}`;
+      const path = normalizeRepositoryPath(`src-tauri/src/${absolute.slice(root.length + 1)}`);
       if (!excluded.has(path)) sources.push([path, readFileSync(absolute, 'utf8')]);
     }
   };
@@ -691,6 +758,10 @@ function crateRustSources() {
 
 export function validateMainnetSourcePolicy(read, readBytes) {
   validatePinnedPolicySources(read, readBytes);
+  validateMainnetSourceSemantics(read);
+}
+
+export function validateMainnetSourceSemantics(read) {
   validateUpdateKeyPair(read('docs/release-update-key.hex'), read('docs/release-update-key.pem'));
   validateBrowserNetworkSource(read('src/lib/config.ts'));
   validateBuildScriptSource(read('src-tauri/build.rs'));

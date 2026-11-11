@@ -49,7 +49,14 @@ if [[ -n "$unexpected_stores" ]]; then
   fail "process-wide Svelte stores require an explicit lifetime/identity decision; found: $unexpected_stores"
 fi
 
-python3 -m unittest discover -s services/core-gateway/tests -v ||
-  fail "narrow Core gateway boundary tests failed"
+case "$(uname -s)" in
+  MINGW*|MSYS*|CYGWIN*)
+    echo "Core gateway integration tests: skipped on Windows; the service requires POSIX file permissions."
+    ;;
+  *)
+    python3 -m unittest discover -s services/core-gateway/tests -v ||
+      fail "narrow Core gateway boundary tests failed"
+    ;;
+esac
 
 echo "Architecture boundaries: clean."

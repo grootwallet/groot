@@ -15,10 +15,9 @@ const styles = readUiStyles();
 
 describe('foreground wallet actions during sync', () => {
   it('keeps signer metadata visible and reports why the health action is unavailable', () => {
-    expect(settings).toContain('hardwareSignerWallet = await walletService.externalSignerWallet()');
-    expect(settings.indexOf('hardwareSignerWallet = await')).toBeLessThan(
-      settings.indexOf('setHardwareHealthChecks(await walletService.hardwareHealthChecks())')
-    );
+    expect(settings).toMatch(/readSettingsWalletData\(\s*walletService/);
+    expect(settings).toContain('hardwareSignerWallet = data.signer');
+    expect(settings).toContain('setHardwareHealthChecks(data.health)');
     expect(settings).toContain('disabled={settingsSyncActive}');
     expect(settings).toContain("'Available after sync'");
     expect(settings).toContain('class="settings-sync-indicator"');

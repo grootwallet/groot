@@ -2,6 +2,7 @@
   import { locale } from '$lib/i18n';
   import { translate } from '$lib/i18n-catalog';
   import { Check, Cpu, KeyRound, X } from '@lucide/svelte';
+  import type { PolicySignerGroup } from '$lib/types';
 
   type SignerItem = {
     label: string;
@@ -16,6 +17,7 @@
     signedFingerprints = [],
     collecting = false,
     loading = false,
+    signerGroups = [],
     ondiscard
   } = $props<{
     signers: SignerItem[];
@@ -23,6 +25,7 @@
     signedFingerprints?: string[];
     collecting?: boolean;
     loading?: boolean;
+    signerGroups?: PolicySignerGroup[];
     ondiscard?: (signer: SignerItem) => void;
   }>();
 
@@ -33,6 +36,21 @@
       (signer: SignerItem) => signer.fingerprint && signedFingerprints.includes(signer.fingerprint)
     ).length
   );
+  const signerGroupRequirement = (group: PolicySignerGroup) =>
+    translate($locale, '{count} of {total} {group}', {
+      count: group.required,
+      total: group.signers.length,
+      group: translate($locale, group.label)
+    });
+  const signerGroupSignedCount = (group: PolicySignerGroup) => {
+    const signed = new Set(
+      signedFingerprints.map((fingerprint: string) => fingerprint.toLowerCase())
+    );
+    return Math.min(
+      group.required,
+      group.signers.filter((signer) => signed.has(signer.fingerprint.toLowerCase())).length
+    );
+  };
 </script>
 
 <section
@@ -46,10 +64,12 @@
       <span>{translate($locale, 'Signing with')}</span><strong
         >{loading
           ? translate($locale, 'Checking…')
-          : translate($locale, '{required} of {total}', {
-              required,
-              total: signers.length
-            })}</strong
+          : signerGroups.length
+            ? translate($locale, 'Selected path')
+            : translate($locale, '{required} of {total}', {
+                required,
+                total: signers.length
+              })}</strong
       >
     </div>
     <small
@@ -57,17 +77,33 @@
         $locale,
         loading
           ? translate($locale, 'Loading wallet signer')
-          : collecting
-            ? translate($locale, '{signed} of {required} collected', {
-                signed: signedCount,
-                required
-              })
-            : required === 1
-              ? 'One signature required'
-              : `${required} signatures required`
+          : signerGroups.length
+            ? translate($locale, 'Follow each signer group requirement below.')
+            : collecting
+              ? translate($locale, '{signed} of {required} collected', {
+                  signed: signedCount,
+                  required
+                })
+              : required === 1
+                ? 'One signature required'
+                : `${required} signatures required`
       )}</small
     >
   </header>
+  {#if !loading && signerGroups.length}<div
+      class="send-signer-groups"
+      aria-label={translate($locale, 'Signer group requirements')}
+    >
+      {#each signerGroups as group (group.code)}<div>
+          <strong>{signerGroupRequirement(group)}</strong>
+          {#if collecting}<small
+              >{translate($locale, '{signed} of {required} collected', {
+                signed: signerGroupSignedCount(group),
+                required: group.required
+              })}</small
+            >{/if}
+        </div>{/each}
+    </div>{/if}
   <div class="send-signer-list">
     {#if loading}
       <article class="send-signer-placeholder" aria-hidden="true">
@@ -163,6 +199,29 @@
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
     gap: 6px;
+  }
+  :global(.send-signer-groups):where(.send-signer-groups) {
+    display: grid;
+    gap: 5px;
+    margin: 0 0 8px;
+  }
+  :global(.send-signer-groups):where(.send-signer-groups) > :global(div) {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 6px 8px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+    background: var(--panel);
+  }
+  :global(.send-signer-groups):where(.send-signer-groups) :global(strong),
+  :global(.send-signer-groups):where(.send-signer-groups) :global(small) {
+    font-size: var(--font-size-meta);
+  }
+  :global(.send-signer-groups):where(.send-signer-groups) :global(small) {
+    flex: 0 0 auto;
+    color: var(--muted);
   }
   :global(.send-signer-list):where(.send-signer-list) :global(article) {
     position: relative;

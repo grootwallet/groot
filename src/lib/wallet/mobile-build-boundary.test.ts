@@ -3,7 +3,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   verifyIosFoundationBuild,
-  verifyIosArchiveResources
+  verifyIosArchiveResources,
+  verifyIosSceneManifest
 } from '../../../scripts/dev/verify-ios-foundation-build.mjs';
 import { prepareIosProject } from '../../../scripts/dev/prepare-ios-project.mjs';
 import { describe, expect, it } from 'vitest';
@@ -44,6 +45,40 @@ describe('isolated Testnet4 iOS development build', () => {
   });
 });
 
+describe('iOS window scene launch configuration', () => {
+  const configuration = {
+    UISceneConfigurationName: 'Default Configuration',
+    UISceneClassName: 'UIWindowScene',
+    UISceneDelegateClassName: 'TaoSceneDelegate'
+  };
+  const manifest = (supportsMultipleScenes: boolean, applications = [configuration]) => ({
+    UIApplicationSceneManifest: {
+      UIApplicationSupportsMultipleScenes: supportsMultipleScenes,
+      UISceneConfigurations: { UIWindowSceneSessionRoleApplication: applications }
+    }
+  });
+
+  it('accepts one scene managed by Tao with iPad multi-window disabled', () => {
+    expect(() => verifyIosSceneManifest(manifest(false))).not.toThrow();
+    const plist = read('src-tauri/Info.ios.plist');
+    expect(plist).toMatch(/<key>UIApplicationSupportsMultipleScenes<\/key>\s*<false\/>/);
+    expect(plist).toMatch(
+      /<key>UISceneDelegateClassName<\/key>\s*<string>TaoSceneDelegate<\/string>/
+    );
+  });
+
+  it.each([
+    {},
+    { UIApplicationSceneManifest: {} },
+    manifest(false, []),
+    manifest(false, [configuration, configuration]),
+    manifest(false, [{ ...configuration, UISceneDelegateClassName: 'OtherDelegate' }]),
+    manifest(true)
+  ])('rejects missing or conflicting archived scene declarations', (info) => {
+    expect(() => verifyIosSceneManifest(info)).toThrow('Do not install this archive.');
+  });
+});
+
 describe('actual iOS linked network verification', () => {
   it('rejects an archive containing a build-only static library', () => {
     const directory = mkdtempSync(join(tmpdir(), 'groot-ios-resources-'));
@@ -57,23 +92,62 @@ describe('actual iOS linked network verification', () => {
     }
   });
 
-  it('prepares only the isolated project, keeps its signing settings and is idempotent', () => {
-    const identity = {
-      identifier: mobile.identifier,
-      version: '5.3.0-rc2',
-      bundleVersion: '530002'
-    };
-    const source = `PRODUCT_BUNDLE_IDENTIFIER: ${mobile.identifier}\n      - path: Externals\n      - sdk: Security.framework\nCFBundleShortVersionString: 5.2.0\nCFBundleVersion: "5.2.0"\nCODE_SIGN_STYLE: Automatic\n`;
-    const prepared = prepareIosProject(source, identity);
-    expect(prepareIosProject(prepared, identity)).toBe(prepared);
-    expect(prepared).toContain('excludes: ["**/*.a"]');
-    expect(prepared).toContain('LocalAuthentication.framework');
-    expect(prepared).toContain('CFBundleVersion: "530002"');
-    expect(prepared).toContain('CODE_SIGN_STYLE: Automatic');
+  it.each([
+    ['5.3.0-rc2', '5.3.0', '530002'],
+    ['5.3.0', '5.3.0', '530002'],
+    ['0.5.4-rc01', '0.5.4', '540001']
+  ])(
+    'prepares isolated %s metadata without changing signing and is idempotent',
+    (version, shortVersion, bundleVersion) => {
+      const identity = {
+        identifier: mobile.identifier,
+        version,
+        bundleVersion
+      };
+      const source = `PRODUCT_BUNDLE_IDENTIFIER: ${mobile.identifier}\n      - path: Externals\n      - sdk: Security.framework\nCFBundleShortVersionString: 5.2.0\nCFBundleVersion: "5.2.0"\nCODE_SIGN_STYLE: Automatic\n`;
+      const prepared = prepareIosProject(source, identity);
+      expect(prepareIosProject(prepared, identity)).toBe(prepared);
+      expect(prepared).toContain('excludes: ["**/*.a"]');
+      expect(prepared).toContain('LocalAuthentication.framework');
+      expect(prepared).toContain(`CFBundleVersion: "${bundleVersion}"`);
+      expect(prepared).toContain(`CFBundleShortVersionString: ${shortVersion}`);
+      expect(prepared).toContain('CODE_SIGN_STYLE: Automatic');
+      expect(() =>
+        prepareIosProject(source.replace(mobile.identifier, desktop.identifier), identity)
+      ).toThrow('not changed');
+    }
+  );
+
+  it.each([
+    '5.2.0',
+    '5.3.1',
+    '5.4.0',
+    '0.5.4',
+    '0.5.4-rc00',
+    '0.5.4-rc1',
+    '0.5.4-rc100',
+    '5.3.0-rc0',
+    '5.3.0-rc01',
+    '5.3.0-beta1',
+    '5.3.0+build',
+    '5.3.0-rc2-extra'
+  ])('rejects unapproved development version %s before preparing metadata', (version) => {
+    const source = `PRODUCT_BUNDLE_IDENTIFIER: ${mobile.identifier}\n`;
     expect(() =>
-      prepareIosProject(source.replace(mobile.identifier, desktop.identifier), identity)
-    ).toThrow('not changed');
+      prepareIosProject(source, { identifier: mobile.identifier, version, bundleVersion: '530012' })
+    ).toThrow('Unexpected iOS development identity');
   });
+
+  it('rejects a different identity even when the generated source matches it', () => {
+    expect(() =>
+      prepareIosProject(`PRODUCT_BUNDLE_IDENTIFIER: ${desktop.identifier}\n`, {
+        identifier: desktop.identifier,
+        version: '5.3.0',
+        bundleVersion: '530012'
+      })
+    ).toThrow('Unexpected iOS development identity');
+  });
+
   it.each([
     ['testnet4', 'same', true],
     ['regtest', 'same', false],

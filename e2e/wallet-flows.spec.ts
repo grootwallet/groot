@@ -1,4 +1,7 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
+import { readFileSync } from 'node:fs';
+
+const APP_VERSION = JSON.parse(readFileSync('package.json', 'utf8')).version;
 
 async function expectAmountUnitsSeparated(scope: Locator) {
   const gaps = await scope.locator('.formatted-amount').evaluateAll((elements) =>
@@ -109,7 +112,10 @@ test('copies the public build identity with inline retry feedback', async ({ pag
   await page.goto('/unlock?fixture-locked-wallet-switch=1');
   const buildIdentity = page.getByRole('button', { name: 'Copy build information' });
   const displayedIdentity = (await buildIdentity.textContent())?.trim();
-  expect(displayedIdentity).toMatch(/^Groot v\d+\.\d+\.\d+(?:-rc[1-9][0-9]*)? · [a-z0-9-]+$/);
+  const identityParts = displayedIdentity?.split(' · ');
+  expect(identityParts).toHaveLength(2);
+  expect(identityParts?.[0]).toBe(`Groot v${APP_VERSION}`);
+  expect(identityParts?.[1]).toMatch(/^[a-z0-9-]+$/);
 
   await buildIdentity.click();
   const copyStatus = page.locator('.build-identity-sidebar .build-copy-status');
@@ -992,10 +998,28 @@ test('creates an external-signer wallet, signs by cable, and configures its isol
   const scanQrDialog = page.getByRole('dialog', { name: 'Scan signed PSBT' });
   await scanQrDialog.getByRole('button', { name: 'Close' }).click();
   await expect(scanQrDialog).toBeHidden();
+  await page.evaluate(async () => {
+    const { walletService } = await import('/src/lib/wallet/index.ts');
+    const scan = walletService.listHardwareDevices.bind(walletService);
+    walletService.listHardwareDevices = () => {
+      walletService.listHardwareDevices = scan;
+      return new Promise((resolve, reject) => {
+        Object.assign(window, { finishCableScan: () => scan().then(resolve, reject) });
+      });
+    };
+    const sign = walletService.signExternalWithHardware.bind(walletService);
+    walletService.signExternalWithHardware = (...args) => {
+      walletService.signExternalWithHardware = sign;
+      return new Promise((resolve, reject) => {
+        Object.assign(window, { finishCableSignature: () => sign(...args).then(resolve, reject) });
+      });
+    };
+  });
   await page.getByRole('button', { name: 'Sign with cable' }).click();
   await expect(
     page.getByRole('status', { name: 'Hardware device scan in progress' })
   ).toContainText('Looking for hardware devices');
+  await page.evaluate(() => (window as any).finishCableScan());
   const hardwareReview = page.getByRole('dialog', { name: 'Sign with hardware' });
   await expect(hardwareReview.getByText('Fee rate', { exact: true })).toBeHidden();
   await hardwareReview.getByText('View more details', { exact: true }).click();
@@ -1009,6 +1033,7 @@ test('creates an external-signer wallet, signs by cable, and configures its isol
   await expect(page.getByRole('status', { name: 'Waiting for hardware signature' })).toContainText(
     'Review and approve on the device.'
   );
+  await page.evaluate(() => (window as any).finishCableSignature());
   await expect(page.getByText('Signature verified')).toBeVisible();
   const signedReview = page.getByRole('region', { name: 'Signed transaction review' });
   await expect(signedReview).toBeVisible();
@@ -2206,6 +2231,13 @@ test('receive label suggestions expose aligned tooltips only when truncated', as
   const suggestion = page.getByRole('button', {
     name: 'Reuse A deliberately long reusable label'
   });
+  // focus() does not wait for geometric stability like hover(). Measure the
+  // tooltip only after the dialog's opening animation has completed.
+  await page.getByRole('dialog').evaluate(async (dialog) => {
+    await Promise.all(
+      dialog.getAnimations({ subtree: true }).map((animation) => animation.finished)
+    );
+  });
   if ((page.viewportSize()?.width ?? 1180) <= 760) await suggestion.focus();
   else await suggestion.hover();
   const tooltip = page.getByRole('tooltip');
@@ -2681,6 +2713,12 @@ test('payment QR scanner loads on demand and cancels safely while loading', asyn
   let requested = false;
   let releaseDecoder!: () => void;
   const decoderReady = new Promise<void>((resolve) => (releaseDecoder = resolve));
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'mediaDevices', {
+      configurable: true,
+      value: { getUserMedia: async () => ({ getTracks: () => [] }) }
+    });
+  });
   await page.route(/\/qr-scanner\.js(?:\?|$)/, async (route) => {
     requested = true;
     await decoderReady;
@@ -2697,6 +2735,7 @@ test('payment QR scanner loads on demand and cancels safely while loading', asyn
   await expect(page.getByRole('heading', { name: 'Send bitcoin', exact: true })).toBeVisible();
   expect(requested).toBe(false);
   await page.getByRole('button', { name: 'Scan Bitcoin payment QR' }).click();
+  await page.getByRole('button', { name: 'Allow camera', exact: true }).click();
   await expect.poll(() => requested).toBe(true);
 
   const dialog = page.getByRole('dialog', { name: 'Scan payment request' });
@@ -2705,6 +2744,7 @@ test('payment QR scanner loads on demand and cancels safely while loading', asyn
   releaseDecoder();
   // Reopening reuses the module, but the closed scanner must never acquire a camera.
   await page.getByRole('button', { name: 'Scan Bitcoin payment QR' }).click();
+  await page.getByRole('button', { name: 'Allow camera', exact: true }).click();
   await expect
     .poll(() =>
       page.evaluate(() => (window as unknown as { scannerStarted?: number }).scannerStarted)
@@ -2748,6 +2788,12 @@ test('payment QR scanner loads on demand and cancels safely while loading', asyn
 });
 
 test('rejected payment QR stays fully visible without scrolling the camera', async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'mediaDevices', {
+      configurable: true,
+      value: { getUserMedia: async () => ({ getTracks: () => [] }) }
+    });
+  });
   await page.route(/\/qr-scanner\.js(?:\?|$)/, (route) =>
     route.fulfill({
       contentType: 'application/javascript',
@@ -2760,6 +2806,7 @@ test('rejected payment QR stays fully visible without scrolling the camera', asy
   );
   await page.goto('/send');
   await page.getByRole('button', { name: 'Scan Bitcoin payment QR' }).click();
+  await page.getByRole('button', { name: 'Allow camera', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'Scan payment request' });
   await expect
     .poll(() =>

@@ -330,9 +330,8 @@ fn save_selection_file(root: &Path, selected: Network) -> Result<(), NetworkSele
         file.write_all(&encoded)
             .and_then(|_| file.sync_all())
             .map_err(|_| NetworkSelectionError::Io)?;
-        fs::rename(&temporary, &path).map_err(|_| NetworkSelectionError::Io)?;
-        File::open(root)
-            .and_then(|directory| directory.sync_all())
+        crate::durable_file::replace(&temporary, &path)
+            .and_then(|()| crate::durable_file::sync_parent(root))
             .map_err(|_| NetworkSelectionError::Io)
     })();
     if result.is_err() {

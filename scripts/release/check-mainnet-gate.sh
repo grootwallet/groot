@@ -33,7 +33,12 @@ contains_fixed "export const SUPPORTED_NETWORKS = ['signet', 'testnet4', 'regtes
   || fail "the browser network allowlist changed"
 contains_fixed '"regtest" | "signet" | "testnet4" | "mainnet" | "multi" => {}' src-tauri/build.rs \
   || fail "the native compile-time network allowlist changed"
-node scripts/release/verify-mainnet-source-policy.mjs
+case "${1:-}" in
+  "") node scripts/release/verify-mainnet-source-policy.mjs ;;
+  --internal) node scripts/release/verify-internal-source-policy.mjs ;;
+  *) fail "unknown release-check mode" ;;
+esac
+[[ "$#" -le 1 ]] || fail "unexpected release-check arguments"
 contains_fixed '"status": "approved"' docs/mainnet-release-authorization.json \
   || fail "the v5.3.0 public-release authorization is not approved"
 contains_fixed '"schemaVersion": 2' docs/mainnet-release-authorization.json \
@@ -45,7 +50,7 @@ contains_fixed '"authorizedTag": "v5.3.0"' docs/mainnet-release-authorization.js
 contains_fixed '"decisionAdr": "0105"' docs/mainnet-release-authorization.json \
   || fail "the authorization record does not name ADR 0105"
 release_version="$(node -p "require('./package.json').version")"
-if [[ "$release_version" =~ ^5\.3\.0-rc[1-9][0-9]*$ ]]; then
+if [[ "$release_version" =~ ^5\.3\.0-rc[1-9][0-9]*$ || "$release_version" =~ ^0\.5\.4-rc(0[1-9]|[1-9][0-9])$ ]]; then
   if node scripts/release/assert-public-release-authorized.mjs "$(git rev-parse HEAD)" >/dev/null 2>&1; then
     fail "a prerelease candidate was authorized for public packaging"
   fi
@@ -128,7 +133,7 @@ contains_fixed "- [x] Groot managed, local Core, and direct-HTTPS custom Core pa
   || fail "the completed first-mainnet backend evidence is missing"
 contains_fixed "Tor/onion Core remains excluded" docs/mainnet-release-checklist.md \
   || fail "the first-mainnet Tor exclusion is missing"
-contains_fixed "The first production target is a **macOS Apple-silicon desktop release with both software and approved hardware wallets" docs/roadmap.md \
+contains_fixed "historical **v5.3.0 macOS Apple-silicon desktop release**" docs/roadmap.md \
   || fail "the roadmap no longer matches the first-release platform scope"
 contains_fixed "A second Groot process cannot concurrently mutate" docs/mainnet-release-checklist.md \
   || fail "cross-process locking is missing from the mainnet blockers"
@@ -145,4 +150,8 @@ contains_fixed "Blockstream Jade" docs/mainnet-release-checklist.md \
 contains_fixed "The authorization covers macOS Apple silicon only." docs/mainnet-threat-model.md \
   || fail "the threat model no longer scopes the approved release platform"
 
-echo "Mainnet release gate: v5.2.0 approval remains exact; prerelease public packaging is blocked."
+if [[ "${1:-}" == "--internal" ]]; then
+  echo "Internal structural release checks passed; public source approval remains pending."
+else
+  echo "Mainnet release gate: historical v5.3.0 approval remains exact; prerelease public packaging is blocked."
+fi

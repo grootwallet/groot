@@ -1,4 +1,10 @@
-import type { LabelSuggestion, ReceiveAddress, Transaction, Utxo } from '$lib/types';
+import type {
+  LabelSuggestion,
+  PolicyPathDefinition,
+  ReceiveAddress,
+  Transaction,
+  Utxo
+} from '$lib/types';
 import type { SupportedNetwork } from '$lib/config';
 import { WalletError } from './errors';
 
@@ -18,6 +24,7 @@ export type WalletSnapshot = {
     observedAt: string | null;
     status: 'recent' | 'stale' | 'unknown';
   };
+  policyPaths?: PolicyPathDefinition[];
 };
 
 export type WalletOverview = Pick<

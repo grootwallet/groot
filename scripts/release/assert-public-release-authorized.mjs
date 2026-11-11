@@ -40,11 +40,35 @@ export function verifyPublicReleaseAuthorization({ repoRoot = defaultRepoRoot, c
     reject('the authorization does not name a valid decision ADR');
   }
 
-  const checklist = readFileSync(join(repoRoot, 'docs/mainnet-release-checklist.md'), 'utf8');
-  if (!/^Release decision: APPROVED$/m.test(checklist)) {
-    reject('the canonical checklist is not approved');
+  // v5.3.0 keeps its already-published historical checklist unchanged. Every
+  // later release must use a checklist named for that version so a historical
+  // approval cannot be reused by changing only the authorization record.
+  const checklistPath = join(
+    repoRoot,
+    'docs',
+    version === '5.3.0' ? 'mainnet-release-checklist.md' : `mainnet-release-checklist-${version}.md`
+  );
+  if (!existsSync(checklistPath)) reject('the version-specific release checklist is missing');
+  const checklist = readFileSync(checklistPath, 'utf8');
+  const checklistLines = checklist.split('\n');
+  if (version !== '5.3.0') {
+    const requireIdentity = (label, value) => {
+      const prefix = `${label}:`;
+      const matches = checklistLines.filter((line) => line.startsWith(prefix));
+      if (matches.length !== 1 || matches[0] !== `${label}: ${value}`) {
+        reject(`the release checklist does not name the ${label.toLowerCase()}`);
+      }
+    };
+    requireIdentity('Release version', version);
+    requireIdentity('Release tag', tag);
   }
-  if (/^- \[ \]/m.test(checklist)) reject('the canonical checklist still has open items');
+  const decisions = checklistLines.filter((line) => line.startsWith('Release decision:'));
+  if (decisions.length !== 1 || decisions[0] !== 'Release decision: APPROVED') {
+    reject('the version-specific release checklist is not approved');
+  }
+  if (/^[ \t]*[-*+][ \t]+\[ \]/m.test(checklist)) {
+    reject('the version-specific release checklist still has open items');
+  }
 
   const adrPrefix = `${authorization.decisionAdr}-`;
   const adrMatches = readdirSync(join(repoRoot, 'docs/adr')).filter(

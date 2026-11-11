@@ -26,7 +26,7 @@ describe('startup wallet lock gate', () => {
     expect(shell).toContain('const selection = await walletService.session()');
     expect(shell).toContain("await goto('/unlock')");
 
-    const gate = shell.indexOf("{#if startupState !== 'ready'}");
+    const gate = shell.indexOf("{#if startupState !== 'ready' || shortcutLockPending}");
     const authenticatedBranch = shell.indexOf('{:else}', gate);
     const routeContent = shell.indexOf('{@render children?.()}', authenticatedBranch);
     expect(gate).toBeGreaterThan(-1);

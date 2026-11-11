@@ -1,10 +1,16 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
-const profileCommands = readFileSync(
-  new URL('../../../src-tauri/src/wallet/profile_commands.rs', import.meta.url),
-  'utf8'
-);
+const profileCommands =
+  readFileSync(
+    new URL('../../../src-tauri/src/wallet/profile_commands.rs', import.meta.url),
+    'utf8'
+  ) +
+  '\n' +
+  readFileSync(
+    new URL('../../../src-tauri/src/wallet/recovery_commands.rs', import.meta.url),
+    'utf8'
+  );
 const multisigCommands = readFileSync(
   new URL('../../../src-tauri/src/wallet/multisig_setup_commands.rs', import.meta.url),
   'utf8'
@@ -21,10 +27,15 @@ const hardwareCommands = readFileSync(
   new URL('../../../src-tauri/src/wallet/hardware_commands.rs', import.meta.url),
   'utf8'
 );
-const walletCore = readFileSync(
-  new URL('../../../src-tauri/src/wallet.rs', import.meta.url),
-  'utf8'
-);
+const walletCore =
+  readFileSync(new URL('../../../src-tauri/src/wallet.rs', import.meta.url), 'utf8') +
+  '\n' +
+  readFileSync(new URL('../../../src-tauri/src/wallet/profiles.rs', import.meta.url), 'utf8') +
+  '\n' +
+  readFileSync(
+    new URL('../../../src-tauri/src/wallet/notification_delivery.rs', import.meta.url),
+    'utf8'
+  );
 const coordinationCommands = readFileSync(
   new URL('../../../src-tauri/src/wallet/coordination_commands.rs', import.meta.url),
   'utf8'
@@ -85,6 +96,45 @@ describe('native command scheduling', () => {
     expect(dto).not.toContain('password');
     expect(profileCommands).toContain(
       'authorize_wallet_session(state, source, false, registry.inactivity_timeout_minutes)?'
+    );
+  });
+
+  it('does not serialize remote fee reads with wallet operations', () => {
+    const source = commandSource(profileCommands, 'fees_estimate');
+    const client = source.indexOf('let (config, client, expected_auth) = {');
+    const remote = source.indexOf('let result = estimate_core_fees');
+    const publish = source.indexOf('let estimates = result?');
+    expect(client).toBeGreaterThan(-1);
+    expect(remote).toBeGreaterThan(client);
+    expect(publish).toBeGreaterThan(remote);
+    expect(source.slice(client, remote)).toMatch(
+      /operation_guard\([\s\S]*configured_rpc_client\([\s\S]*\n\s*\};/
+    );
+    expect(source.slice(remote, publish)).toContain('operation_guard(&state)?');
+    expect(source.slice(remote, publish)).toContain(
+      'require_wallet_read_context(&app, &state, wallet_id, Some(session_id))?'
+    );
+    expect(source.slice(remote, publish)).toContain('auth_identity()? != expected_auth');
+  });
+
+  it('reads standard saved proposals from the last committed wallet during refresh', () => {
+    for (const [command, source] of [
+      ['tx_proposals', transactionCommands],
+      ['multisig_proposals', multisigProposalCommands],
+      ['external_signer_proposals', hardwareCommands]
+    ]) {
+      expect(commandSource(source, command)).toContain('with_selected_proposal_db(');
+    }
+    const helper = walletCore.slice(
+      walletCore.indexOf('async fn with_selected_proposal_db'),
+      walletCore.indexOf('fn validate_read_wallet')
+    );
+    expect(helper).toContain('tauri::async_runtime::spawn_blocking');
+    expect(helper).toContain('foreground_persisted_read_guard(&state, wallet_id)?');
+    expect(helper).toContain('open_selected_db_for_persisted_read(&app, multisig)?');
+    expect(helper).toMatch(/recovery_template\.is_some\(\)[\s\S]*drop\(persisted\.take\(\)\)/);
+    expect(helper.slice(helper.indexOf('let result = read('))).toContain(
+      'require_wallet_read_context(&app, &state, wallet_id, Some(session_id))?'
     );
   });
 
@@ -161,7 +211,6 @@ describe('native command scheduling', () => {
     ['wallet_notifications_ack', profileCommands],
     ['multisig_sync', multisigCommands],
     ['multisig_address_create', multisigCommands],
-    ['tx_proposals', transactionCommands],
     ['tx_prepare', transactionCommands],
     ['tx_acceleration_prepare', transactionCommands],
     ['multisig_acceleration_prepare', transactionCommands],
@@ -172,9 +221,7 @@ describe('native command scheduling', () => {
     ['cpfp_acceleration_quote', transactionCommands],
     ['external_signer_wallet', hardwareCommands],
     ['tx_sign_and_broadcast', transactionCommands],
-    ['multisig_proposals', multisigProposalCommands],
     ['multisig_proposal_broadcast', multisigProposalCommands],
-    ['external_signer_proposals', hardwareCommands],
     ['external_signer_proposal_broadcast', hardwareCommands],
     ['hardware_health_checks', hardwareCommands],
     ['multisig_signer_policy_verifications', hardwareCommands],
@@ -248,10 +295,9 @@ describe('native command scheduling', () => {
 
   it('wallet locking cancels automatic sync before waiting for the wallet-operation lock', () => {
     const source = commandSource(profileCommands, 'wallet_lock');
-    expect(source.indexOf('cancel_foreground_sync(&state)?')).toBeGreaterThan(-1);
-    expect(source.indexOf('cancel_foreground_sync(&state)?')).toBeLessThan(
-      source.indexOf('operation_guard(&state)?')
-    );
+    const cancel = source.indexOf('foreground_sync_read_gate(&state, profile.id, true)?');
+    expect(cancel).toBeGreaterThan(-1);
+    expect(cancel).toBeLessThan(source.indexOf('operation_guard(&state)?'));
   });
 
   it.each(['wallet_notifications', 'wallet_notifications_ack'])(

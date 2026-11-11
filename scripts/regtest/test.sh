@@ -58,18 +58,30 @@ trap cleanup EXIT
 run_lib_test() {
   local test_name="$1"
   if [[ "${GROOT_RUST_COVERAGE:-0}" == "1" ]]; then
-    cargo llvm-cov --no-clean --locked \
+    cargo llvm-cov --no-report --locked \
       --manifest-path "${PROJECT_DIR}/src-tauri/Cargo.toml" \
       --lib -- "${test_name}" --ignored --nocapture --test-threads=1
   else
-    cargo test --locked --manifest-path "${PROJECT_DIR}/src-tauri/Cargo.toml" \
-      "${test_name}" --lib -- --ignored --nocapture --test-threads=1
+    case "${test_name}" in
+      funded_continuity_all_named_paths_renew_reorg_and_restore|funded_continuity_descriptors_restore_history_in_core)
+        # Match RC10's test-only policy-planning profile. Keep assertions,
+        # overflow/debug checks and real Core validation; coverage owns its profile.
+        cargo test --config profile.test.package.miniscript.opt-level=3 \
+          --config profile.test.package.groot.opt-level=3 \
+          --locked --manifest-path "${PROJECT_DIR}/src-tauri/Cargo.toml" \
+          "${test_name}" --lib -- --ignored --nocapture --test-threads=1
+        ;;
+      *)
+        cargo test --locked --manifest-path "${PROJECT_DIR}/src-tauri/Cargo.toml" \
+          "${test_name}" --lib -- --ignored --nocapture --test-threads=1
+        ;;
+    esac
   fi
 }
 
 run_regtest_multisig() {
   if [[ "${GROOT_RUST_COVERAGE:-0}" == "1" ]]; then
-    cargo llvm-cov --no-clean --locked \
+    cargo llvm-cov --no-report --locked \
       --manifest-path "${PROJECT_DIR}/src-tauri/Cargo.toml" \
       --test regtest_multisig -- --ignored --nocapture --test-threads=1
   else

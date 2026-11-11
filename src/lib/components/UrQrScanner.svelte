@@ -5,7 +5,7 @@
   import { Camera, CameraOff, Check } from '@lucide/svelte';
   import { onDestroy } from 'svelte';
   import Button from './Button.svelte';
-  import type QrScanner from 'qr-scanner';
+  import { createQrCamera, cameraError } from '$lib/qr-camera';
 
   let {
     onframe,
@@ -26,7 +26,7 @@
   let expectedParts = $state(0);
   let scanComplete = $state(false);
   let processingFrames = false;
-  let scanner: QrScanner | undefined;
+  let scanner: ReturnType<typeof createQrCamera> | undefined;
   let stopped = false;
   const seen = new Set<string>();
   const pendingFrames: string[] = [];
@@ -118,56 +118,15 @@
     scanner = undefined;
     cameraActive = false;
     try {
-      if (!window.isSecureContext) throw new Error('insecure_camera_origin');
-      if (!navigator.mediaDevices?.getUserMedia) throw new Error('camera_unavailable');
-
-      // Request platform permission directly from this user gesture. QrScanner
-      // intentionally collapses all getUserMedia failures into "Camera not
-      // found", which would hide denial and camera-in-use states from Groot.
-      const permissionStream = await navigator.mediaDevices.getUserMedia({
-        audio: false,
-        video: true
-      });
-      for (const track of permissionStream.getTracks()) track.stop();
-      if (stopped) return;
-      const { default: QrScanner } = await import('qr-scanner');
-      if (stopped) return;
-
       if (!video) throw new Error('camera_unavailable');
-      scanner = new QrScanner(
-        video,
-        (result) => {
-          void acceptFrame(result.data);
-        },
-        {
-          preferredCamera: 'environment',
-          maxScansPerSecond: 8,
-          highlightScanRegion: false,
-          highlightCodeOutline: true,
-          returnDetailedScanResult: true,
-          onDecodeError: () => {}
-        }
-      );
-      await scanner.start();
-      if (stopped || scanComplete) {
-        scanner?.destroy();
-        return;
-      }
-      cameraActive = true;
+      scanner = createQrCamera(video, (frame) => void acceptFrame(frame));
+      cameraActive = await scanner.start();
     } catch (cause) {
       if (stopped) return;
-      const name = cause instanceof DOMException ? cause.name : '';
-      const message = cause instanceof Error ? cause.message : '';
-      error =
-        message === 'insecure_camera_origin'
-          ? 'Camera access requires Groot’s secure app connection. Reopen this scanner in the desktop app.'
-          : name === 'NotAllowedError'
-            ? 'Camera access was denied. Allow camera access for Groot, then reopen this scanner.'
-            : name === 'NotReadableError' || name === 'AbortError'
-              ? 'The camera is being used by another app. Close its camera, then try again.'
-              : name === 'NotFoundError' || name === 'DevicesNotFoundError'
-                ? 'No usable camera is available. Connect a camera or import the signed PSBT file instead.'
-                : 'Groot could not start the camera. Check its system permission, then try again.';
+      error = cameraError(
+        cause,
+        'No usable camera is available. Connect a camera or import the signed PSBT file instead.'
+      );
     } finally {
       starting = false;
     }

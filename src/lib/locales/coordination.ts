@@ -1,6 +1,27 @@
 import type { CatalogSection } from './types';
 
 export const coordinationCopy = {
+  'Mobile signing requires the complete previous transaction for every input. Export the full PSBT from the coordinator.':
+    {
+      fr: 'La signature mobile nécessite la transaction précédente complète pour chaque entrée. Exportez la PSBT complète depuis le coordinateur.',
+      es: 'La firma móvil requiere la transacción anterior completa para cada entrada. Exporta la PSBT completa desde el coordinador.'
+    },
+  'A PSBT input does not match its authenticated previous output.': {
+    fr: 'Une entrée PSBT ne correspond pas à sa sortie précédente authentifiée.',
+    es: 'Una entrada PSBT no coincide con su salida anterior autenticada.'
+  },
+  'A PSBT input does not match its previous transaction.': {
+    fr: 'Une entrée PSBT ne correspond pas à sa transaction précédente.',
+    es: 'Una entrada PSBT no coincide con su transacción anterior.'
+  },
+  'A PSBT input points outside its previous transaction.': {
+    fr: 'Une entrée PSBT référence une sortie inexistante de sa transaction précédente.',
+    es: 'Una entrada PSBT apunta a una salida inexistente de su transacción anterior.'
+  },
+  'The PSBT repeats an input.': {
+    fr: 'La PSBT contient une entrée en double.',
+    es: 'La PSBT repite una entrada.'
+  },
   'Pair phone': { fr: 'Associer le téléphone', es: 'Emparejar teléfono' },
   'Back up the policy and verify its first address.': {
     fr: 'Sauvegardez la politique et vérifiez sa première adresse.',

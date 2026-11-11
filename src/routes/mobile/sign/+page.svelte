@@ -1,6 +1,7 @@
 <script lang="ts">
   import WarningNotice from '$lib/components/WarningNotice.svelte';
   import { onDestroy } from 'svelte';
+  import { useWalletShellContext } from '$lib/wallet/shell-context';
   import { ArrowLeft, Check, QrCode, ShieldCheck } from '@lucide/svelte';
   import AnimatedUrQr from '$lib/components/AnimatedUrQr.svelte';
   import Button from '$lib/components/Button.svelte';
@@ -28,16 +29,33 @@
   let busy = $state(false);
   let error = $state('');
 
-  onDestroy(() => (pin = ''));
+  const walletShell = useWalletShellContext();
+  let scanRevision = 0;
+  let active = true;
+  function currentAttempt() {
+    const revision = scanRevision;
+    const walletId = walletShell.selectedWalletId();
+    return () => active && revision === scanRevision && walletId === walletShell.selectedWalletId();
+  }
+  onDestroy(() => {
+    active = false;
+    restart();
+  });
 
   async function receivePsbtFrame(frame: string) {
+    const current = currentAttempt();
     frames = [...frames, frame];
     try {
-      reviewedPsbt = await walletService.decodePsbtUr(frames);
-      review = await walletService.reviewMobilePsbt(reviewedPsbt);
+      const decoded = await walletService.decodePsbtUr(frames);
+      if (!current()) return false;
+      const result = await walletService.reviewMobilePsbt(decoded);
+      if (!current()) return false;
+      reviewedPsbt = decoded;
+      review = result;
       error = '';
       return true;
     } catch (cause) {
+      if (!current()) return false;
       if (cause instanceof WalletError && cause.code === 'qr_incomplete') return false;
       error = localizedError(cause, $locale, 'This QR could not be verified.');
       throw cause;
@@ -45,26 +63,34 @@
   }
 
   async function sign() {
-    if (!review || !reviewedPsbt || !pin) return;
+    if (!review || !reviewedPsbt || !pin || busy) return;
+    const current = currentAttempt();
     busy = true;
     error = '';
     try {
-      signed = await walletService.signMobilePsbt(reviewedPsbt, review.revisionId, pin);
+      const pending = walletService.signMobilePsbt(reviewedPsbt, review.revisionId, pin);
       pin = '';
+      const result = await pending;
+      if (!current()) return;
+      signed = result;
       toast({
         title: 'PSBT signed on this phone',
         description: 'Let desktop scan the signed PSBT. Groot did not broadcast it.',
         tone: 'success'
       });
     } catch (cause) {
-      error = localizedError(cause, $locale, 'The PSBT was not signed.');
+      if (current()) error = localizedError(cause, $locale, 'The PSBT was not signed.');
     } finally {
-      pin = '';
-      busy = false;
+      if (current()) {
+        pin = '';
+        busy = false;
+      }
     }
   }
 
   function restart() {
+    scanRevision += 1;
+    busy = false;
     frames = [];
     reviewedPsbt = '';
     review = null;
@@ -204,13 +230,7 @@
           ariaLive="polite"
           body={error}
         />{/if}
-      <UrQrScanner
-        onframe={receivePsbtFrame}
-        onreset={() => {
-          frames = [];
-          error = '';
-        }}
-      />
+      <UrQrScanner onframe={receivePsbtFrame} onreset={restart} />
     </InstructionCard>
   {/if}
 </div>

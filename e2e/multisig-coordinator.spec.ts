@@ -719,6 +719,7 @@ test('spends end-to-end from the ready-made demo wallet', async ({ page }) => {
   await expect(page.locator('.toast').filter({ hasText: 'Signed PSBT rejected' })).toBeVisible();
   await expect(signerSummary.getByText('0 of 2 collected')).toBeVisible();
   await rejectedImport.getByRole('button', { name: 'Cancel' }).click();
+  await expect(rejectedImport).toHaveCount(0);
   const durableImportError = page
     .getByRole('region', { name: 'Transaction review' })
     .getByRole('alert');
@@ -736,6 +737,7 @@ test('spends end-to-end from the ready-made demo wallet', async ({ page }) => {
   await expect(rejectedImport.getByRole('textbox', { name: 'Signed PSBT' })).toHaveValue('');
   await expect(rejectedImport.getByRole('alert')).toHaveCount(0);
   await rejectedImport.getByRole('button', { name: 'Cancel' }).click();
+  await expect(rejectedImport).toHaveCount(0);
   await page.getByRole('button', { name: 'Show unsigned QR' }).click();
   const unsignedQrDialog = page.getByRole('dialog', { name: 'Unsigned PSBT' });
   const unsignedQrImage = unsignedQrDialog.getByRole('img', { name: /QR frame/ });
@@ -1367,13 +1369,17 @@ test('offers safe recipes and advanced M-of-N control', async ({ page }, testInf
     await expect(selectedMark).toBeVisible();
     await expect(selectedMark).toHaveCSS('stroke', 'rgb(255, 255, 255)');
   }
-  await expect(page.getByText('Miniscript signer compatibility', { exact: true })).toBeVisible();
-  await expect(page.getByText(/no direct USB Miniscript workflow is certified/)).toBeVisible();
+  await expect(page.getByText('Limited signer support', { exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: /^Partner continuity/ })).toBeEnabled();
   const assistedRecovery = page.getByRole('button', { name: /^Family continuity/ });
   await expect(assistedRecovery).toBeEnabled();
   await expect(assistedRecovery).toContainText('Test networks only');
+  await page.getByRole('button', { name: /^Partner continuity/ }).click();
+  await expect(page.getByText('Limited signer support', { exact: true })).toBeVisible();
+  await expect(page.getByText(/Offline PSBT only/)).toBeVisible();
+  await expect(page.getByText(/Unsupported: Coldcard, Trezor, phone signers/)).toBeVisible();
   await page.getByRole('button', { name: /^Standard/ }).click();
+  await expect(page.getByText('Limited signer support', { exact: true })).toHaveCount(0);
   await revealInsight(page, 'How Standard multisig works', testInfo.project.name === 'mobile');
   await expect(
     page.getByRole('tooltip').filter({ hasText: 'No single key can spend alone' })
@@ -2519,6 +2525,7 @@ for (const language of ['en', 'fr', 'es'] as const) {
             ),
           fullPage: true
         });
+        await expect(page.locator('.toast-region .toast')).toHaveCount(0, { timeout: 10_000 });
         await review.click();
         await expect(review).toHaveCount(0);
       }

@@ -1432,6 +1432,46 @@ fn foreground_sync_read_gate_closes_before_the_writer_commits() {
 }
 
 #[test]
+fn explicit_lock_cancels_only_the_selected_sync_and_fences_its_commit() {
+    let state = AppState::default();
+    let wallet_id = Uuid::new_v4();
+    let cancel = Arc::new(AtomicBool::new(false));
+    let reads_safe = Arc::new(AtomicBool::new(true));
+    let _sync_operation = state.operations.lock().unwrap();
+    state
+        .foreground_sync
+        .lock()
+        .unwrap()
+        .replace(ActiveForegroundSync {
+            wallet_id,
+            cancel: Arc::clone(&cancel),
+            persisted_reads_safe: Arc::clone(&reads_safe),
+        });
+
+    assert!(foreground_sync_read_gate(&state, Uuid::new_v4(), true)
+        .unwrap()
+        .is_none());
+    assert!(ensure_foreground_sync_not_cancelled(Some(&cancel)).is_ok());
+    let lock_fence = foreground_sync_read_gate(&state, wallet_id, true)
+        .unwrap()
+        .unwrap();
+    assert!(state.persisted_sync_reads.try_write().is_err());
+    assert!(state.metadata_operations.try_lock().is_ok());
+    drop(lock_fence);
+
+    let _commit_fence = stop_persisted_sync_reads(&state).unwrap();
+    assert_eq!(
+        ensure_foreground_sync_not_cancelled(Some(&cancel))
+            .unwrap_err()
+            .code,
+        "sync_cancelled"
+    );
+    assert!(foreground_sync_read_gate(&state, wallet_id, true)
+        .unwrap()
+        .is_none());
+}
+
+#[test]
 fn metadata_operations_do_not_wait_for_the_selected_wallet_sync() {
     let state = AppState::default();
     let wallet_id = Uuid::new_v4();
@@ -5182,6 +5222,50 @@ fn inheritance_descriptor_backup_recompiles_the_persisted_template() {
 }
 
 #[test]
+fn recovery_drill_presents_valid_advanced_backups_without_enabling_the_coordinator() {
+    use crate::recovery::TimedSpendingPath;
+
+    for template in [
+        RecoveryTemplate::Decaying {
+            stages: vec![
+                TimedSpendingPath::new(0, 3, ["key-1", "key-2", "key-3", "key-4"]),
+                TimedSpendingPath::new(4_320, 2, ["key-1", "key-2", "key-3", "key-4"]),
+            ],
+        },
+        RecoveryTemplate::Expanding {
+            stages: vec![
+                TimedSpendingPath::new(0, 2, ["key-1", "key-2"]),
+                TimedSpendingPath::new(4_320, 2, ["key-1", "key-2", "key-3"]),
+            ],
+        },
+    ] {
+        let mut backup = descriptor_backup();
+        let analysis = analyze_template(&template, &backup.wallet.cosigners).unwrap();
+        backup.wallet.external_descriptor = analysis.external_descriptor;
+        backup.wallet.internal_descriptor = analysis.internal_descriptor;
+        backup.wallet.threshold = analysis.paths[0].threshold;
+        backup.wallet.policy_type = recovery_policy_type(&template).to_owned();
+        backup.wallet.recovery_template = Some(template);
+        backup.wallet.spending_paths = analysis.paths;
+
+        let validated = validate_multisig_backup(&serde_json::to_string(&backup).unwrap()).unwrap();
+        let (policy_type, paths) = recovery_drill_policy_presentation(&validated.wallet).unwrap();
+        assert_eq!(
+            policy_type.as_deref(),
+            Some(validated.wallet.policy_type.as_str())
+        );
+        assert_eq!(paths.len(), validated.wallet.spending_paths.len());
+        assert_eq!(paths[0].available_after_blocks, 0);
+        assert_eq!(paths[1].available_after_blocks, 4_320);
+        assert_eq!(
+            verified_analysis(&validated.wallet).unwrap_err().code,
+            "hardware_policy_unsupported",
+            "inspection compatibility must not expand transaction-coordinator support"
+        );
+    }
+}
+
+#[test]
 fn descriptor_backup_rejects_oversize_network_and_policy_tampering() {
     assert_eq!(
         validate_multisig_backup(&"x".repeat(256 * 1024 + 1))
@@ -5237,6 +5321,15 @@ fn private_json_is_atomic_owner_only_and_bounded() {
     fs::write(&path, vec![b'x'; MAX_PRIVATE_JSON_BYTES as usize + 1]).unwrap();
     assert_eq!(read_private_text(&path).unwrap_err().code, "internal_error");
     fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn bundled_sqlite_includes_the_wal_page_size_fix() {
+    let version = bdk_wallet::rusqlite::version_number();
+    assert!(
+        version >= 3_054_000,
+        "SQLite 3.54.0 or later is required, linked version is {version}"
+    );
 }
 
 #[test]
@@ -5344,7 +5437,7 @@ fn mainnet_node_admission_lifetime_is_monotonic_and_bounded() {
     ));
     assert!(!mainnet_node_admission_is_current_at(
         created_at,
-        created_at - Duration::from_nanos(1)
+        created_at - Duration::from_secs(1)
     ));
 }
 
@@ -5605,6 +5698,7 @@ fn synced_snapshots_enqueue_received_and_first_confirmation_events_once() {
             observed_at: Some("1".to_owned()),
             status: "stale",
         },
+        policy_paths: vec![],
     };
 
     enqueue_snapshot_notifications(&db, &snapshot).unwrap();
@@ -6101,6 +6195,7 @@ fn restart_restores_proposals_frozen_coins_and_acknowledged_notifications() {
             .code,
         "malformed_psbt"
     );
+    drop(restarted_db);
     fs::remove_dir_all(directory).unwrap();
 }
 
@@ -6134,6 +6229,7 @@ fn restart_lists_only_active_payment_proposals_newest_first() {
         active_payment_proposal_ids(&restarted_db).unwrap(),
         vec!["newer-active", "older-active"]
     );
+    drop(restarted_db);
     fs::remove_dir_all(directory).unwrap();
 }
 
@@ -6618,6 +6714,7 @@ fn restored_mainnet_node_auth_requires_fresh_verification_before_database_open()
         tor_proxy: None,
     };
     let mut session = NodeAuthSession {
+        identity: Uuid::new_v4(),
         config: config.clone(),
         password: Zeroizing::new("secret".to_owned()),
         mainnet_node_verified: false,
@@ -7041,13 +7138,18 @@ fn sync_reconciles_only_exact_observed_proposals_atomically_and_after_reopen() {
     )
     .unwrap();
     db.execute("INSERT INTO groot_accelerations (proposal_id, method, original_txid, original_kind, original_direction, original_amount, original_date, original_label, created_at) VALUES('accepted','rbf',?1,'payment','sent',1,'1','Synthetic',1)", [Txid::from_byte_array([77;32]).to_string()]).unwrap();
+    db.execute_batch("CREATE TRIGGER fail_notification BEFORE INSERT ON groot_notifications BEGIN SELECT RAISE(ABORT, 'synthetic write failure'); END;").unwrap();
     {
         let transaction = db.transaction().unwrap();
         let repaired = reconcile_broadcast_proposals(&wallet, &transaction).unwrap();
         assert_eq!(repaired, [txid]);
-        enqueue_reconciled_broadcasts(&transaction, &repaired, 0).unwrap();
-        // Dropping the transaction simulates a failed local commit.
+        assert!(enqueue_reconciled_broadcasts(&transaction, &repaired, 0).is_err());
+        // The actual notification write failed after proposal/label changes.
+        // Drop and reopen before retry, preserving the accepted transaction.
     }
+    drop(db);
+    let mut db = Connection::open(&path).unwrap();
+    db.execute_batch("DROP TRIGGER fail_notification;").unwrap();
     assert_eq!(
         db.query_row(
             "SELECT status FROM groot_proposals WHERE proposal_id='accepted'",
@@ -7296,6 +7398,155 @@ fn family_assistance_requires_a_parent_and_an_assistance_role() {
 }
 
 #[test]
+fn per_coin_policy_status_preserves_the_bip68_inclusion_boundary() {
+    let metadata = continuity_test_metadata(false);
+    let analysis = verified_analysis(&metadata).unwrap();
+    let definitions = policy_path_definitions(&metadata, &analysis).unwrap();
+    let delayed = &definitions[1];
+    let delay = delayed.available_after_blocks;
+    let confirmation_height = 100;
+
+    let waiting_confirmations = delay - 1;
+    let waiting_tip = confirmation_height + waiting_confirmations - 1;
+    let waiting =
+        policy_path_coin_status(delayed, waiting_confirmations, waiting_tip, true, false).unwrap();
+    assert_eq!(waiting.policy_state, "waiting");
+    assert_eq!(waiting.blocks_until_broadcast_eligible, Some(1));
+    assert_eq!(waiting.confirmation_height, Some(confirmation_height));
+    assert_eq!(
+        waiting.earliest_inclusion_height,
+        Some(confirmation_height + delay)
+    );
+
+    let eligible_tip = confirmation_height + delay - 1;
+    let eligible = policy_path_coin_status(delayed, delay, eligible_tip, true, false).unwrap();
+    assert_eq!(eligible.policy_state, "available");
+    assert_eq!(eligible.blocks_until_broadcast_eligible, Some(0));
+    assert_eq!(eligible.confirmation_height, Some(confirmation_height));
+    assert_eq!(
+        eligible.earliest_inclusion_height,
+        Some(eligible_tip + 1),
+        "the first valid inclusion block is the block after the tip where the coin reaches the required confirmation count"
+    );
+}
+
+#[test]
+fn per_coin_policy_status_keeps_action_blockers_separate_from_path_state() {
+    let metadata = continuity_test_metadata(false);
+    let analysis = verified_analysis(&metadata).unwrap();
+    let definitions = policy_path_definitions(&metadata, &analysis).unwrap();
+    let delayed = &definitions[1];
+    let confirmations = delayed.available_after_blocks;
+    let tip = 100 + confirmations - 1;
+
+    let frozen = policy_path_coin_status(delayed, confirmations, tip, true, true).unwrap();
+    assert_eq!(frozen.policy_state, "available");
+    assert_eq!(frozen.action_blockers, vec!["frozen"]);
+
+    let stale = policy_path_coin_status(delayed, confirmations, tip, false, false).unwrap();
+    assert_eq!(stale.policy_state, "unknown");
+    assert_eq!(stale.action_blockers, vec!["stale_chain"]);
+
+    let primary = policy_path_coin_status(&definitions[0], 1, 100, false, true).unwrap();
+    assert_eq!(primary.policy_state, "available");
+    assert_eq!(primary.action_blockers, vec!["frozen", "stale_chain"]);
+}
+
+#[test]
+fn per_coin_policy_unconfirmed_has_no_path_height_or_calendar_estimate() {
+    let metadata = continuity_test_metadata(false);
+    let analysis = verified_analysis(&metadata).unwrap();
+    let definitions = policy_path_definitions(&metadata, &analysis).unwrap();
+
+    let status = policy_path_coin_status(&definitions[1], 0, 500, true, false).unwrap();
+    assert_eq!(status.policy_state, "unconfirmed");
+    assert_eq!(status.age_blocks, 0);
+    assert_eq!(status.blocks_until_broadcast_eligible, None);
+    assert_eq!(status.confirmation_height, None);
+    assert_eq!(status.earliest_inclusion_height, None);
+    assert_eq!(status.approximate_seconds_remaining, None);
+    assert!(status.action_blockers.is_empty());
+}
+
+#[test]
+fn per_coin_policy_continuity_renewal_becomes_due_at_26_280_confirmations() {
+    let confirmation_height = 200;
+    let before_confirmations = CONTINUITY_RENEWAL_BLOCKS - 1;
+    let before_tip = confirmation_height + before_confirmations - 1;
+    let before =
+        policy_renewal_recommendation("partner_continuity_v1", before_confirmations, before_tip)
+            .unwrap()
+            .unwrap();
+    assert!(!before.due);
+    assert_eq!(before.remaining_blocks, Some(1));
+    assert_eq!(
+        before.recommended_at_height,
+        Some(confirmation_height + CONTINUITY_RENEWAL_BLOCKS - 1)
+    );
+
+    let due_tip = confirmation_height + CONTINUITY_RENEWAL_BLOCKS - 1;
+    let due =
+        policy_renewal_recommendation("family_continuity_v1", CONTINUITY_RENEWAL_BLOCKS, due_tip)
+            .unwrap()
+            .unwrap();
+    assert!(due.due);
+    assert_eq!(due.recommended_at_age_blocks, 26_280);
+    assert_eq!(due.remaining_blocks, Some(0));
+    assert_eq!(due.recommended_at_height, Some(due_tip));
+    assert_eq!(due.approximate_seconds_remaining, Some(0));
+
+    assert!(policy_renewal_recommendation("recovery", 26_280, due_tip)
+        .unwrap()
+        .is_none());
+}
+
+#[test]
+fn per_coin_policy_family_assistance_preserves_parent_and_child_role_groups() {
+    let metadata = continuity_test_metadata(true);
+    let analysis = verified_analysis(&metadata).unwrap();
+    let definitions = policy_path_definitions(&metadata, &analysis).unwrap();
+    let assistance = &definitions[1];
+
+    assert_eq!(assistance.code, "family_assistance");
+    assert_eq!(assistance.required, 2);
+    assert_eq!(assistance.signer_groups.len(), 2);
+    assert_eq!(assistance.signer_groups[0].code, "parents");
+    assert_eq!(assistance.signer_groups[0].required, 1);
+    assert_eq!(assistance.signer_groups[0].signers.len(), 2);
+    assert!(assistance.signer_groups[0]
+        .signers
+        .iter()
+        .all(|signer| signer.role == "parent"));
+    assert_eq!(assistance.signer_groups[1].code, "child_assistance_signers");
+    assert_eq!(assistance.signer_groups[1].required, 1);
+    assert_eq!(assistance.signer_groups[1].signers.len(), 2);
+    assert!(assistance.signer_groups[1]
+        .signers
+        .iter()
+        .all(|signer| signer.role == "child_assistance"));
+    let mut grouped_fingerprints = assistance
+        .signer_groups
+        .iter()
+        .flat_map(|group| group.signers.iter())
+        .map(|signer| signer.fingerprint.clone())
+        .collect::<Vec<_>>();
+    grouped_fingerprints.sort();
+    grouped_fingerprints.dedup();
+    let mut eligible_fingerprints = assistance.eligible_signer_fingerprints.clone();
+    eligible_fingerprints.sort();
+    eligible_fingerprints.dedup();
+    assert_eq!(grouped_fingerprints, eligible_fingerprints);
+    assert_eq!(
+        assistance
+            .signer_groups
+            .iter()
+            .map(|group| group.required)
+            .sum::<usize>(),
+        assistance.required
+    );
+}
+
+#[test]
 fn fee_estimates_preserve_each_available_target_without_filling_missing_targets() {
     for mask in 0..8 {
         let known = [0.2, 0.5, 1.25];
@@ -7536,4 +7787,245 @@ fn observed_receive_output_marks_its_permanent_address_without_touching_others()
         )
         .unwrap();
     assert_eq!(untouched, ("awaiting".to_owned(), 0));
+}
+
+#[test]
+fn failed_profile_cleanup_preserves_a_visible_registry_commit() {
+    let root = std::env::temp_dir().join(format!("groot-profile-commit-{}", Uuid::new_v4()));
+    let id = Uuid::new_v4();
+    let directory = root.join("wallets").join(id.to_string());
+    fs::create_dir_all(&directory).unwrap();
+    fs::write(directory.join("synthetic-state"), b"preserve").unwrap();
+    let mut registry = WalletRegistry::default();
+    registry
+        .add(WalletProfile {
+            id,
+            name: "Synthetic".into(),
+            network: network_name().into(),
+            kind: WalletKind::Multisig,
+            descriptor_checksum: "12345678".into(),
+            created_at: 1,
+            backup_verified: true,
+        })
+        .unwrap();
+    registry::save_atomic(&root.join("wallet-registry.json"), &registry).unwrap();
+    assert!(cleanup_failed_profile(&directory).is_err());
+    assert_eq!(
+        fs::read(directory.join("synthetic-state")).unwrap(),
+        b"preserve"
+    );
+    // Uncertain/corrupt registry state also forbids destructive cleanup.
+    fs::write(root.join("wallet-registry.json"), b"truncated").unwrap();
+    assert!(cleanup_failed_profile(&directory).is_err());
+    assert!(directory.exists());
+    registry::save_atomic(
+        &root.join("wallet-registry.json"),
+        &WalletRegistry::default(),
+    )
+    .unwrap();
+    cleanup_failed_profile(&directory).unwrap();
+    assert!(!directory.exists());
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn persisted_profile_identity_reopens_all_wallet_kinds_and_rejects_metadata_substitution() {
+    let root = std::env::temp_dir().join(format!("groot-profile-identity-{}", Uuid::new_v4()));
+    let mnemonic = Mnemonic::parse(WORDS).unwrap();
+    let software = software_wallet_descriptors(&mnemonic, "synthetic passphrase").unwrap();
+    let multisig = descriptor_backup().wallet;
+    let secp = Secp256k1::new();
+    let master = Xpriv::new_master(NetworkKind::Test, &[42; 32]).unwrap();
+    let account = master
+        .derive_priv(
+            &secp,
+            &DerivationPath::from_str(singlesig_account_path()).unwrap(),
+        )
+        .unwrap();
+    let signer = ExternalSignerInput {
+        label: "Synthetic signer".into(),
+        fingerprint: master.fingerprint(&secp).to_string(),
+        xpub: Xpub::from_priv(&secp, &account).to_string(),
+        derivation_path: singlesig_account_path().into(),
+        source: SignerSource::Qr,
+        device_type: None,
+    };
+    let hardware_pair = external_signer::descriptors(&signer).unwrap();
+    let hardware = ExternalSignerWallet {
+        version: 1,
+        name: "Synthetic hardware".into(),
+        signer,
+        external_descriptor: hardware_pair.0.clone(),
+        internal_descriptor: hardware_pair.1.clone(),
+    };
+    for (kind, pair, metadata, expected_name) in [
+        (WalletKind::SingleKey, software, None, "Primary wallet"),
+        (
+            WalletKind::Multisig,
+            (
+                multisig.external_descriptor.clone(),
+                multisig.internal_descriptor.clone(),
+            ),
+            Some(serde_json::to_value(&multisig).unwrap()),
+            multisig.name.as_str(),
+        ),
+        (
+            WalletKind::WatchOnly,
+            hardware_pair,
+            Some(serde_json::to_value(&hardware).unwrap()),
+            hardware.name.as_str(),
+        ),
+    ] {
+        let id = Uuid::new_v4();
+        let directory = root.join(id.to_string());
+        ensure_private_directory(&directory).unwrap();
+        let db_path = directory.join("wallet.sqlite");
+        let mut db = Connection::open(&db_path).unwrap();
+        init_app_schema(&db).unwrap();
+        Wallet::create(pair.0.clone(), pair.1.clone())
+            .network(network())
+            .create_wallet(&mut db)
+            .unwrap();
+        drop(db);
+        if let Some(value) = &metadata {
+            fs::write(
+                directory.join("wallet.json"),
+                serde_json::to_vec(value).unwrap(),
+            )
+            .unwrap();
+        }
+        let profile = profile_from_directory(&directory, id, kind.clone()).unwrap();
+        assert_eq!(profile.id, id);
+        assert_eq!(profile.name, expected_name);
+        assert_eq!(profile.kind, kind);
+        assert_eq!(profile.network, network_name());
+        assert!(profile.backup_verified);
+        assert_eq!(
+            descriptor_pair_from_directory(&directory, &profile).unwrap(),
+            pair
+        );
+        let before = fs::read(&db_path).unwrap();
+        let mut wrong_identity = profile.clone();
+        wrong_identity.descriptor_checksum = "00000000".into();
+        assert_eq!(
+            descriptor_pair_from_directory(&directory, &wrong_identity)
+                .unwrap_err()
+                .code,
+            "wallet_corrupt"
+        );
+        if let Some(mut value) = metadata {
+            value["internalDescriptor"] = serde_json::Value::String(pair.0.clone());
+            fs::write(
+                directory.join("wallet.json"),
+                serde_json::to_vec(&value).unwrap(),
+            )
+            .unwrap();
+            assert_eq!(
+                descriptor_pair_from_directory(&directory, &profile)
+                    .unwrap_err()
+                    .code,
+                "wallet_corrupt"
+            );
+            fs::write(directory.join("wallet.json"), b"truncated").unwrap();
+            assert!(descriptor_pair_from_directory(&directory, &profile).is_err());
+        }
+        assert_eq!(
+            fs::read(&db_path).unwrap(),
+            before,
+            "identity inspection must not rewrite the database"
+        );
+    }
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn profile_attempt_cleanup_clears_only_failed_auth_and_preserves_uncertain_commits() {
+    let root = std::env::temp_dir().join(format!("groot-profile-attempt-{}", Uuid::new_v4()));
+    let id = Uuid::new_v4();
+    let other = Uuid::new_v4();
+    let directory = root.join("wallets").join(id.to_string());
+    ensure_private_directory(&directory).unwrap();
+    fs::write(directory.join("synthetic-state"), b"preserve").unwrap();
+    let state = AppState::default();
+    for wallet_id in [id, other] {
+        state.node_auth.lock().unwrap().insert(
+            wallet_id,
+            NodeAuthSession {
+                identity: Uuid::new_v4(),
+                config: CoreNodeConfig {
+                    backend: ChainBackend::LocalCore {
+                        url: "http://127.0.0.1:18443".into(),
+                    },
+                    auth: RpcAuthMode::UserPass,
+                    username: Some("synthetic".into()),
+                    tor_proxy: None,
+                },
+                password: Zeroizing::new("synthetic credential".into()),
+                mainnet_node_verified: false,
+            },
+        );
+    }
+    finish_new_profile_attempt(&state, id, &directory, true).unwrap();
+    assert!(directory.exists());
+    assert_eq!(state.node_auth.lock().unwrap().len(), 2);
+    fs::write(root.join("wallet-registry.json"), b"truncated").unwrap();
+    assert!(finish_new_profile_attempt(&state, id, &directory, false).is_err());
+    assert_eq!(
+        fs::read(directory.join("synthetic-state")).unwrap(),
+        b"preserve"
+    );
+    let sessions = state.node_auth.lock().unwrap();
+    assert!(!sessions.contains_key(&id));
+    assert!(sessions.contains_key(&other));
+    drop(sessions);
+    registry::save_atomic(
+        &root.join("wallet-registry.json"),
+        &WalletRegistry::default(),
+    )
+    .unwrap();
+    finish_new_profile_attempt(&state, id, &directory, false).unwrap();
+    assert!(!directory.exists());
+    // Cleanup is idempotent, but never guesses at malformed ownership paths.
+    finish_new_profile_attempt(&state, id, &directory, false).unwrap();
+    for invalid in [
+        root.join("wallets/not-a-uuid"),
+        root.join("other").join(id.to_string()),
+    ] {
+        ensure_private_directory(&invalid).unwrap();
+        fs::write(invalid.join("synthetic-state"), b"preserve").unwrap();
+        assert!(cleanup_failed_profile(&invalid).is_err());
+        assert_eq!(
+            fs::read(invalid.join("synthetic-state")).unwrap(),
+            b"preserve"
+        );
+    }
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[cfg(unix)]
+#[test]
+fn private_profile_storage_rejects_links_and_restores_owner_only_permissions() {
+    use std::os::unix::{fs::symlink, fs::PermissionsExt};
+    let root = std::env::temp_dir().join(format!("groot-private-directory-{}", Uuid::new_v4()));
+    let directory = root.join("regular");
+    ensure_private_directory(&directory).unwrap();
+    fs::set_permissions(&directory, fs::Permissions::from_mode(0o755)).unwrap();
+    ensure_private_directory(&directory).unwrap();
+    assert_eq!(
+        fs::metadata(&directory).unwrap().permissions().mode() & 0o777,
+        0o700
+    );
+    let file = directory.join("record.json");
+    fs::write(&file, b"public synthetic record").unwrap();
+    let dir_link = root.join("directory-link");
+    symlink(&directory, &dir_link).unwrap();
+    assert!(ensure_private_directory(&dir_link).is_err());
+    assert!(ensure_private_directory(&file).is_err());
+    let file_link = root.join("file-link");
+    symlink(&file, &file_link).unwrap();
+    assert!(read_private_text(&file_link).is_err());
+    assert!(read_private_text(&directory).is_err());
+    assert_eq!(read_private_text(&file).unwrap(), "public synthetic record");
+    assert_eq!(fs::read(&file).unwrap(), b"public synthetic record");
+    fs::remove_dir_all(root).unwrap();
 }

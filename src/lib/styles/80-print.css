@@ -126,6 +126,84 @@
     color: #4b5563;
     font-size: 7px;
   }
+  .backup-print-sheet .print-policy-paths > p {
+    margin: -2px 0 6px;
+    color: #4b5563;
+    font-size: 7px;
+  }
+  .backup-print-sheet .print-policy-path-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .backup-print-sheet .print-policy-path-list.three-policy-paths {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .backup-print-sheet .print-policy-path-list > .backup-policy-path {
+    display: block;
+    min-width: 0;
+    padding: 6px;
+    break-inside: avoid;
+  }
+  .backup-print-sheet .backup-policy-path-heading {
+    display: flex;
+    align-items: start;
+    justify-content: space-between;
+    gap: 5px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid #d1d5db;
+  }
+  .backup-print-sheet .backup-policy-path-heading strong {
+    line-height: 1.25;
+  }
+  .backup-print-sheet .backup-policy-path-heading span {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+  .backup-print-sheet .backup-policy-groups {
+    display: grid;
+    gap: 4px;
+    padding-top: 4px;
+  }
+  .backup-print-sheet .backup-policy-group {
+    margin: 0;
+  }
+  .backup-print-sheet .backup-policy-group h3 {
+    margin: 0 0 2px;
+    font-size: 7px;
+  }
+  .backup-print-sheet .backup-policy-group ul {
+    display: grid;
+    gap: 2px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .backup-print-sheet .backup-policy-group li {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 1px 4px;
+    min-width: 0;
+    padding: 3px 4px;
+    border: 0;
+    border-radius: 3px;
+    background: #f3f4f6;
+  }
+  .backup-print-sheet .backup-policy-group li strong,
+  .backup-print-sheet .backup-policy-group li code,
+  .backup-print-sheet .backup-policy-group li span {
+    font-size: 6px;
+    line-height: 1.2;
+  }
+  .backup-print-sheet .backup-policy-group li code {
+    color: #374151;
+  }
+  .backup-print-sheet .backup-policy-group li span {
+    grid-column: 1 / -1;
+  }
   .print-descriptors {
     display: grid;
     grid-template-columns: 1fr;

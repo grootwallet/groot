@@ -81,6 +81,7 @@ use crate::proposal::{
 };
 use crate::recovery::{
     analyze_template, calculate_maturity, MaturityState, PolicyAnalysis, RecoveryTemplate,
+    CONTINUITY_RENEWAL_BLOCKS,
 };
 use crate::registry::{self, RegistryError, WalletKind, WalletProfile, WalletRegistry};
 use crate::secure_store;
@@ -142,13 +143,15 @@ const MAINNET_NODE_ADMISSION_LIFETIME: Duration = Duration::from_secs(15 * 60);
 pub mod diagnostics;
 #[path = "wallet/export_commands.rs"]
 mod export_commands;
+#[cfg(all(test, unix))]
+use export_commands::write_public_export;
 #[cfg(any(target_os = "macos", test))]
 use export_commands::PendingPdfExport;
 use export_commands::SavedFileReveal;
 #[cfg(test)]
 use export_commands::{
     consume_pending_pdf_export, consume_saved_file_token, validate_psbt_filename,
-    validate_public_backup_filename, validate_public_backup_pdf_filename, write_public_export,
+    validate_public_backup_filename, validate_public_backup_pdf_filename,
     PENDING_PDF_EXPORT_TIMEOUT, SAVED_FILE_REVEAL_TIMEOUT,
 };
 pub use export_commands::{PendingPdfExportDto, SavedFileDto};
@@ -234,14 +237,14 @@ pub fn public_backup_pdf_save(
 fn hwi_cli(app: &AppHandle) -> ApiResult<HwiCli> {
     let home = app.path().home_dir().map_err(internal)?;
     let chain = HwiChain::for_network(network());
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
     let cli = if let Some(resource_name) = option_env!("GROOT_BUNDLED_HWI_RESOURCE") {
         let resource_dir = app.path().resource_dir().map_err(internal)?;
         HwiCli::for_bundled_resource(chain, &resource_dir, resource_name)
     } else {
         Ok(HwiCli::for_chain(chain))
     };
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
     let cli = Ok(HwiCli::for_chain(chain));
 
     cli.and_then(|cli| cli.with_home(home))
@@ -289,8 +292,8 @@ fn api_error(code: &'static str, message: impl ToString) -> ApiError {
     }
 }
 
-// Mobile 5.3 starts with public observation and interchange only. Keep this
-// native guard even when the renderer hides the actions.
+// USB signing and multisig broadcast remain desktop-only. Isolated Testnet4
+// iOS software/phone keys use the separate guard below; renderer hiding is insufficient.
 fn require_desktop_key_operation() -> ApiResult<()> {
     validate_key_operation_platform(cfg!(any(target_os = "ios", target_os = "android")))
 }
@@ -429,11 +432,22 @@ fn foreground_persisted_read_guard(
     state: &AppState,
     wallet_id: Uuid,
 ) -> ApiResult<Option<RwLockReadGuard<'_, ()>>> {
+    foreground_sync_read_gate(state, wallet_id, false)
+}
+
+fn foreground_sync_read_gate(
+    state: &AppState,
+    wallet_id: Uuid,
+    cancel_for_lock: bool,
+) -> ApiResult<Option<RwLockReadGuard<'_, ()>>> {
     let active = state.foreground_sync.lock().map_err(internal)?;
-    let safe = active.as_ref().is_some_and(|sync| {
-        sync.wallet_id == wallet_id && sync.persisted_reads_safe.load(Ordering::Acquire)
-    });
-    if safe {
+    let Some(sync) = active.as_ref().filter(|sync| sync.wallet_id == wallet_id) else {
+        return Ok(None);
+    };
+    if cancel_for_lock {
+        sync.cancel.store(true, Ordering::Release);
+    }
+    if sync.persisted_reads_safe.load(Ordering::Acquire) {
         Ok(Some(state.persisted_sync_reads.read().map_err(internal)?))
     } else {
         Ok(None)
@@ -608,6 +622,54 @@ fn require_wallet_read_context(
     validate_read_session(current, session_id)
 }
 
+// A saved proposal is reviewed from the last committed wallet state. Its
+// signing and broadcast commands still serialize with sync and revalidate.
+async fn with_selected_proposal_db<T: Send + 'static>(
+    app: AppHandle,
+    multisig: bool,
+    read: impl FnOnce(&AppHandle, &mut Connection) -> ApiResult<T> + Send + 'static,
+) -> ApiResult<T> {
+    let wallet_id = selected_profile(&app)?.id;
+    let session_id = app
+        .state::<AppState>()
+        .unlocked_wallets
+        .lock()
+        .map_err(internal)?
+        .identity(wallet_id);
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let session_id = validate_read_session(session_id, None)?;
+        let mut persisted = foreground_persisted_read_guard(&state, wallet_id)?;
+        if persisted.is_some() && multisig {
+            require_wallet_read_context(&app, &state, wallet_id, Some(session_id))?;
+            // Continuity computes path maturity through the ordinary snapshot
+            // pipeline, which reconciles provenance. Keep that on the writer.
+            if read_multisig_metadata(&app)?.recovery_template.is_some() {
+                drop(persisted.take());
+            }
+        }
+        let _operation = if persisted.is_none() {
+            Some(operation_guard(&state)?)
+        } else {
+            None
+        };
+        require_wallet_read_context(&app, &state, wallet_id, Some(session_id))?;
+        require_unlocked(&app, &state)?;
+        let mut db = if persisted.is_some() {
+            open_selected_db_for_persisted_read(&app, multisig)?
+        } else if multisig {
+            open_multisig_db(&app)?
+        } else {
+            open_db(&app)?
+        };
+        let result = read(&app, &mut db)?;
+        require_wallet_read_context(&app, &state, wallet_id, Some(session_id))?;
+        Ok(result)
+    })
+    .await
+    .map_err(internal)?
+}
+
 fn validate_read_wallet(current: Uuid, expected: Uuid) -> ApiResult<()> {
     if current != expected {
         return Err(api_error(
@@ -660,6 +722,7 @@ fn lock_wallet(state: &State<'_, AppState>, wallet_id: Uuid) -> ApiResult<()> {
 pub struct AppState {
     operations: Mutex<()>,
     metadata_operations: Mutex<()>,
+    fee_estimate_request: Mutex<()>,
     foreground_sync: Mutex<Option<ActiveForegroundSync>>,
     persisted_sync_reads: RwLock<()>,
     proposals: Mutex<HashMap<String, PendingProposal>>,
@@ -865,6 +928,7 @@ struct ActiveForegroundSync {
 }
 
 struct NodeAuthSession {
+    identity: Uuid,
     config: CoreNodeConfig,
     password: Zeroizing<String>,
     mainnet_node_verified: bool,
@@ -1246,6 +1310,8 @@ pub struct UtxoDto {
     provenance: ProvenanceSummaryDto,
     frozen: bool,
     policy_maturity: Option<PolicyMaturityDto>,
+    policy_path_statuses: Vec<PolicyPathCoinStatusDto>,
+    policy_renewal_recommendation: Option<PolicyRenewalRecommendationDto>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -1260,6 +1326,58 @@ pub struct PolicyMaturityDto {
     maturity_height: Option<u32>,
     approximate_seconds_remaining: Option<u64>,
     delayed_spend_supported: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PolicyPathSignerDto {
+    label: String,
+    fingerprint: String,
+    role: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PolicySignerGroupDto {
+    code: String,
+    label: String,
+    required: usize,
+    signers: Vec<PolicyPathSignerDto>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PolicyPathDefinitionDto {
+    index: usize,
+    code: String,
+    name: String,
+    required: usize,
+    eligible_signer_fingerprints: Vec<String>,
+    signer_groups: Vec<PolicySignerGroupDto>,
+    available_after_blocks: u32,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PolicyPathCoinStatusDto {
+    path_index: usize,
+    policy_state: &'static str,
+    age_blocks: u32,
+    blocks_until_broadcast_eligible: Option<u32>,
+    confirmation_height: Option<u32>,
+    earliest_inclusion_height: Option<u32>,
+    approximate_seconds_remaining: Option<u64>,
+    action_blockers: Vec<&'static str>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PolicyRenewalRecommendationDto {
+    recommended_at_age_blocks: u32,
+    remaining_blocks: Option<u32>,
+    recommended_at_height: Option<u32>,
+    approximate_seconds_remaining: Option<u64>,
+    due: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -1281,12 +1399,14 @@ pub struct WalletSnapshotDto {
     label_suggestions: Vec<LabelSuggestionDto>,
     synced_at: Option<String>,
     chain_tip: ChainTipDto,
+    policy_paths: Vec<PolicyPathDefinitionDto>,
 }
 
 #[derive(Debug, Clone)]
 struct DelayedPolicyContext {
     policy_type: String,
     delay_blocks: u32,
+    paths: Vec<PolicyPathDefinitionDto>,
 }
 
 #[derive(Clone, Serialize)]
@@ -1639,6 +1759,8 @@ pub struct RecoveryDrillDto {
     cosigners: Vec<CosignerInput>,
     first_address: String,
     matches_current_wallet: bool,
+    policy_type: Option<String>,
+    policy_paths: Vec<PolicyPathDefinitionDto>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq)]
@@ -2001,256 +2123,6 @@ fn descriptor_checksum(descriptor: &str) -> ApiResult<String> {
         .ok_or_else(|| internal("A canonical descriptor checksum is missing."))
 }
 
-fn load_registry(app: &AppHandle) -> ApiResult<WalletRegistry> {
-    ensure_registry_migrated(app)?;
-    let registry = registry::load(&registry_path(app)?).map_err(registry_api_error)?;
-    ensure_registry_network(&registry)?;
-    Ok(registry)
-}
-
-fn ensure_registry_network(registry: &WalletRegistry) -> ApiResult<()> {
-    if registry
-        .wallets
-        .iter()
-        .all(|wallet| wallet.network == network_name())
-    {
-        Ok(())
-    } else {
-        Err(api_error(
-            "wrong_network",
-            format!(
-                "This wallet registry does not belong to the active {} network. No wallet was opened.",
-                network_name()
-            ),
-        ))
-    }
-}
-
-fn save_registry(app: &AppHandle, registry: &WalletRegistry) -> ApiResult<()> {
-    registry::save_atomic(&registry_path(app)?, registry).map_err(registry_api_error)
-}
-
-fn profile_directory(app: &AppHandle, id: Uuid) -> ApiResult<PathBuf> {
-    Ok(wallets_root(app)?.join(id.to_string()))
-}
-
-fn selected_profile(app: &AppHandle) -> ApiResult<WalletProfile> {
-    let registry = load_registry(app)?;
-    let selected = registry
-        .selected_wallet_id
-        .ok_or_else(|| registry_api_error(RegistryError::UnknownSelection))?;
-    registry
-        .wallets
-        .into_iter()
-        .find(|wallet| wallet.id == selected)
-        .ok_or_else(|| registry_api_error(RegistryError::UnknownSelection))
-}
-
-fn selected_profile_of_kind(app: &AppHandle, expected: WalletKind) -> ApiResult<WalletProfile> {
-    let profile = selected_profile(app)?;
-    if profile.kind != expected {
-        return Err(api_error(
-            "wrong_wallet_kind",
-            "The selected wallet does not support this operation.",
-        ));
-    }
-    Ok(profile)
-}
-
-fn wallet_dir(app: &AppHandle) -> ApiResult<PathBuf> {
-    let profile = selected_profile(app)?;
-    if !matches!(profile.kind, WalletKind::SingleKey | WalletKind::WatchOnly) {
-        return Err(api_error(
-            "wrong_wallet_kind",
-            "The selected wallet does not support this operation.",
-        ));
-    }
-    profile_directory(app, profile.id)
-}
-
-fn db_path(app: &AppHandle) -> ApiResult<PathBuf> {
-    Ok(wallet_dir(app)?.join("wallet.sqlite"))
-}
-
-fn secret_path(app: &AppHandle) -> ApiResult<PathBuf> {
-    Ok(wallet_dir(app)?.join("secret.json"))
-}
-
-fn wallet_secret_context(wallet_id: Uuid) -> secure_store::SecureStoreContext {
-    secure_store::SecureStoreContext::new(wallet_id, secure_store::SecureStorePurpose::WalletSecret)
-}
-
-fn node_auth_context(wallet_id: Uuid) -> secure_store::SecureStoreContext {
-    secure_store::SecureStoreContext::new(wallet_id, secure_store::SecureStorePurpose::NodeAuth)
-}
-
-fn external_signer_metadata_path(app: &AppHandle) -> ApiResult<PathBuf> {
-    let profile = selected_profile_of_kind(app, WalletKind::WatchOnly)?;
-    Ok(profile_directory(app, profile.id)?.join("wallet.json"))
-}
-
-fn multisig_dir(app: &AppHandle) -> ApiResult<PathBuf> {
-    let profile = selected_profile_of_kind(app, WalletKind::Multisig)?;
-    profile_directory(app, profile.id)
-}
-
-fn multisig_metadata_path(app: &AppHandle) -> ApiResult<PathBuf> {
-    Ok(multisig_dir(app)?.join("wallet.json"))
-}
-
-fn multisig_secret_path(app: &AppHandle) -> ApiResult<PathBuf> {
-    Ok(multisig_dir(app)?.join("secret.json"))
-}
-
-fn multisig_db_path(app: &AppHandle) -> ApiResult<PathBuf> {
-    Ok(multisig_dir(app)?.join("wallet.sqlite"))
-}
-
-fn profile_from_directory(
-    directory: &Path,
-    id: Uuid,
-    kind: WalletKind,
-) -> ApiResult<WalletProfile> {
-    let (name, checksum) = match kind {
-        WalletKind::SingleKey => {
-            let permit = database_open_permit_for_offline_identity_inspection()?;
-            let mut db = open_wallet_database(&directory.join("wallet.sqlite"), &permit)?;
-            let wallet = load_wallet(&mut db)?;
-            (
-                "Primary wallet".to_owned(),
-                descriptor_checksum(&wallet.public_descriptor(KeychainKind::External).to_string())?,
-            )
-        }
-        WalletKind::Multisig => {
-            let encoded = read_private_text(&directory.join("wallet.json"))?;
-            let wallet: MultisigWalletDto = serde_json::from_str(&encoded).map_err(internal)?;
-            (
-                wallet.name,
-                descriptor_checksum(&wallet.external_descriptor)?,
-            )
-        }
-        WalletKind::WatchOnly => {
-            let encoded = read_private_text(&directory.join("wallet.json"))?;
-            let wallet: ExternalSignerWallet = serde_json::from_str(&encoded).map_err(internal)?;
-            (
-                wallet.name,
-                descriptor_checksum(&wallet.external_descriptor)?,
-            )
-        }
-    };
-    Ok(WalletProfile {
-        id,
-        name,
-        network: network_name().to_owned(),
-        kind,
-        descriptor_checksum: checksum,
-        created_at: now(),
-        backup_verified: true,
-    })
-}
-
-fn ensure_registry_migrated(app: &AppHandle) -> ApiResult<()> {
-    let app_data = app_data_dir(app)?;
-    ensure_private_directory(&app_data)?;
-    ensure_private_directory(&wallets_root(app)?)?;
-    let path = registry_path(app)?;
-    if path.exists() {
-        let registry = registry::load(&path).map_err(registry_api_error)?;
-        ensure_registry_network(&registry)?;
-        return Ok(());
-    }
-    if !is_regtest() {
-        return save_registry(app, &WalletRegistry::default());
-    }
-    let legacy = [
-        (app_data.join("regtest-wallet"), WalletKind::SingleKey),
-        (app_data.join("regtest-multisig"), WalletKind::Multisig),
-    ];
-    let mut registry = WalletRegistry::default();
-    let mut moves = Vec::<(PathBuf, PathBuf)>::new();
-    let mut legacy_identities = Vec::<(String, WalletProfile)>::new();
-    for (legacy_directory, kind) in legacy {
-        if !legacy_directory.exists() {
-            continue;
-        }
-        let metadata = fs::symlink_metadata(&legacy_directory).map_err(internal)?;
-        if metadata.file_type().is_symlink() || !metadata.is_dir() {
-            return Err(internal(
-                "Legacy wallet storage is not a regular directory.",
-            ));
-        }
-        let id = Uuid::new_v4();
-        let profile = profile_from_directory(&legacy_directory, id, kind)?;
-        let (external_descriptor, _) = descriptor_pair_from_directory(&legacy_directory, &profile)?;
-        if let Some((_, existing)) = legacy_identities
-            .iter()
-            .find(|(existing_descriptor, _)| existing_descriptor == &external_descriptor)
-        {
-            return Err(wallet_already_exists(existing));
-        }
-        legacy_identities.push((external_descriptor, profile.clone()));
-        registry.add(profile).map_err(registry_api_error)?;
-        moves.push((legacy_directory, profile_directory(app, id)?));
-    }
-    migrate_directories_with_rollback(&moves, || save_registry(app, &registry))
-}
-
-fn ensure_private_directory(path: &Path) -> ApiResult<()> {
-    fs::create_dir_all(path).map_err(internal)?;
-    let metadata = fs::symlink_metadata(path).map_err(internal)?;
-    if metadata.file_type().is_symlink() || !metadata.is_dir() {
-        return Err(internal("Private storage is not a regular directory."));
-    }
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        fs::set_permissions(path, fs::Permissions::from_mode(0o700)).map_err(internal)?;
-    }
-    Ok(())
-}
-
-fn migrate_directories_with_rollback(
-    moves: &[(PathBuf, PathBuf)],
-    commit: impl FnOnce() -> ApiResult<()>,
-) -> ApiResult<()> {
-    let mut completed = 0;
-    for (source, destination) in moves {
-        if let Err(error) = fs::rename(source, destination) {
-            for (rollback_source, rollback_destination) in moves[..completed].iter().rev() {
-                let _ = fs::rename(rollback_destination, rollback_source);
-            }
-            return Err(internal(error));
-        }
-        completed += 1;
-    }
-    if let Err(error) = commit() {
-        for (source, destination) in moves[..completed].iter().rev() {
-            let _ = fs::rename(destination, source);
-        }
-        return Err(error);
-    }
-    Ok(())
-}
-
-fn prepare_profile_directory(app: &AppHandle) -> ApiResult<(Uuid, PathBuf)> {
-    let id = Uuid::new_v4();
-    let directory = prepare_profile_directory_with_id(app, id)?;
-    Ok((id, directory))
-}
-
-fn prepare_profile_directory_with_id(app: &AppHandle, id: Uuid) -> ApiResult<PathBuf> {
-    ensure_registry_migrated(app)?;
-    let directory = profile_directory(app, id)?;
-    ensure_private_directory(&wallets_root(app)?)?;
-    if directory.exists() {
-        return Err(internal(
-            "The new wallet storage identity is already in use.",
-        ));
-    }
-    ensure_private_directory(&directory)?;
-    Ok(directory)
-}
-
 fn current_mainnet_node_admission(state: &AppState) -> ApiResult<PendingMainnetNodeAdmission> {
     let mut admission = state
         .pending_mainnet_node_admission
@@ -2471,134 +2343,6 @@ fn open_existing_wallet_database_read_only(
     db.execute_batch("PRAGMA trusted_schema = OFF;")
         .map_err(internal)?;
     Ok(db)
-}
-
-fn profile_descriptor_pair(
-    app: &AppHandle,
-    profile: &WalletProfile,
-) -> ApiResult<(String, String)> {
-    let directory = profile_directory(app, profile.id)?;
-    descriptor_pair_from_directory(&directory, profile)
-}
-
-fn descriptor_pair_from_directory(
-    directory: &Path,
-    profile: &WalletProfile,
-) -> ApiResult<(String, String)> {
-    let permit = database_open_permit_for_offline_identity_inspection()?;
-    let mut db =
-        open_existing_wallet_database_read_only(&directory.join("wallet.sqlite"), &permit)?;
-    let wallet = load_wallet(&mut db)?;
-    let external = wallet.public_descriptor(KeychainKind::External).to_string();
-    let internal_descriptor = wallet.public_descriptor(KeychainKind::Internal).to_string();
-    let expected = match profile.kind {
-        WalletKind::SingleKey => None,
-        WalletKind::WatchOnly => {
-            let encoded = read_private_text(&directory.join("wallet.json"))?;
-            let metadata: ExternalSignerWallet =
-                serde_json::from_str(&encoded).map_err(internal)?;
-            metadata
-                .signer
-                .validate()
-                .map_err(external_signer_api_error)?;
-            let derived = external_signer::descriptors(&metadata.signer)
-                .map_err(external_signer_api_error)?;
-            if metadata.version != 1
-                || metadata.external_descriptor != derived.0
-                || metadata.internal_descriptor != derived.1
-            {
-                return Err(api_error(
-                    "wallet_corrupt",
-                    "External-signer metadata does not match its public wallet identity.",
-                ));
-            }
-            Some((metadata.external_descriptor, metadata.internal_descriptor))
-        }
-        WalletKind::Multisig => {
-            let encoded = read_private_text(&directory.join("wallet.json"))?;
-            let metadata: MultisigWalletDto = serde_json::from_str(&encoded).map_err(internal)?;
-            Some((metadata.external_descriptor, metadata.internal_descriptor))
-        }
-    };
-    validate_loaded_descriptors(
-        profile,
-        &external,
-        &internal_descriptor,
-        expected
-            .as_ref()
-            .map(|(external, internal)| (external.as_str(), internal.as_str())),
-    )?;
-    Ok((external, internal_descriptor))
-}
-
-fn find_exact_descriptor_profile(
-    app: &AppHandle,
-    registry: &WalletRegistry,
-    external_descriptor: &str,
-) -> ApiResult<Option<WalletProfile>> {
-    find_exact_descriptor_profile_with(registry, external_descriptor, |profile| {
-        profile_descriptor_pair(app, profile).map(|(external, _)| external)
-    })
-}
-
-fn find_exact_descriptor_profile_with(
-    registry: &WalletRegistry,
-    external_descriptor: &str,
-    mut read_external_descriptor: impl FnMut(&WalletProfile) -> ApiResult<String>,
-) -> ApiResult<Option<WalletProfile>> {
-    descriptor_checksum(external_descriptor)?;
-    let mut matched = None;
-    for profile in registry
-        .wallets
-        .iter()
-        .filter(|profile| profile.network == network_name())
-    {
-        let existing_external = read_external_descriptor(profile)?;
-        if exact_descriptor_identity_matches(external_descriptor, &existing_external) {
-            if matched.is_some() {
-                return Err(api_error(
-                    "wallet_corrupt",
-                    "The wallet registry contains the same exact descriptor identity more than once.",
-                ));
-            }
-            matched = Some(profile.clone());
-        }
-    }
-    Ok(matched)
-}
-
-fn exact_descriptor_identity_matches(candidate_external: &str, existing_external: &str) -> bool {
-    candidate_external == existing_external
-}
-
-fn commit_profile(
-    app: &AppHandle,
-    profile: WalletProfile,
-    external_descriptor: &str,
-) -> ApiResult<()> {
-    let mut registry = load_registry(app)?;
-    if let Some(existing) = find_exact_descriptor_profile(app, &registry, external_descriptor)? {
-        return Err(wallet_already_exists(&existing));
-    }
-    registry.add(profile.clone()).map_err(registry_api_error)?;
-    registry.select(profile.id).map_err(registry_api_error)?;
-    save_registry(app, &registry)
-}
-
-fn commit_multisig_profile(app: &AppHandle, id: Uuid, wallet: &MultisigWalletDto) -> ApiResult<()> {
-    commit_profile(
-        app,
-        WalletProfile {
-            id,
-            name: wallet.name.clone(),
-            network: network_name().to_owned(),
-            kind: WalletKind::Multisig,
-            descriptor_checksum: descriptor_checksum(&wallet.external_descriptor)?,
-            created_at: now(),
-            backup_verified: true,
-        },
-        &wallet.external_descriptor,
-    )
 }
 
 fn regtest_dir() -> ApiResult<PathBuf> {
@@ -2859,6 +2603,7 @@ fn load_node_auth_session(
             ));
         }
         Some(NodeAuthSession {
+            identity: Uuid::new_v4(),
             config,
             password,
             mainnet_node_verified: false,
@@ -2901,12 +2646,25 @@ fn rpc_client_with_timeout(
     timeout: Duration,
 ) -> ApiResult<Client> {
     let config = read_node_config(app)?;
+    let client = configured_rpc_client(app, state, &config, timeout)?;
+    validate_first_mainnet_rpc_backend(&client, &config.backend)?;
+    Ok(client)
+}
+
+// Constructs a transport from the saved configuration. The caller must
+// verify the remote chain before using it for any wallet operation.
+fn configured_rpc_client(
+    app: &AppHandle,
+    state: &State<'_, AppState>,
+    config: &CoreNodeConfig,
+    timeout: Duration,
+) -> ApiResult<Client> {
     validate_first_mainnet_rpc_endpoint(&config.backend)?;
     let url = config
         .validate()
         .map_err(network_config_api_error)?
         .to_string();
-    let client = match config.auth {
+    match config.auth {
         RpcAuthMode::Cookie => {
             if !is_regtest() {
                 return Err(api_error(
@@ -2932,7 +2690,7 @@ fn rpc_client_with_timeout(
                     "Unlock the wallet again to load its protected RPC credentials.",
                 )
             })?;
-            if session.config != config {
+            if session.config != *config {
                 return Err(api_error(
                     "invalid_node_config",
                     "The Bitcoin Core connection changed after unlock. Review and save it again before connecting.",
@@ -2946,9 +2704,7 @@ fn rpc_client_with_timeout(
                 timeout,
             )
         }
-    }?;
-    validate_first_mainnet_rpc_backend(&client, &config.backend)?;
-    Ok(client)
+    }
 }
 
 fn candidate_rpc_client(config: &CoreNodeConfig, password: &str) -> ApiResult<Client> {
@@ -5299,8 +5055,8 @@ fn delayed_policy_context(wallet: &MultisigWalletDto) -> ApiResult<Option<Delaye
         return Ok(None);
     };
     let analysis = verified_analysis(wallet)?;
-    let delay_blocks = analysis
-        .paths
+    let paths = policy_path_definitions(wallet, &analysis)?;
+    let delay_blocks = paths
         .iter()
         .find(|path| path.available_after_blocks > 0)
         .map(|path| path.available_after_blocks)
@@ -5325,12 +5081,50 @@ fn delayed_policy_context(wallet: &MultisigWalletDto) -> ApiResult<Option<Delaye
             }
         }
     } else {
-        recovery_policy_type(template)
+        let expected = recovery_policy_type(template);
+        if wallet.policy_type != expected {
+            return Err(api_error(
+                "wallet_corrupt",
+                "The delayed-policy type does not match its verified template.",
+            ));
+        }
+        expected
     };
     Ok(Some(DelayedPolicyContext {
         policy_type: policy_type.to_owned(),
         delay_blocks,
+        paths,
     }))
+}
+
+// Recovery inspection must describe every backup format that the backup validator
+// accepts, including historical Decaying and Expanding templates. Transaction
+// coordination intentionally supports a narrower set through `verified_analysis`.
+fn recovery_drill_policy_presentation(
+    wallet: &MultisigWalletDto,
+) -> ApiResult<(Option<String>, Vec<PolicyPathDefinitionDto>)> {
+    let Some(template) = wallet.recovery_template.as_ref() else {
+        return Ok((None, Vec::new()));
+    };
+    let analysis = analyze_template(template, &wallet.cosigners).map_err(recovery_api_error)?;
+    if analysis.external_descriptor != wallet.external_descriptor
+        || analysis.internal_descriptor != wallet.internal_descriptor
+        || analysis.paths != wallet.spending_paths
+    {
+        return Err(api_error(
+            "wallet_corrupt",
+            "The recovery policy does not match the verified backup descriptors.",
+        ));
+    }
+    let policy_type = verified_recovery_policy_type(template, &analysis.paths);
+    if wallet.policy_type != policy_type {
+        return Err(api_error(
+            "wallet_corrupt",
+            "The recovery-policy type does not match the verified backup template.",
+        ));
+    }
+    let paths = policy_path_definitions(wallet, &analysis)?;
+    Ok((Some(policy_type.to_owned()), paths))
 }
 
 fn selected_delayed_policy_context(app: &AppHandle) -> ApiResult<Option<DelayedPolicyContext>> {
@@ -6634,10 +6428,8 @@ fn write_private_json(path: &Path, value: &impl Serialize) -> ApiResult<()> {
         let mut file = options.open(&temp).map_err(internal)?;
         file.write_all(&encoded).map_err(internal)?;
         file.sync_all().map_err(internal)?;
-        fs::rename(&temp, path).map_err(internal)?;
-        #[cfg(unix)]
-        File::open(parent)
-            .and_then(|directory| directory.sync_all())
+        crate::durable_file::replace(&temp, path)
+            .and_then(|()| crate::durable_file::sync_parent(parent))
             .map_err(internal)?;
         Ok(())
     })();
@@ -6655,48 +6447,6 @@ fn persist_secret_material(
 ) -> ApiResult<()> {
     secure_store::store(path, material, credential, wallet_secret_context(wallet_id))
         .map_err(secure_store_error)
-}
-
-fn cleanup_failed_profile(dir: &Path) -> ApiResult<()> {
-    match fs::remove_dir_all(dir) {
-        Ok(()) => Ok(()),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(error) => Err(internal(error)),
-    }
-}
-
-fn finish_new_profile_attempt(
-    state: &AppState,
-    wallet_id: Uuid,
-    directory: &Path,
-    succeeded: bool,
-) -> ApiResult<()> {
-    let cleanup = if succeeded {
-        Ok(())
-    } else {
-        state.node_auth.lock().map_err(internal)?.remove(&wallet_id);
-        cleanup_failed_profile(directory)
-    };
-    cleanup
-}
-
-fn read_private_text(path: &Path) -> ApiResult<String> {
-    let metadata = fs::symlink_metadata(path).map_err(internal)?;
-    if metadata.file_type().is_symlink() || !metadata.is_file() {
-        return Err(internal("Private storage is not a regular file."));
-    }
-    let file = File::open(path).map_err(internal)?;
-    if metadata.len() > MAX_PRIVATE_JSON_BYTES {
-        return Err(internal("Private storage payload is too large."));
-    }
-    let mut encoded = String::new();
-    file.take(MAX_PRIVATE_JSON_BYTES + 1)
-        .read_to_string(&mut encoded)
-        .map_err(internal)?;
-    if encoded.len() as u64 > MAX_PRIVATE_JSON_BYTES {
-        return Err(internal("Private storage payload is too large."));
-    }
-    Ok(encoded)
 }
 
 fn create_from_mnemonic(
@@ -7133,6 +6883,9 @@ fn sync_wallet_with_core(
     );
     ensure_foreground_sync_not_cancelled(cancel)?;
     let _readers = stop_persisted_sync_reads(state)?;
+    // A lock can cancel this refresh while holding the read gate, just
+    // before the writer acquires it. Never commit a staged result after that.
+    ensure_foreground_sync_not_cancelled(cancel)?;
     let transaction = db.transaction().map_err(internal)?;
     mark_observed_addresses(&wallet, &transaction)?;
     label_provenance::reconcile_wallet_outputs(&wallet, &transaction, now()).map_err(internal)?;
@@ -7689,6 +7442,118 @@ fn snapshot_from(
     snapshot_for_view(wallet, db, synced_at, multisig, delayed_policy, false, true)
 }
 
+fn confirmation_height(confirmations: u32, tip: u32) -> ApiResult<Option<u32>> {
+    if confirmations == 0 {
+        return Ok(None);
+    }
+    tip.checked_sub(confirmations.saturating_sub(1))
+        .map(Some)
+        .ok_or_else(|| {
+            api_error(
+                "wallet_corrupt",
+                "A coin's confirmation height is outside the supported range.",
+            )
+        })
+}
+
+fn policy_path_coin_status(
+    definition: &PolicyPathDefinitionDto,
+    confirmations: u32,
+    tip: u32,
+    recent: bool,
+    frozen: bool,
+) -> ApiResult<PolicyPathCoinStatusDto> {
+    let confirmation_height = confirmation_height(confirmations, tip)?;
+    let mut action_blockers = Vec::with_capacity(2);
+    if frozen {
+        action_blockers.push("frozen");
+    }
+    if !recent {
+        action_blockers.push("stale_chain");
+    }
+    if definition.available_after_blocks == 0 {
+        return Ok(PolicyPathCoinStatusDto {
+            path_index: definition.index,
+            policy_state: "available",
+            age_blocks: confirmations,
+            blocks_until_broadcast_eligible: Some(0),
+            confirmation_height,
+            earliest_inclusion_height: None,
+            approximate_seconds_remaining: Some(0),
+            action_blockers,
+        });
+    }
+    let calculation = calculate_maturity(definition.available_after_blocks, confirmations)
+        .map_err(recovery_api_error)?;
+    let earliest_inclusion_height = match confirmation_height {
+        Some(height) => Some(
+            height
+                .checked_add(definition.available_after_blocks)
+                .ok_or_else(|| {
+                    api_error(
+                        "wallet_corrupt",
+                        "A coin's delayed-policy height is outside the supported range.",
+                    )
+                })?,
+        ),
+        None => None,
+    };
+    let policy_state = if !recent {
+        "unknown"
+    } else {
+        match calculation.state {
+            MaturityState::Unconfirmed => "unconfirmed",
+            MaturityState::Immature | MaturityState::Approaching => "waiting",
+            MaturityState::Mature => "available",
+        }
+    };
+    Ok(PolicyPathCoinStatusDto {
+        path_index: definition.index,
+        policy_state,
+        age_blocks: calculation.age_blocks,
+        blocks_until_broadcast_eligible: calculation.remaining_blocks,
+        confirmation_height,
+        earliest_inclusion_height,
+        approximate_seconds_remaining: calculation.approximate_seconds_remaining,
+        action_blockers,
+    })
+}
+
+fn policy_renewal_recommendation(
+    policy_type: &str,
+    confirmations: u32,
+    tip: u32,
+) -> ApiResult<Option<PolicyRenewalRecommendationDto>> {
+    if !matches!(
+        policy_type,
+        "partner_continuity_v1" | "family_continuity_v1"
+    ) {
+        return Ok(None);
+    }
+    let calculation =
+        calculate_maturity(CONTINUITY_RENEWAL_BLOCKS, confirmations).map_err(recovery_api_error)?;
+    let recommended_at_height = match confirmation_height(confirmations, tip)? {
+        Some(height) => Some(
+            height
+                .checked_add(CONTINUITY_RENEWAL_BLOCKS.saturating_sub(1))
+                .ok_or_else(|| {
+                    api_error(
+                        "wallet_corrupt",
+                        "A coin's renewal height is outside the supported range.",
+                    )
+                })?,
+        ),
+        None => None,
+    };
+    Ok(Some(PolicyRenewalRecommendationDto {
+        recommended_at_age_blocks: CONTINUITY_RENEWAL_BLOCKS,
+        remaining_blocks: calculation.remaining_blocks,
+        recommended_at_height,
+        approximate_seconds_remaining: calculation.approximate_seconds_remaining,
+        due: calculation.state == MaturityState::Mature,
+    }))
+}
+
 // The overview-only intermediate is projected to WalletOverviewDto before IPC;
 // it is never returned to a full-snapshot consumer such as coin selection.
 fn snapshot_for_view(
@@ -7707,6 +7572,7 @@ fn snapshot_for_view(
     let balance = wallet.balance();
     let tip = wallet.latest_checkpoint().height();
     let chain_tip = chain_tip_dto(db, tip, synced_at.as_deref())?;
+    let chain_tip_recent = chain_tip.status == "recent";
     let addresses = if overview_only {
         Vec::new()
     } else {
@@ -7746,6 +7612,7 @@ fn snapshot_for_view(
         )
         .map_err(internal)?;
         let primary_label = provenance.labels.first().cloned();
+        let coin_frozen = frozen.contains(&output.outpoint.to_string());
         let label = primary_label
             .as_ref()
             .map(|label| label.text.clone())
@@ -7785,6 +7652,32 @@ fn snapshot_for_view(
                 })
             })
             .transpose()?;
+        // Definitions are verified once when the wallet opens. This projection is
+        // pure and stays inside the single snapshot command: no per-coin IPC or SQL.
+        let policy_path_statuses = delayed_policy
+            .map(|policy| {
+                policy
+                    .paths
+                    .iter()
+                    .map(|path| {
+                        policy_path_coin_status(
+                            path,
+                            output_confirmations,
+                            tip,
+                            chain_tip_recent,
+                            coin_frozen,
+                        )
+                    })
+                    .collect::<ApiResult<Vec<_>>>()
+            })
+            .transpose()?
+            .unwrap_or_default();
+        let policy_renewal_recommendation = delayed_policy
+            .map(|policy| {
+                policy_renewal_recommendation(&policy.policy_type, output_confirmations, tip)
+            })
+            .transpose()?
+            .flatten();
         utxos.push(UtxoDto {
             outpoint: output.outpoint.to_string(),
             amount: output.txout.value.to_sat(),
@@ -7793,8 +7686,10 @@ fn snapshot_for_view(
             label,
             primary_label,
             provenance,
-            frozen: frozen.contains(&output.outpoint.to_string()),
+            frozen: coin_frozen,
             policy_maturity,
+            policy_path_statuses,
+            policy_renewal_recommendation,
         });
     }
 
@@ -7818,6 +7713,9 @@ fn snapshot_for_view(
             label_provenance::label_suggestions(db, None).map_err(internal)?
         },
         synced_at: chain_tip.observed_at.clone(),
+        policy_paths: delayed_policy
+            .map(|policy| policy.paths.clone())
+            .unwrap_or_default(),
         chain_tip,
     })
 }
@@ -7867,64 +7765,6 @@ fn chain_tip_dto(db: &Connection, height: u32, synced_at: Option<&str>) -> ApiRe
             "stale"
         },
     })
-}
-
-fn snapshot_notifications(snapshot: &WalletSnapshotDto) -> Vec<WalletNotification> {
-    let mut events = Vec::new();
-    for transaction in &snapshot.transactions {
-        if transaction.direction == "received" {
-            events.push(WalletNotification::PaymentReceived {
-                txid: transaction.id.clone(),
-                amount: transaction.amount,
-                balance: snapshot.balance.total,
-            });
-        }
-        if transaction.confirmations > 0 {
-            events.push(WalletNotification::FirstConfirmation {
-                txid: transaction.id.clone(),
-                balance: snapshot.balance.total,
-            });
-        }
-    }
-    events
-}
-
-fn enqueue_snapshot_notifications(db: &Connection, snapshot: &WalletSnapshotDto) -> ApiResult<()> {
-    let maturity_observations = snapshot
-        .utxos
-        .iter()
-        .filter_map(|coin| {
-            coin.policy_maturity
-                .as_ref()
-                .filter(|maturity| {
-                    matches!(maturity.policy_type.as_str(), "recovery" | "inheritance")
-                })
-                .map(|maturity| {
-                    let rank = match maturity.state {
-                        MaturityState::Unconfirmed | MaturityState::Immature => 0,
-                        MaturityState::Approaching => 1,
-                        MaturityState::Mature => 2,
-                    };
-                    notifications::PolicyMaturityObservation {
-                        outpoint: coin.outpoint.clone(),
-                        rank,
-                        remaining_blocks: maturity.remaining_blocks,
-                        policy_type: maturity.policy_type.clone(),
-                    }
-                })
-        })
-        .collect::<Vec<_>>();
-    notifications::reconcile_policy_maturity(db, &maturity_observations, now())
-        .map_err(internal)?;
-    let events = snapshot_notifications(snapshot);
-    if !notifications::history_initialized(db).map_err(internal)? {
-        notifications::seed_history_in_transaction(db, &events, now()).map_err(internal)?;
-        return Ok(());
-    }
-    for event in &events {
-        notifications::enqueue(db, event, now()).map_err(internal)?;
-    }
-    Ok(())
 }
 
 #[path = "wallet/pin_change.rs"]
@@ -8405,3 +8245,14 @@ mod funded_acceleration_tests;
 mod performance_tests;
 #[cfg(test)]
 mod tests;
+
+#[path = "wallet/profiles.rs"]
+mod profiles;
+use profiles::*;
+
+#[path = "wallet/notification_delivery.rs"]
+mod notification_delivery;
+use notification_delivery::*;
+
+#[path = "wallet/recovery_commands.rs"]
+pub(crate) mod recovery_commands;

@@ -1,7 +1,7 @@
 {
   "name": "groot-wallet",
   "private": true,
-  "version": "5.3.0",
+  "version": "0.5.4-rc01",
   "license": "Apache-2.0",
   "author": "Rochal Holdings",
   "repository": {
@@ -47,7 +47,7 @@
     "test:acceptance": "playwright test",
     "test:integration:regtest": "bash scripts/regtest/test.sh",
     "test:regtest": "pnpm test:integration:regtest",
-    "test:release-gate": "node --test scripts/release/assert-public-release-authorized.test.mjs scripts/release/verify-mainnet-source-policy.test.mjs scripts/release/sbom-order.test.mjs scripts/release/production-macos-release.test.mjs && bash scripts/release/check-mainnet-gate.sh",
+    "test:release-gate": "node --test scripts/release/build-source-watch.test.mjs scripts/release/assert-public-release-authorized.test.mjs scripts/release/verify-mainnet-source-policy.test.mjs scripts/release/sbom-order.test.mjs scripts/release/production-macos-release.test.mjs && bash scripts/release/check-mainnet-gate.sh",
     "test:boundaries": "bash scripts/quality/check-boundaries.sh",
     "test:secret-surfaces": "node --test scripts/quality/check-secret-surfaces.test.mjs && node scripts/quality/check-secret-surfaces.mjs",
     "test:supply-chain": "node scripts/quality/check-supply-chain.mjs",
@@ -57,9 +57,9 @@
     "test:localization": "node scripts/quality/check-localization.mjs",
     "test:agent-scaffolding": "bash scripts/quality/check-agent-scaffolding.sh",
     "test:hardware-preflight": "node --test scripts/hardware/*.test.mjs",
-    "test:full": "pnpm validate && pnpm test:coverage && pnpm test:coverage:rust && pnpm test:acceptance",
+    "test:full": "pnpm validate:ci && pnpm test:coverage:rust:all && pnpm test:acceptance",
     "test:watch": "vitest",
-    "validate": "pnpm format:check && pnpm test:agent-scaffolding && pnpm test:boundaries && pnpm test:secret-surfaces && pnpm test:supply-chain && pnpm test:brand && pnpm test:versions && pnpm test:localization && pnpm test:hardware-preflight && pnpm test:release-gate && pnpm release:test:update && pnpm release:test:hwi && pnpm release:test:compare && pnpm test:dev-runtime && pnpm check && pnpm test && pnpm build",
+    "validate": "pnpm format:check && pnpm test:agent-scaffolding && pnpm test:ci-workflows && pnpm test:ci-harness && pnpm test:boundaries && pnpm test:secret-surfaces && pnpm test:supply-chain && pnpm test:brand && pnpm test:versions && pnpm test:localization && pnpm test:hardware-preflight && pnpm test:release-gate && pnpm release:test:update && pnpm release:test:hwi && pnpm release:test:compare && pnpm test:dev-runtime && pnpm check && pnpm test && pnpm build",
     "regtest:start": "bash scripts/regtest/start.sh",
     "regtest:status": "bash scripts/regtest/status.sh",
     "regtest:mine": "bash scripts/regtest/mine.sh",
@@ -85,7 +85,12 @@
     "release:test:hwi": "node scripts/release/test-hwi-artifact.mjs && node --test scripts/release/verify-packaged-hwi.test.mjs scripts/release/build-mainnet-internal-rc.test.mjs scripts/release/prepare-hwi-runtime.test.mjs",
     "release:verify:packaged-hwi": "node scripts/release/verify-packaged-hwi.mjs",
     "release:test:compare": "bash scripts/release/test-compare-unsigned.sh && bash scripts/release/test-reproducible-rust-env.sh",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "validate:ci": "node scripts/quality/validate.mjs --coverage",
+    "validate:internal": "node scripts/quality/validate.mjs --internal",
+    "test:release-gate:internal": "node scripts/release/internal-release-gate.mjs",
+    "test:ci-workflows": "node --test scripts/quality/ci-workflows.test.mjs",
+    "test:ci-harness": "node --test scripts/quality/validate.test.mjs scripts/quality/rust-coverage-harness.test.mjs scripts/release/internal-release-gate.test.mjs scripts/release/internal-candidate-source.test.mjs"
   },
   "devDependencies": {
     "@playwright/test": "1.62.1",
@@ -106,7 +111,7 @@
   },
   "dependencies": {
     "@lucide/svelte": "1.24.0",
-    "@tauri-apps/api": "2.11.1",
+    "@tauri-apps/api": "2.12.4",
     "@tauri-apps/plugin-clipboard-manager": "2.3.2",
     "qr-scanner": "1.4.2",
     "qrcode": "1.5.4"

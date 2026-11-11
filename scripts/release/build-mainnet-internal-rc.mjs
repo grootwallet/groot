@@ -16,10 +16,17 @@ import {
 } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { validateCompiledTeamId, verifyPackagedHwi } from './verify-packaged-hwi.mjs';
-import { copyHwiRuntime, prepareHwiRuntime, verifyHwiRuntime } from './prepare-hwi-runtime.mjs';
+import {
+  assertInternalCandidateSource,
+  requireInternalCandidateSource
+} from './internal-candidate-source.mjs';
 
 const repoRoot = resolve(fileURLToPath(new URL('../../', import.meta.url)));
+const sourceIdentity = requireInternalCandidateSource(repoRoot);
+const { validateCompiledTeamId, verifyPackagedHwi } = await import('./verify-packaged-hwi.mjs');
+const { copyHwiRuntime, prepareHwiRuntime, verifyHwiRuntime } =
+  await import('./prepare-hwi-runtime.mjs');
+const { verifyMacosCameraAccess } = await import('./verify-macos-camera.mjs');
 const tauriRoot = join(repoRoot, 'src-tauri');
 const manifestPath = join(repoRoot, 'docs/hwi-artifact-manifest-3.2.0-mac-arm64.json');
 const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
@@ -55,14 +62,19 @@ const source = resolve(process.env.GROOT_HWI_SOURCE ?? '/opt/homebrew/bin/hwi');
 const cargoMetadata = JSON.parse(
   execFileSync(
     'cargo',
-    ['metadata', '--format-version', '1', '--no-deps', '--manifest-path', 'src-tauri/Cargo.toml'],
+    [
+      'metadata',
+      '--locked',
+      '--format-version',
+      '1',
+      '--no-deps',
+      '--manifest-path',
+      'src-tauri/Cargo.toml'
+    ],
     { cwd: repoRoot, encoding: 'utf8' }
   )
 );
-const commit = execFileSync('git', ['rev-parse', 'HEAD'], {
-  cwd: repoRoot,
-  encoding: 'utf8'
-}).trim();
+const commit = sourceIdentity.candidateCommit;
 const cargoTarget = cargoMetadata.target_directory;
 const stageDirectory = join(tauriRoot, '.release-stage');
 const stagedHwi = join(stageDirectory, 'hwi');
@@ -73,6 +85,7 @@ const outputRoot = resolve(
 );
 const outputApp = join(outputRoot, buildIdentity.appName);
 const outputDmg = join(outputRoot, `${buildIdentity.appName.replace(/\.app$/, '')}.dmg`);
+const outputZip = join(outputRoot, `${buildIdentity.appName.replace(/\.app$/, '')}.zip`);
 
 const digest = (path) => createHash('sha256').update(readFileSync(path)).digest('hex');
 const fail = (message) => {
@@ -82,12 +95,18 @@ const fail = (message) => {
 if (process.platform !== 'darwin' || process.arch !== 'arm64') {
   fail('the internal mainnet RC is restricted to macOS Apple silicon');
 }
-const worktreeStatus = execFileSync('git', ['status', '--porcelain=v1', '--untracked-files=all'], {
+execFileSync(process.execPath, [join(repoRoot, 'scripts/release/internal-release-gate.mjs')], {
   cwd: repoRoot,
-  encoding: 'utf8'
+  stdio: 'inherit'
 });
-if (worktreeStatus.trim())
-  fail('internal RC builds require a clean tracked and untracked worktree');
+function assertSourceUnchanged() {
+  try {
+    assertInternalCandidateSource(repoRoot, sourceIdentity);
+  } catch (error) {
+    fail(error instanceof Error ? error.message : String(error));
+  }
+}
+
 if (existsSync(outputRoot)) fail(`output already exists: ${outputRoot}`);
 const sourceLink = lstatSync(source);
 if (sourceLink.isSymbolicLink() || !sourceLink.isFile()) fail('HWI source must be a regular file');
@@ -103,6 +122,7 @@ execFileSync('codesign', ['--verify', '--strict', '--verbose=2', source], { stdi
 
 rmSync(stageDirectory, { recursive: true, force: true });
 mkdirSync(stageDirectory, { recursive: true, mode: 0o755 });
+let outputCreated = false;
 try {
   copyFileSync(source, stagedHwi);
   chmodSync(stagedHwi, 0o755);
@@ -134,7 +154,10 @@ try {
         identifier: buildIdentity.identifier
       }),
       '--bundles',
-      'app'
+      'app',
+      '--no-sign',
+      '--',
+      '--locked'
     ],
     {
       cwd: repoRoot,
@@ -165,19 +188,8 @@ try {
   }
 
   // This private QR rehearsal can request camera access only after a user gesture.
-  // Do not inherit HWI entitlements or broaden the production signing workflow.
+  // Keep the app camera-only; never inherit the HWI runtime entitlement.
   const cameraEntitlements = join(tauriRoot, 'Entitlements.camera.plist');
-  const cameraPolicy = JSON.parse(
-    execFileSync('/usr/bin/plutil', ['-convert', 'json', '-o', '-', cameraEntitlements], {
-      encoding: 'utf8'
-    })
-  );
-  if (
-    Object.keys(cameraPolicy).length !== 1 ||
-    cameraPolicy['com.apple.security.device.camera'] !== true
-  ) {
-    throw new Error('Internal camera entitlement file must contain only camera access');
-  }
   execFileSync(
     'codesign',
     ['--force', '--sign', '-', '--timestamp=none', '--entitlements', cameraEntitlements, builtApp],
@@ -185,6 +197,8 @@ try {
       stdio: 'inherit'
     }
   );
+  assertSourceUnchanged();
+  verifyMacosCameraAccess(builtApp);
   const result = verifyPackagedHwi(builtApp, {
     manifestPath,
     requireProductionSigning: false
@@ -202,6 +216,7 @@ try {
   }
 
   mkdirSync(outputRoot, { recursive: true, mode: 0o755 });
+  outputCreated = true;
   cpSync(builtApp, outputApp, { recursive: true, verbatimSymlinks: true });
   if (runtime) {
     verifyHwiRuntime(
@@ -213,6 +228,7 @@ try {
   execFileSync('codesign', ['--verify', '--deep', '--strict', '--verbose=2', outputApp], {
     stdio: 'pipe'
   });
+  verifyMacosCameraAccess(outputApp);
   execFileSync('node', ['scripts/release/create-macos-dmg.mjs', outputApp, outputDmg, 'Groot'], {
     cwd: repoRoot,
     stdio: 'inherit'
@@ -220,6 +236,11 @@ try {
   const executable = join(outputApp, 'Contents', 'MacOS', 'Groot');
   const buildInfo = [
     `commit=${commit}`,
+    `candidate_commit=${sourceIdentity.candidateCommit}`,
+    `source_tree=${sourceIdentity.sourceTree}`,
+    `source_snapshot_sha256=${sourceIdentity.sourceSnapshotSha256}`,
+    `source_tracked_files=${sourceIdentity.trackedFileCount}`,
+    `approval_context=${sourceIdentity.approvalContext}`,
     `compiled_network=${buildNetwork}`,
     `bundle_identifier=${buildIdentity.identifier}`,
     'signing=ad-hoc-internal-only',
@@ -231,8 +252,53 @@ try {
     ''
   ].join('\n');
   writeFileSync(join(outputRoot, 'BUILD-INFO'), buildInfo, { mode: 0o644 });
+  execFileSync('ditto', ['-c', '-k', '--keepParent', outputApp, outputZip], { stdio: 'inherit' });
+  const sbom = join(outputRoot, 'groot.cdx.json');
+  execFileSync('node', ['scripts/release/generate-sbom.mjs', sbom, executable], {
+    cwd: repoRoot,
+    stdio: 'inherit'
+  });
+  const provenance = {
+    schemaVersion: 1,
+    kind: 'groot-internal-hardware-candidate',
+    commit,
+    candidateCommit: sourceIdentity.candidateCommit,
+    sourceTree: sourceIdentity.sourceTree,
+    sourceSnapshotSha256: sourceIdentity.sourceSnapshotSha256,
+    sourceTrackedFiles: sourceIdentity.trackedFileCount,
+    approvalContext: sourceIdentity.approvalContext,
+    version: JSON.parse(readFileSync(join(repoRoot, 'package.json'), 'utf8')).version,
+    compiledNetwork: buildNetwork,
+    bundleIdentifier: buildIdentity.identifier,
+    signing: 'ad-hoc-internal-only',
+    camera: 'verified-camera-only',
+    hwiSha256: result.sha256,
+    ...(runtime ? { hwiRuntimeSha256: runtime.sha256 } : {}),
+    executableSha256: digest(executable),
+    sbomSha256: digest(sbom),
+    cargoLockSha256: digest(join(tauriRoot, 'Cargo.lock')),
+    pnpmLockSha256: digest(join(repoRoot, 'pnpm-lock.yaml'))
+  };
+  writeFileSync(join(outputRoot, 'PROVENANCE.json'), JSON.stringify(provenance, null, 2) + '\n');
+  assertSourceUnchanged();
+  const files = [
+    outputDmg,
+    outputZip,
+    join(outputRoot, 'BUILD-INFO'),
+    sbom,
+    join(outputRoot, 'PROVENANCE.json')
+  ];
+  writeFileSync(
+    join(outputRoot, 'SHA256SUMS'),
+    files.map((path) => `${digest(path)}  ${path.slice(outputRoot.length + 1)}`).join('\n') + '\n'
+  );
+
   console.log(`Internal ${buildTarget} RC: ${outputApp}`);
   console.log(`Internal ${buildTarget} RC DMG: ${outputDmg}`);
+  console.log(`Internal ${buildTarget} RC ZIP: ${outputZip}`);
+} catch (cause) {
+  if (outputCreated) rmSync(outputRoot, { recursive: true, force: true });
+  throw cause;
 } finally {
   rmSync(stageDirectory, { recursive: true, force: true });
 }

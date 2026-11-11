@@ -242,7 +242,17 @@ try {
     teamId
   );
 
-  run('codesign', ['--force', '--sign', identity, '--options', 'runtime', '--timestamp', builtApp]);
+  run('codesign', [
+    '--force',
+    '--sign',
+    identity,
+    '--options',
+    'runtime',
+    '--timestamp',
+    '--entitlements',
+    join(repoRoot, 'src-tauri/Entitlements.camera.plist'),
+    builtApp
+  ]);
   verifyPackagedHwi(builtApp, {
     manifestPath: signedHwiManifest,
     expectedTeamId: teamId,
