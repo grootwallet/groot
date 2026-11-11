@@ -2098,13 +2098,14 @@ mod tests {
     #[test]
     fn reports_failure_timeout_and_missing_executable_without_output_leaks() {
         let failure = test_script("failure", "IFS= read -r command\nexit 1");
+        // The shared hardware coordinator can queue this fixture behind other tests.
         for _ in 0..64 {
             assert_eq!(
                 run_program(
                     &failure,
                     &HwiSource::External,
                     &["test".to_owned()],
-                    Duration::from_secs(1),
+                    Duration::from_secs(15),
                     None,
                 ),
                 Err(HardwareError::CommandFailed(None))

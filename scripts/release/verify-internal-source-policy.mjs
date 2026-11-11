@@ -31,7 +31,7 @@ const internalTextOverrides = new Map([
     'src-tauri/src/process_lock.rs',
     'ad8e61d95bcabf072a66a44fe5efec66864d423419610fdd94ad5978e6c74676'
   ],
-  ['src-tauri/src/hardware.rs', '5fbe37b818c09d1961626407dff9e44936072ea6ef670ea94a68770fefd0aef9'],
+  ['src-tauri/src/hardware.rs', '6e2e76679ff522ec5237cdb1c12fa64a4529856bf8fd66a9bf2a88468bf86e65'],
   ['src-tauri/src/registry.rs', 'c94f4c70ea2f72fa74ef8350bb4f7751b24569d41eb6db7edee02af1dda84aa6'],
   [
     'src-tauri/src/secure_store.rs',

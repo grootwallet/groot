@@ -141,9 +141,12 @@ test('browser projects keep their complete case inventory and independent failur
     { project: 'mobile', browser: 'webkit' }
   ]);
   const commands = runs(browser);
+  const sync = 'pnpm exec svelte-kit sync';
+  assert.ok(commands.includes(sync));
   assert.ok(commands.includes('pnpm exec playwright install --with-deps ${{ matrix.browser }}'));
   const acceptance = commands.find((command) => command.includes('pnpm test:acceptance'));
   assert.ok(acceptance);
+  assert.ok(commands.indexOf(sync) < commands.indexOf(acceptance));
   assert.match(acceptance, /--global-timeout=1500000(?:[;\s]|$)/);
   assert.match(acceptance, /--project=\$\{\{ matrix\.project \}\} --workers=1(?:[;\s]|$)/);
   assert.doesNotMatch(acceptance, /--(?:grep|shard|pass-with-no-tests|retries)(?:[=\s]|$)/);
