@@ -1,8 +1,11 @@
-# Native coverage can spend minutes solving fixed-delay policies inside Miniscript.
-# Keep Groot's own instrumentation on the test profile and optimize the dependency.
+# Optimize measured costs in Miniscript planning and Base58Check key encoding.
+# Keep Groot's instrumentation on the test profile.
 # Only the coverage harness runs Cargo from this directory.
 [profile.coverage]
 inherits = "test"
 
 [profile.coverage.package.miniscript]
+opt-level = 3
+
+[profile.coverage.package.base58ck]
 opt-level = 3

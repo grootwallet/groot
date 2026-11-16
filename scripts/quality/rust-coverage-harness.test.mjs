@@ -163,7 +163,7 @@ function assertThresholds(event, lines, functions, regions) {
   assert.equal(value('--fail-under-regions'), String(regions));
 }
 
-test('coverage optimizes only the Miniscript dependency in the test profile', () => {
+test('the coverage profile optimizes only Miniscript and Base58Check dependencies', () => {
   const profile = readFileSync('scripts/quality/rust-coverage/.cargo/config.toml', 'utf8')
     .split('\n')
     .map((line) => line.trim())
@@ -172,6 +172,8 @@ test('coverage optimizes only the Miniscript dependency in the test profile', ()
     '[profile.coverage]',
     'inherits = "test"',
     '[profile.coverage.package.miniscript]',
+    'opt-level = 3',
+    '[profile.coverage.package.base58ck]',
     'opt-level = 3'
   ]);
 });
