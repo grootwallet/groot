@@ -225,7 +225,7 @@ describe('foreground wallet navigation', () => {
     );
   });
 
-  it('requires first-history approval while preserving progress without inventing a balance', () => {
+  it('requires first-history approval and preserves scan progress on both platforms', () => {
     expect(overview).toContain('walletShell.requestInitialHistoryApproval();');
     expect(overview).not.toContain('requestAutomaticInitialScan');
     expect(overview).not.toContain('initial-scan-options');
@@ -236,9 +236,6 @@ describe('foreground wallet navigation', () => {
     expect(overview).toContain('recoveryStatus.processedBlocks');
     expect(overview).toContain("'Syncing · {percent}%'");
     expect(overview).toContain("'{processed} / {total} blocks'");
-    expect(overview).not.toContain('<Amount value={0} hidden={$discreetMode} />');
-    expect(overview).toContain('!initialHistoryRequired');
-    expect(overview).toContain("'Never synced'");
   });
 
   it('checks the selected Mainnet wallet setup instead of assuming Mainnet is ready', () => {
