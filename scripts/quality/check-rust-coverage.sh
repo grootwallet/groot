@@ -82,6 +82,11 @@ adapter_pattern="src/(compact_filters|direct_rpc|durable_file|hardware|label_pro
 # artifacts and the coverage dependency cache. The core report precedes Core I/O.
 cd "${PROJECT_DIR}/scripts/quality/rust-coverage"
 cargo llvm-cov clean --workspace --locked --manifest-path "${MANIFEST_PATH}"
+if [[ -d "${CARGO_LLVM_COV_TARGET_DIR}/coverage" ]]; then
+  # llvm-cov's workspace clean removes old profiles but misses custom-profile binaries.
+  cargo clean --locked --manifest-path "${MANIFEST_PATH}" \
+    --target-dir "${CARGO_LLVM_COV_TARGET_DIR}" --profile coverage --package groot
+fi
 cargo llvm-cov --no-report --locked --manifest-path "${MANIFEST_PATH}" --profile coverage --lib
 cargo llvm-cov report \
   --locked \

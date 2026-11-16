@@ -77,6 +77,9 @@ shift
 phase="$kind"
 if [[ "$kind" == cargo ]]; then
   phase=units
+  if [[ "$1" == clean && " $* " == *" --profile coverage "* ]]; then
+    phase=clean-coverage-workspace
+  fi
   for arg in "$@"; do
     [[ "$arg" == --ignored ]] && phase=scenario
   done
@@ -309,6 +312,43 @@ testBash('a standalone core gate starts fresh and never calls Core', () => {
     );
   });
 });
+
+for (const failedClean of [false, true]) {
+  testBash(
+    failedClean
+      ? 'a failed warm custom-profile cleanup stops before tests'
+      : 'warm coverage removes only Groot custom-profile artifacts before tests',
+    () => {
+      withFixture(({ run, directory, repository }) => {
+        const target = join(directory, 'existing instrumented target');
+        mkdirSync(join(target, 'coverage'), { recursive: true });
+        const { result, events } = run('scripts/quality/check-rust-coverage.sh', {
+          CARGO_LLVM_COV_TARGET_DIR: target,
+          GROOT_STUB_FAIL: failedClean ? 'clean-coverage-workspace' : ''
+        });
+        assert.equal(result.status, failedClean ? 17 : 0, result.stderr);
+        assert.deepEqual(
+          events.map(({ phase }) => phase),
+          failedClean
+            ? ['clean', 'clean-coverage-workspace']
+            : ['clean', 'clean-coverage-workspace', 'units', 'core-report']
+        );
+        assert.deepEqual(events[1].args, [
+          'clean',
+          '--locked',
+          '--manifest-path',
+          join(repository, 'src-tauri', 'Cargo.toml'),
+          '--target-dir',
+          target,
+          '--profile',
+          'coverage',
+          '--package',
+          'groot'
+        ]);
+      });
+    }
+  );
+}
 
 for (const missing of [false, true]) {
   testBash(
