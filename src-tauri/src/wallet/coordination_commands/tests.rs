@@ -474,6 +474,25 @@ fn interrupted_mobile_pairing_restores_or_cleans_from_the_committed_session_set(
 }
 
 #[test]
+fn repeated_mobile_invitation_preserves_the_staged_key() {
+    let directory = TemporaryPairingDirectory::new();
+    let session = Uuid::new_v4().to_string();
+    let path = pending_mobile_secret_path_in(&directory.0, &session).unwrap();
+    require_unused_mobile_pairing_slot(&path).unwrap();
+
+    fs::write(&path, b"existing encrypted stage").unwrap();
+    assert_eq!(
+        require_unused_mobile_pairing_slot(&path).unwrap_err().code,
+        "pairing_in_progress"
+    );
+    assert_eq!(fs::read(&path).unwrap(), b"existing encrypted stage");
+    assert_eq!(
+        active_mobile_pairing_sessions(&directory.0).unwrap(),
+        [session]
+    );
+}
+
+#[test]
 fn mobile_pairing_cancel_is_idempotent_bounded_and_removes_either_lifecycle_state() {
     let directory = TemporaryPairingDirectory::new();
     let active = Uuid::new_v4().to_string();

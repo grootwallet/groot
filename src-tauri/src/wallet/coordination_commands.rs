@@ -282,6 +282,10 @@ pub async fn coordination_mobile_accept(
         validate_credential(credential.as_str())?;
         let invitation = PairingInvitation::parse_json(&invitation_json, now())
             .map_err(coordination_api_error)?;
+        let session_uuid = staging_session_uuid(&invitation.session_id)?;
+        reconcile_mobile_pairing_storage(&app)?;
+        let staged_path = pending_mobile_secret_path(&app, &invitation.session_id)?;
+        require_unused_mobile_pairing_slot(&staged_path)?;
         let label = signer_label.trim();
         if label.is_empty() || label.chars().count() > 48 {
             return Err(api_error(
@@ -325,10 +329,10 @@ pub async fn coordination_mobile_accept(
         };
         let staged = Zeroizing::new(serde_json::to_vec(&staged).map_err(internal)?);
         secure_store::store(
-            &pending_mobile_secret_path(&app, &invitation.session_id)?,
+            &staged_path,
             &staged,
             credential.as_str(),
-            wallet_secret_context(staging_session_uuid(&invitation.session_id)?),
+            wallet_secret_context(session_uuid),
         )
         .map_err(secure_store_error)?;
         Ok(PairingResponseDto {

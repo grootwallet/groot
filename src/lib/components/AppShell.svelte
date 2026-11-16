@@ -226,6 +226,7 @@
   let startupFailure = $state('');
   let checkingRuntime = $state(true);
   let backgroundLockRequired = false;
+  let backgroundLockRunning = false;
   let selectedProfile = $derived(profiles.find((wallet) => wallet.id === selectedWalletId));
   let policyContext = $derived(
     selectedProfile?.kind === 'multisig' || page.url.pathname.startsWith('/multisig')
@@ -234,6 +235,7 @@
   let mobileItems = $derived(policyContext ? nav : nav.slice(0, 3));
   let onboardingRoute = $derived(walletSetupRoutes.has(page.url.pathname));
   let mobileSetupRoute = $derived(isMobileSetupRoute(page.url.pathname));
+  let phonePairingRoute = $derived(page.url.pathname === '/mobile/pair');
   let lockedRoute = $derived(page.url.pathname === '/unlock');
   let settingsRoute = $derived(page.url.pathname === '/settings');
   let diagnosticsRoute = $derived(page.url.pathname === '/diagnostics');
@@ -745,11 +747,6 @@
       mobileRuntime = runtime.mobile && runtime.platform !== 'browser';
       restoreMobileViewport?.();
       restoreMobileViewport = configureMobileViewport(mobileRuntime);
-      if (mobileRuntime && document.visibilityState !== 'visible') {
-        backgroundLockRequired = true;
-        await enforceMobileBackgroundLock();
-        return;
-      }
       if (runtime.networkSwitching !== networkSwitchingBuild) {
         startupFailure = translate(
           $locale,
@@ -769,9 +766,19 @@
         throw new Error('native/web build mismatch');
       }
       checkingRuntime = false;
+      if (mobileRuntime && document.visibilityState !== 'visible') {
+        backgroundLockRequired = true;
+        await enforceMobileBackgroundLock();
+        return;
+      }
       await refreshSetupDraft();
       if (!(await walletService.exists())) {
-        if (!diagnosticsRoute) await goto('/welcome');
+        if (
+          !diagnosticsRoute &&
+          !(mobileRuntime && phonePairingRoute && runtime.network !== 'mainnet')
+        ) {
+          await goto('/welcome');
+        }
         startupState = 'ready';
         return;
       }
@@ -827,7 +834,8 @@
   }
 
   async function enforceMobileBackgroundLock() {
-    if (!mobileRuntime || !backgroundLockRequired) return;
+    if (!mobileRuntime || !backgroundLockRequired || backgroundLockRunning) return;
+    backgroundLockRunning = true;
     startupState = 'checking';
     liveSync?.stop();
     try {
@@ -836,11 +844,17 @@
         walletService.cancelSync()
       ]);
       await walletService.lockAll();
+      selectedWalletUnlocked = false;
+      // The startup gate unmounts the form, including its PIN and QR state.
+      // Remount pairing from encrypted native staging after the lock succeeds.
+      if (!phonePairingRoute) await goto('/unlock');
       backgroundLockRequired = false;
-      await goto('/unlock');
       startupState = 'ready';
     } catch {
+      startupFailure = translate($locale, 'Groot could not verify the wallet lock state.');
       startupState = 'failed';
+    } finally {
+      backgroundLockRunning = false;
     }
   }
 

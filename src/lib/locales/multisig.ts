@@ -23,6 +23,30 @@ export const multisigCopy = {
     fr: 'Vérification de {walletName}',
     es: 'Revisión de {walletName}'
   },
+  'Verify {walletName}': {
+    fr: 'Vérifier {walletName}',
+    es: 'Verificar {walletName}'
+  },
+  'Compare each fingerprint with its signer or a trusted public-key backup.': {
+    fr: 'Comparez chaque empreinte avec son signataire ou une sauvegarde de clé publique fiable.',
+    es: 'Compara cada huella con su firmante o con una copia fiable de la clave pública.'
+  },
+  'Show all public keys': {
+    fr: 'Afficher toutes les clés publiques',
+    es: 'Mostrar todas las claves públicas'
+  },
+  'Hide all public keys': {
+    fr: 'Masquer toutes les clés publiques',
+    es: 'Ocultar todas las claves públicas'
+  },
+  'Public key copied': {
+    fr: 'Clé publique copiée',
+    es: 'Clave pública copiada'
+  },
+  'All signer public keys': {
+    fr: 'Toutes les clés publiques des signataires',
+    es: 'Todas las claves públicas de los firmantes'
+  },
   'Back up {walletName} Wallet': {
     fr: 'Sauvegarder le portefeuille {walletName}',
     es: 'Respaldar la cartera {walletName}'
@@ -211,6 +235,10 @@ export const multisigCopy = {
   'Add {count} more signers.': {
     fr: 'Ajoutez encore {count} signataires.',
     es: 'Añade {count} firmantes más.'
+  },
+  'Add {count} keys': {
+    fr: 'Ajouter {count} clés',
+    es: 'Añadir {count} claves'
   },
   'Remove {count} signer.': { fr: 'Retirez {count} signataire.', es: 'Elimina {count} firmante.' },
   'Remove {count} signers.': {
@@ -847,10 +875,6 @@ export const multisigCopy = {
       es: 'en esta política multifirma. Activar o elegir una frase de contraseña más adelante abre una cartera oculta diferente; no cambia este firmante. La huella importada queda vinculada permanentemente a esta política.'
     },
   'independent keys': { fr: 'clés indépendantes', es: 'claves independientes' },
-  'independent keys for this template.': {
-    fr: 'clés indépendantes pour ce modèle.',
-    es: 'claves independientes para esta plantilla.'
-  },
   Inheritance: { fr: 'Héritage', es: 'Herencia' },
   'Initialize or restore only with trusted vendor tools.': {
     fr: 'Initialisez ou restaurez uniquement avec les outils fiables du fabricant.',

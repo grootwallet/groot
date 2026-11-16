@@ -22,10 +22,10 @@ Prepare one unlocked iPhone in Developer Mode and the matching desktop candidate
 7. Let desktop scan the encrypted QR displayed by the phone: choose **Scan phone QR code** on desktop and hold the phone steady.
 8. Compare the six digits again. On desktop, tap **Six digits match — add signer**.
 9. On iPhone, enter the local app PIN and tap **Desktop scanned this phone key**.
-10. Add the other two independent signers on desktop. Review their fingerprints and the 2-of-3 policy.
+10. Switch to another iPhone app while you add the other two signers on desktop and verify the policy on the hardware. Return to Groot after the final QR is ready. The phone should show **Phone key saved**. If you fully quit Groot, choose **Resume pairing** on Welcome or Unlock. Use the original phone PIN and confirm the phone skips key creation.
 11. Save and verify the public descriptor backup. Set the desktop wallet PIN and create the wallet.
-12. Desktop displays the final wallet QR. Scan it on iPhone, review the threshold and first receive address, enter the phone PIN, and tap **Accept wallet policy**.
-13. Confirm desktop and phone show the same first receive address. Lock and restart both apps; the same wallet must return on both.
+12. Scan the final desktop QR on the iPhone, enter the same PIN, and tap **Accept wallet policy**.
+13. Compare the 2-of-3 policy and first receive address in **Policy** on both devices before funding. Lock and restart both apps; the same wallet must return on both.
 
 ## 2. Sign with the paired phone
 

@@ -2792,7 +2792,10 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     throw new WalletError('unsupported_operation', 'Device pairing requires the native Groot app.');
   }
   async pendingMobilePairings(): ReturnType<WalletPort['pendingMobilePairings']> {
-    return [];
+    return typeof sessionStorage !== 'undefined' &&
+      sessionStorage.getItem('fixture-pending-mobile-pairing') === '1'
+      ? [{ sessionId: 'synthetic-pairing' }]
+      : [];
   }
   async resumePairingOnMobile(
     _sessionId: string,

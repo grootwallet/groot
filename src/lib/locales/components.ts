@@ -33,9 +33,9 @@ export const componentCopy = {
     fr: 'L’accès à la caméra a été refusé. Autorisez Groot à l’utiliser, puis réessayez.',
     es: 'Se denegó el acceso a la cámara. Permite el acceso a Groot e inténtalo de nuevo.'
   },
-  'No usable camera is available. Connect a camera or import the signed PSBT file instead.': {
-    fr: 'Aucune caméra utilisable. Connectez une caméra ou importez le fichier PSBT signé.',
-    es: 'No hay ninguna cámara disponible. Conecta una cámara o importa el archivo PSBT firmado.'
+  'No usable camera is available.': {
+    fr: 'Aucune caméra utilisable.',
+    es: 'No hay ninguna cámara disponible.'
   },
   '{count} unique frames scanned': {
     fr: '{count} images uniques analysées',

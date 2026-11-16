@@ -1708,6 +1708,18 @@ test('creates and verifies a simple 2-of-3 descriptor wallet', async ({ page }) 
   // on the shared mobile CI runner. Keep a bounded hang detector with enough
   // headroom for the verified 45-second focused path under concurrent load.
   test.setTimeout(90_000);
+  await page.addInitScript(() => {
+    let copied = '';
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: {
+        writeText: async (value: string) => {
+          copied = value;
+        },
+        readText: async () => copied
+      }
+    });
+  });
   const hardwareKeys = [
     { ...keys[0], fingerprint: 'f00dbabe' },
     { ...keys[1], fingerprint: '1ed9e001' },
@@ -1732,9 +1744,29 @@ test('creates and verifies a simple 2-of-3 descriptor wallet', async ({ page }) 
   await expect(page.getByRole('link', { name: 'Recover from backup' })).toHaveCount(0);
   await expect(page.getByText('2 of 3 signatures')).toBeVisible();
   await expect(
-    page.getByRole('heading', { name: 'Family vault Review', exact: true })
+    page.getByRole('heading', { name: 'Verify Family vault', exact: true })
   ).toBeVisible();
   await expect(page.getByRole('button', { name: 'Descriptor logic' })).toHaveCount(0);
+  const verification = page.locator('.review-policy');
+  await expect(verification.getByText(hardwareKeys[0].xpub, { exact: true })).toHaveCount(0);
+  await verification.getByRole('button', { name: 'Show all public keys' }).click();
+  const publicKeyBlocks = verification.locator('.review-public-keys .readable-address-block');
+  await expect(publicKeyBlocks).toHaveCount(hardwareKeys.length);
+  await expect(publicKeyBlocks.locator('.sr-only')).toHaveText(hardwareKeys.map((key) => key.xpub));
+  expect(
+    await publicKeyBlocks.first().locator('.readable-address-groups > span').allTextContents()
+  ).toEqual(hardwareKeys[0].xpub.match(/.{1,4}/g));
+  await publicKeyBlocks
+    .first()
+    .getByRole('button', { name: 'Copy exact Account public key' })
+    .click();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(hardwareKeys[0].xpub);
+  await expect(page.getByText('Public key copied', { exact: true })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
+    true
+  );
+  await verification.getByRole('button', { name: 'Hide all public keys' }).click();
+  await expect(verification.getByText(hardwareKeys[0].xpub, { exact: true })).toHaveCount(0);
   for (const theme of ['light', 'dark']) {
     await page.evaluate(
       (theme) => document.documentElement.setAttribute('data-theme', theme),
@@ -2207,9 +2239,15 @@ test('reveals draft errors only after review and keeps signer identity readable'
   await page.getByLabel('Account xpub').fill(keys[0].xpub);
   await page.getByRole('button', { name: 'Add key' }).click();
 
-  await expect(page.getByText('Device fingerprint', { exact: true })).toBeVisible();
-  await expect(page.getByText('Manual entry', { exact: true })).toBeVisible();
-  await expect(page.getByText(keys[0].xpub, { exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Add 3 keys', exact: true })).toBeVisible();
+  const signerRow = page.getByRole('button', { name: 'View Coldcard details' });
+  await expect(signerRow.locator('.device-number')).toHaveCount(0);
+  await expect(signerRow).toContainText('Fingerprint');
+  await expect(signerRow).toContainText('Connection');
+  await expect(signerRow).toContainText('Manual entry');
+  await expect(page.getByText('Device fingerprint', { exact: true })).toHaveCount(0);
+  await expect(page.getByText(keys[0].xpub, { exact: true })).toHaveCount(0);
+  await expect(page.locator('.cosigner-public-key')).toHaveCount(0);
   await expect(page.getByRole('alert')).toHaveCount(0);
 
   await page.getByRole('button', { name: 'View Coldcard details' }).click();
@@ -2223,13 +2261,7 @@ test('reveals draft errors only after review and keeps signer identity readable'
   await page.getByRole('button', { name: 'Review wallet' }).click();
   await expect(page.getByText('Add 2 more signers.')).toBeVisible();
   await expect(page.getByText('The threshold cannot exceed the number of signers.')).toHaveCount(0);
-  const keyLayout = await page.locator('.cosigner-public-key code').evaluate((element) => ({
-    whiteSpace: getComputedStyle(element).whiteSpace,
-    scrollWidth: element.scrollWidth,
-    clientWidth: element.clientWidth
-  }));
-  expect(keyLayout.whiteSpace).toBe('normal');
-  expect(keyLayout.scrollWidth).toBeLessThanOrEqual(keyLayout.clientWidth);
+  await expect(signerRow).toBeVisible();
 });
 
 test('gates and simulates guided Miniscript recovery policies', async ({ page }) => {

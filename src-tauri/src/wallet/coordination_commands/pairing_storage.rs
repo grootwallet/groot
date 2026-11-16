@@ -94,6 +94,17 @@ pub(super) fn pending_mobile_secret_path(app: &AppHandle, session_id: &str) -> A
     pending_mobile_secret_path_in(&directory, session_id)
 }
 
+pub(super) fn require_unused_mobile_pairing_slot(path: &Path) -> ApiResult<()> {
+    match fs::symlink_metadata(path) {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(internal(error)),
+        Ok(_) => Err(api_error(
+            "pairing_in_progress",
+            "This invitation already has a phone key. Resume pairing to use it.",
+        )),
+    }
+}
+
 pub(super) fn pending_mobile_secret_path_in(
     directory: &Path,
     session_id: &str,

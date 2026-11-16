@@ -64,7 +64,10 @@ for (const theme of ['light', 'dark']) {
         );
       };
       walletService.awaitFinalPairingPolicy = async () => {};
-      walletService.inspectFinalPairingOnMobile = async () => 'synthetic-session';
+      walletService.inspectFinalPairingOnMobile = async (frames: string[]) =>
+        frames.some((frame) => frame.endsWith('/different'))
+          ? 'different-session'
+          : 'synthetic-session';
       walletService.completePairingOnMobile = async (_frames: string[], credential: string) => {
         if (credential !== 'synthetic-correct-pin')
           throw new WalletError('invalid_credential', 'Incorrect app PIN.');
@@ -124,6 +127,15 @@ for (const theme of ['light', 'dark']) {
     await page.getByLabel('Local app PIN', { exact: true }).fill('synthetic-correct-pin');
     await page.getByRole('button', { name: 'Desktop scanned this phone key', exact: true }).click();
     await page.getByRole('button', { name: 'Allow camera', exact: true }).click();
+    await expect(page.locator('.scanner')).toHaveClass(/camera-active/);
+    await page.evaluate(() =>
+      (window as Window & { emitPhoneFrame: (frame: string) => void }).emitPhoneFrame(
+        'ur:groot-wallet/different'
+      )
+    );
+    await expect(page.getByRole('alert')).toHaveText('Scan the QR for this pairing.');
+    await expect(page.getByRole('button', { name: 'Accept wallet policy' })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Try camera again', exact: true }).click();
     await expect(page.locator('.scanner')).toHaveClass(/camera-active/);
     await page.evaluate(() =>
       (window as Window & { emitPhoneFrame: (frame: string) => void }).emitPhoneFrame(

@@ -85,6 +85,7 @@ describe('mobile pairing lifecycle UI', () => {
     expect(routeSource).toContain("stage = response.awaitingFinalPolicy ? 'final' : 'response';");
     expect(routeSource).toContain('walletService.awaitFinalPairingPolicy(response.sessionId, pin)');
     expect(routeSource).toContain('walletService.inspectFinalPairingOnMobile(finalFrames)');
+    expect(routeSource).toContain('sessionId !== response?.sessionId');
     expect(routeSource).toContain('role="status"');
     expect(routeSource).toContain('role="alert"');
   });
@@ -162,9 +163,8 @@ describe('mobile pairing lifecycle UI', () => {
   it('keeps pairing focused by hiding wallet navigation and explaining the desktop handoff', () => {
     expect(appShellSource).toContain('isMobileSetupRoute(page.url.pathname)');
     expect(appShellSource).toContain('!mobileSetupRoute');
-    expect(desktopRouteSource).toContain('desktop will show one final QR for the phone.');
-    expect(routeSource).toContain('Finish on desktop');
-    expect(routeSource).toContain('Scan the final wallet QR shown on desktop.');
+    expect(desktopRouteSource).toContain('Finish setting up the wallet to get the final QR.');
+    expect(routeSource).toContain('Scan the final wallet policy');
     expect(routeSource).toContain('class="full pairing-exit" href="/"');
   });
 

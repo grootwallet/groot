@@ -41,8 +41,9 @@
   let resumePin = $state('');
   let resumeError = $state('');
   let resumeNotice = $state('');
-  let pairingPage: HTMLDivElement;
+  let pairingPage: HTMLDivElement | undefined;
   let keyboardActive = $state(false);
+  let disposed = false;
   const pairingSteps = $derived([
     translate($locale, 'Invitation'),
     translate($locale, 'Phone key'),
@@ -79,7 +80,7 @@
   function finishInputFocus() {
     setTimeout(() => {
       keyboardActive =
-        isTextEntry(document.activeElement) && pairingPage.contains(document.activeElement);
+        isTextEntry(document.activeElement) && !!pairingPage?.contains(document.activeElement);
     }, 0);
   }
 
@@ -101,13 +102,14 @@
   });
 
   onDestroy(() => {
+    disposed = true;
     pin = '';
     confirmation = '';
     resumePin = '';
   });
 
   async function resumePendingPairing() {
-    if (!selectedPendingSession || !resumePin) return;
+    if (!selectedPendingSession || !resumePin || busy) return;
     busy = true;
     resumeError = '';
     resumeNotice = '';
@@ -115,11 +117,6 @@
       response = await walletService.resumePairingOnMobile(selectedPendingSession, resumePin);
       comparisonCode = response.comparisonCode;
       stage = response.awaitingFinalPolicy ? 'final' : 'response';
-      toast({
-        title: 'Pairing resumed',
-        description: 'The same invitation-bound response is ready for desktop.',
-        tone: 'success'
-      });
     } catch (cause) {
       resumeError = localizedError(cause, $locale, 'The pending pairing could not be resumed.');
     } finally {
@@ -129,7 +126,7 @@
   }
 
   async function cancelPendingPairing() {
-    if (!selectedPendingSession) return;
+    if (!selectedPendingSession || busy) return;
     busy = true;
     resumeError = '';
     resumeNotice = '';
@@ -179,26 +176,25 @@
       return true;
     } catch (cause) {
       if (cause instanceof WalletError && cause.code === 'qr_incomplete') return false;
-      error = localizedError(cause, $locale, 'This QR could not be verified.');
       throw cause;
     }
   }
 
   async function createSigner() {
-    if (!invitationJson || pin !== confirmation || !pin || !signerLabel.trim()) return;
+    if (busy || !invitationJson || pin !== confirmation || !pin || !signerLabel.trim()) return;
     busy = true;
     error = '';
     try {
       response = await walletService.acceptPairingOnMobile(invitationJson, signerLabel, pin);
       comparisonCode = response.comparisonCode;
       stage = 'response';
-      toast({
-        title: 'Mobile key ready',
-        description: 'Compare the six digits, then let desktop scan this response.',
-        tone: 'success'
-      });
     } catch (cause) {
-      error = localizedError(cause, $locale, 'The mobile signer could not be created.');
+      if (cause instanceof WalletError && cause.code === 'pairing_in_progress') {
+        stage = 'invite';
+        await loadPendingPairings();
+      } else {
+        error = localizedError(cause, $locale, 'The mobile signer could not be created.');
+      }
     } finally {
       pin = '';
       confirmation = '';
@@ -225,12 +221,15 @@
   async function receiveFinal(frame: string) {
     finalFrames = [...finalFrames, frame];
     try {
-      finalSessionId = await walletService.inspectFinalPairingOnMobile(finalFrames);
+      const sessionId = await walletService.inspectFinalPairingOnMobile(finalFrames);
+      if (sessionId !== response?.sessionId) {
+        throw new WalletError('pairing_authentication_failed', 'Scan the QR for this pairing.');
+      }
+      finalSessionId = sessionId;
       error = '';
       return true;
     } catch (cause) {
       if (cause instanceof WalletError && cause.code === 'qr_incomplete') return false;
-      error = localizedError(cause, $locale, 'This QR could not be verified.');
       throw cause;
     }
   }
@@ -241,11 +240,8 @@
     error = '';
     try {
       await walletService.completePairingOnMobile(finalFrames, pin);
-      toast({
-        title: 'Shared wallet paired',
-        description: 'This phone holds one signer; desktop remains the coordinator.',
-        tone: 'success'
-      });
+      if (disposed) return;
+      toast({ title: 'Shared wallet paired', tone: 'success' });
       await goto('/multisig');
     } catch (cause) {
       error = localizedError(cause, $locale, 'The final wallet policy could not be accepted.');
@@ -287,12 +283,7 @@
       <InstructionCard>
         <span class="step-icon"><LockKeyhole size={22} /></span>
         <div>
-          <strong>{translate($locale, 'Finish an interrupted pairing')}</strong><small
-            >{translate(
-              $locale,
-              'Enter the pairing PIN once. Groot does not retain it after the app restarts.'
-            )}</small
-          >
+          <strong>{translate($locale, 'Phone key saved')}</strong>
         </div>
         {#if pendingPairings.length > 1}
           <label class="field"
@@ -367,13 +358,8 @@
         <strong>{walletName}</strong><small>{network} · {threshold} of {signerCount}</small>
       </div>
       <div class="security-note">
-        <ShieldCheck size={18} /><span
-          ><strong>{translate($locale, 'Words-only recovery')}</strong><small
-            >{translate(
-              $locale,
-              'Write down all 24 words. The PIN unlocks this phone only.'
-            )}</small
-          ></span
+        <ShieldCheck size={18} /><small
+          >{translate($locale, 'Write down all 24 words. The PIN unlocks this phone only.')}</small
         >
       </div>
       <div class="comparison" aria-label={translate($locale, 'Pairing comparison code')}>
@@ -408,12 +394,7 @@
     <InstructionCard>
       <span class="step-icon"><LockKeyhole size={22} /></span>
       <div>
-        <strong>{translate($locale, 'Let desktop scan this response')}</strong><small
-          >{translate(
-            $locale,
-            'The account xpub is encrypted and signed for this invitation.'
-          )}</small
-        >
+        <strong>{translate($locale, 'Scan this QR on desktop')}</strong>
       </div>
       <AnimatedUrQr
         frames={response.frames}
@@ -422,10 +403,7 @@
         label={translate($locale, 'Encrypted mobile signer QR')}
       />
       <p class="qr-guidance">
-        {translate(
-          $locale,
-          'Turn up screen brightness, hold the phone steady, or tap the QR to enlarge it.'
-        )}
+        {translate($locale, 'Tap the QR to enlarge it.')}
       </p>
       <div class="comparison" aria-label={translate($locale, 'Pairing comparison code')}>
         <small>{translate($locale, 'Both devices must show')}</small><strong
@@ -453,9 +431,7 @@
     <InstructionCard>
       <span class="step-icon"><ScanLine size={22} /></span>
       <div>
-        <strong>{translate($locale, 'Finish on desktop')}</strong><small
-          >{translate($locale, 'Scan the final wallet QR shown on desktop.')}</small
-        >
+        <strong>{translate($locale, 'Scan the final wallet policy')}</strong>
       </div>
       {#if error}<WarningNotice
           tone="danger"
@@ -470,6 +446,7 @@
         onframe={receiveFinal}
         onreset={() => {
           finalFrames = [];
+          finalSessionId = '';
           error = '';
         }}
       />
@@ -538,10 +515,6 @@
     padding: 0.9rem;
     border-radius: 0.8rem;
     background: var(--surface-inset);
-  }
-  .security-note span {
-    display: grid;
-    gap: 0.2rem;
   }
   .comparison {
     display: grid;

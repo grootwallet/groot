@@ -1,7 +1,7 @@
 <script lang="ts">
   import { locale } from '$lib/i18n';
   import { translate, localizedError } from '$lib/i18n-catalog';
-  import { LockKeyhole, Plus, Trash2 } from '@lucide/svelte';
+  import { LockKeyhole, Plus, Smartphone, Trash2 } from '@lucide/svelte';
   import { afterNavigate, goto } from '$app/navigation';
   import { onDestroy, onMount, tick } from 'svelte';
   import { fly } from 'svelte/transition';
@@ -32,6 +32,7 @@
   let selectedWalletId = $state<string | null>(null);
   let compatibility = $state<WalletProfileCompatibility | null>(null);
   let runtimeIdentity = $state<RuntimePlatform | null>(null);
+  let pairingPending = $state(false);
   let credentialForm = $state<HTMLFormElement | null>(null);
   let retryAfterSeconds = $state(0);
   let retryTimer: ReturnType<typeof setInterval> | null = null;
@@ -68,6 +69,14 @@
     if (!(await walletService.exists())) {
       await goto('/welcome');
       return;
+    }
+    if (runtimeIdentity.mobile && runtimeIdentity.network !== 'mainnet') {
+      void walletService
+        .pendingMobilePairings()
+        .then((pairings) => {
+          pairingPending = pairings.length > 0;
+        })
+        .catch(() => undefined);
     }
     await loadProfiles();
   });
@@ -234,6 +243,11 @@
     </main>
   {/key}
   {#if runtimeIdentity?.mobile}<div class="mobile-add-wallet">
+      {#if pairingPending}
+        <Button href="/mobile/pair" variant="secondary" size="large" class="full"
+          ><Smartphone size={16} />{translate($locale, 'Resume pairing')}</Button
+        >
+      {/if}
       <Button href="/welcome?add=1" variant="secondary" size="large" class="full"
         ><Plus size={16} />{translate($locale, 'Add another wallet')}</Button
       >
@@ -294,6 +308,8 @@
 
 <style>
   .mobile-add-wallet {
+    display: grid;
+    gap: 0.65rem;
     width: min(470px, calc(100% - 36px));
     margin: 0 auto 24px;
     flex-shrink: 0;

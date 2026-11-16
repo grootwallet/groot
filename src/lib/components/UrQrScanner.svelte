@@ -2,7 +2,7 @@
   import WarningNotice from '$lib/components/WarningNotice.svelte';
   import { locale } from '$lib/i18n';
   import { translate, localizedError } from '$lib/i18n-catalog';
-  import { Camera, CameraOff, Check } from '@lucide/svelte';
+  import { Camera, Check } from '@lucide/svelte';
   import { onDestroy } from 'svelte';
   import Button from './Button.svelte';
   import { createQrCamera, cameraError } from '$lib/qr-camera';
@@ -123,10 +123,7 @@
       cameraActive = await scanner.start();
     } catch (cause) {
       if (stopped) return;
-      error = cameraError(
-        cause,
-        'No usable camera is available. Connect a camera or import the signed PSBT file instead.'
-      );
+      error = cameraError(cause, 'No usable camera is available.');
     } finally {
       starting = false;
     }
@@ -154,25 +151,23 @@
       icon
       role="alert"
       body={translate($locale, error)}
-    />{:else}
+    />{:else if scanComplete || cameraActive || starting}
     <div class="scan-status" role="status">
       {#if scanComplete}<Check size={16} /><span>{translate($locale, 'QR verified')}</span>
       {:else}
-        {#if cameraActive}<Camera size={16} /><span
-            >{translate(
-              $locale,
-              starting
-                ? 'Requesting camera permission…'
-                : scanned
-                  ? scanned === 1
-                    ? '{count} unique frame scanned'
-                    : '{count} unique frames scanned'
-                  : prompt,
-              { count: scanned }
-            )}</span
-          >{:else}<CameraOff size={16} /><span
-            >{translate($locale, 'Allow camera access to scan this QR.')}</span
-          >{/if}
+        <Camera size={16} /><span
+          >{translate(
+            $locale,
+            starting
+              ? 'Requesting camera permission…'
+              : scanned
+                ? scanned === 1
+                  ? '{count} unique frame scanned'
+                  : '{count} unique frames scanned'
+                : prompt,
+            { count: scanned }
+          )}</span
+        >
       {/if}
     </div>
   {/if}

@@ -13,6 +13,14 @@ import {
 // the frozen public-release snapshot. Public/Mainnet pins remain unchanged.
 const internalTextOverrides = new Map([
   [
+    'src/routes/welcome/+page.svelte',
+    'e51475e38b7ba5a2503f3744651d30176498de8c5f5a58f67bbbc678c2b4416c'
+  ],
+  [
+    'src/routes/unlock/+page.svelte',
+    '17acadba38396a2a01b8551ef9e07a8f6529c7126ab7d7fd804e04a4aea6dcb8'
+  ],
+  [
     'src-tauri/src/wallet/activity.rs',
     '86a9b616c973fe9542d81ba8de8ca34c0c6e2dc5c20f7249a1bb574bf2b88d13'
   ],
@@ -90,7 +98,7 @@ const internalTextOverrides = new Map([
   ['src/lib/release-notes.ts', '619a9397c1012603575d56e1055546c17415695488149c4456e4f08ef36a8260'],
   [
     'src/lib/components/AppShell.svelte',
-    '7de098a448787ed57d96465d4779e898565363921f2aab147f87dcea1e90d146'
+    'c7efc1a9e177c45070921a3e66e91d868c237a9c133346e624cb042a8331116a'
   ],
   [
     'src/lib/wallet/live-sync.ts',
@@ -103,7 +111,7 @@ const internalTextOverrides = new Map([
   ],
   [
     'src/routes/multisig/new/+page.svelte',
-    'b79f48ea9fa8f0df2fb06023f0f2dfa06e5fd6b6e52daa83ed66efcae78136e5'
+    '843dbddaa8932af266e3ee97180ddb2b8a7aeb63937ef6a6ce2b3b70f177d02d'
   ],
   [
     'src/routes/multisig/recover/+page.svelte',
