@@ -596,11 +596,14 @@ test('locked wallet can continue into hardware and multisig setup', async ({ pag
       await card.locator('.wallet-type-footer').evaluate((footer) => {
         const footerBounds = footer.getBoundingClientRect();
         const label = footer.querySelector('.wallet-type-meta')?.getBoundingClientRect();
-        const arrow = footer.querySelector('.wallet-type-arrow')?.getBoundingClientRect();
+        const arrowElement = footer.querySelector('.wallet-type-arrow');
+        const arrow = arrowElement?.getBoundingClientRect();
+        const transform = arrowElement ? getComputedStyle(arrowElement).transform : 'none';
+        const translateX = transform === 'none' ? 0 : new DOMMatrixReadOnly(transform).m41;
         return Boolean(
           arrow &&
-          Math.abs(footerBounds.right - arrow.right) <= 1 &&
-          (!label || label.right <= arrow.left)
+          Math.abs(footerBounds.right - (arrow.right - translateX)) <= 1 &&
+          (!label || label.right <= arrow.left - translateX)
         );
       })
     ).toBe(true);
