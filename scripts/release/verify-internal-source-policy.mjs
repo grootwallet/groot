@@ -104,7 +104,7 @@ const internalTextOverrides = new Map([
     'src/lib/wallet/live-sync.ts',
     '6dfb771e83c4a6db7dedfef3667ebe026f99ca41a4db1f0b650c14a9d003be15'
   ],
-  ['src/routes/+page.svelte', '1de9c018139b3b38d60e396fce12102903c4a489d76820c26f306ee69c9a6047'],
+  ['src/routes/+page.svelte', 'ecdb91799282f566c63eb19e88ea2e5f64dbd9295f88e27d0244d226f1618006'],
   [
     'src/routes/settings/+page.svelte',
     '188eb46a8980ca831b629bb7a4149de8a4d90eaca140f27e75e3172105ea79d5'

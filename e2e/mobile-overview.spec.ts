@@ -58,6 +58,7 @@ test.describe('native mobile Overview', () => {
   });
 
   test('shows funded actions and keeps every wallet action reachable', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 750 });
     await page.goto('/?fixture-native-mobile=1&fixture-selected-multisig=1');
 
     const actions = page.locator('.mobile-actions');

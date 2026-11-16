@@ -24,10 +24,10 @@ for (const theme of ['light', 'dark']) {
     });
 
     await page.goto('/?fixture-initial-history-required=1&fixture-native-mobile=1');
-    const modal = page.getByRole('dialog', { name: 'Approve wallet-history scan' });
-    await expect(modal.getByText('Set up wallet sync', { exact: true })).toBeVisible();
-    await expect(modal).toContainText('Groot managed access is Mainnet-only');
-    await expect(modal.getByRole('button', { name: 'Approve and scan' })).toBeDisabled();
+    const setup = page.locator('.mobile-sync-notice');
+    await expect(setup.getByText('Set up wallet sync', { exact: true })).toBeVisible();
+    await expect(page.getByRole('dialog', { name: 'Approve wallet-history scan' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Approve and scan' })).toHaveCount(0);
     await page.screenshot({
       animations: 'disabled',
       path: info.outputPath(`phone-remote-setup-${theme}.png`)
@@ -44,7 +44,9 @@ for (const theme of ['light', 'dark']) {
         throw new WalletError('network_unavailable', 'Synthetic mobile node is not configured.');
       };
     });
-    await modal.getByRole('button', { name: 'Set up my own node' }).click();
+    await setup.getByRole('link', { name: 'Configure sync', exact: true }).click();
+    await expect(page).toHaveURL(/\/settings#network-services$/);
+    await page.getByRole('button', { name: /Bitcoin Core connection/ }).click();
     await expect(page.getByRole('dialog', { name: 'Connect Bitcoin Core' })).toBeVisible();
     await page
       .getByRole('dialog', { name: 'Connect Bitcoin Core' })
@@ -52,7 +54,6 @@ for (const theme of ['light', 'dark']) {
       .click();
     await page.locator('.mobile-nav').getByRole('link', { name: 'Overview', exact: true }).click();
     await expect(page.getByRole('dialog')).toHaveCount(0);
-    const setup = page.locator('.mobile-sync-notice');
     await expect(setup).toContainText('Set up wallet sync');
     await expect(page.locator('.initial-history-scan')).toHaveCount(0);
     expect((await setup.boundingBox())!.height).toBeLessThanOrEqual(100);

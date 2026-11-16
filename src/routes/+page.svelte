@@ -1254,7 +1254,7 @@
       description={loadError}
       onretry={networkSetupRequired ? openNetworkSetup : loadSnapshot}
     />
-  {:else if snapshot && !initialDataLoading && !initialScanInFlight && !initialHistoryRequired}
+  {:else if snapshot && !initialDataLoading && !initialScanInFlight && (!mobileRuntime || !initialHistoryRequired)}
     <section class="balance-card content-reveal">
       <div class="balance-top">
         <span>{translate($locale, 'Total balance')}</span><button
@@ -1268,23 +1268,41 @@
           >{#if $discreetMode}<Eye size={17} />{:else}<EyeOff size={17} />{/if}</button
         >
       </div>
-      <button
-        class="balance-value"
-        type="button"
-        aria-label={translate(
-          $locale,
-          $denomination === 'btc' ? 'Show balance in sats' : 'Show balance in BTC'
-        )}
-        title={translate(
-          $locale,
-          $denomination === 'btc' ? 'Show balance in sats' : 'Show balance in BTC'
-        )}
-        onclick={() => setDenomination($denomination === 'btc' ? 'sats' : 'btc')}
-      >
-        <Amount value={snapshot.balance.total} hidden={$discreetMode} />
-      </button>
+      {#if initialHistoryRequired}
+        <div
+          class="balance-value unverified-balance"
+          aria-label={translate($locale, 'Unverified balance')}
+        >
+          <Amount value={0} hidden={$discreetMode} /><small
+            >{translate($locale, 'Never synced')}</small
+          >
+        </div>
+      {:else}
+        <button
+          class="balance-value"
+          type="button"
+          aria-label={translate(
+            $locale,
+            $denomination === 'btc' ? 'Show balance in sats' : 'Show balance in BTC'
+          )}
+          title={translate(
+            $locale,
+            $denomination === 'btc' ? 'Show balance in sats' : 'Show balance in BTC'
+          )}
+          onclick={() => setDenomination($denomination === 'btc' ? 'sats' : 'btc')}
+        >
+          <Amount value={snapshot.balance.total} hidden={$discreetMode} />
+        </button>
+      {/if}
       <div class="pending-line">
-        <i></i>{translate($locale, $discreetMode ? 'Pending activity hidden' : pendingDescription)}
+        <i></i>{translate(
+          $locale,
+          initialHistoryRequired
+            ? 'This wallet has not completed a sync yet.'
+            : $discreetMode
+              ? 'Pending activity hidden'
+              : pendingDescription
+        )}
       </div>
     </section>
   {:else if initialDataLoading || initialScanInFlight}
@@ -1585,10 +1603,27 @@
 </Modal>
 
 <style>
+  .unverified-balance {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    cursor: default;
+  }
+  .unverified-balance :global(strong) {
+    font-size: 42px;
+  }
+  .unverified-balance small {
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+    font-weight: 600;
+  }
   .verify-backup-actions.compact-backup-actions {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
     gap: 0.5rem;
+  }
+  .compact-backup-actions :global(.show-words-action) {
+    margin-inline: 0;
   }
   @media (max-width: 760px) {
     .dashboard-page .page-header {
