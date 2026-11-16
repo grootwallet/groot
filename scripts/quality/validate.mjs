@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { closeSync, mkdtempSync, openSync, readFileSync, rmSync } from 'node:fs';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { join, resolve } from 'node:path';
 import { availableParallelism, tmpdir } from 'node:os';
@@ -110,6 +110,11 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
 
   const root = fileURLToPath(new URL('../../', import.meta.url));
   const scripts = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url))).scripts;
+  // Initialize rustup once before checks can invoke Cargo or rustc concurrently.
+  const cargo = spawnSync('cargo', ['--version'], { cwd: root, stdio: 'inherit' });
+  if (cargo.status !== 0) {
+    throw new Error('Could not initialize the pinned Rust toolchain', { cause: cargo.error });
+  }
   const outputDirectory = mkdtempSync(join(tmpdir(), 'groot-validation-'));
   const concurrency = Math.min(4, availableParallelism());
   const started = performance.now();

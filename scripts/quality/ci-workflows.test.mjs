@@ -157,7 +157,14 @@ test('browser projects keep their complete case inventory and independent failur
 });
 
 test('CI uses one full frontend coverage pass and keeps native obligations', () => {
-  const commands = runs(ci.jobs['frontend-checks']);
+  const frontend = ci.jobs['frontend-checks'];
+  const commands = runs(frontend);
+  const rustSetup = frontend.steps.find((step) => step.uses?.startsWith('dtolnay/rust-toolchain@'));
+  assert.equal(rustSetup?.with.toolchain, '1.97.1');
+  assert.ok(
+    frontend.steps.indexOf(rustSetup) <
+      frontend.steps.findIndex((step) => step.run?.includes('pnpm validate:ci'))
+  );
   assert.equal(commands.filter((command) => /pnpm validate:ci\b/.test(command)).length, 1);
   assert.equal(
     commands.filter((command) => /pnpm test(?::coverage)?(?:\s|$)/.test(command)).length,

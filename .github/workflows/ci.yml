@@ -33,6 +33,10 @@ jobs:
           sudo apt-get install -y --no-install-recommends ripgrep
       - run: pnpm install --frozen-lockfile
       - run: pnpm audit --prod --audit-level high
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+        with:
+          toolchain: 1.97.1
+          components: clippy,rustfmt,llvm-tools-preview
       - name: Static boundaries, release gates, unit coverage, and build
         shell: bash
         run: |
