@@ -9,7 +9,7 @@
     children
   } = $props<{
     title: string;
-    description: string;
+    description?: string;
     compact?: boolean;
     icon?: Snippet;
     children?: Snippet;
@@ -19,6 +19,6 @@
 <section class:compact class="empty-state" aria-live="polite">
   {#if icon}<span class="empty-icon">{@render icon()}</span>{/if}
   <h2>{title}</h2>
-  <p>{description}</p>
+  {#if description}<p>{description}</p>{/if}
   {@render children?.()}
 </section>

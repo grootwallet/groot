@@ -949,14 +949,17 @@
 </script>
 
 {#snippet walletActionItems()}
-  <a href="/activity" role="menuitem" onclick={() => (moreOpen = false)}
+  <a
+    href="/activity"
+    role={mobileRuntime ? undefined : 'menuitem'}
+    onclick={() => (moreOpen = false)}
     ><Activity size={16} /><span
       ><strong>{translate($locale, 'Activity')}</strong><small
         >{translate($locale, 'View all transactions')}</small
       ></span
     ></a
   >
-  <a href="/coins" role="menuitem" onclick={() => (moreOpen = false)}
+  <a href="/coins" role={mobileRuntime ? undefined : 'menuitem'} onclick={() => (moreOpen = false)}
     ><CircleDot size={16} /><span
       ><strong>{translate($locale, 'Coins')}</strong><small
         >{translate($locale, 'Inspect and choose UTXOs')}</small
@@ -965,7 +968,7 @@
   >
   {#if hardwareSignerWallet}
     <button
-      role="menuitem"
+      role={mobileRuntime ? undefined : 'menuitem'}
       onclick={() => {
         moreOpen = false;
         signerDetailsOpen = true;
@@ -978,7 +981,10 @@
     >
   {/if}
   {#if multisig}
-    <a href="/multisig" role="menuitem" onclick={() => (moreOpen = false)}
+    <a
+      href="/multisig"
+      role={mobileRuntime ? undefined : 'menuitem'}
+      onclick={() => (moreOpen = false)}
       ><ShieldCheck size={16} /><span
         ><strong>{translate($locale, 'Policy')}</strong><small
           >{translate($locale, 'Keys, backups, and rules')}</small
@@ -986,7 +992,7 @@
       ></a
     >
     <button
-      role="menuitem"
+      role={mobileRuntime ? undefined : 'menuitem'}
       onclick={() => {
         moreOpen = false;
         showDescriptors = true;
@@ -997,7 +1003,10 @@
         ></span
       ></button
     >
-    <a href="/multisig/backup" role="menuitem" onclick={() => (moreOpen = false)}
+    <a
+      href="/multisig/backup"
+      role={mobileRuntime ? undefined : 'menuitem'}
+      onclick={() => (moreOpen = false)}
       ><FileKey size={16} /><span
         ><strong>{translate($locale, 'Export & verify')}</strong><small
           >{translate($locale, 'Save a public wallet backup')}</small
@@ -1294,16 +1303,18 @@
           <Amount value={snapshot.balance.total} hidden={$discreetMode} />
         </button>
       {/if}
-      <div class="pending-line">
-        <i></i>{translate(
-          $locale,
-          initialHistoryRequired
-            ? 'This wallet has not completed a sync yet.'
-            : $discreetMode
-              ? 'Pending activity hidden'
-              : pendingDescription
-        )}
-      </div>
+      {#if !mobileRuntime || (!$discreetMode && (pendingBreakdown.incoming || pendingBreakdown.change || pendingBreakdown.outgoing))}
+        <div class="pending-line">
+          <i></i>{translate(
+            $locale,
+            initialHistoryRequired
+              ? 'This wallet has not completed a sync yet.'
+              : $discreetMode
+                ? 'Pending activity hidden'
+                : pendingDescription
+          )}
+        </div>
+      {/if}
     </section>
   {:else if initialDataLoading || initialScanInFlight}
     <WalletSkeleton variant="balance" />
@@ -1402,6 +1413,7 @@
           bind:element={moreTrigger}
           label={translate($locale, 'More wallet actions')}
           expanded={moreOpen}
+          popup={mobileRuntime ? 'dialog' : 'menu'}
           size="large"
           onclick={() => (moreOpen = !moreOpen)}
         />
@@ -1430,7 +1442,9 @@
     {#if !(mobileRuntime && initialHistoryRequired)}<section class="section-block">
         <div class="section-heading">
           <div><h2>{translate($locale, 'Recent activity')}</h2></div>
-          <a href="/activity">{translate($locale, 'View all')}</a>
+          {#if !mobileRuntime || recentTransactions.length}
+            <a href="/activity">{translate($locale, 'View all')}</a>
+          {/if}
         </div>
         {#if initialDataLoading || initialScanInFlight}
           <TxList items={[]} loading />
@@ -1454,7 +1468,9 @@
           <EmptyState
             compact
             title={translate($locale, 'No transactions yet')}
-            description={translate($locale, 'Received and sent transactions will appear here.')}
+            description={mobileRuntime
+              ? undefined
+              : translate($locale, 'Received and sent transactions will appear here.')}
           >
             {#snippet icon()}<Activity size={22} />{/snippet}
           </EmptyState>
@@ -1465,18 +1481,11 @@
 
 <Modal
   open={moreOpen && mobileRuntime}
-  fixedViewport
   title={translate($locale, 'More wallet actions')}
   onclose={() => (moreOpen = false)}
 >
-  <div class="overview-actions-dialog-scroll">
-    <div
-      class="overview-wallet-actions overview-mobile-actions"
-      role="menu"
-      aria-label={translate($locale, 'More wallet actions')}
-    >
-      {@render walletActionItems()}
-    </div>
+  <div class="overview-wallet-actions overview-mobile-actions">
+    {@render walletActionItems()}
   </div>
 </Modal>
 
@@ -1981,13 +1990,6 @@
     background: var(--panel-2);
     box-shadow: 0 16px 42px rgba(0, 0, 0, 0.28);
   }
-  :global(.overview-actions-dialog-scroll):where(.overview-actions-dialog-scroll) {
-    min-height: 0;
-    flex: 1 1 auto;
-    overflow-y: auto;
-    overscroll-behavior: contain;
-    scrollbar-gutter: stable;
-  }
   :global(.overview-mobile-actions):where(.overview-mobile-actions) {
     display: grid;
     gap: 2px;
@@ -2032,6 +2034,9 @@
   :global(.overview-wallet-actions):where(.overview-wallet-actions) :global(small) {
     color: var(--muted);
     font-size: var(--font-size-meta);
+  }
+  :global(.overview-mobile-actions):where(.overview-mobile-actions) :global(small) {
+    display: none;
   }
 
   @media (max-width: 700px) {

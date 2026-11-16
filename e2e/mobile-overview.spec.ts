@@ -46,6 +46,7 @@ test.describe('native mobile Overview', () => {
     const balance = page.locator('.balance-card');
     await expect(balance).toBeVisible();
     await expect(balance).toContainText('0');
+    await expect(balance.getByText('0 sats pending')).toHaveCount(0);
     await expect(page.getByText('No transactions yet', { exact: true })).toBeVisible();
 
     const actions = page.locator('.mobile-actions');
@@ -65,10 +66,13 @@ test.describe('native mobile Overview', () => {
     await expect(actions.getByRole('link', { name: 'Receive', exact: true })).toBeVisible();
     await expect(actions.getByRole('link', { name: 'Send', exact: true })).toBeVisible();
 
-    await page.getByRole('button', { name: 'More wallet actions' }).click();
+    const trigger = page.getByRole('button', { name: 'More wallet actions' });
+    await expect(trigger).toHaveAttribute('aria-haspopup', 'dialog');
+    await trigger.click();
     const dialog = page.getByRole('dialog', { name: 'More wallet actions' });
     await expect(dialog).toBeVisible();
-    const lastAction = dialog.getByRole('menuitem', { name: /Export & verify/ });
+    const lastAction = dialog.getByRole('link', { name: 'Export & verify', exact: true });
+    expect((await dialog.boundingBox())!.height).toBeLessThan(page.viewportSize()!.height * 0.6);
     await lastAction.scrollIntoViewIfNeeded();
     await expect(lastAction).toBeVisible();
     const bounds = await lastAction.boundingBox();
