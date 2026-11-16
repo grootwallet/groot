@@ -1036,7 +1036,9 @@ test('surfaces partial and fully signed proposals on Overview', async ({ page })
   ).toContainText('Signing in progress');
 });
 
-test('keeps advanced wallet actions compact with one multipath descriptor', async ({ page }) => {
+test('keeps advanced wallet actions compact with one multipath descriptor', async ({
+  page
+}, testInfo) => {
   await page.goto('/multisig');
   await page.getByRole('button', { name: 'More wallet actions' }).click();
   await expect(page.getByRole('menuitem', { name: /Show descriptors/ })).toBeVisible();
@@ -1050,13 +1052,37 @@ test('keeps advanced wallet actions compact with one multipath descriptor', asyn
   await expect(descriptors.getByText('View separate receive and change descriptors')).toHaveCount(
     0
   );
-  await expect(descriptors.getByRole('button', { name: 'Copy wallet descriptor' })).toBeVisible();
+  const descriptorCode = descriptors.locator('.descriptor-primary code');
+  const copyDescriptor = descriptors.getByRole('button', { name: 'Copy wallet descriptor' });
+  await expect(copyDescriptor).toBeVisible();
+  expect(
+    await descriptorCode.evaluate((element) =>
+      Number.parseFloat(getComputedStyle(element).fontSize)
+    )
+  ).toBeGreaterThanOrEqual(13);
+  expect((await copyDescriptor.boundingBox())?.height).toBeGreaterThanOrEqual(44);
+  await page.screenshot({
+    path: testInfo.outputPath(`wallet-descriptor-${testInfo.project.name}.png`),
+    animations: 'disabled'
+  });
   await descriptors.getByRole('button', { name: 'Close' }).click();
 });
 
 test('keeps hardware checks available for imported signers and hides them for offline keys', async ({
   page
-}) => {
+}, testInfo) => {
+  await page.addInitScript(() => {
+    let copied = '';
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: {
+        writeText: async (value: string) => {
+          copied = value;
+        },
+        readText: async () => copied
+      }
+    });
+  });
   await page.goto('/multisig');
 
   await expect(page.locator('.saved-cosigner-list article')).toHaveCount(3);
@@ -1064,12 +1090,30 @@ test('keeps hardware checks available for imported signers and hides them for of
 
   await page.getByRole('button', { name: 'View Coldcard details' }).click();
   const coldcardDialog = page.getByRole('dialog', { name: 'Coldcard', exact: true });
+  const mobile = (page.viewportSize()?.width ?? 1180) <= 760;
+  const signerMetadata = coldcardDialog.locator('details.signer-metadata');
   await expect(coldcardDialog).toBeVisible();
-  await expect(coldcardDialog.getByText('f00dbabe', { exact: true })).toBeVisible();
-  await expect(coldcardDialog.getByText("m/48'/1'/0'/2'", { exact: true })).toBeVisible();
+  await expect(signerMetadata).toBeVisible();
+  await expect(signerMetadata.locator('.connection-detail')).toHaveCount(1);
+  if (mobile) {
+    await expect(signerMetadata).not.toHaveAttribute('open', '');
+    await expect(signerMetadata.getByText('f00dbabe', { exact: true })).toBeHidden();
+    await signerMetadata.getByText('Technical details', { exact: true }).click();
+    await expect(signerMetadata).toHaveAttribute('open', '');
+    await expect(signerMetadata.getByText('f00dbabe', { exact: true })).toBeVisible();
+  } else {
+    await expect(signerMetadata).toHaveAttribute('open', '');
+    await expect(signerMetadata.locator('summary')).toBeHidden();
+    await expect(signerMetadata.getByText('f00dbabe', { exact: true })).toBeVisible();
+  }
+  await expect(signerMetadata.getByText("m/48'/1'/0'/2'", { exact: true })).toBeVisible();
   await expect(coldcardDialog.getByText('Wallet policy', { exact: true })).toBeVisible();
   await expect(coldcardDialog.getByText('Setup not recorded', { exact: true })).toBeVisible();
   await expect(coldcardDialog.getByRole('button', { name: 'Review setup' })).toBeVisible();
+  await page.screenshot({
+    path: testInfo.outputPath(`signer-details-${testInfo.project.name}.png`),
+    animations: 'disabled'
+  });
   await coldcardDialog.getByRole('button', { name: 'View public account key (xpub)' }).click();
   const xpubDialog = page.getByRole('dialog', {
     name: 'Coldcard public account key (xpub)',
@@ -1078,11 +1122,28 @@ test('keeps hardware checks available for imported signers and hides them for of
   await expect(
     xpubDialog.getByRole('button', { name: 'Copy exact Public account key (xpub)' })
   ).toBeVisible();
+  const readableXpub = xpubDialog.locator('.readable-address');
+  const readableXpubGroups = xpubDialog.locator('.readable-address-groups');
+  expect(
+    await readableXpubGroups.evaluate((element) =>
+      Number.parseFloat(getComputedStyle(element).fontSize)
+    )
+  ).toBeGreaterThanOrEqual(15);
+  await readableXpub.click();
+  await expect(
+    xpubDialog.getByRole('button', { name: 'Public account key (xpub) copied' })
+  ).toBeVisible();
+  const xpubToast = page.locator('.toast').filter({ hasText: 'Public account key (xpub) copied' });
+  await expect(xpubToast).toHaveCount(mobile ? 0 : 1);
   const xpubBounds = await xpubDialog.boundingBox();
   const xpubViewport = page.viewportSize();
   expect(xpubBounds && xpubViewport).toBeTruthy();
   expect(xpubBounds!.y).toBeGreaterThanOrEqual(0);
   expect(xpubBounds!.y + xpubBounds!.height).toBeLessThanOrEqual(xpubViewport!.height);
+  await page.screenshot({
+    path: testInfo.outputPath(`signer-xpub-${testInfo.project.name}.png`),
+    animations: 'disabled'
+  });
   await xpubDialog.getByRole('button', { name: 'Close' }).click();
   await expect(coldcardDialog.getByText('Not checked yet', { exact: true })).toBeVisible();
   await coldcardDialog.getByRole('button', { name: 'Check signer' }).click();
@@ -1098,7 +1159,10 @@ test('keeps hardware checks available for imported signers and hides them for of
 
   await page.getByRole('button', { name: 'View Offline backup details' }).click();
   const backupDialog = page.getByRole('dialog', { name: 'Offline backup' });
+  const backupMetadata = backupDialog.locator('details.signer-metadata');
   await expect(backupDialog.locator('.ready-badge')).toHaveText('Ready');
+  if (mobile) await expect(backupMetadata).not.toHaveAttribute('open', '');
+  else await expect(backupMetadata).toHaveAttribute('open', '');
   await expect(backupDialog.getByRole('button', { name: 'Check signer' })).toHaveCount(0);
   await backupDialog.getByRole('button', { name: 'Close' }).click();
 
@@ -1147,21 +1211,15 @@ test('uses the same wallet navigation for a multisig policy', async ({ page }) =
     await expect(page.locator('.overview-inline-primary').first()).toBeHidden();
     const walletTrigger = page.getByRole('button', { name: 'Switch wallet' });
     await walletTrigger.click();
-    const walletMenu = page.getByRole('menu', { name: 'Wallets' });
-    const [walletTriggerBox, walletMenuBox] = await Promise.all([
-      walletTrigger.boundingBox(),
-      walletMenu.boundingBox()
-    ]);
-    expect(walletTriggerBox).not.toBeNull();
-    expect(walletMenuBox).not.toBeNull();
-    expect(
-      (walletMenuBox?.y ?? 0) - ((walletTriggerBox?.y ?? 0) + (walletTriggerBox?.height ?? 0))
-    ).toBeGreaterThanOrEqual(7);
-    expect(
-      (walletMenuBox?.y ?? 0) - ((walletTriggerBox?.y ?? 0) + (walletTriggerBox?.height ?? 0))
-    ).toBeLessThanOrEqual(9);
-    expect(Math.abs((walletMenuBox?.x ?? 0) - (walletTriggerBox?.x ?? 0))).toBeLessThanOrEqual(1);
-    await walletTrigger.click();
+    const walletDialog = page.getByRole('dialog', { name: 'Wallets' });
+    const walletDialogBox = await walletDialog.boundingBox();
+    const viewport = page.viewportSize();
+    expect(walletDialogBox && viewport).toBeTruthy();
+    expect(walletDialogBox!.y).toBeGreaterThanOrEqual(0);
+    expect(walletDialogBox!.y + walletDialogBox!.height).toBeLessThanOrEqual(viewport!.height);
+    await expect(walletDialog.locator('.wallet-profile-list button')).toHaveCount(2);
+    await expect(walletDialog.getByRole('link', { name: 'Add wallet' })).toBeVisible();
+    await walletDialog.getByRole('button', { name: 'Close' }).click();
   } else {
     const receive = page
       .locator('.primary-actions .overview-inline-primary')

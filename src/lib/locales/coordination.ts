@@ -38,9 +38,17 @@ export const coordinationCopy = {
   },
   'Desktop coordinator': { fr: 'Coordinateur sur ordinateur', es: 'Coordinador de escritorio' },
   'Finish on desktop': { fr: 'Terminer sur ordinateur', es: 'Terminar en el ordenador' },
-  'Phone signer · QR connection': {
-    fr: 'Signataire mobile · connexion QR',
-    es: 'Firmante móvil · conexión QR'
+  'Phone signer': {
+    fr: 'Signataire mobile',
+    es: 'Firmante móvil'
+  },
+  'Verify backup': {
+    fr: 'Vérifier la sauvegarde',
+    es: 'Verificar la copia'
+  },
+  'Have your 24 recovery words ready.': {
+    fr: 'Préparez vos 24 mots de récupération.',
+    es: 'Ten listas tus 24 palabras de recuperación.'
   },
   'QR connection': { fr: 'Connexion QR', es: 'Conexión QR' },
   'QR verified': { fr: 'QR vérifié', es: 'QR verificado' },

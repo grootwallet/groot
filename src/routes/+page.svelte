@@ -113,10 +113,12 @@
   let selectedProfile = $state<WalletProfile | null>(null);
   let phoneBackupUnverified = $state(false);
   let verifyOpen = $state(false);
+  let verifyPhoneKey = $state(false);
   let verifyCredential = $state('');
   let verifyError = $state('');
   let verifying = $state(false);
   let revealingBackup = $state(false);
+  let verifyGeneration = 0;
   let initialDataLoading = $state(true);
   let checkingNode = $state(false);
   let syncSource = $state<WalletSyncSource | null>(null);
@@ -283,6 +285,16 @@
       ? ($hardwareHealthChecks[hardwareHealthKey(hardwareSignerWallet.signer.fingerprint)] ?? null)
       : null
   );
+  const mobileSyncStatusVisible = $derived(
+    mobileRuntime &&
+      (mobileSyncSetupRequired ||
+        initialHistoryRequired ||
+        Boolean(
+          manualSyncDetailsVisible &&
+          syncStatus &&
+          (syncInProgress || syncStatus.state === 'failed')
+        ))
+  );
   const pendingBreakdown = $derived(
     snapshot ? pendingBalanceBreakdown(snapshot) : { incoming: 0, change: 0, outgoing: 0 }
   );
@@ -381,6 +393,7 @@
 
   onDestroy(() => {
     verifyCredential = '';
+    ++verifyGeneration;
     ++loadGeneration;
     ++syncStatusReadGeneration;
   });
@@ -493,6 +506,7 @@
       if (!current()) return;
       automaticInitialScanPending = false;
       snapshot = nextSnapshot;
+      walletShell.reportMobileQuickActionSnapshot(profile.id, nextSnapshot);
       initialDataLoading = false;
       void loadSecondaryDetails(generation);
       if (firstHistory) await loadRecoveryState(generation);
@@ -519,6 +533,8 @@
           : networkSetupRequired
             ? 'Connect this wallet to Bitcoin Core in Settings to load network data.'
             : localizedError(cause, $locale, 'The wallet data could not be read.');
+      if (!snapshot && selectedProfile)
+        walletShell.reportMobileQuickActionSnapshot(selectedProfile.id, null);
       initialDataLoading = false;
       toast({
         title:
@@ -645,6 +661,7 @@
       ) {
         multisig = event.walletKind === 'multisig';
         snapshot = event.snapshot;
+        walletShell.reportMobileQuickActionSnapshot(event.walletId, event.snapshot);
         loadError = '';
         loadErrorCode = '';
         syncError = '';
@@ -654,7 +671,12 @@
   );
   onMount(() => {
     const closeOnOutsidePointer = (event: PointerEvent) => {
-      if (moreOpen && event.target instanceof Node && !moreMenu?.contains(event.target))
+      if (
+        moreOpen &&
+        !mobileRuntime &&
+        event.target instanceof Node &&
+        !moreMenu?.contains(event.target)
+      )
         moreOpen = false;
     };
     const closeOnEscape = (event: KeyboardEvent) => {
@@ -702,7 +724,7 @@
       } else if (walletShell.initialHistoryScanRunning(profile.id)) {
         automaticInitialScanPending = true;
         startRecoveryStatusPolling(true);
-      } else if (!snapshot?.syncedAt && nodeReady) {
+      } else if (!snapshot?.syncedAt && nodeReady && !mobileSyncSetupRequired) {
         automaticInitialScanPending = false;
         walletShell.requestInitialHistoryApproval();
       }
@@ -783,18 +805,25 @@
       }
       return;
     }
-    if (syncInProgress) return;
+    const walletId = selectedProfile?.id;
+    if (syncInProgress || !walletId) return;
+    const generation = loadGeneration;
+    const current = () =>
+      generation === loadGeneration && walletShell.selectedWalletId() === walletId;
     manualSyncDetailsVisible = manual;
     syncing = true;
     if (manual) syncError = '';
     try {
       if (manual) await walletShell.pauseAutomaticSync();
+      if (!current()) return;
       startSyncStatusPolling();
       const [nextSnapshot] = await Promise.all([
         multisig ? walletService.syncMultisig() : walletService.sync(),
         new Promise((resolve) => setTimeout(resolve, 1_200))
       ]);
+      if (!current()) return;
       snapshot = nextSnapshot;
+      walletShell.reportMobileQuickActionSnapshot(walletId, nextSnapshot);
       if (manual)
         toast({
           title: 'Wallet is up to date',
@@ -802,6 +831,7 @@
           tone: 'success'
         });
     } catch (cause) {
+      if (!current()) return;
       if (cause instanceof WalletError && cause.code === 'sync_cancelled') return;
       if (cause instanceof WalletError && cause.code === 'wallet_locked') {
         await goto('/unlock');
@@ -826,62 +856,58 @@
         return;
       }
     } finally {
-      await refreshSyncStatus();
+      if (current()) await refreshSyncStatus();
       syncing = false;
       if (syncStatus?.state !== 'failed') manualSyncDetailsVisible = false;
       if (manual) walletShell.resumeAutomaticSync();
     }
   };
-  async function verifyBackup() {
-    verifying = true;
+  function closeBackupVerification() {
+    ++verifyGeneration;
+    verifyOpen = false;
+    verifyCredential = '';
+    verifyError = '';
+  }
+
+  function openBackupVerification(phone = false) {
+    if (verifying || revealingBackup) return;
+    closeBackupVerification();
+    verifyPhoneKey = phone;
+    verifyOpen = true;
+  }
+
+  async function verifyBackup(reveal = false) {
+    const walletId = selectedProfile?.id;
+    if (!verifyCredential || !walletId || verifying || revealingBackup) return;
+    const generation = ++verifyGeneration;
+    const current = () =>
+      generation === verifyGeneration && walletShell.selectedWalletId() === walletId;
+    revealingBackup = reveal;
+    verifying = !reveal;
     verifyError = '';
     try {
-      const verified = await walletService.verifyBackup(verifyCredential);
+      const result = reveal
+        ? walletService.revealAndVerifyBackup(verifyCredential)
+        : walletService.verifyBackup(verifyCredential);
       verifyCredential = '';
-      verifyOpen = false;
+      const verified = await result;
+      if (!current()) return;
       if (!verified) {
-        toast({
-          title: 'Backup still unverified',
-          description: 'You can return to verification whenever you are ready.'
-        });
+        if (!reveal) closeBackupVerification();
+        toast({ title: 'Backup still unverified' });
         return;
       }
+      closeBackupVerification();
       if (selectedProfile) selectedProfile = { ...selectedProfile, backupVerified: true };
-      toast({
-        title: 'Recovery backup verified',
-        description: 'Your written words matched this wallet.',
-        tone: 'success'
-      });
+      phoneBackupUnverified = false;
+      toast({ title: 'Recovery backup verified', tone: 'success' });
     } catch (cause) {
-      verifyError = localizedError(cause, $locale, 'Could not verify this recovery backup.');
+      if (current()) {
+        verifyError = localizedError(cause, $locale, 'Could not verify this recovery backup.');
+      }
     } finally {
       verifyCredential = '';
       verifying = false;
-    }
-  }
-  async function revealAndVerifyBackup() {
-    revealingBackup = true;
-    verifyError = '';
-    try {
-      const verified = await walletService.revealAndVerifyBackup(verifyCredential);
-      if (!verified) {
-        toast({
-          title: 'Backup still unverified',
-          description: 'Your recovery words remain available to reveal again before verification.'
-        });
-        return;
-      }
-      verifyOpen = false;
-      if (selectedProfile) selectedProfile = { ...selectedProfile, backupVerified: true };
-      toast({
-        title: 'Recovery backup verified',
-        description: 'Your reconstructed word order matched this wallet.',
-        tone: 'success'
-      });
-    } catch (cause) {
-      verifyError = localizedError(cause, $locale, 'Could not reveal this recovery backup.');
-    } finally {
-      verifyCredential = '';
       revealingBackup = false;
     }
   }
@@ -922,37 +948,93 @@
   }
 </script>
 
-<div class="page dashboard-page">
+{#snippet walletActionItems()}
+  <a href="/activity" role="menuitem" onclick={() => (moreOpen = false)}
+    ><Activity size={16} /><span
+      ><strong>{translate($locale, 'Activity')}</strong><small
+        >{translate($locale, 'View all transactions')}</small
+      ></span
+    ></a
+  >
+  <a href="/coins" role="menuitem" onclick={() => (moreOpen = false)}
+    ><CircleDot size={16} /><span
+      ><strong>{translate($locale, 'Coins')}</strong><small
+        >{translate($locale, 'Inspect and choose UTXOs')}</small
+      ></span
+    ></a
+  >
+  {#if hardwareSignerWallet}
+    <button
+      role="menuitem"
+      onclick={() => {
+        moreOpen = false;
+        signerDetailsOpen = true;
+      }}
+      ><HeartPulse size={16} /><span
+        ><strong>{translate($locale, 'Health check')}</strong><small
+          >{translate($locale, 'Verify the connected signer identity')}</small
+        ></span
+      ></button
+    >
+  {/if}
+  {#if multisig}
+    <a href="/multisig" role="menuitem" onclick={() => (moreOpen = false)}
+      ><ShieldCheck size={16} /><span
+        ><strong>{translate($locale, 'Policy')}</strong><small
+          >{translate($locale, 'Keys, backups, and rules')}</small
+        ></span
+      ></a
+    >
+    <button
+      role="menuitem"
+      onclick={() => {
+        moreOpen = false;
+        showDescriptors = true;
+      }}
+      ><Eye size={16} /><span
+        ><strong>{translate($locale, 'Show descriptors')}</strong><small
+          >{translate($locale, 'Inspect receive and change logic')}</small
+        ></span
+      ></button
+    >
+    <a href="/multisig/backup" role="menuitem" onclick={() => (moreOpen = false)}
+      ><FileKey size={16} /><span
+        ><strong>{translate($locale, 'Export & verify')}</strong><small
+          >{translate($locale, 'Save a public wallet backup')}</small
+        ></span
+      ></a
+    >
+  {/if}
+{/snippet}
+
+<div class="page dashboard-page" class:native-mobile-overview={mobileRuntime}>
   <header class="page-header">
     <div>
       <h1>{translate($locale, 'Overview')}</h1>
     </div>
-    <button
-      class="sync-button"
-      disabled={automaticInitialScanPending ||
-        walletAwaitingAutomaticScan ||
-        syncInProgress ||
-        recoveryScanIsActive(recoveryStatus)}
-      title={mobileSyncSetupRequired
-        ? translate($locale, 'Connect a trusted node to sync this wallet.')
-        : syncButtonTitle}
-      onclick={() => sync(true)}
-      ><RefreshCw
-        size={15}
-        class={automaticInitialScanPending ||
-        walletAwaitingAutomaticScan ||
-        syncInProgress ||
-        recoveryScanIsActive(recoveryStatus)
-          ? 'spin'
-          : ''}
-      />{mobileSyncSetupRequired ? translate($locale, 'Set up sync') : syncButtonLabel}</button
-    >
+    {#if !mobileSyncStatusVisible}<button
+        class="sync-button"
+        disabled={automaticInitialScanPending ||
+          walletAwaitingAutomaticScan ||
+          syncInProgress ||
+          recoveryScanIsActive(recoveryStatus)}
+        title={mobileSyncSetupRequired
+          ? translate($locale, 'Connect a trusted node to sync this wallet.')
+          : syncButtonTitle}
+        onclick={() => sync(true)}
+        ><RefreshCw
+          size={15}
+          class={automaticInitialScanPending ||
+          walletAwaitingAutomaticScan ||
+          syncInProgress ||
+          recoveryScanIsActive(recoveryStatus)
+            ? 'spin'
+            : ''}
+        />{mobileSyncSetupRequired ? translate($locale, 'Set up sync') : syncButtonLabel}</button
+      >{/if}
   </header>
   {#if mobileSyncSetupRequired}<div class="mobile-sync-notice">
-      <WarningNotice
-        class="compact-action"
-        title={translate($locale, 'Set up wallet sync')}
-        body={translate($locale, 'Connect a trusted node to sync this wallet.')}
+      <WarningNotice class="compact-action" title={translate($locale, 'Set up wallet sync')}
         ><Button size="small" variant="secondary" href="/settings#network-services"
           >{translate($locale, 'Configure sync')}</Button
         ></WarningNotice
@@ -1085,7 +1167,7 @@
       title={translate($locale, 'Recovery backup not verified')}
       class="compact-action"
     >
-      <Button size="small" variant="secondary" href="/multisig"
+      <Button size="small" variant="secondary" onclick={() => openBackupVerification(true)}
         >{translate($locale, 'Verify now')}</Button
       >
     </WarningNotice>
@@ -1099,13 +1181,8 @@
         ><strong>{translate($locale, 'Recovery backup not verified')}</strong><small
           >{translate($locale, 'Verify your written recovery words.')}</small
         ></span
-      ><Button
-        size="small"
-        variant="secondary"
-        onclick={() => {
-          verifyError = '';
-          verifyOpen = true;
-        }}>{translate($locale, 'Verify now')}</Button
+      ><Button size="small" variant="secondary" onclick={() => openBackupVerification()}
+        >{translate($locale, 'Verify now')}</Button
       >
     </section>
   {/if}
@@ -1177,7 +1254,7 @@
       description={loadError}
       onretry={networkSetupRequired ? openNetworkSetup : loadSnapshot}
     />
-  {:else if snapshot && !initialDataLoading && !initialScanInFlight}
+  {:else if snapshot && !initialDataLoading && !initialScanInFlight && !initialHistoryRequired}
     <section class="balance-card content-reveal">
       <div class="balance-top">
         <span>{translate($locale, 'Total balance')}</span><button
@@ -1191,44 +1268,26 @@
           >{#if $discreetMode}<Eye size={17} />{:else}<EyeOff size={17} />{/if}</button
         >
       </div>
-      {#if initialHistoryRequired}
-        <div
-          class="balance-value unverified-balance"
-          aria-label={translate($locale, 'Unverified balance')}
-        >
-          <Amount value={0} hidden={$discreetMode} /><small
-            >{translate($locale, 'Never synced')}</small
-          >
-        </div>
-      {:else}
-        <button
-          class="balance-value"
-          type="button"
-          aria-label={translate(
-            $locale,
-            $denomination === 'btc' ? 'Show balance in sats' : 'Show balance in BTC'
-          )}
-          title={translate(
-            $locale,
-            $denomination === 'btc' ? 'Show balance in sats' : 'Show balance in BTC'
-          )}
-          onclick={() => setDenomination($denomination === 'btc' ? 'sats' : 'btc')}
-        >
-          <Amount value={snapshot?.balance.total ?? 0} hidden={$discreetMode} />
-        </button>
-      {/if}
-      <div class="pending-line">
-        <i></i>{translate(
+      <button
+        class="balance-value"
+        type="button"
+        aria-label={translate(
           $locale,
-          initialHistoryRequired
-            ? 'This wallet has not completed a sync yet.'
-            : $discreetMode
-              ? 'Pending activity hidden'
-              : pendingDescription
+          $denomination === 'btc' ? 'Show balance in sats' : 'Show balance in BTC'
         )}
+        title={translate(
+          $locale,
+          $denomination === 'btc' ? 'Show balance in sats' : 'Show balance in BTC'
+        )}
+        onclick={() => setDenomination($denomination === 'btc' ? 'sats' : 'btc')}
+      >
+        <Amount value={snapshot.balance.total} hidden={$discreetMode} />
+      </button>
+      <div class="pending-line">
+        <i></i>{translate($locale, $discreetMode ? 'Pending activity hidden' : pendingDescription)}
       </div>
     </section>
-  {:else}
+  {:else if initialDataLoading || initialScanInFlight}
     <WalletSkeleton variant="balance" />
   {/if}
   {#if !loadError}
@@ -1328,69 +1387,14 @@
           size="large"
           onclick={() => (moreOpen = !moreOpen)}
         />
-        {#if moreOpen}
+        {#if moreOpen && !mobileRuntime}
           <div
-            class="overview-more-menu"
+            class="overview-more-menu overview-wallet-actions"
             role="menu"
             aria-label={translate($locale, 'More wallet actions')}
             transition:fly={{ y: 5, duration: 160 }}
           >
-            <a href="/activity" role="menuitem" onclick={() => (moreOpen = false)}
-              ><Activity size={16} /><span
-                ><strong>{translate($locale, 'Activity')}</strong><small
-                  >{translate($locale, 'View all transactions')}</small
-                ></span
-              ></a
-            >
-            <a href="/coins" role="menuitem" onclick={() => (moreOpen = false)}
-              ><CircleDot size={16} /><span
-                ><strong>{translate($locale, 'Coins')}</strong><small
-                  >{translate($locale, 'Inspect and choose UTXOs')}</small
-                ></span
-              ></a
-            >
-            {#if hardwareSignerWallet}
-              <button
-                role="menuitem"
-                onclick={() => {
-                  moreOpen = false;
-                  signerDetailsOpen = true;
-                }}
-                ><HeartPulse size={16} /><span
-                  ><strong>{translate($locale, 'Health check')}</strong><small
-                    >{translate($locale, 'Verify the connected signer identity')}</small
-                  ></span
-                ></button
-              >
-            {/if}
-            {#if multisig}
-              <a href="/multisig" role="menuitem" onclick={() => (moreOpen = false)}
-                ><ShieldCheck size={16} /><span
-                  ><strong>{translate($locale, 'Policy')}</strong><small
-                    >{translate($locale, 'Keys, backups, and rules')}</small
-                  ></span
-                ></a
-              >
-              <button
-                role="menuitem"
-                onclick={() => {
-                  moreOpen = false;
-                  showDescriptors = true;
-                }}
-                ><Eye size={16} /><span
-                  ><strong>{translate($locale, 'Show descriptors')}</strong><small
-                    >{translate($locale, 'Inspect receive and change logic')}</small
-                  ></span
-                ></button
-              >
-              <a href="/multisig/backup" role="menuitem" onclick={() => (moreOpen = false)}
-                ><FileKey size={16} /><span
-                  ><strong>{translate($locale, 'Export & verify')}</strong><small
-                    >{translate($locale, 'Save a public wallet backup')}</small
-                  ></span
-                ></a
-              >
-            {/if}
+            {@render walletActionItems()}
           </div>
         {/if}
       </div>
@@ -1405,41 +1409,58 @@
         ><ArrowUpFromLine size={18} />{translate($locale, 'Send')}</a
       >
     </div>
-    <section class="section-block">
-      <div class="section-heading">
-        <div><h2>{translate($locale, 'Recent activity')}</h2></div>
-        <a href="/activity">{translate($locale, 'View all')}</a>
-      </div>
-      {#if initialDataLoading || initialScanInFlight}
-        <TxList items={[]} loading />
-      {:else if initialHistoryRequired}
-        <EmptyState
-          compact
-          title={translate($locale, 'Wallet history not verified')}
-          description={translate(
-            $locale,
-            'Complete or resume the first scan before relying on activity.'
-          )}
-        >
-          {#snippet icon()}<Activity size={22} />{/snippet}
-        </EmptyState>
-      {:else if recentTransactions.length}
-        <TxList
-          items={recentTransactions}
-          onselect={(transaction) => (selectedTransactionId = transaction.id)}
-        />
-      {:else}
-        <EmptyState
-          compact
-          title={translate($locale, 'No transactions yet')}
-          description={translate($locale, 'Received and sent transactions will appear here.')}
-        >
-          {#snippet icon()}<Activity size={22} />{/snippet}
-        </EmptyState>
-      {/if}
-    </section>
+    {#if !(mobileRuntime && initialHistoryRequired)}<section class="section-block">
+        <div class="section-heading">
+          <div><h2>{translate($locale, 'Recent activity')}</h2></div>
+          <a href="/activity">{translate($locale, 'View all')}</a>
+        </div>
+        {#if initialDataLoading || initialScanInFlight}
+          <TxList items={[]} loading />
+        {:else if initialHistoryRequired}
+          <EmptyState
+            compact
+            title={translate($locale, 'Wallet history not verified')}
+            description={translate(
+              $locale,
+              'Complete or resume the first scan before relying on activity.'
+            )}
+          >
+            {#snippet icon()}<Activity size={22} />{/snippet}
+          </EmptyState>
+        {:else if recentTransactions.length}
+          <TxList
+            items={recentTransactions}
+            onselect={(transaction) => (selectedTransactionId = transaction.id)}
+          />
+        {:else}
+          <EmptyState
+            compact
+            title={translate($locale, 'No transactions yet')}
+            description={translate($locale, 'Received and sent transactions will appear here.')}
+          >
+            {#snippet icon()}<Activity size={22} />{/snippet}
+          </EmptyState>
+        {/if}
+      </section>{/if}
   {/if}
 </div>
+
+<Modal
+  open={moreOpen && mobileRuntime}
+  fixedViewport
+  title={translate($locale, 'More wallet actions')}
+  onclose={() => (moreOpen = false)}
+>
+  <div class="overview-actions-dialog-scroll">
+    <div
+      class="overview-wallet-actions overview-mobile-actions"
+      role="menu"
+      aria-label={translate($locale, 'More wallet actions')}
+    >
+      {@render walletActionItems()}
+    </div>
+  </div>
+</Modal>
 
 <TxDetailsModal transaction={selected} {multisig} onclose={() => (selectedTransactionId = null)} />
 <DeviceDetailsModal
@@ -1496,71 +1517,79 @@
 
 <Modal
   open={verifyOpen}
-  title={translate($locale, 'Verify recovery backup')}
+  title={translate(
+    $locale,
+    verifyPhoneKey ? 'Verify phone recovery backup' : 'Verify recovery backup'
+  )}
   description={translate(
     $locale,
-    'Use your written 24 words for a private native proof, or reveal them securely first if you still need to make the backup.'
+    mobileRuntime
+      ? 'Have your 24 recovery words ready.'
+      : 'Use your written 24 words for a private native proof, or reveal them securely first if you still need to make the backup.'
   )}
-  onclose={() => {
-    verifyOpen = false;
-    verifyCredential = '';
-    verifyError = '';
-  }}
+  onclose={closeBackupVerification}
 >
-  <WarningNotice
-    class="verify-backup-warning"
-    credentialSpacing
-    title={translate($locale, 'Your recovery words stay private')}
-    body={translate($locale, 'Groot checks them securely on this device.')}
-    insightLabel={translate($locale, 'About recovery-word privacy')}
-    insightText={translate(
-      $locale,
-      'Groot reveals and verifies the words in a separate trusted native window. They never enter the webview or leave this device.'
-    )}
-  />
+  {#if !mobileRuntime}<WarningNotice
+      class="verify-backup-warning"
+      credentialSpacing
+      title={translate($locale, 'Your recovery words stay private')}
+      body={translate($locale, 'Groot checks them securely on this device.')}
+      insightLabel={translate($locale, 'About recovery-word privacy')}
+      insightText={translate(
+        $locale,
+        'Groot reveals and verifies the words in a separate trusted native window. They never enter the webview or leave this device.'
+      )}
+    />{/if}
   <PasswordField
-    label={translate($locale, 'Wallet passphrase')}
+    label={translate($locale, verifyPhoneKey ? 'App PIN' : 'Wallet passphrase')}
     bind:value={verifyCredential}
     autocomplete="current-password"
-    hint={translate(
-      $locale,
-      'Required to decrypt the recovery words only inside trusted Rust code.'
-    )}
+    hint={mobileRuntime
+      ? undefined
+      : translate($locale, 'Required to decrypt the recovery words only inside trusted Rust code.')}
   />
   {#if verifyError}<WarningNotice
       tone="danger"
       icon
       role="alert"
       ariaLive="polite"
-      body={verifyError.replace('passphrase / PIN', 'wallet passphrase')}
+      body={verifyPhoneKey
+        ? verifyError
+        : verifyError.replace('passphrase / PIN', 'wallet passphrase')}
     />{/if}
-  <div class="modal-footer verify-backup-actions">
+  <div class="modal-footer verify-backup-actions" class:compact-backup-actions={mobileRuntime}>
     <Button
       class="show-words-action"
       variant="secondary"
       disabled={!verifyCredential || verifying || revealingBackup}
       loading={revealingBackup}
       loadingLabel={translate($locale, 'Opening recovery words…')}
-      onclick={revealAndVerifyBackup}>{translate($locale, 'View recovery words first')}</Button
+      onclick={() => verifyBackup(true)}
+      >{translate(
+        $locale,
+        mobileRuntime ? 'Show recovery words' : 'View recovery words first'
+      )}</Button
     >
-    <Button
-      variant="secondary"
-      disabled={verifying || revealingBackup}
-      onclick={() => {
-        verifyOpen = false;
-        verifyCredential = '';
-        verifyError = '';
-      }}>{translate($locale, 'Cancel')}</Button
-    ><Button
+    {#if !mobileRuntime}<Button
+        variant="secondary"
+        disabled={verifying || revealingBackup}
+        onclick={closeBackupVerification}>{translate($locale, 'Cancel')}</Button
+      >{/if}<Button
       disabled={!verifyCredential || revealingBackup}
       loading={verifying}
       loadingLabel={translate($locale, 'Opening verification…')}
-      onclick={verifyBackup}>{translate($locale, 'Continue')}</Button
+      onclick={() => verifyBackup()}
+      >{translate($locale, mobileRuntime ? 'Verify backup' : 'Continue')}</Button
     >
   </div>
 </Modal>
 
 <style>
+  .verify-backup-actions.compact-backup-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.5rem;
+  }
   @media (max-width: 760px) {
     .dashboard-page .page-header {
       min-height: 46px;
@@ -1631,20 +1660,6 @@
     width: 100%;
     height: 5px;
     accent-color: var(--progress);
-  }
-  :global(.unverified-balance):where(.unverified-balance) {
-    display: flex;
-    align-items: baseline;
-    gap: 10px;
-    cursor: default;
-  }
-  :global(.unverified-balance):where(.unverified-balance) :global(strong) {
-    font-size: 42px;
-  }
-  :global(.unverified-balance):where(.unverified-balance) :global(small) {
-    color: var(--muted);
-    font-size: var(--font-size-meta);
-    font-weight: 600;
   }
   :global(.initial-history-scan):where(.initial-history-scan)
     + :global(.backup-verification-banner),
@@ -1931,8 +1946,19 @@
     background: var(--panel-2);
     box-shadow: 0 16px 42px rgba(0, 0, 0, 0.28);
   }
-  :global(.overview-more-menu):where(.overview-more-menu) :global(a),
-  :global(.overview-more-menu):where(.overview-more-menu) :global(button) {
+  :global(.overview-actions-dialog-scroll):where(.overview-actions-dialog-scroll) {
+    min-height: 0;
+    flex: 1 1 auto;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+  }
+  :global(.overview-mobile-actions):where(.overview-mobile-actions) {
+    display: grid;
+    gap: 2px;
+  }
+  :global(.overview-wallet-actions):where(.overview-wallet-actions) :global(a),
+  :global(.overview-wallet-actions):where(.overview-wallet-actions) :global(button) {
     width: 100%;
     min-height: 48px;
     display: grid;
@@ -1947,28 +1973,28 @@
     text-align: left;
     cursor: pointer;
   }
-  :global(.overview-more-menu):where(.overview-more-menu) :global(a:hover),
-  :global(.overview-more-menu):where(.overview-more-menu) :global(a:focus-visible),
-  :global(.overview-more-menu):where(.overview-more-menu) :global(button:hover),
-  :global(.overview-more-menu):where(.overview-more-menu) :global(button:focus-visible) {
+  :global(.overview-wallet-actions):where(.overview-wallet-actions) :global(a:hover),
+  :global(.overview-wallet-actions):where(.overview-wallet-actions) :global(a:focus-visible),
+  :global(.overview-wallet-actions):where(.overview-wallet-actions) :global(button:hover),
+  :global(.overview-wallet-actions):where(.overview-wallet-actions) :global(button:focus-visible) {
     color: var(--text);
     background: var(--surface-hover);
     outline: 0;
   }
-  :global(.overview-more-menu):where(.overview-more-menu) :global(a > svg),
-  :global(.overview-more-menu):where(.overview-more-menu) :global(button > svg) {
+  :global(.overview-wallet-actions):where(.overview-wallet-actions) :global(a > svg),
+  :global(.overview-wallet-actions):where(.overview-wallet-actions) :global(button > svg) {
     color: var(--muted);
   }
-  :global(.overview-more-menu):where(.overview-more-menu) :global(a > span),
-  :global(.overview-more-menu):where(.overview-more-menu) :global(button > span) {
+  :global(.overview-wallet-actions):where(.overview-wallet-actions) :global(a > span),
+  :global(.overview-wallet-actions):where(.overview-wallet-actions) :global(button > span) {
     min-width: 0;
     display: grid;
     gap: 2px;
   }
-  :global(.overview-more-menu):where(.overview-more-menu) :global(strong) {
+  :global(.overview-wallet-actions):where(.overview-wallet-actions) :global(strong) {
     font-size: var(--font-size-meta);
   }
-  :global(.overview-more-menu):where(.overview-more-menu) :global(small) {
+  :global(.overview-wallet-actions):where(.overview-wallet-actions) :global(small) {
     color: var(--muted);
     font-size: var(--font-size-meta);
   }
@@ -1985,19 +2011,54 @@
   }
 
   @media (max-width: 760px) {
+    :global(.initial-history-scan):where(.initial-history-scan) {
+      gap: 9px 12px;
+      padding: 10px 12px;
+    }
     :global(.balance-card):where(.balance-card) {
-      padding: 22px 20px;
+      padding: 16px;
+    }
+    :global(.pending-line):where(.pending-line) {
+      margin-top: 16px;
     }
     :global(.backup-verification-banner):where(.backup-verification-banner) {
-      grid-template-columns: 24px minmax(0, 1fr);
-      margin-top: -12px;
+      grid-template-columns: 22px minmax(0, 1fr) auto;
+      gap: 8px;
+      margin-top: 0;
+      padding: 10px 12px;
+    }
+    :global(.backup-verification-banner):where(.backup-verification-banner) :global(small) {
+      display: none;
     }
     :global(.backup-verification-banner):where(.backup-verification-banner) :global(.button) {
-      grid-column: 2;
-      justify-self: start;
+      grid-column: auto;
+      min-height: 44px;
     }
     :global(.balance-value):where(.balance-value) {
       font-size: 35px;
+      margin-top: 8px;
+    }
+    :global(.native-mobile-overview .section-block .empty-state.compact) {
+      min-height: 0;
+      display: grid;
+      grid-template-columns: 34px minmax(0, 1fr);
+      align-items: center;
+      justify-content: stretch;
+      gap: 2px 10px;
+      padding: 12px;
+      text-align: left;
+    }
+    :global(.native-mobile-overview .section-block .empty-state.compact .empty-icon) {
+      width: 34px;
+      height: 34px;
+      grid-row: 1 / span 2;
+    }
+    :global(.native-mobile-overview .section-block .empty-state.compact h2) {
+      margin: 0;
+    }
+    :global(.native-mobile-overview .section-block .empty-state.compact p) {
+      max-width: none;
+      margin: 0;
     }
     :global(.active-proposal-callout):where(.active-proposal-callout) {
       grid-template-columns: 32px minmax(0, 1fr);

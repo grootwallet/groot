@@ -225,7 +225,7 @@ describe('foreground wallet navigation', () => {
     );
   });
 
-  it('requires first-history approval while preserving progress and unverified balances', () => {
+  it('requires first-history approval while preserving progress without inventing a balance', () => {
     expect(overview).toContain('walletShell.requestInitialHistoryApproval();');
     expect(overview).not.toContain('requestAutomaticInitialScan');
     expect(overview).not.toContain('initial-scan-options');
@@ -236,7 +236,8 @@ describe('foreground wallet navigation', () => {
     expect(overview).toContain('recoveryStatus.processedBlocks');
     expect(overview).toContain("'Syncing · {percent}%'");
     expect(overview).toContain("'{processed} / {total} blocks'");
-    expect(overview).toContain('<Amount value={0} hidden={$discreetMode} />');
+    expect(overview).not.toContain('<Amount value={0} hidden={$discreetMode} />');
+    expect(overview).toContain('!initialHistoryRequired');
     expect(overview).toContain("'Never synced'");
   });
 

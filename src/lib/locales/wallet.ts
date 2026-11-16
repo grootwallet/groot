@@ -413,6 +413,10 @@ export const walletCopy = {
   Mixed: { fr: 'Mélangée', es: 'Mezclada' },
   'Mixed provenance': { fr: 'Provenance mélangée', es: 'Procedencia mezclada' },
   'No local label': { fr: 'Aucun libellé local', es: 'Sin etiqueta local' },
+  'No coins selected': {
+    fr: 'Aucune pièce sélectionnée',
+    es: 'Ninguna moneda seleccionada'
+  },
   'No spendable outputs yet': {
     fr: 'Aucune sortie dépensable pour le moment',
     es: 'Aún no hay salidas disponibles para gastar'

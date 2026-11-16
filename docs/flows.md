@@ -100,11 +100,13 @@ Separate mobile setup (`/mobile/pair`, `/mobile/recover`, `/mobile/watch`) remai
 
 With a phone key saved, switch apps or restart Groot while desktop verifies its other signers. Switching apps returns to the pairing screen after lock. After restart, choose **Resume pairing** on Welcome or Unlock. Enter the pairing PIN and continue from the saved step. If a final QR scan was interrupted, scan it again. A QR for a different pending session cannot advance the current pairing.
 
+Mobile Overview shows the sync action or status once. Before the first verified history scan, it keeps Receive and any saved payment accessible without displaying a zero balance. New Send is shown when the current wallet has a verified snapshot and available coins. **Verify now** opens the recovery-backup prompt in Overview and passes the phone PIN or software-wallet passphrase to the existing native verification flow. Signer account details remain available on demand.
+
 Phone-key pairing uses the same optional native backup verification as software creation. Cancelling word presentation creates no signer; Verify later stages the key with `backupVerified=false`, preserved through restart and final policy acceptance. Pairing and the shared-wallet policy page show the reminder. The latter offers native verification/reveal using a fresh app PIN and device authorization. Only a successful native word check clears the reminder. Existing staging and profile formats remain compatible.
 
 After a QR is completely verified, release its camera stream and replace the preview with a compact success result before credential entry. Native mobile content scrolls between the fixed safe header and bottom controls, never beneath them. Keep setup copy brief; phone signer connections are QR. iOS uses Groot credentials without repeated platform prompts; an old key may need one final platform approval (ADR 0097).
 
-Unlocked mobile screens omit the brand header and start below the system safe area. Sync and backup reminders use compact inline actions with 44px touch targets; recovery verification remains available. This presentation change has no BIP or persisted-format impact.
+Unlocked mobile screens omit the brand header and start below the system safe area. Sync and backup reminders use compact inline actions with 44px touch targets; recovery verification remains available. Mobile Overview shows one sync state and no numeric balance before history verification. Receive and saved-payment resume remain available; new Send appears only with a positive, unfrozen coin. This presentation change has no BIP or persisted-format impact.
 
 Watch-only QR import retains an explicit Back to wallet action when mobile branding is hidden; leaving before camera permission resolves releases the eventual stream.
 

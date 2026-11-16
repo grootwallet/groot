@@ -170,6 +170,10 @@
     usesCommandModifier
   } from '$lib/keyboard-shortcuts';
   import { configureMobileViewport } from '$lib/mobile-viewport';
+  import {
+    shouldShowMobileSend,
+    type MobileQuickActionSnapshot
+  } from '$lib/wallet/mobile-quick-actions';
   import { applyZoom, changeZoom, initZoom } from '$lib/zoom';
   let { children } = $props();
   let mainElement = $state<HTMLElement>();
@@ -221,6 +225,7 @@
   let shortcutLockPending = $state(false);
   let walletSelectionTask: Promise<void> | undefined;
   let mobileRuntime = $state(false);
+  let mobileQuickActions = $state<{ walletId: string; showSend: boolean } | null>(null);
   let pendingUnlockSyncWalletId: string | null = null;
   let runtimeIdentity = $state<RuntimePlatform | null>(null);
   let startupFailure = $state('');
@@ -258,6 +263,9 @@
     selectedProfile?.kind === 'multisig' ? '/multisig/receive' : '/receive'
   );
   const sendHref = $derived(selectedProfile?.kind === 'multisig' ? '/multisig/send' : '/send');
+  const showSendQuickAction = $derived(
+    mobileQuickActions?.walletId === selectedWalletId && mobileQuickActions.showSend
+  );
   const showSetupResume = $derived(
     Boolean(multisigSetupDraft) && !onboardingRoute && !diagnosticsRoute
   );
@@ -517,6 +525,7 @@
     try {
       const registry = await walletService.profiles();
       if (generation === profileReadGeneration) {
+        if (registry.selectedWalletId !== selectedWalletId) mobileQuickActions = null;
         profiles = registry.wallets;
         selectedWalletId = registry.selectedWalletId;
       }
@@ -656,6 +665,7 @@
       const selection = await walletService.selectWallet(walletId);
       // Change the routed wallet context only after Rust has atomically selected
       // the same profile. The keyed route then reloads against one wallet kind.
+      mobileQuickActions = null;
       selectedWalletId = selection.profile.id;
       selectedWalletUnlocked = selection.unlocked;
       await goto(selection.unlocked ? '/' : '/unlock');
@@ -708,6 +718,13 @@
     automaticSyncPauseCount = Math.max(0, automaticSyncPauseCount - 1);
     if (automaticSyncPauseCount === 0 && !isPrototypeWallet && !syncPausedRoute) liveSync?.start();
   }
+  function reportMobileQuickActionSnapshot(
+    walletId: string,
+    snapshot: MobileQuickActionSnapshot | null
+  ) {
+    if (walletId !== selectedWalletId) return;
+    mobileQuickActions = snapshot ? { walletId, showSend: shouldShowMobileSend(snapshot) } : null;
+  }
   provideWalletShellContext({
     profiles: () => profiles,
     selectedWalletId: () => selectedWalletId,
@@ -717,6 +734,7 @@
     beginHardwareReview,
     requestUnlockSync,
     requestInitialHistoryApproval,
+    reportMobileQuickActionSnapshot,
     initialHistoryScanRunning: (walletId) => initialHistoryScanWalletId === walletId,
     consumeUnlockSync,
     pauseAutomaticSync,
@@ -905,6 +923,7 @@
         profiles = known
           ? profiles.map((profile) => (profile.id === event.profile.id ? event.profile : profile))
           : [...profiles, event.profile];
+        if (event.profile.id !== selectedWalletId) mobileQuickActions = null;
         selectedWalletId = event.profile.id;
       }
     });
@@ -1151,13 +1170,13 @@
       </div>{/if}
 
     {#if showQuickActions}
-      <div class="mobile-actions">
+      <div class="mobile-actions" class:single-action={!showSendQuickAction}>
         <a class="mobile-action secondary" href={receiveHref}
           ><ArrowDownToLine size={18} />{t('receive', $locale)}</a
         >
-        <a class="mobile-action primary" href={sendHref}
-          ><ArrowUpFromLine size={18} />{t('send', $locale)}</a
-        >
+        {#if showSendQuickAction}<a class="mobile-action primary" href={sendHref}
+            ><ArrowUpFromLine size={18} />{t('send', $locale)}</a
+          >{/if}
       </div>
     {/if}
     <DiscardMultisigSetupModal
@@ -1697,6 +1716,9 @@
       right: 18px;
       z-index: 19;
     }
+    :global(.mobile-actions.single-action):where(.mobile-actions) {
+      grid-template-columns: minmax(0, 1fr);
+    }
     :global(.mobile-action):where(.mobile-action) {
       min-height: 46px;
       border-radius: var(--radius-control);
@@ -1797,19 +1819,7 @@
       isolation: isolate;
     }
     :global(.app-shell.native-mobile .mobile-nav a.active) {
-      background: transparent;
-    }
-    :global(.app-shell.native-mobile .mobile-nav a.active)::before {
-      content: '';
-      position: absolute;
-      z-index: -1;
-      width: min(100%, calc(49px + env(safe-area-inset-bottom, 0px)));
-      aspect-ratio: 1;
-      bottom: calc(0px - env(safe-area-inset-bottom, 0px));
-      left: 50%;
-      transform: translateX(-50%);
       background: var(--surface-active);
-      pointer-events: none;
     }
     :global(.app-shell.native-mobile .mobile-nav a svg) {
       width: 20px;

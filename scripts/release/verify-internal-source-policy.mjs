@@ -98,13 +98,13 @@ const internalTextOverrides = new Map([
   ['src/lib/release-notes.ts', '619a9397c1012603575d56e1055546c17415695488149c4456e4f08ef36a8260'],
   [
     'src/lib/components/AppShell.svelte',
-    'c7efc1a9e177c45070921a3e66e91d868c237a9c133346e624cb042a8331116a'
+    '78b8164f53e7e1e3bf93b864dcb008c12ed9fe466fb1a5e8e785dd99f603fe67'
   ],
   [
     'src/lib/wallet/live-sync.ts',
     '6dfb771e83c4a6db7dedfef3667ebe026f99ca41a4db1f0b650c14a9d003be15'
   ],
-  ['src/routes/+page.svelte', '9d11aa21aee7d1fcd7bd4822be9ac0219ab74005c7685b5b0fa273b82214c346'],
+  ['src/routes/+page.svelte', '1de9c018139b3b38d60e396fce12102903c4a489d76820c26f306ee69c9a6047'],
   [
     'src/routes/settings/+page.svelte',
     '188eb46a8980ca831b629bb7a4149de8a4d90eaca140f27e75e3172105ea79d5'

@@ -24,7 +24,10 @@
   <button
     type="button"
     class="readable-address"
-    aria-label={translate($locale, 'Copy exact {label}', { label: translate($locale, label) })}
+    aria-label={copied
+      ? translate($locale, '{label} copied', { label: translate($locale, label) })
+      : translate($locale, 'Copy exact {label}', { label: translate($locale, label) })}
+    aria-live="polite"
     onclick={oncopy}
   >
     <span class="readable-address-groups" aria-hidden="true">

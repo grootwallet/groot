@@ -236,6 +236,7 @@
         transactions = event.snapshot.transactions;
         chainTip = event.snapshot.chainTip;
         policyPaths = event.snapshot.policyPaths ?? [];
+        walletShell.reportMobileQuickActionSnapshot(event.walletId, event.snapshot);
         selected = selected.filter((outpoint) =>
           utxos.some((coin) => coin.outpoint === outpoint && !coin.frozen)
         );
@@ -268,18 +269,18 @@
   });
 
   async function load() {
+    let requestedWalletId = walletShell.selectedWalletId();
     loading = true;
     loadError = '';
     try {
       const shellWallets = walletShell.profiles();
-      const shellSelectedWalletId = walletShell.selectedWalletId();
       const registry =
-        shellWallets.length && shellSelectedWalletId
-          ? { wallets: shellWallets, selectedWalletId: shellSelectedWalletId }
+        shellWallets.length && requestedWalletId
+          ? { wallets: shellWallets, selectedWalletId: requestedWalletId }
           : await walletService.profiles();
+      requestedWalletId = registry.selectedWalletId;
       multisig =
-        registry.wallets.find((wallet) => wallet.id === registry.selectedWalletId)?.kind ===
-        'multisig';
+        registry.wallets.find((wallet) => wallet.id === requestedWalletId)?.kind === 'multisig';
       const snapshot = multisig
         ? await walletService.multisigSnapshot()
         : await walletService.snapshot();
@@ -287,6 +288,8 @@
       transactions = snapshot.transactions;
       chainTip = snapshot.chainTip;
       policyPaths = snapshot.policyPaths ?? [];
+      if (requestedWalletId)
+        walletShell.reportMobileQuickActionSnapshot(requestedWalletId, snapshot);
       const requestedCoin = new URLSearchParams(location.search).get('coin');
       if (requestedCoin && utxos.some((coin) => coin.outpoint === requestedCoin)) {
         expanded = [requestedCoin];
@@ -302,6 +305,7 @@
         return;
       }
       loadError = localizedError(cause, $locale, 'Coin data could not be read.');
+      if (requestedWalletId) walletShell.reportMobileQuickActionSnapshot(requestedWalletId, null);
       toast({ title: 'Could not load coins', description: loadError, tone: 'danger' });
     } finally {
       loading = false;
@@ -310,12 +314,15 @@
 
   async function syncNow() {
     if (syncing) return;
+    const requestedWalletId = walletShell.selectedWalletId();
     syncing = true;
     try {
       const snapshot = multisig ? await walletService.syncMultisig() : await walletService.sync();
       utxos = snapshot.utxos;
       transactions = snapshot.transactions;
       chainTip = snapshot.chainTip;
+      if (requestedWalletId)
+        walletShell.reportMobileQuickActionSnapshot(requestedWalletId, snapshot);
       toast({
         title: 'Coins are up to date',
         description: 'Protection timelines were refreshed.',
@@ -474,12 +481,15 @@
 
   <section class="coin-toolbar" aria-live="polite">
     <div>
-      {#key selected.length}<span class="coin-selection-count" in:fly={{ y: -4, duration: 140 }}
-          ><strong>{selected.length} {translate($locale, 'selected')}</strong><span
-            ><Amount value={selectedTotal} hidden={$discreetMode} interactive />
-            {translate($locale, 'selected')}</span
-          ></span
-        >{/key}
+      {#if selected.length}
+        {#key selected.length}<span class="coin-selection-count" in:fly={{ y: -4, duration: 140 }}
+            ><strong>{selected.length} {translate($locale, 'selected')}</strong><span
+              ><Amount value={selectedTotal} hidden={$discreetMode} interactive />
+              {translate($locale, 'selected')}</span
+            ></span
+          >{/key}
+      {:else}<span class="coin-selection-empty">{translate($locale, 'No coins selected')}</span
+        >{/if}
     </div>
     <div class="coin-toolbar-actions">
       {#if selected.length}<div class="coin-selection-actions" in:fade={{ duration: 150 }}>
@@ -558,12 +568,7 @@
               selected.length === 1 ? 'Send selected coin' : 'Send selected coins'
             )}</Button
           >
-        </div>{:else}<span class="auto-note"
-          ><CircleDot size={14} />{translate(
-            $locale,
-            'Automatic selection remains the default'
-          )}</span
-        ><CoinSortMenu value={sortOrder} onchange={(next) => (sortOrder = next)} />{/if}
+        </div>{:else}<CoinSortMenu value={sortOrder} onchange={(next) => (sortOrder = next)} />{/if}
     </div>
   </section>
   <section
@@ -1402,6 +1407,11 @@
     flex-direction: column;
     gap: 3px;
   }
+  :global(.coin-selection-empty):where(.coin-selection-empty) {
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+    font-weight: 650;
+  }
   :global(.coin-selection-actions):where(.coin-selection-actions) {
     display: inline-flex;
     align-items: center;
@@ -1416,11 +1426,6 @@
   :global(.coin-toolbar):where(.coin-toolbar) :global(span) {
     color: var(--muted);
     font-size: var(--font-size-meta);
-  }
-  :global(.auto-note):where(.auto-note) {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
   }
   :global(.coin-filters):where(.coin-filters) {
     margin: 0 0 14px;

@@ -6,12 +6,9 @@
 
 <div class:labelled class="language-control">
   {#if labelled}
+    <span class="setting-icon"><Languages size={18} /></span>
     <span class="language-control-copy">
-      <span class="setting-icon"><Languages size={18} /></span>
-      <span
-        ><strong>{t('language', $locale)}</strong><small>{t('languageDescription', $locale)}</small
-        ></span
-      >
+      <strong>{t('language', $locale)}</strong><small>{t('languageDescription', $locale)}</small>
     </span>
   {/if}
   <div class="language-toggle" role="group" aria-label={t('language', $locale)}>
@@ -37,14 +34,12 @@
   }
   .language-control.labelled {
     width: 100%;
-  }
-  .language-control-copy {
-    display: flex;
+    display: grid;
+    grid-template-columns: 33px minmax(0, 1fr) auto;
     align-items: center;
     gap: 12px;
-    min-width: 0;
   }
-  .language-control-copy > span:last-child {
+  .language-control-copy {
     min-width: 0;
     display: grid;
     gap: 2px;
@@ -95,9 +90,6 @@
 
   @media (max-width: 540px) {
     .language-control.labelled {
-      gap: 10px;
-    }
-    .language-control-copy {
       gap: 10px;
     }
     .language-toggle button {

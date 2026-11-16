@@ -53,6 +53,7 @@
   import { toast } from '$lib/stores/toasts';
   import { coldcardPolicyFilename } from '$lib/transfer';
   import { useWalletShellContext } from '$lib/wallet/shell-context';
+  import { shouldShowMobileSend } from '$lib/wallet/mobile-quick-actions';
   import {
     hasMiniscriptPolicy,
     isContinuityPolicyType,
@@ -216,9 +217,11 @@
     phoneBackupError = '';
     phoneBackupNotice = '';
     try {
-      const verified = reveal
-        ? await walletService.revealAndVerifyBackup(phoneBackupCredential)
-        : await walletService.verifyBackup(phoneBackupCredential);
+      const result = reveal
+        ? walletService.revealAndVerifyBackup(phoneBackupCredential)
+        : walletService.verifyBackup(phoneBackupCredential);
+      phoneBackupCredential = '';
+      const verified = await result;
       phoneBackupVerified = verified;
       phoneBackupNotice = translate(
         $locale,
@@ -228,7 +231,6 @@
       toast({ title: phoneBackupNotice, tone: verified ? 'success' : 'default' });
     } catch (cause) {
       phoneBackupError = localizedError(cause, $locale, 'Could not verify this recovery backup.');
-      toast({ title: 'Backup verification failed', description: phoneBackupError, tone: 'danger' });
     } finally {
       phoneBackupCredential = '';
       phoneBackupBusy = false;
@@ -715,7 +717,7 @@
           {translate(
             $locale,
             coordination?.role === 'mobile_cosigner'
-              ? 'Phone signer · QR connection'
+              ? 'Phone signer'
               : coordination?.role === 'desktop_coordinator'
                 ? 'Desktop coordinator'
                 : 'Watch-only wallet'
@@ -839,7 +841,10 @@
         <Button variant="secondary" href="/multisig/receive">{translate($locale, 'Receive')}</Button
         >{#if coordination?.canSignOnThisDevice}<Button href="/mobile/sign"
             ><Smartphone size={16} />{translate($locale, 'Sign desktop PSBT')}</Button
-          >{:else}<Button href="/multisig/send">{translate($locale, 'Send')}</Button>{/if}
+          >{:else}<Button
+            class={snapshot && shouldShowMobileSend(snapshot) ? '' : 'empty-wallet-send'}
+            href="/multisig/send">{translate($locale, 'Send')}</Button
+          >{/if}
       </div>
     </section>
     {#if continuityPolicy}
@@ -1285,8 +1290,9 @@
     error={phoneBackupError}
   />
   {#if phoneBackupNotice}<p role="status">{phoneBackupNotice}</p>{/if}
-  <div class="modal-footer">
+  <div class="modal-footer phone-recovery-actions">
     <Button
+      class="phone-recovery-later"
       variant="secondary"
       disabled={phoneBackupBusy}
       onclick={() => {
@@ -1302,7 +1308,7 @@
     <Button
       disabled={!phoneBackupCredential}
       loading={phoneBackupBusy}
-      onclick={() => verifyPhoneBackup()}>{translate($locale, 'Verify now')}</Button
+      onclick={() => verifyPhoneBackup()}>{translate($locale, 'Verify backup')}</Button
     >
   </div>
 </Modal>
@@ -1777,19 +1783,45 @@
   }
 
   @media (max-width: 760px) {
+    .coordinator-page > .page-header {
+      min-height: auto;
+      margin-bottom: 0.75rem;
+    }
     :global(.vault-grid):where(.vault-grid) {
       grid-template-columns: 1fr;
     }
     :global(.vault-hero):where(.vault-hero) {
-      grid-template-columns: 42px minmax(0, 1fr);
+      grid-template-columns: minmax(0, 1fr);
+      gap: 0.65rem;
+      padding: 0.875rem;
+      margin-bottom: 1rem;
+    }
+    :global(.vault-hero):where(.vault-hero) > :global(span),
+    :global(.vault-hero):where(.vault-hero) :global(.vault-balance) {
+      display: none;
+    }
+    :global(.vault-policy-tags):where(.vault-policy-tags) {
+      margin: 0 0 0.25rem;
     }
     :global(.vault-actions):where(.vault-actions) {
       grid-column: 1 / -1;
       display: grid;
-      grid-template-columns: auto 1fr 1fr;
+      grid-template-columns: auto repeat(2, minmax(0, 1fr));
+    }
+    :global(.vault-actions):where(.vault-actions):has(:global(.empty-wallet-send)) {
+      grid-template-columns: auto minmax(0, 1fr);
+    }
+    :global(.vault-actions):where(.vault-actions) :global(.empty-wallet-send) {
+      display: none;
     }
     :global(.vault-backup-card):where(.vault-backup-card) {
       order: -1;
+      gap: 0.5rem;
+      padding: 0.875rem;
+    }
+    :global(.vault-backup-card):where(.vault-backup-card) :global(.vault-backup-icon),
+    :global(.vault-backup-card):where(.vault-backup-card) :global(p) {
+      display: none;
     }
     :global(.saved-cosigner-list):where(.saved-cosigner-list) :global(button) {
       grid-template-columns: 32px minmax(0, 1fr) auto;
@@ -1801,6 +1833,14 @@
       right: 18px;
       left: 18px;
       width: auto;
+    }
+    .phone-recovery-actions {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 0.5rem;
+    }
+    .phone-recovery-actions :global(.phone-recovery-later) {
+      display: none;
     }
   }
 

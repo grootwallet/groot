@@ -23,16 +23,28 @@ for (const theme of ['light', 'dark']) {
     expect(mainBox!.y).toBe(0);
     expect(navBox!.height).toBe(49);
     expect(navBox!.y + navBox!.height).toBe(844);
-    const selection = await navigation.locator('a.active').evaluate((node) => {
-      const style = getComputedStyle(node, '::before');
+    const activeNavigation = navigation.locator('a.active');
+    const selection = await activeNavigation.evaluate((node) => {
+      const style = getComputedStyle(node);
       return {
-        width: parseFloat(style.width),
-        height: parseFloat(style.height),
-        bottom: style.bottom
+        background: style.backgroundColor,
+        decoration: getComputedStyle(node, '::before').content
       };
     });
-    expect(selection.width).toBe(selection.height);
-    expect(selection.bottom).toBe('0px');
+    expect(selection.background).not.toBe('rgba(0, 0, 0, 0)');
+    expect(selection.decoration).toBe('none');
+    const activeNavigationBox = await activeNavigation.boundingBox();
+    const navigationItemCount = await navigation.getByRole('link').count();
+    const navigationBorderTop = await navigation.evaluate((element) =>
+      Number.parseFloat(getComputedStyle(element).borderTopWidth)
+    );
+    expect(activeNavigationBox).toBeTruthy();
+    expect(activeNavigationBox!.width).toBeCloseTo(navBox!.width / navigationItemCount, 1);
+    expect(activeNavigationBox!.y).toBeCloseTo(navBox!.y + navigationBorderTop, 1);
+    expect(activeNavigationBox!.y + activeNavigationBox!.height).toBeCloseTo(
+      navBox!.y + navBox!.height,
+      1
+    );
     expect(mainBox!.y + mainBox!.height).toBeLessThanOrEqual(actionBox!.y - 8);
     expect(actionBox!.y + actionBox!.height).toBeLessThanOrEqual(navBox!.y - 8);
     await main.evaluate((node) => {

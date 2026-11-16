@@ -21,10 +21,13 @@ for (const theme of ['light', 'dark']) {
         body: 'export default class { constructor(_video, emit) { window.emitPhoneFrame = (frame = "ur:groot-invite/synthetic") => emit({ data: frame }); } async start() {} stop() {} destroy() {} }'
       })
     );
-    await page.goto('/mobile/pair');
+    await page.goto('/mobile/pair?fixture-selected-multisig=1');
     await page.evaluate(async () => {
       const path = '/src/lib/wallet/index.ts';
       const { walletService, WalletError } = await import(path);
+      const runtime = await walletService.runtimePlatform();
+      if (runtime.mobile)
+        walletService.runtimePlatform = async () => ({ ...runtime, platform: 'ios' });
       walletService.decodePairingInvitation = async () => ({
         invitationJson: JSON.stringify({
           walletName: 'Synthetic family',
@@ -80,13 +83,14 @@ for (const theme of ['light', 'dark']) {
         keyProtection: 'synthetic-only'
       });
       const profiles = walletService.profiles.bind(walletService);
+      let verified = false;
       walletService.profiles = async () => {
         const registry = await profiles();
         return {
           ...registry,
           wallets: registry.wallets.map((profile: { backupVerified: boolean }) => ({
             ...profile,
-            backupVerified: false
+            backupVerified: verified
           }))
         };
       };
@@ -95,7 +99,8 @@ for (const theme of ['light', 'dark']) {
         if (credential !== 'synthetic-correct-pin')
           throw new WalletError('invalid_credential', 'Incorrect app PIN.');
         attempts += 1;
-        return attempts > 1;
+        verified = attempts > 1;
+        return verified;
       };
     });
     const capture = async (name: string) => {
@@ -156,42 +161,65 @@ for (const theme of ['light', 'dark']) {
     await expect(page.getByRole('heading', { name: 'Family wallet', exact: true })).toBeVisible();
     const reminder = page.getByText('Recovery backup not verified', { exact: true });
     await expect(reminder).toBeVisible();
-    await page.getByRole('button', { name: 'Verify now', exact: true }).click();
-    const dialog = page.getByRole('dialog', { name: 'Verify phone recovery backup' });
-    await dialog.getByLabel('App PIN', { exact: true }).fill('synthetic-wrong-pin');
-    await dialog.getByRole('button', { name: 'Verify now', exact: true }).click();
-    await expect(dialog.getByText('Incorrect app PIN.', { exact: true })).toBeVisible();
-    await expect(dialog.getByLabel('App PIN', { exact: true })).toHaveValue('');
-    await dialog.getByLabel('App PIN', { exact: true }).fill('synthetic-correct-pin');
-    await dialog.getByRole('button', { name: 'Verify now', exact: true }).click();
-    await expect(dialog.getByRole('status')).toHaveText('Backup still unverified');
-    await expect(reminder).toBeVisible();
-    await dialog.getByRole('button', { name: 'Verify later', exact: true }).click();
-    await expect(dialog).toHaveCount(0);
-    await capture('shared-wallet-backup-reminder');
-    await page.getByRole('button', { name: 'Verify now', exact: true }).click();
-    await dialog.getByLabel('App PIN', { exact: true }).fill('synthetic-correct-pin');
-    await dialog.getByRole('button', { name: 'Verify now', exact: true }).click();
-    await expect(dialog).toHaveCount(0);
-    await expect(reminder).toHaveCount(0);
-    await expect(page.locator('.coordinator-page').getByRole('status')).toHaveText(
-      'Recovery backup verified'
-    );
-    await capture('phone-backup-verified');
-    await expect(page.locator('.toast-region .toast')).toHaveCount(0, { timeout: 10_000 });
     const phoneDetails = page.getByRole('button', {
       name: 'View Synthetic phone details',
       exact: true
     });
-    await phoneDetails.evaluate((element) =>
-      element.scrollIntoView({ block: 'center', behavior: 'instant' })
-    );
     await phoneDetails.click();
     const signerDialog = page.getByRole('dialog');
+    const technical = signerDialog.locator('details.signer-metadata');
+    if (info.project.name === 'mobile') {
+      await expect(technical).not.toHaveAttribute('open', '');
+      await technical.getByText('Technical details', { exact: true }).click();
+    }
     await expect(
-      signerDialog.locator('.connection-detail').getByText('QR connection', { exact: true })
+      technical.locator('.connection-detail').getByText('QR connection', { exact: true })
     ).toBeVisible();
     await expect(signerDialog.getByText('USB connection needed', { exact: true })).toHaveCount(0);
     await capture('phone-qr-connection-details');
+    await signerDialog.getByRole('button', { name: 'Close', exact: true }).click();
+    await expect(signerDialog).toHaveCount(0);
+    await page.getByRole('button', { name: 'Verify now', exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: 'Verify phone recovery backup' });
+    await dialog.getByLabel('App PIN', { exact: true }).fill('synthetic-wrong-pin');
+    await dialog.getByRole('button', { name: 'Verify backup', exact: true }).click();
+    await expect(dialog.getByText('Incorrect app PIN.', { exact: true })).toBeVisible();
+    await expect(dialog.getByLabel('App PIN', { exact: true })).toHaveValue('');
+    await dialog.getByLabel('App PIN', { exact: true }).fill('synthetic-correct-pin');
+    await dialog.getByRole('button', { name: 'Verify backup', exact: true }).click();
+    await expect(dialog.getByRole('status')).toHaveText('Backup still unverified');
+    await expect(reminder).toBeVisible();
+    await dialog.getByRole('button', { name: 'Close', exact: true }).click();
+    await expect(dialog).toHaveCount(0);
+    await capture('shared-wallet-backup-reminder');
+    if (info.project.name === 'mobile') {
+      await page
+        .locator('.mobile-nav')
+        .getByRole('link', { name: 'Overview', exact: true })
+        .click();
+      await page.getByRole('button', { name: 'Verify now', exact: true }).click();
+      await expect(dialog).toBeVisible();
+      expect(new URL(page.url()).pathname).toBe('/');
+      await dialog.getByLabel('App PIN', { exact: true }).fill('synthetic-correct-pin');
+      const verify = dialog.getByRole('button', { name: 'Verify backup', exact: true });
+      const bounds = await verify.boundingBox();
+      expect(bounds && bounds.x >= 0 && bounds.x + bounds.width <= page.viewportSize()!.width).toBe(
+        true
+      );
+      await verify.click();
+      await expect(dialog).toHaveCount(0);
+      await expect(page.getByRole('button', { name: 'Verify now', exact: true })).toHaveCount(0);
+      await capture('overview-backup-verified');
+    } else {
+      await page.getByRole('button', { name: 'Verify now', exact: true }).click();
+      await dialog.getByLabel('App PIN', { exact: true }).fill('synthetic-correct-pin');
+      await dialog.getByRole('button', { name: 'Verify backup', exact: true }).click();
+      await expect(page.locator('.coordinator-page').getByRole('status')).toHaveText(
+        'Recovery backup verified'
+      );
+    }
+    await expect(dialog).toHaveCount(0);
+    await expect(reminder).toHaveCount(0);
+    await capture('phone-backup-verified');
   });
 }

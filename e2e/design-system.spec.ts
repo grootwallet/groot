@@ -110,6 +110,26 @@ test('local font failure never blocks balance, navigation, or editable payment f
   );
 });
 
+test('settings language icon aligns with the shared setting-row grid', async ({ page }) => {
+  await page.goto('/settings');
+  await settled(page);
+  const languageRow = page.locator('.language-setting-row');
+  const themeRow = page.locator('.setting-row').filter({
+    has: page.getByText('Theme', { exact: true })
+  });
+  const languageIcon = await languageRow.locator('.setting-icon').boundingBox();
+  const languageCopy = await languageRow.locator('.language-control-copy').boundingBox();
+  const themeIcon = await themeRow.locator('.setting-icon').boundingBox();
+  expect(languageIcon && languageCopy && themeIcon).toBeTruthy();
+  expect(Math.abs(languageIcon!.x - themeIcon!.x)).toBeLessThanOrEqual(1);
+  expect(
+    Math.abs(
+      languageIcon!.y + languageIcon!.height / 2 - (languageCopy!.y + languageCopy!.height / 2)
+    )
+  ).toBeLessThanOrEqual(1);
+  await contained(page);
+});
+
 test('translated compact layouts, zoom-equivalent reflow, and reduced motion retain controls', async ({
   page
 }) => {
