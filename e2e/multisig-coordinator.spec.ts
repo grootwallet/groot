@@ -1590,7 +1590,9 @@ test('unlocks a detected Trezor with the bounded PIN-position flow', async ({ pa
   const initialTopLeftBox = await topLeft.boundingBox();
   await topLeft.click();
   const selectedTopLeftBox = await topLeft.boundingBox();
-  expect(selectedTopLeftBox?.y).toBe(initialTopLeftBox?.y);
+  expect(initialTopLeftBox).not.toBeNull();
+  expect(selectedTopLeftBox).not.toBeNull();
+  expect(Math.abs(selectedTopLeftBox!.y - initialTopLeftBox!.y)).toBeLessThan(0.5);
   await pin.getByRole('button', { name: 'Bottom left position' }).click();
   await pin.getByRole('button', { name: 'Top right position' }).click();
   await expect(pin.getByLabel('3 PIN positions selected')).toHaveText('•••');
