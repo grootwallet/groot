@@ -1145,6 +1145,10 @@
     letter-spacing: 0.08em;
     text-transform: uppercase;
   }
+  :global(.wallet-type-footer):where(.wallet-type-footer) :global(.wallet-type-arrow) {
+    flex-shrink: 0;
+    margin-inline-start: auto;
+  }
   :global(.wallet-type-card:hover):where(.wallet-type-card) :global(.wallet-type-arrow) {
     color: var(--wallet-type-accent, var(--fr-blue));
     transform: translateX(3px);

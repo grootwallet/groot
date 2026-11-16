@@ -6,6 +6,13 @@ require_command bitcoind
 require_command bitcoin-cli
 mkdir -p "${REGTEST_DIR}"
 
+# Long Continuity fixtures mine over 52,000 real blocks. Sample Core's
+# debug-only block-index traversal while retaining every consensus check.
+fixture_options=(-nosettings)
+if [[ "${1:-}" == "--long-continuity" ]]; then
+  fixture_options+=(-checkblockindex=128)
+fi
+
 if "${BTC_CLI[@]}" getblockchaininfo >/dev/null 2>&1; then
   echo "Groot regtest is already running."
 else
@@ -22,7 +29,7 @@ else
     -rpcallowip=127.0.0.1 \
     -rpcport="${RPC_PORT}" \
     -port="${P2P_PORT}" \
-    -nosettings
+    "${fixture_options[@]}"
 
   for _ in {1..50}; do
     if "${BTC_CLI[@]}" getblockchaininfo >/dev/null 2>&1; then break; fi

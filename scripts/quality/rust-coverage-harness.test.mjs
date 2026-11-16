@@ -36,6 +36,7 @@ const descriptorScenarios = [
 const fixtureScripts = [
   'scripts/quality/check-rust-coverage.sh',
   'scripts/quality/check-rust-full-coverage.sh',
+  'scripts/quality/rust-coverage/.cargo/config.toml',
   'scripts/regtest/test.sh'
 ];
 const quote = (value) => `'${value.replaceAll("'", "'\\''")}'`;
@@ -105,7 +106,7 @@ exit 0
   for (const action of ['start', 'stop']) {
     writeFileSync(
       join(repository, 'scripts', 'regtest', `${action}.sh`),
-      `#!/bin/bash\n/bin/bash ${quote(stub)} core-${action}\n`
+      `#!/bin/bash\n/bin/bash ${quote(stub)} core-${action} "$@"\n`
     );
   }
   return {
@@ -159,6 +160,19 @@ function assertThresholds(event, lines, functions, regions) {
   assert.equal(value('--fail-under-regions'), String(regions));
 }
 
+test('coverage optimizes only the Miniscript dependency in the test profile', () => {
+  const profile = readFileSync('scripts/quality/rust-coverage/.cargo/config.toml', 'utf8')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line && !line.startsWith('#'));
+  assert.deepEqual(profile, [
+    '[profile.coverage]',
+    'inherits = "test"',
+    '[profile.coverage.package.miniscript]',
+    'opt-level = 3'
+  ]);
+});
+
 testBash(
   'full lane gates deterministic units before appending every Core scenario exactly once',
   () => {
@@ -188,6 +202,11 @@ testBash(
       for (const event of events.filter(({ kind }) => kind === 'cargo')) {
         assert.ok(event.args.includes('--locked'));
         assert.equal(event.coverage, join(repository, 'src-tauri', 'target', 'llvm-cov-target'));
+        if (event.phase !== 'clean') {
+          const profileIndex = event.args.indexOf('--profile');
+          assert.ok(profileIndex !== -1);
+          assert.equal(event.args[profileIndex + 1], 'coverage');
+        }
       }
       for (const { args } of calls) {
         assert.equal(args.includes('--no-clean'), false);
@@ -196,9 +215,15 @@ testBash(
       }
       const stops = events.filter(({ phase }) => phase === 'core-stop');
       const starts = events.filter(({ phase }) => phase === 'core-start');
-      assert.equal(starts.length, 2);
-      assert.equal(stops.length, 2);
-      assert.notEqual(starts[0].regtest, starts[1].regtest);
+      assert.deepEqual(
+        starts.map(({ args }) => args),
+        [[], [], ['--long-continuity']]
+      );
+      assert.equal(stops.length, 3);
+      assert.equal(new Set(starts.map(({ regtest }) => regtest)).size, 3);
+      assert.ok(calls.slice(0, 9).every(({ regtest }) => regtest === starts[0].regtest));
+      assert.equal(calls[9].regtest, starts[1].regtest);
+      assert.ok(calls.slice(10).every(({ regtest }) => regtest === starts[2].regtest));
       for (const { regtest } of starts) assert.equal(existsSync(regtest), false);
     });
   }

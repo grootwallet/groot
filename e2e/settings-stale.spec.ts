@@ -284,7 +284,9 @@ async function openPinSettings(page: Page) {
   );
   if ((page.viewportSize()?.width ?? 1180) <= 760) {
     await page.getByRole('button', { name: 'Switch wallet' }).click();
-    await page.getByRole('menuitemradio', { name: /Family wallet/ }).click();
+    const walletSwitcher = page.getByRole('dialog', { name: 'Wallets' });
+    await expect(walletSwitcher).toBeVisible();
+    await walletSwitcher.getByRole('button', { name: /Family wallet/ }).click();
   } else {
     await page
       .getByRole('complementary')

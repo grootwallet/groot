@@ -6,6 +6,7 @@ TEST_TMP_ROOT="${TMPDIR:-/tmp}"
 OWNS_REGTEST_DIR=0
 PRIMARY_REGTEST_DIR=""
 DESCRIPTOR_REGTEST_DIR=""
+CONTINUITY_REGTEST_DIR=""
 if [[ -z "${GROOT_REGTEST_DIR:-}" ]]; then
   export GROOT_REGTEST_DIR
   GROOT_REGTEST_DIR="$(mktemp -d "${TEST_TMP_ROOT%/}/groot-regtest-test.XXXXXX")"
@@ -52,20 +53,28 @@ cleanup() {
   if [[ -n "${DESCRIPTOR_REGTEST_DIR}" ]]; then
     cleanup_owned_dir "${DESCRIPTOR_REGTEST_DIR}"
   fi
+  if [[ -n "${CONTINUITY_REGTEST_DIR}" ]]; then
+    cleanup_owned_dir "${CONTINUITY_REGTEST_DIR}"
+  fi
 }
 trap cleanup EXIT
+
+run_coverage_test() (
+  # Discover the instrumented profile without changing ordinary Cargo configuration.
+  cd "${PROJECT_DIR}/scripts/quality/rust-coverage"
+  cargo llvm-cov --no-report --locked \
+    --manifest-path "${PROJECT_DIR}/src-tauri/Cargo.toml" \
+    --profile coverage "$@"
+)
 
 run_lib_test() {
   local test_name="$1"
   if [[ "${GROOT_RUST_COVERAGE:-0}" == "1" ]]; then
-    cargo llvm-cov --no-report --locked \
-      --manifest-path "${PROJECT_DIR}/src-tauri/Cargo.toml" \
-      --lib -- "${test_name}" --ignored --nocapture --test-threads=1
+    run_coverage_test --lib -- "${test_name}" --ignored --nocapture --test-threads=1
   else
     case "${test_name}" in
       funded_continuity_all_named_paths_renew_reorg_and_restore|funded_continuity_descriptors_restore_history_in_core)
-        # Match RC10's test-only policy-planning profile. Keep assertions,
-        # overflow/debug checks and real Core validation; coverage owns its profile.
+        # Keep assertions, overflow/debug checks and real Core validation.
         cargo test --config profile.test.package.miniscript.opt-level=3 \
           --config profile.test.package.groot.opt-level=3 \
           --locked --manifest-path "${PROJECT_DIR}/src-tauri/Cargo.toml" \
@@ -81,9 +90,7 @@ run_lib_test() {
 
 run_regtest_multisig() {
   if [[ "${GROOT_RUST_COVERAGE:-0}" == "1" ]]; then
-    cargo llvm-cov --no-report --locked \
-      --manifest-path "${PROJECT_DIR}/src-tauri/Cargo.toml" \
-      --test regtest_multisig -- --ignored --nocapture --test-threads=1
+    run_coverage_test --test regtest_multisig -- --ignored --nocapture --test-threads=1
   else
     cargo test --locked --manifest-path "${PROJECT_DIR}/src-tauri/Cargo.toml" \
       --test regtest_multisig -- --ignored --nocapture --test-threads=1
@@ -118,6 +125,12 @@ DESCRIPTOR_REGTEST_DIR="$(mktemp -d "${TEST_TMP_ROOT%/}/groot-regtest-test.XXXXX
 export GROOT_REGTEST_DIR="${DESCRIPTOR_REGTEST_DIR}"
 bash "${PROJECT_DIR}/scripts/regtest/start.sh"
 GROOT_RUN_REGTEST=1 run_regtest_multisig
+
+# Isolate the two long Continuity cases from the default diagnostic cadence.
+bash "${PROJECT_DIR}/scripts/regtest/stop.sh"
+CONTINUITY_REGTEST_DIR="$(mktemp -d "${TEST_TMP_ROOT%/}/groot-regtest-test.XXXXXX")"
+export GROOT_REGTEST_DIR="${CONTINUITY_REGTEST_DIR}"
+bash "${PROJECT_DIR}/scripts/regtest/start.sh" --long-continuity
 
 GROOT_RUN_REGTEST=1 run_lib_test funded_continuity_all_named_paths_renew_reorg_and_restore
 

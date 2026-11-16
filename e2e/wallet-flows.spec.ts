@@ -304,8 +304,14 @@ test('creates a 24-word wallet and clears onboarding secrets', async ({ page }) 
     page.getByText('Custom spending, recovery, inheritance, or shared control.')
   ).toBeVisible();
   if (mobile) {
-    await expect(page.getByText('Add this phone as one signer in a shared wallet.')).toBeVisible();
+    await expect(page.getByText('Use this phone as a signer.')).toBeVisible();
+    await expect(
+      page.getByText('Recover a shared wallet from desktop and its 24 words.')
+    ).toBeVisible();
     await expect(page.getByText('Import a hardware wallet without its signing key.')).toBeVisible();
+    await expect(
+      page.getByRole('link', { name: /Connect desktop app/ }).locator('.wallet-type-meta')
+    ).toHaveCount(0);
   }
   await chooseSoftwareWallet(page);
   const setupProgress = page.getByRole('navigation', { name: 'Software wallet setup progress' });
@@ -588,9 +594,14 @@ test('locked wallet can continue into hardware and multisig setup', async ({ pag
   for (const card of await page.locator('.wallet-type-card').all()) {
     expect(
       await card.locator('.wallet-type-footer').evaluate((footer) => {
+        const footerBounds = footer.getBoundingClientRect();
         const label = footer.querySelector('.wallet-type-meta')?.getBoundingClientRect();
         const arrow = footer.querySelector('.wallet-type-arrow')?.getBoundingClientRect();
-        return Boolean(label && arrow && label.right <= arrow.left);
+        return Boolean(
+          arrow &&
+          Math.abs(footerBounds.right - arrow.right) <= 1 &&
+          (!label || label.right <= arrow.left)
+        );
       })
     ).toBe(true);
   }
@@ -640,7 +651,9 @@ test('switching wallets never renders data from the previously selected wallet',
 
   if (isMobile) {
     await page.getByRole('button', { name: 'Switch wallet' }).click();
-    await page.getByRole('menuitemradio', { name: /Family wallet/ }).click();
+    const walletSwitcher = page.getByRole('dialog', { name: 'Wallets' });
+    await expect(walletSwitcher).toBeVisible();
+    await walletSwitcher.getByRole('button', { name: /Family wallet/ }).click();
   } else {
     await page
       .getByRole('complementary')
@@ -987,15 +1000,14 @@ test('creates an external-signer wallet, signs by cable, and configures its isol
   await unsignedQrDialog.getByRole('button', { name: 'Close' }).click();
   await expect(unsignedQrDialog).toBeHidden();
   await page.getByRole('button', { name: 'Scan signed QR' }).click();
-  await expect(
-    page.getByText(
-      /Allow camera access to scan this QR|Camera access was denied|No camera was found/
-    )
-  ).toBeVisible();
+  const scanQrDialog = page.getByRole('dialog', { name: 'Scan signed PSBT' });
+  const allowCamera = scanQrDialog.getByRole('button', { name: 'Allow camera' });
+  await expect(allowCamera).toBeVisible();
+  await allowCamera.click();
+  await expect(scanQrDialog.getByRole('status').or(scanQrDialog.getByRole('alert'))).toBeVisible();
   await expect(
     page.getByText('QR scanning is not available in this WebView. Import the PSBT file instead.')
   ).toHaveCount(0);
-  const scanQrDialog = page.getByRole('dialog', { name: 'Scan signed PSBT' });
   await scanQrDialog.getByRole('button', { name: 'Close' }).click();
   await expect(scanQrDialog).toBeHidden();
   await page.evaluate(async () => {

@@ -98,7 +98,6 @@ jobs:
     timeout-minutes: 90
     env:
       CARGO_TARGET_DIR: ${{ github.workspace }}/src-tauri/target/normal
-      CARGO_LLVM_COV_TARGET_DIR: ${{ github.workspace }}/src-tauri/target/coverage
     defaults:
       run:
         working-directory: src-tauri
@@ -122,27 +121,15 @@ jobs:
         with:
           toolchain: 1.97.1
           components: clippy,rustfmt
-      - name: Cache ordinary Rust dependencies
+      - name: Cache ordinary Rust dependencies and audit tool
         uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
         with:
           workspaces: src-tauri -> target/normal
-          key: ordinary-v1
-          cache-bin: false
-          cache-workspace-crates: false
-          save-if: ${{ github.ref == 'refs/heads/main' }}
-      - name: Cache instrumented dependencies and pinned tools
-        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
-        with:
-          workspaces: src-tauri -> target/coverage
-          key: coverage-v1-audit-0.22.2-llvm-cov-0.8.7
+          key: ordinary-v2-audit-0.22.2
           cache-workspace-crates: false
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: cargo fmt --check
       - run: cargo clippy --locked --all-targets --all-features -- -D warnings
-      - name: Compile every permitted native network
-        run: bash ../scripts/network/check-native-builds.sh
-      - name: Build Rust API documentation with warnings denied
-        run: RUSTDOCFLAGS="-D warnings" cargo doc --locked --no-deps --all-features
       - name: Rust unit and integration tests (pyramid base and middle)
         run: |
           set -o pipefail
@@ -150,17 +137,62 @@ jobs:
           { time cargo test --locked --all-targets --all-features; } 2>&1 | tee "$RUNNER_TEMP/rust-tests.log"
       - name: Execute Rust documentation examples
         run: cargo test --locked --doc --all-features
-      - name: Release ordinary workspace binaries and record disk usage
+      - name: Build Rust API documentation with warnings denied
+        run: RUSTDOCFLAGS="-D warnings" cargo doc --locked --no-deps --all-features
+      - name: Compile every permitted native network
+        run: bash ../scripts/network/check-native-builds.sh
+      - run: cargo install cargo-audit --locked --version 0.22.2
+      - run: cargo audit --file Cargo.lock
+      - name: Record ordinary Rust disk usage
+        if: always()
         run: |
-          df -h . > "$RUNNER_TEMP/rust-disk-before-coverage.log"
-          du -sh "$CARGO_TARGET_DIR" >> "$RUNNER_TEMP/rust-disk-before-coverage.log"
-          if [[ -d "$CARGO_LLVM_COV_TARGET_DIR" ]]; then
-            du -sh "$CARGO_LLVM_COV_TARGET_DIR" >> "$RUNNER_TEMP/rust-disk-before-coverage.log"
+          df -h . > "$RUNNER_TEMP/rust-disk.log"
+          if [[ -d "$CARGO_TARGET_DIR" ]]; then
+            du -sh "$CARGO_TARGET_DIR" >> "$RUNNER_TEMP/rust-disk.log"
           fi
-          cargo clean --locked --package groot --target-dir "$CARGO_TARGET_DIR"
-          df -h . >> "$RUNNER_TEMP/rust-disk-before-coverage.log"
-          du -sh "$CARGO_TARGET_DIR" >> "$RUNNER_TEMP/rust-disk-before-coverage.log"
-          cat "$RUNNER_TEMP/rust-disk-before-coverage.log"
+          cat "$RUNNER_TEMP/rust-disk.log"
+      - name: Retain native test evidence
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: native-validation-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/rust-tests.log
+            ${{ runner.temp }}/rust-disk.log
+          if-no-files-found: warn
+          retention-days: 14
+
+  rust-coverage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      CARGO_LLVM_COV_TARGET_DIR: ${{ github.workspace }}/src-tauri/target/coverage
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install Tauri Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            libappindicator3-dev \
+            librsvg2-dev \
+            libssl-dev \
+            libudev-dev \
+            libwebkit2gtk-4.1-dev \
+            patchelf
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+        with:
+          toolchain: 1.97.1
+          components: llvm-tools-preview
+      - name: Cache instrumented dependencies and pinned coverage tool
+        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        with:
+          workspaces: src-tauri -> target/coverage
+          key: coverage-v2-llvm-cov-0.8.7
+          cache-workspace-crates: false
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Install pinned Bitcoin Core 31.1 for isolated Regtest
         run: |
           archive=/tmp/bitcoin-31.1-x86_64-linux-gnu.tar.gz
@@ -170,13 +202,8 @@ jobs:
           echo "b80d9c3e04da78fb6f0569685673418cf686fadba9042d926d13fb87ff503f9e  $archive" | sha256sum --check --strict
           tar --extract --gzip --file "$archive" --directory /tmp
           echo "/tmp/bitcoin-31.1/bin" >> "$GITHUB_PATH"
-      - name: Install security and coverage tools
-        run: |
-          cargo install cargo-audit --locked --version 0.22.2
-          cargo install cargo-llvm-cov --locked --version 0.8.7
-      - run: cargo audit --file Cargo.lock
+      - run: cargo install cargo-llvm-cov --locked --version 0.8.7
       - name: Enforce deterministic-core coverage, then whole-library coverage with real Core
-        working-directory: .
         run: |
           set -o pipefail
           TIMEFORMAT='real %3R s; user %3U s; sys %3S s'
@@ -185,21 +212,17 @@ jobs:
         if: always()
         run: |
           df -h . > "$RUNNER_TEMP/rust-disk-after-coverage.log"
-          for directory in "$CARGO_TARGET_DIR" "$CARGO_LLVM_COV_TARGET_DIR"; do
-            if [[ -d "$directory" ]]; then
-              du -sh "$directory" >> "$RUNNER_TEMP/rust-disk-after-coverage.log"
-            fi
-          done
+          if [[ -d "$CARGO_LLVM_COV_TARGET_DIR" ]]; then
+            du -sh "$CARGO_LLVM_COV_TARGET_DIR" >> "$RUNNER_TEMP/rust-disk-after-coverage.log"
+          fi
           cat "$RUNNER_TEMP/rust-disk-after-coverage.log"
-      - name: Retain native test and coverage evidence
+      - name: Retain native coverage evidence
         if: always()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
-          name: native-validation-${{ github.sha }}
+          name: native-coverage-${{ github.sha }}
           path: |
-            ${{ runner.temp }}/rust-tests.log
             ${{ runner.temp }}/rust-coverage.log
-            ${{ runner.temp }}/rust-disk-before-coverage.log
             ${{ runner.temp }}/rust-disk-after-coverage.log
           if-no-files-found: warn
           retention-days: 14
@@ -207,7 +230,7 @@ jobs:
   # Preserve the existing required frontend check as the full acceptance gate.
   frontend:
     if: always()
-    needs: [frontend-checks, browser, rust]
+    needs: [frontend-checks, browser, rust, rust-coverage]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -219,7 +242,7 @@ jobs:
           CI_REQUIRED_RESULTS: ${{ toJSON(needs) }}
         run: |
           node --input-type=module <<'NODE'
-          const expected = ['frontend-checks', 'browser', 'rust'];
+          const expected = ['frontend-checks', 'browser', 'rust', 'rust-coverage'];
           const results = JSON.parse(process.env.CI_REQUIRED_RESULTS);
           if (Object.keys(results).length !== expected.length) {
             throw new Error('Acceptance result inventory is incomplete or unexpected');

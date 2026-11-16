@@ -97,7 +97,6 @@ jobs:
           set -o pipefail
           TIMEFORMAT='real %3R s; user %3U s; sys %3S s'
           { time pnpm validate:internal; } 2>&1 | tee "$RUNNER_TEMP/internal-validation.log"
-          pnpm build:testnet4
       - name: Run Windows-compatible validation
         if: runner.os == 'Windows'
         shell: bash
@@ -117,7 +116,6 @@ jobs:
           pnpm check
           pnpm test:coverage
           pnpm build
-          pnpm build:testnet4
       - name: Validate Rust on the native host
         working-directory: src-tauri
         run: |

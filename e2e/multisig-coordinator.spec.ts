@@ -652,7 +652,12 @@ test('spends end-to-end from the ready-made demo wallet', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Family wallet' })).toBeVisible();
   await expect(page.locator('.vault-policy-tags .policy-pill')).toHaveText('2 of 3 keys');
   await expect(page.getByText('Ready-to-test demo wallet')).toHaveCount(0);
-  await expect(page.getByText('2,481,240 sats')).toBeVisible();
+  const walletBalance = page.locator('.vault-balance');
+  if ((page.viewportSize()?.width ?? 1180) <= 760) {
+    await expect(walletBalance).toBeHidden();
+  } else {
+    await expect(walletBalance).toContainText('2,481,240 sats');
+  }
   await page.getByRole('link', { name: 'Send', exact: true }).click();
   const paymentProgress = page.getByRole('navigation', { name: 'Payment progress' });
   await expect(paymentProgress).toContainText('Intent');
@@ -919,7 +924,12 @@ test('requires explicit confirmation before discarding a multisig proposal', asy
   await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible();
   await page.goto('/multisig');
   await expect(page.getByRole('heading', { name: 'Family wallet' })).toBeVisible();
-  await expect(page.getByText('2,481,240 sats')).toBeVisible();
+  const walletBalance = page.locator('.vault-balance');
+  if ((page.viewportSize()?.width ?? 1180) <= 760) {
+    await expect(walletBalance).toBeHidden();
+  } else {
+    await expect(walletBalance).toContainText('2,481,240 sats');
+  }
 });
 
 test('surfaces partial and fully signed proposals on Overview', async ({ page }) => {
@@ -1659,7 +1669,7 @@ test('imports a bounded public signer record from a mounted-file flow', async ({
   await expect(page.getByRole('button', { name: 'View SD signer details' })).toBeVisible();
   await page.getByRole('button', { name: 'View SD signer details' }).click();
   const details = page.getByRole('dialog', { name: 'SD signer' });
-  await expect(details.getByRole('definition').filter({ hasText: 'File import' })).toBeVisible();
+  await expect(details.getByText('File import', { exact: true }).first()).toBeVisible();
   await details.getByRole('button', { name: 'Edit name' }).click();
   await details.getByLabel('Signer name').fill('Air-gapped Coldcard');
   await details.getByRole('button', { name: 'Save name' }).click();

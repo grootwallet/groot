@@ -52,6 +52,7 @@ require_text .github/workflows/ci.yml 'cargo test --locked --doc --all-features'
 
 node <<'NODE'
 import { readFileSync } from 'node:fs';
+import { validationGroups } from './scripts/quality/validate.mjs';
 
 const packageJson = JSON.parse(readFileSync('package.json', 'utf8'));
 const requiredScripts = [
@@ -81,7 +82,7 @@ if (packageJson.engines?.node !== '24.19.0' || packageJson.engines?.pnpm !== '11
   process.exit(1);
 }
 
-if (!packageJson.scripts.validate.includes('pnpm test:agent-scaffolding')) {
+if (!validationGroups(packageJson.scripts, 'standard').flat().includes('test:agent-scaffolding')) {
   console.error('Agent scaffolding failed: validate does not run the scaffolding gate');
   process.exit(1);
 }

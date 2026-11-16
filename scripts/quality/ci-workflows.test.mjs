@@ -33,7 +33,7 @@ const aggregate = ci.jobs.frontend;
 const aggregateStep = aggregate.steps.find((step) => step.env?.CI_REQUIRED_RESULTS);
 const aggregateCode = aggregateStep.run.match(/<<'NODE'\n([\s\S]*?)\nNODE\s*$/)?.[1];
 assert.ok(aggregateCode, 'the required gate must have an executable result validator');
-const lanes = ['frontend-checks', 'browser', 'rust'];
+const lanes = ['frontend-checks', 'browser', 'rust', 'rust-coverage'];
 const successful = () => Object.fromEntries(lanes.map((lane) => [lane, { result: 'success' }]));
 
 function derLength(length) {
@@ -172,26 +172,36 @@ test('CI uses one full frontend coverage pass and keeps native obligations', () 
   assert.match(native, /cargo test --locked --doc --all-features/);
   assert.match(native, /cargo doc --locked --no-deps --all-features/);
   assert.match(native, /cargo audit --file Cargo\.lock/);
-  const cleanCommands = native.split('\n').filter((command) => command.includes('cargo clean'));
-  assert.deepEqual(cleanCommands, [
-    'cargo clean --locked --package groot --target-dir "$CARGO_TARGET_DIR"'
-  ]);
   assert.ok(
-    native.indexOf('cargo test --locked --doc --all-features') < native.indexOf(cleanCommands[0])
+    native.indexOf('cargo test --locked --doc --all-features') <
+      native.indexOf('scripts/network/check-native-builds.sh')
   );
 
   assert.match(native, /scripts\/network\/check-native-builds\.sh/);
-  assert.equal((native.match(/scripts\/quality\/check-rust-full-coverage\.sh/g) ?? []).length, 1);
-  assert.doesNotMatch(
-    native,
-    /scripts\/regtest\/test\.sh|scripts\/quality\/check-rust-coverage\.sh/
-  );
+  assert.doesNotMatch(native, /cargo clean|scripts\/regtest\/test\.sh|check-rust-.*coverage\.sh/);
+  const coverage = runs(ci.jobs['rust-coverage']).join('\n');
+  assert.equal((coverage.match(/scripts\/quality\/check-rust-full-coverage\.sh/g) ?? []).length, 1);
+  assert.match(coverage, /cargo install cargo-llvm-cov --locked --version 0\.8\.7/);
+  assert.match(coverage, /sha256sum --check --strict/);
+  assert.doesNotMatch(coverage, /cargo test|scripts\/regtest\/test\.sh|check-rust-coverage\.sh/);
+  assert.equal(ci.jobs.rust.needs, undefined);
+  assert.equal(ci.jobs['rust-coverage'].needs, undefined);
 });
 
 test('ordinary and instrumented caches cannot include workspace or packaged app binaries', () => {
   const native = ci.jobs.rust;
-  assert.notEqual(native.env.CARGO_TARGET_DIR, native.env.CARGO_LLVM_COV_TARGET_DIR);
-  const caches = native.steps.filter((step) => step.uses?.startsWith('Swatinem/rust-cache@'));
+  const coverage = ci.jobs['rust-coverage'];
+  assert.notEqual(native.env.CARGO_TARGET_DIR, coverage.env.CARGO_LLVM_COV_TARGET_DIR);
+  assert.equal(native.env.CARGO_LLVM_COV_TARGET_DIR, undefined);
+  assert.equal(coverage.env.CARGO_TARGET_DIR, undefined);
+  const caches = [native, coverage].map((job) => {
+    const [cache, ...duplicates] = job.steps.filter((step) =>
+      step.uses?.startsWith('Swatinem/rust-cache@')
+    );
+    assert.ok(cache);
+    assert.deepEqual(duplicates, []);
+    return cache;
+  });
   assert.equal(caches.length, 2);
   assert.notEqual(caches[0].with.key, caches[1].with.key);
   assert.deepEqual(caches.map((step) => step.with.workspaces).sort(), [
@@ -252,7 +262,6 @@ test('internal packages use structured release-stop validation and preserve Wind
     'the explicit Windows gate must not be duplicated elsewhere in the workflow'
   );
   assert.ok(windowsCommands.indexOf(internalGate) < windowsCommands.indexOf('pnpm build'));
-  assert.ok(windowsCommands.indexOf(internalGate) < windowsCommands.indexOf('pnpm build:testnet4'));
   const portableRuntimeTest = 'node --test scripts/release/prepare-hwi-runtime.test.mjs';
   assert.equal(
     windowsCommands.filter((command) => command === portableRuntimeTest).length,
@@ -267,9 +276,15 @@ test('internal packages use structured release-stop validation and preserve Wind
     /cargo test --locked --all-targets --all-features/
   );
   assert.equal(steps.filter((step) => step.uses?.startsWith('Swatinem/rust-cache@')).length, 1);
+  const testnetConfig = JSON.parse(
+    readFileSync(new URL('src-tauri/tauri.testnet4.conf.json', root), 'utf8')
+  );
+  assert.equal(testnetConfig.build.beforeBuildCommand, 'pnpm build:testnet4');
+  assert.doesNotMatch(runs(internal.jobs.package).join('\n'), /pnpm build:testnet4/);
   const buildIndex = steps.findIndex(
     (step) => step.run?.trim() === 'node scripts/release/build-cross-platform-testnet4.mjs'
   );
+  assert.ok(steps.indexOf(linux) < buildIndex && steps.indexOf(windows) < buildIndex);
   const attestationIndex = steps.findIndex(
     (step) => step.uses === 'actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6'
   );

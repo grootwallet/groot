@@ -14,7 +14,7 @@ import {
 const internalTextOverrides = new Map([
   [
     'src/routes/welcome/+page.svelte',
-    'e51475e38b7ba5a2503f3744651d30176498de8c5f5a58f67bbbc678c2b4416c'
+    '90c67fe622c75069646710693c14129af2a3489dbf90d6790b55e86cc087214c'
   ],
   [
     'src/routes/unlock/+page.svelte',
@@ -24,7 +24,7 @@ const internalTextOverrides = new Map([
     'src-tauri/src/wallet/activity.rs',
     '86a9b616c973fe9542d81ba8de8ca34c0c6e2dc5c20f7249a1bb574bf2b88d13'
   ],
-  ['package.json', '518f06a995e6455df0a0d8937f6d3cf320bb05bea9b32e9b55c666e4bcbc83ac'],
+  ['package.json', '4c46cc7021c78a0995a8e4859653a045ecdc862cf62c8c28261ccbdbc0827b06'],
   ['src-tauri/Cargo.toml', '32416156d450506b10dbc29382d4723d226ec001ce38f62cc47c41994a449a2a'],
   ['src-tauri/tauri.conf.json', 'dcfc61fef779c1a0df714a95c843b9dc42276381bbe066ef9a1c72266c38c56f'],
   ['src-tauri/src/lib.rs', '685e0df112f35055faf33fa13093ff0ef29449606016642223a3aa992d91f72d'],

@@ -12,9 +12,11 @@ cd "${PROJECT_DIR}"
 bash scripts/quality/check-rust-coverage.sh
 # Append all 15 isolated Core scenarios to that same instrumented workspace.
 GROOT_RUST_COVERAGE=1 bash scripts/regtest/test.sh
+cd "${PROJECT_DIR}/scripts/quality/rust-coverage"
 cargo llvm-cov report \
   --locked \
   --manifest-path "${MANIFEST_PATH}" \
+  --profile coverage \
   --summary-only \
   --fail-under-lines 62 \
   --fail-under-functions 59 \

@@ -1,65 +1,128 @@
 #!/usr/bin/env node
-import { readFileSync } from 'node:fs';
-import { spawnSync } from 'node:child_process';
+import { closeSync, mkdtempSync, openSync, readFileSync, rmSync } from 'node:fs';
+import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { resolve } from 'node:path';
+import { join, resolve } from 'node:path';
+import { availableParallelism, tmpdir } from 'node:os';
 
-// Keep the mandatory command as the single inventory of frontend obligations.
-export function validationSteps(scripts, mode) {
-  if (!['coverage', 'internal'].includes(mode)) throw new Error('Unknown validation mode');
-  const steps = scripts.validate.split(' && ').map((command) => {
-    const match = /^pnpm ([\w:-]+)$/.exec(command);
-    if (!match || !scripts[match[1]]) throw new Error(`Unsupported validation step: ${command}`);
-    return match[1];
-  });
-  if (
-    steps.filter((step) => step === 'test').length !== 1 ||
-    steps.filter((step) => step === 'test:release-gate').length !== 1
-  ) {
-    throw new Error('Validation must contain exactly one unit pass and release gate');
+const independentChecks = [
+  'format:check',
+  'test:ci-harness',
+  'test:boundaries',
+  'test:release-gate',
+  'test:agent-scaffolding',
+  'test:ci-workflows',
+  'test:secret-surfaces',
+  'test:supply-chain',
+  'test:brand',
+  'test:versions',
+  'test:localization',
+  'test:hardware-preflight',
+  'release:test:update',
+  'release:test:hwi',
+  'release:test:compare',
+  'test:dev-runtime'
+];
+
+export function validationGroups(scripts, mode) {
+  if (!['standard', 'coverage', 'internal'].includes(mode)) {
+    throw new Error('Unknown validation mode');
   }
-  return steps.map((step) =>
-    step === 'test'
-      ? 'test:coverage'
-      : mode === 'internal' && step === 'test:release-gate'
-        ? 'test:release-gate:internal'
-        : step
-  );
+
+  const releaseGate = mode === 'internal' ? 'test:release-gate:internal' : 'test:release-gate';
+  const unitTests = mode === 'standard' ? 'test' : 'test:coverage';
+  const groups = [
+    // These commands share SvelteKit output. Finish each before starting the next.
+    ['check', unitTests, 'build'],
+    ...independentChecks.map((step) => [step === 'test:release-gate' ? releaseGate : step])
+  ];
+  for (const step of groups.flat()) {
+    if (!Object.hasOwn(scripts, step)) throw new Error(`Missing validation script: ${step}`);
+  }
+  return groups;
 }
 
-export function runValidation(scripts, mode, execute) {
-  for (const step of validationSteps(scripts, mode)) {
-    const status = execute(step);
-    if (status !== 0) return 1;
+export async function runValidation(scripts, mode, execute, concurrency) {
+  const groups = validationGroups(scripts, mode);
+  if (!Number.isInteger(concurrency) || concurrency < 1) {
+    throw new Error('Validation concurrency must be a positive integer');
   }
-  return 0;
+  let nextGroup = 0;
+  let failed = false;
+
+  async function runWorker() {
+    while (nextGroup < groups.length) {
+      const group = groups[nextGroup++];
+      for (const step of group) {
+        if ((await execute(step)) !== 0) {
+          failed = true;
+          break;
+        }
+      }
+    }
+  }
+
+  const workers = Array.from({ length: Math.min(groups.length, concurrency) }, runWorker);
+  for (const result of await Promise.allSettled(workers)) {
+    if (result.status === 'rejected') throw result.reason;
+  }
+  return failed ? 1 : 0;
+}
+
+async function runStep(root, outputDirectory, step) {
+  const started = performance.now();
+  const log = join(outputDirectory, step.replaceAll(':', '-') + '.log');
+  const fd = openSync(log, 'wx', 0o600);
+  let child;
+  try {
+    child = spawn('pnpm', [step], {
+      stdio: ['ignore', fd, fd],
+      cwd: root,
+      shell: process.platform === 'win32',
+      env: {
+        ...process.env,
+        VITEST_MAX_WORKERS: process.env.VITEST_MAX_WORKERS ?? '2'
+      }
+    });
+  } finally {
+    closeSync(fd);
+  }
+  const status = await new Promise((resolve) => {
+    child.once('error', (error) => {
+      console.error(`Could not start validation step ${step}: ${error.message}`);
+    });
+    child.once('close', resolve);
+  });
+  process.stdout.write(readFileSync(log));
+  console.log(
+    `Validation ${step}: ${status === 0 ? 'passed' : 'failed'} (${((performance.now() - started) / 1000).toFixed(1)}s)`
+  );
+  return status;
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const mode =
-    process.argv[2] === '--coverage'
-      ? 'coverage'
-      : process.argv[2] === '--internal'
-        ? 'internal'
-        : undefined;
-  if (process.argv.length !== 3 || !mode) throw new Error('Use --coverage or --internal');
+  const mode = new Map([
+    [undefined, 'standard'],
+    ['--coverage', 'coverage'],
+    ['--internal', 'internal']
+  ]).get(process.argv[2]);
+  if (process.argv.length > 3 || !mode) throw new Error('Use no option, --coverage or --internal');
+
   const root = fileURLToPath(new URL('../../', import.meta.url));
   const scripts = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url))).scripts;
-  console.log(
-    mode === 'internal'
-      ? 'Internal acceptance: public source approval remains pending; every other gate must pass.'
-      : 'Mandatory validation with one coverage-enabled unit pass.'
-  );
-  process.exitCode = runValidation(scripts, mode, (step) => {
-    const started = performance.now();
-    const result = spawnSync('pnpm', [step], {
-      stdio: 'inherit',
-      cwd: root,
-      shell: process.platform === 'win32'
-    });
-    console.log(
-      `Validation ${step}: ${result.status === 0 ? 'passed' : 'failed'} (${((performance.now() - started) / 1000).toFixed(1)}s)`
+  const outputDirectory = mkdtempSync(join(tmpdir(), 'groot-validation-'));
+  const concurrency = Math.min(4, availableParallelism());
+  const started = performance.now();
+  if (mode === 'internal') console.log('Internal validation uses the internal source review gate.');
+  try {
+    process.exitCode = await runValidation(
+      scripts,
+      mode,
+      (step) => runStep(root, outputDirectory, step),
+      concurrency
     );
-    return result.error || result.signal ? 1 : result.status;
-  });
+    console.log(`Validation finished in ${((performance.now() - started) / 1000).toFixed(1)}s.`);
+  } finally {
+    rmSync(outputDirectory, { recursive: true, force: true });
+  }
 }

@@ -34,6 +34,9 @@ from gateway import (  # noqa: E402
 PASSWORD = b"correct horse battery staple"
 USERNAME = "test-client"
 HASH = "00" * 32
+# socketserver.shutdown waits for the next idle poll. Shorten that wait for the
+# three disposable servers each test starts, without changing request handling.
+TEST_SERVER_POLL_INTERVAL = 0.01
 
 
 class FakeCoreHandler(BaseHTTPRequestHandler):
@@ -134,10 +137,14 @@ class GatewayIntegrationTests(unittest.TestCase):
         self.enrolled = directory / "enrolled.json"
         enrollment = EnrollmentStore(self.enrolled)
         self.core = FakeCore()
-        self.core_thread = threading.Thread(target=self.core.serve_forever, daemon=True)
+        self.core_thread = threading.Thread(
+            target=self.core.serve_forever, args=(TEST_SERVER_POLL_INTERVAL,), daemon=True
+        )
         self.core_thread.start()
         self.fulcrum = FakeFulcrum()
-        self.fulcrum_thread = threading.Thread(target=self.fulcrum.serve_forever, daemon=True)
+        self.fulcrum_thread = threading.Thread(
+            target=self.fulcrum.serve_forever, args=(TEST_SERVER_POLL_INTERVAL,), daemon=True
+        )
         self.fulcrum_thread.start()
         self.gateway = Gateway(
             GatewayConfig(
@@ -149,7 +156,9 @@ class GatewayIntegrationTests(unittest.TestCase):
             )
         )
         self.server = GatewayServer(("127.0.0.1", 0), self.gateway)
-        self.server_thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+        self.server_thread = threading.Thread(
+            target=self.server.serve_forever, args=(TEST_SERVER_POLL_INTERVAL,), daemon=True
+        )
         self.server_thread.start()
 
     def tearDown(self) -> None:

@@ -80,11 +80,13 @@ echo "Reporting adapters separately through whole-library coverage: ${adapter_mo
 adapter_pattern="src/(compact_filters|direct_rpc|durable_file|hardware|label_provenance|lib|main|managed_gateway|native_backup|network|process_lock|registry|secure_store|tor_rpc|updates|wallet)(\\.rs|/.*\\.rs)$"
 # Discard stale instrumented Groot objects/profiles, retaining ordinary Cargo
 # artifacts and the coverage dependency cache. The core report precedes Core I/O.
+cd "${PROJECT_DIR}/scripts/quality/rust-coverage"
 cargo llvm-cov clean --workspace --locked --manifest-path "${MANIFEST_PATH}"
-cargo llvm-cov --no-report --locked --manifest-path "${MANIFEST_PATH}" --lib
+cargo llvm-cov --no-report --locked --manifest-path "${MANIFEST_PATH}" --profile coverage --lib
 cargo llvm-cov report \
   --locked \
   --manifest-path "${MANIFEST_PATH}" \
+  --profile coverage \
   --summary-only \
   --ignore-filename-regex "$adapter_pattern" \
   --fail-under-lines 99 \
