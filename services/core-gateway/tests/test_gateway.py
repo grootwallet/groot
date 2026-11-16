@@ -9,6 +9,7 @@ import sys
 import tempfile
 import threading
 import unittest
+from contextlib import closing
 from unittest import mock
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -427,13 +428,18 @@ class GatewayIntegrationTests(unittest.TestCase):
             for _ in range(MAX_HANDLER_CONCURRENCY):
                 self.assertTrue(self.server._handler_slots.acquire(blocking=False))
                 acquired += 1
-            status, result, headers = self.request(
-                {"id": 1, "method": "getblockcount", "params": []},
-                auth=authorization(),
-            )
-            self.assertEqual((status, result), (503, {"error": "gateway_busy"}))
-            self.assertEqual(headers["Cache-Control"], "no-store")
-            self.assertEqual(headers["Connection"], "close")
+            # Admission responds before reading the request. A header-only
+            # request avoids racing a second socket write against that close.
+            with closing(
+                http.client.HTTPConnection("127.0.0.1", self.server.server_port, timeout=2)
+            ) as connection:
+                connection.request("POST", "/", headers={"Authorization": authorization()})
+                response = connection.getresponse()
+                self.assertEqual(response.status, 503)
+                self.assertEqual(json.loads(response.read()), {"error": "gateway_busy"})
+                self.assertEqual(response.getheader("Cache-Control"), "no-store")
+                self.assertEqual(response.getheader("Connection"), "close")
+            self.assertEqual(self.core.requests, [])
         finally:
             for _ in range(acquired):
                 self.server._handler_slots.release()
