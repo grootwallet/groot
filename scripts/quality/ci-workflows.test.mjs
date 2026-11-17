@@ -408,8 +408,10 @@ test('CI uses one full frontend coverage pass and keeps native obligations', () 
     1
   );
   assert.match(ciValidationStep().run, /set -eu/);
-  assert.match(ciValidationStep().run, /validate:ci\|validate:internal/);
-  assert.match(ciValidationStep().run, /time pnpm "\$ci_validation_script"/);
+  assert.match(ciValidationStep().run, /case "\$ci_validation_script" in/);
+  assert.equal((ciValidationStep().run.match(/time pnpm validate:ci;/g) ?? []).length, 1);
+  assert.equal((ciValidationStep().run.match(/time pnpm validate:internal;/g) ?? []).length, 1);
+  assert.doesNotMatch(ciValidationStep().run, /pnpm "\$ci_validation_script"/);
   assert.equal(
     commands.filter((command) => /pnpm test(?::coverage)?(?:\s|$)/.test(command)).length,
     0
@@ -766,9 +768,12 @@ test('timed evidence pipelines retain output and propagate a failing command', (
     .flatMap((job) => job.steps)
     .filter((step) => step.run?.includes('| tee '));
   assert.equal(timedSteps.length, 5);
-  for (const step of timedSteps) {
+  const pipelines = timedSteps.flatMap((step) => {
     assert.match(step.run, /set -o pipefail/);
-    const pipeline = step.run.split('\n').find((line) => line.includes('| tee '));
+    return step.run.split('\n').filter((line) => line.includes('| tee '));
+  });
+  assert.equal(pipelines.length, 6);
+  for (const pipeline of pipelines) {
     assert.match(pipeline, /\{ time [^;]+; \} 2>&1 \| tee /);
     for (const status of [0, 17]) {
       const directory = mkdtempSync(join(tmpdir(), 'groot-ci-pipeline-'));
