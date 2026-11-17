@@ -77,7 +77,7 @@ Mobile signer routes compose the existing InstructionCard, Button, PasswordField
 
 Native mobile setup keeps build information in Settings instead of a fixed footer over onboarding actions. Its content scroller starts below the status-bar safe area. Stacked sync and backup notices remain in document flow; only one missing-connection notice is shown.
 
-Unlocked mobile screens omit the brand header and start below the system safe area. Sync and backup reminders use compact inline actions with 44px touch targets; recovery verification remains available. Overview shows each sync fact once, omits an unverified numeric balance, and keeps saved-payment resume separate from the availability of a new Send action. This presentation change has no BIP or persisted-format impact.
+Unlocked mobile screens omit the brand header and start below the system safe area. Sync and backup reminders use compact inline actions with 44px touch targets; recovery verification remains available. Overview shows each sync fact once. The balance card shows a verified total, including zero, or labels a zero from an empty local snapshot **Unverified balance** while the first scan is idle. Discreet mode masks both amounts. Saved-payment resume is separate from the availability of a new Send action. This presentation change has no BIP or persisted-format impact.
 
 Native mobile navigation uses a 49px tab row plus the system bottom safe area, 20px icons and 12px labels. Keep the home indicator clear; do not add a second bottom spacer.
 

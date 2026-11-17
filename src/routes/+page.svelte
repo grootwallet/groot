@@ -161,6 +161,7 @@
   let initialHistoryRequired = $derived(
     syncSource?.type === 'bitcoin_core' && Boolean(snapshot) && !snapshot?.syncedAt
   );
+  const mobileUnverifiedBalance = $derived(mobileRuntime && initialHistoryRequired);
   let shellInitialScanRunning = $derived(
     Boolean(selectedProfile && walletShell.initialHistoryScanRunning(selectedProfile.id))
   );
@@ -1263,10 +1264,15 @@
       description={loadError}
       onretry={networkSetupRequired ? openNetworkSetup : loadSnapshot}
     />
-  {:else if snapshot && !initialDataLoading && !initialScanInFlight && (!mobileRuntime || !initialHistoryRequired)}
+  {:else if snapshot && !initialDataLoading && !initialScanInFlight && (!mobileUnverifiedBalance || snapshot.balance.total === 0)}
     <section class="balance-card content-reveal">
       <div class="balance-top">
-        <span>{translate($locale, 'Total balance')}</span><button
+        <span
+          >{translate(
+            $locale,
+            mobileUnverifiedBalance ? 'Unverified balance' : 'Total balance'
+          )}</span
+        ><button
           class="ghost-icon"
           aria-label={translate(
             $locale,
@@ -1282,9 +1288,8 @@
           class="balance-value unverified-balance"
           aria-label={translate($locale, 'Unverified balance')}
         >
-          <Amount value={0} hidden={$discreetMode} /><small
-            >{translate($locale, 'Never synced')}</small
-          >
+          <Amount value={0} hidden={$discreetMode} />
+          {#if !mobileRuntime}<small>{translate($locale, 'Never synced')}</small>{/if}
         </div>
       {:else}
         <button
@@ -1303,7 +1308,7 @@
           <Amount value={snapshot.balance.total} hidden={$discreetMode} />
         </button>
       {/if}
-      {#if !mobileRuntime || (!$discreetMode && (pendingBreakdown.incoming || pendingBreakdown.change || pendingBreakdown.outgoing))}
+      {#if !mobileRuntime || (!initialHistoryRequired && !$discreetMode && (pendingBreakdown.incoming || pendingBreakdown.change || pendingBreakdown.outgoing))}
         <div class="pending-line">
           <i></i>{translate(
             $locale,

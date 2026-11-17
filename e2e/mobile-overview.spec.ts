@@ -12,14 +12,17 @@ test.describe('native mobile Overview', () => {
     await expect(page.locator('.mobile-actions')).toHaveCount(0);
   });
 
-  test('shows one setup action without an invented balance or duplicate history warning', async ({
-    page
-  }) => {
-    await page.goto('/?fixture-native-mobile=1&fixture-initial-history-required=1');
+  test('shows an unverified zero balance and one sync setup action', async ({ page }) => {
+    await page.goto(
+      '/?fixture-native-mobile=1&fixture-initial-history-required=1&fixture-empty-wallet=1'
+    );
 
     await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible();
     await expect(page.getByText('Set up wallet sync', { exact: true })).toHaveCount(1);
     await expect(page.getByRole('button', { name: 'Set up sync' })).toHaveCount(0);
+    const balance = page.locator('.balance-card');
+    await expect(balance.getByText('Unverified balance', { exact: true })).toBeVisible();
+    await expect(balance.getByLabel('Unverified balance')).toHaveText(/^\s*0\s*sats\s*$/);
     await expect(page.getByText('Total balance', { exact: true })).toHaveCount(0);
     await expect(page.getByText('Never synced', { exact: true })).toHaveCount(0);
     await expect(page.getByText('Wallet history not verified', { exact: true })).toHaveCount(0);
@@ -36,8 +39,21 @@ test.describe('native mobile Overview', () => {
       path: test.info().outputPath('overview-sync-setup.png'),
       animations: 'disabled'
     });
+    await balance.getByRole('button', { name: 'Hide wallet amounts' }).click();
+    await expect(balance.getByText('••••••', { exact: true })).toBeVisible();
+    await expect(balance.getByText('0', { exact: true })).toHaveCount(0);
     await page.getByRole('link', { name: 'Configure sync' }).click();
     await expect(page).toHaveURL(/\/settings#network-services$/);
+  });
+
+  test('keeps a nonzero unverified snapshot out of the balance card', async ({ page }) => {
+    await page.goto('/?fixture-native-mobile=1&fixture-initial-history-required=1');
+
+    await expect(page.getByText('Set up wallet sync', { exact: true })).toBeVisible();
+    await expect(page.locator('.balance-card')).toHaveCount(0);
+    await expect(page.locator('.mobile-actions').getByRole('link', { name: 'Send' })).toHaveCount(
+      0
+    );
   });
 
   test('keeps Receive but omits new Send for a verified empty wallet', async ({ page }) => {
@@ -45,7 +61,10 @@ test.describe('native mobile Overview', () => {
 
     const balance = page.locator('.balance-card');
     await expect(balance).toBeVisible();
-    await expect(balance).toContainText('0');
+    await expect(balance.getByText('Total balance', { exact: true })).toBeVisible();
+    await expect(balance.getByRole('button', { name: 'Show balance in BTC' })).toHaveText(
+      /^\s*0\s*sats\s*$/
+    );
     await expect(balance.getByText('0 sats pending')).toHaveCount(0);
     await expect(page.getByText('No transactions yet', { exact: true })).toBeVisible();
 
