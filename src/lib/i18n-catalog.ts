@@ -12,6 +12,12 @@ import { attributeCopy } from './locales/attributes';
 import { dynamicCopy } from './locales/dynamic';
 import { coordinationCopy } from './locales/coordination';
 
+import { marketplaceCopy } from './locales/marketplace';
+
+import { marketplaceBackendCopy } from './locales/marketplace-backend';
+
+import { marketplaceProviderCopy } from './locales/marketplace-provider';
+
 export type { MessageValues, Translation, CatalogSection } from './locales/types';
 
 // English source copy is the stable catalog key. Keeping the source beside both
@@ -415,6 +421,9 @@ export const copyCatalog = {
   ...attributeCopy,
   ...dynamicCopy,
   ...coordinationCopy,
+  ...marketplaceCopy,
+  ...marketplaceBackendCopy,
+  ...marketplaceProviderCopy,
   Dismiss: { fr: 'Fermer', es: 'Cerrar' },
   Cancel: { fr: 'Annuler', es: 'Cancelar' },
   Back: { fr: 'Retour', es: 'Atrás' },

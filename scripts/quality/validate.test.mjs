@@ -11,6 +11,8 @@ const mandatory = [
   'test:ci-workflows',
   'test:ci-harness',
   'test:boundaries',
+  'test:marketplace-transport',
+  'test:marketplace-provider',
   'test:secret-surfaces',
   'test:supply-chain',
   'test:brand',

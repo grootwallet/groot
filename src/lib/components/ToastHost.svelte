@@ -4,15 +4,17 @@
   import { locale } from '$lib/i18n';
   import { translate } from '$lib/i18n-catalog';
   import { fly } from 'svelte/transition';
+  let { inline = false } = $props<{ inline?: boolean }>();
+  const visibleToasts = $derived(inline ? $toasts.slice(-1) : $toasts);
 </script>
 
-<div class="toast-region" aria-live="polite">
-  {#each $toasts as item (item.id)}
+<div class="toast-region" class:inline aria-live="polite">
+  {#each visibleToasts as item (item.id)}
     <div
       class="toast"
       class:warning={item.tone === 'warning'}
       class:danger={item.tone === 'danger'}
-      transition:fly={{ x: 12, duration: 180 }}
+      transition:fly={{ x: 12, duration: inline ? 0 : 180 }}
     >
       <div
         class="toast-mark"
@@ -52,7 +54,7 @@
 
   :global(.toast-region):where(.toast-region) {
     position: fixed;
-    z-index: 200;
+    z-index: 90;
     right: 20px;
     bottom: 20px;
     width: min(360px, calc(100% - 40px));
@@ -136,5 +138,24 @@
       max-width: 360px;
       margin-left: auto;
     }
+  }
+  .toast-region.inline {
+    position: static;
+    z-index: auto;
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    /* Reserve one notice so expiry cannot move a control under an active pointer. */
+    block-size: 64px;
+    display: grid;
+    grid-template: 'notice' minmax(0, 1fr) / minmax(0, 1fr);
+    align-items: start;
+  }
+  .toast-region.inline :global(.toast) {
+    grid-area: notice;
+    padding: 8px 12px;
+    box-shadow: none;
+    max-block-size: 100%;
+    overflow-y: auto;
   }
 </style>

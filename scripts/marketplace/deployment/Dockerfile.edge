@@ -1,0 +1,4 @@
+FROM caddy:2.11.4-alpine@sha256:6aeddd44c3078b0f9a35206472a11420648a79c184603ef95957d0a20044cb2b
+# The upstream file capability is unnecessary on 8443 and conflicts with a zero-capability bounding set.
+RUN setcap -r /usr/bin/caddy
+USER 1000:1000

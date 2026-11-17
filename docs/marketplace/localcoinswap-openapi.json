@@ -1,0 +1,2403 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Groot LocalCoinSwap Gateway",
+    "version": "1.0.0",
+    "description": "HTTP contract for Groot's loopback LocalCoinSwap preview. Start the server in fixture, public or single-account mode. The exact configured Host and loopback peer are required. JSON request bodies are limited to 8 KiB and JSON responses to 512 KiB. Unknown or repeated parameters are rejected. GET requests have no body. Account operations use the configured local bearer token in account mode and the local test identity in fixture mode. A provider API key is never sent by clients. Invalid methods return 405 with Allow. Account registration, bitcoin escrow signing and settlement are unavailable."
+  },
+  "servers": [
+    {
+      "url": "http://127.0.0.1:{port}/api/marketplace/localcoinswap",
+      "description": "Local preview server. The dedicated launcher defaults to port 5310.",
+      "variables": {
+        "port": {
+          "default": "5310"
+        }
+      }
+    }
+  ],
+  "paths": {
+    "/capabilities": {
+      "get": {
+        "operationId": "getCapabilities",
+        "summary": "Get preview capabilities",
+        "description": "A local bearer token is optional. authenticated indicates fixture access or a valid local token. Upstream key validity and permissions are checked by actual provider calls.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Marker"
+          },
+          {
+            "$ref": "#/components/parameters/OriginForRead"
+          },
+          {
+            "$ref": "#/components/parameters/FetchSite"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Gateway mode and feature flags.",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/NoStore"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["apiVersion", "data"],
+                  "properties": {
+                    "apiVersion": {
+                      "const": 1
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/Capabilities"
+                    }
+                  }
+                },
+                "example": {
+                  "apiVersion": 1,
+                  "data": {
+                    "mode": "fixture",
+                    "authenticated": true,
+                    "tradeActions": true,
+                    "btcExecution": false
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidRequest"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "x-groot-access": "capabilities",
+        "security": [
+          {
+            "LocalAccess": []
+          },
+          {}
+        ]
+      }
+    },
+    "/offers": {
+      "get": {
+        "operationId": "listOffers",
+        "summary": "Find eligible bitcoin offers",
+        "description": "Find BTC/EUR SEPA Instant offers with a recently active maker. Intent describes the Groot user's side. The amount is filtered in the gateway. Provider pagination counts precede local eligibility filtering. Prices are indicative.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Marker"
+          },
+          {
+            "$ref": "#/components/parameters/OriginForRead"
+          },
+          {
+            "$ref": "#/components/parameters/FetchSite"
+          },
+          {
+            "$ref": "#/components/parameters/Intent"
+          },
+          {
+            "$ref": "#/components/parameters/AmountCents"
+          },
+          {
+            "$ref": "#/components/parameters/Country"
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/Offset"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Public offer page.",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/NoStore"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["apiVersion", "data"],
+                  "properties": {
+                    "apiVersion": {
+                      "const": 1
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/OfferPage"
+                    }
+                  }
+                },
+                "example": {
+                  "apiVersion": 1,
+                  "data": {
+                    "items": [
+                      {
+                        "id": "91e1dc0f-1fc8-4232-9d7b-0f3aee06b011",
+                        "intent": "buy",
+                        "country": "FR",
+                        "currency": "EUR",
+                        "paymentMethod": "sepa_instant",
+                        "pricePerBtcCents": 8000000,
+                        "exactPricePerBtc": {
+                          "units": "80000",
+                          "scale": 0
+                        },
+                        "minFiatCents": 5000,
+                        "maxFiatCents": 25000,
+                        "maker": "Camille",
+                        "terms": "Send from a bank account in your name.",
+                        "active": true,
+                        "observedAtMs": 1794384000000
+                      }
+                    ],
+                    "nextOffset": null,
+                    "total": 1
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidRequest"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/ProviderRejected"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "502": {
+            "$ref": "#/components/responses/InvalidProviderResponse"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        },
+        "x-groot-access": "public"
+      }
+    },
+    "/offers/{offerId}": {
+      "get": {
+        "operationId": "getOffer",
+        "summary": "Get an offer",
+        "description": "Return current terms and indicative price for one BTC/EUR SEPA Instant offer.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Marker"
+          },
+          {
+            "$ref": "#/components/parameters/OriginForRead"
+          },
+          {
+            "$ref": "#/components/parameters/FetchSite"
+          },
+          {
+            "$ref": "#/components/parameters/OfferId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Offer details.",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/NoStore"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["apiVersion", "data"],
+                  "properties": {
+                    "apiVersion": {
+                      "const": 1
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/Offer"
+                    }
+                  }
+                },
+                "example": {
+                  "apiVersion": 1,
+                  "data": {
+                    "id": "91e1dc0f-1fc8-4232-9d7b-0f3aee06b011",
+                    "intent": "buy",
+                    "country": "FR",
+                    "currency": "EUR",
+                    "paymentMethod": "sepa_instant",
+                    "pricePerBtcCents": 8000000,
+                    "exactPricePerBtc": {
+                      "units": "80000",
+                      "scale": 0
+                    },
+                    "minFiatCents": 5000,
+                    "maxFiatCents": 25000,
+                    "maker": "Camille",
+                    "terms": "Send from a bank account in your name.",
+                    "active": true,
+                    "observedAtMs": 1794384000000
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidRequest"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/ProviderRejected"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "502": {
+            "$ref": "#/components/responses/InvalidProviderResponse"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        },
+        "x-groot-access": "public"
+      }
+    },
+    "/trades": {
+      "get": {
+        "operationId": "listTrades",
+        "summary": "List account trades",
+        "description": "Return existing non-custodial BTC/EUR SEPA Instant trades for the connected account.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Marker"
+          },
+          {
+            "$ref": "#/components/parameters/OriginForRead"
+          },
+          {
+            "$ref": "#/components/parameters/FetchSite"
+          },
+          {
+            "$ref": "#/components/parameters/Stage"
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/Offset"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Trade page.",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/NoStore"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["apiVersion", "data"],
+                  "properties": {
+                    "apiVersion": {
+                      "const": 1
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/TradePage"
+                    }
+                  }
+                },
+                "example": {
+                  "apiVersion": 1,
+                  "data": {
+                    "items": [
+                      {
+                        "id": "91e1dc0f-1fc8-4232-9d7b-0f3aee06b001",
+                        "status": "CRYPTO_ESC",
+                        "buyer": "groot-tester",
+                        "seller": "Camille",
+                        "fiatCents": 10000,
+                        "bitcoinSats": 125000,
+                        "createdAtMs": 1794384000000,
+                        "expiresAtMs": 1794387600000
+                      }
+                    ],
+                    "nextOffset": null,
+                    "total": 1
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidRequest"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/ProviderRejected"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "502": {
+            "$ref": "#/components/responses/InvalidProviderResponse"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "x-groot-access": "account",
+        "security": [
+          {
+            "LocalAccess": []
+          },
+          {}
+        ]
+      }
+    },
+    "/transactions": {
+      "get": {
+        "operationId": "listBtcTransactions",
+        "summary": "List account bitcoin transactions",
+        "description": "Return deposits, withdrawals and escrow movements for the connected provider account, newest first. The provider omits self-transfers. This read uses the provider read scope.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Marker"
+          },
+          {
+            "$ref": "#/components/parameters/OriginForRead"
+          },
+          {
+            "$ref": "#/components/parameters/FetchSite"
+          },
+          {
+            "$ref": "#/components/parameters/BtcTransactionType"
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/Offset"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bitcoin transaction page.",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/NoStore"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["apiVersion", "data"],
+                  "properties": {
+                    "apiVersion": {
+                      "const": 1
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/BtcTransactionPage"
+                    }
+                  }
+                },
+                "example": {
+                  "apiVersion": 1,
+                  "data": {
+                    "items": [
+                      {
+                        "id": 51,
+                        "txid": "7777777777777777777777777777777777777777777777777777777777777777",
+                        "type": "ESCROW_RELEASE",
+                        "sats": 125000,
+                        "confirmed": true,
+                        "firstSeenAtMs": 1793830445000,
+                        "confirmedAtMs": 1793831012000
+                      }
+                    ],
+                    "nextOffset": null,
+                    "total": 1
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/ProviderRejected"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "502": {
+            "$ref": "#/components/responses/InvalidProviderResponse"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "x-groot-access": "account",
+        "security": [
+          {
+            "LocalAccess": []
+          },
+          {}
+        ]
+      }
+    },
+    "/trades/{tradeId}": {
+      "get": {
+        "operationId": "getTrade",
+        "summary": "Get a trade",
+        "description": "Return a normalized trade for the connected account. The gateway omits raw escrow metadata and private files.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Marker"
+          },
+          {
+            "$ref": "#/components/parameters/OriginForRead"
+          },
+          {
+            "$ref": "#/components/parameters/FetchSite"
+          },
+          {
+            "$ref": "#/components/parameters/TradeId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Trade details.",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/NoStore"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["apiVersion", "data"],
+                  "properties": {
+                    "apiVersion": {
+                      "const": 1
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/Trade"
+                    }
+                  }
+                },
+                "example": {
+                  "apiVersion": 1,
+                  "data": {
+                    "id": "91e1dc0f-1fc8-4232-9d7b-0f3aee06b001",
+                    "status": "CRYPTO_ESC",
+                    "buyer": "groot-tester",
+                    "seller": "Camille",
+                    "fiatCents": 10000,
+                    "bitcoinSats": 125000,
+                    "createdAtMs": 1794384000000,
+                    "expiresAtMs": 1794387600000
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidRequest"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/ProviderRejected"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "502": {
+            "$ref": "#/components/responses/InvalidProviderResponse"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "x-groot-access": "account",
+        "security": [
+          {
+            "LocalAccess": []
+          },
+          {}
+        ]
+      }
+    },
+    "/trades/{tradeId}/messages": {
+      "get": {
+        "operationId": "listTradeMessages",
+        "summary": "List trade messages",
+        "description": "Omit view for the legacy offset page. Set view=latest and omit offset to load the newest window, oldest first within that window. The latest response includes its starting offset. A moving window that cannot be verified returns a retryable 503.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Marker"
+          },
+          {
+            "$ref": "#/components/parameters/OriginForRead"
+          },
+          {
+            "$ref": "#/components/parameters/FetchSite"
+          },
+          {
+            "$ref": "#/components/parameters/TradeId"
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/Offset"
+          },
+          {
+            "$ref": "#/components/parameters/ChatView"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Trade messages in the requested page or latest window.",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/NoStore"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["apiVersion", "data"],
+                  "properties": {
+                    "apiVersion": {
+                      "const": 1
+                    },
+                    "data": {
+                      "oneOf": [
+                        {
+                          "$ref": "#/components/schemas/MessagePage"
+                        },
+                        {
+                          "$ref": "#/components/schemas/LatestMessagePage"
+                        }
+                      ]
+                    }
+                  }
+                },
+                "example": {
+                  "apiVersion": 1,
+                  "data": {
+                    "items": [
+                      {
+                        "id": 1,
+                        "sender": "groot-tester",
+                        "content": "I sent the transfer.",
+                        "createdAtMs": 1794384000000,
+                        "hasAttachment": false
+                      }
+                    ],
+                    "nextOffset": null,
+                    "total": 1,
+                    "offset": 0
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidRequest"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/ProviderRejected"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "502": {
+            "$ref": "#/components/responses/InvalidProviderResponse"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "x-groot-access": "account",
+        "security": [
+          {
+            "LocalAccess": []
+          },
+          {}
+        ]
+      },
+      "post": {
+        "operationId": "sendTradeMessage",
+        "summary": "Send a trade message",
+        "description": "Send plain text through the connected account. Keep the same UUID and body when checking or explicitly retrying an interrupted request. Text and attachment metadata are projected without attachment URLs.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Marker"
+          },
+          {
+            "$ref": "#/components/parameters/OriginForWrite"
+          },
+          {
+            "$ref": "#/components/parameters/FetchSite"
+          },
+          {
+            "$ref": "#/components/parameters/TradeId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKeyHeader"
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Saved message.",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/NoStore"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["apiVersion", "data"],
+                  "properties": {
+                    "apiVersion": {
+                      "const": 1
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/Message"
+                    }
+                  }
+                },
+                "example": {
+                  "apiVersion": 1,
+                  "data": {
+                    "id": 1,
+                    "sender": "groot-tester",
+                    "content": "I sent the transfer.",
+                    "createdAtMs": 1794384000000,
+                    "hasAttachment": false
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidRequest"
+          },
+          "403": {
+            "$ref": "#/components/responses/WriteForbidden"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/WriteConflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "422": {
+            "$ref": "#/components/responses/ProviderRejected"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "502": {
+            "$ref": "#/components/responses/InvalidProviderResponse"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "x-groot-access": "account_write",
+        "security": [
+          {
+            "LocalAccess": []
+          },
+          {}
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendMessage"
+              },
+              "example": {
+                "content": "I sent the transfer."
+              }
+            }
+          }
+        }
+      }
+    },
+    "/trades/{tradeId}/actions": {
+      "post": {
+        "operationId": "performTradeAction",
+        "summary": "Update an existing trade",
+        "description": "The gateway checks expectedStatus against the current state before it forwards an action. LocalCoinSwap enforces ownership, role and transition rules. A payment claim records what the buyer reports. An unfunded cancellation is limited to a newly requested trade.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Marker"
+          },
+          {
+            "$ref": "#/components/parameters/OriginForWrite"
+          },
+          {
+            "$ref": "#/components/parameters/FetchSite"
+          },
+          {
+            "$ref": "#/components/parameters/TradeId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKeyHeader"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Full Trade for mark_paid or cancel_unfunded. TradeStatus for open_dispute or withdraw_dispute.",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/NoStore"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["apiVersion", "data"],
+                  "properties": {
+                    "apiVersion": {
+                      "const": 1
+                    },
+                    "data": {
+                      "oneOf": [
+                        {
+                          "$ref": "#/components/schemas/Trade"
+                        },
+                        {
+                          "$ref": "#/components/schemas/TradeStatus"
+                        }
+                      ]
+                    }
+                  }
+                },
+                "example": {
+                  "apiVersion": 1,
+                  "data": {
+                    "id": "91e1dc0f-1fc8-4232-9d7b-0f3aee06b001",
+                    "status": "FUND_PAID",
+                    "buyer": "groot-tester",
+                    "seller": "Camille",
+                    "fiatCents": 10000,
+                    "bitcoinSats": 125000,
+                    "createdAtMs": 1794384000000,
+                    "expiresAtMs": 1794387600000
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidRequest"
+          },
+          "403": {
+            "$ref": "#/components/responses/WriteForbidden"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/WriteConflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "422": {
+            "$ref": "#/components/responses/ProviderRejected"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "502": {
+            "$ref": "#/components/responses/InvalidProviderResponse"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "x-groot-access": "account_write",
+        "security": [
+          {
+            "LocalAccess": []
+          },
+          {}
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TradeAction"
+              },
+              "examples": {
+                "markPaid": {
+                  "value": {
+                    "action": "mark_paid",
+                    "expectedStatus": "CRYPTO_ESC"
+                  }
+                },
+                "openDispute": {
+                  "value": {
+                    "action": "open_dispute",
+                    "expectedStatus": "FUND_PAID",
+                    "description": "The payment needs review."
+                  }
+                },
+                "withdrawDispute": {
+                  "value": {
+                    "action": "withdraw_dispute",
+                    "expectedStatus": "DISPUTED"
+                  }
+                },
+                "cancelUnfunded": {
+                  "value": {
+                    "action": "cancel_unfunded",
+                    "expectedStatus": "CREATED"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/operations/{idempotencyKey}": {
+      "get": {
+        "operationId": "getOperationReceipt",
+        "summary": "Get a write receipt",
+        "description": "Read a previously reserved request from the same account and journal. Readable with account writes turned off. A 200 response can still indicate pending, rejected, or unknown. An unknown receipt blocks replay of that write.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Marker"
+          },
+          {
+            "$ref": "#/components/parameters/OriginForRead"
+          },
+          {
+            "$ref": "#/components/parameters/FetchSite"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKeyPath"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Journal receipt.",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/NoStore"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["apiVersion", "data"],
+                  "properties": {
+                    "apiVersion": {
+                      "const": 1
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/Operation"
+                    }
+                  }
+                },
+                "example": {
+                  "apiVersion": 1,
+                  "data": {
+                    "status": "succeeded",
+                    "data": {
+                      "id": 1,
+                      "sender": "groot-tester",
+                      "content": "I sent the transfer.",
+                      "createdAtMs": 1794384000000,
+                      "hasAttachment": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidRequest"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "502": {
+            "$ref": "#/components/responses/InvalidProviderResponse"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "x-groot-access": "account",
+        "security": [
+          {
+            "LocalAccess": []
+          },
+          {}
+        ]
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "LocalAccess": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Separate local gateway token for account mode, 32–256 characters from A–Z, a–z, 0–9, underscore and hyphen."
+      }
+    },
+    "headers": {
+      "NoStore": {
+        "description": "Responses must not be cached.",
+        "schema": {
+          "type": "string",
+          "const": "no-store"
+        }
+      },
+      "RetryAfter": {
+        "description": "Seconds before retrying.",
+        "schema": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 86400
+        }
+      }
+    },
+    "parameters": {
+      "Marker": {
+        "name": "X-Groot-LocalCoinSwap",
+        "in": "header",
+        "required": true,
+        "description": "Required local request marker.",
+        "schema": {
+          "type": "string",
+          "const": "1"
+        }
+      },
+      "OriginForRead": {
+        "name": "Origin",
+        "in": "header",
+        "required": false,
+        "description": "When supplied, must be the exact configured loopback origin.",
+        "schema": {
+          "type": "string"
+        }
+      },
+      "OriginForWrite": {
+        "name": "Origin",
+        "in": "header",
+        "required": true,
+        "description": "Must be the exact configured loopback origin. Browsers attach it automatically.",
+        "schema": {
+          "type": "string"
+        }
+      },
+      "FetchSite": {
+        "name": "Sec-Fetch-Site",
+        "in": "header",
+        "required": false,
+        "description": "Allowed browser fetch metadata when supplied.",
+        "schema": {
+          "type": "string",
+          "enum": ["same-origin", "none"]
+        }
+      },
+      "IdempotencyKeyHeader": {
+        "name": "Idempotency-Key",
+        "in": "header",
+        "required": true,
+        "description": "One UUID per write intent. Keep it to check the receipt and reuse it only with the identical request.",
+        "schema": {
+          "$ref": "#/components/schemas/Uuid"
+        }
+      },
+      "IdempotencyKeyPath": {
+        "name": "idempotencyKey",
+        "in": "path",
+        "required": true,
+        "description": "Request UUID supplied in the original Idempotency-Key header.",
+        "schema": {
+          "$ref": "#/components/schemas/Uuid"
+        }
+      },
+      "OfferId": {
+        "name": "offerId",
+        "in": "path",
+        "required": true,
+        "description": "LocalCoinSwap offer UUID.",
+        "schema": {
+          "$ref": "#/components/schemas/Uuid"
+        }
+      },
+      "TradeId": {
+        "name": "tradeId",
+        "in": "path",
+        "required": true,
+        "description": "LocalCoinSwap trade UUID.",
+        "schema": {
+          "$ref": "#/components/schemas/Uuid"
+        }
+      },
+      "Intent": {
+        "name": "intent",
+        "in": "query",
+        "required": true,
+        "description": "Side of the Groot trader.",
+        "schema": {
+          "$ref": "#/components/schemas/Intent"
+        }
+      },
+      "AmountCents": {
+        "name": "amountCents",
+        "in": "query",
+        "required": true,
+        "description": "Fiat amount in euro cents, used to filter offer eligibility.",
+        "schema": {
+          "type": "integer",
+          "minimum": 5000,
+          "maximum": 25000
+        }
+      },
+      "Country": {
+        "name": "country",
+        "in": "query",
+        "required": false,
+        "description": "Optional exact two-letter country code.",
+        "schema": {
+          "$ref": "#/components/schemas/Country"
+        }
+      },
+      "Limit": {
+        "name": "limit",
+        "in": "query",
+        "required": false,
+        "description": "Maximum number of rows to request.",
+        "schema": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "default": 20
+        }
+      },
+      "Offset": {
+        "name": "offset",
+        "in": "query",
+        "required": false,
+        "description": "Zero-based index in provider results. Omit with view=latest.",
+        "schema": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10000,
+          "default": 0
+        }
+      },
+      "Stage": {
+        "name": "stage",
+        "in": "query",
+        "required": false,
+        "description": "Account trade group.",
+        "schema": {
+          "type": "string",
+          "enum": ["live", "past"],
+          "default": "live"
+        }
+      },
+      "BtcTransactionType": {
+        "name": "type",
+        "in": "query",
+        "required": false,
+        "description": "Select one transaction type. Omit for all types.",
+        "schema": {
+          "$ref": "#/components/schemas/BtcTransactionType"
+        }
+      },
+      "ChatView": {
+        "name": "view",
+        "in": "query",
+        "required": false,
+        "description": "Request the most recent window. Mutually exclusive with offset.",
+        "schema": {
+          "type": "string",
+          "const": "latest"
+        }
+      }
+    },
+    "responses": {
+      "InvalidRequest": {
+        "description": "Malformed request, UUID, query, or JSON body.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/NoStore"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                },
+                {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "const": "invalid_request"
+                        }
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            "example": {
+              "apiVersion": 1,
+              "error": {
+                "code": "invalid_request",
+                "retryable": false
+              }
+            }
+          }
+        }
+      },
+      "Unauthorized": {
+        "description": "Local authorization is missing or invalid, or the provider rejected the configured key as unauthenticated.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/NoStore"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                },
+                {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "enum": ["unauthorized", "provider_unauthenticated"]
+                        }
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            "example": {
+              "apiVersion": 1,
+              "error": {
+                "code": "unauthorized",
+                "retryable": false
+              }
+            }
+          }
+        }
+      },
+      "Forbidden": {
+        "description": "The local host, origin, marker or peer is invalid, or the provider refused this operation.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/NoStore"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                },
+                {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "enum": ["forbidden", "provider_forbidden"]
+                        }
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            "example": {
+              "apiVersion": 1,
+              "error": {
+                "code": "forbidden",
+                "retryable": false
+              }
+            }
+          }
+        }
+      },
+      "WriteForbidden": {
+        "description": "Local request failed origin checks, provider denied the write, or account writes are disabled.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/NoStore"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                },
+                {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "enum": ["forbidden", "provider_forbidden", "writes_disabled"]
+                        }
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            "example": {
+              "apiVersion": 1,
+              "error": {
+                "code": "writes_disabled",
+                "retryable": false
+              }
+            }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "The requested route, resource or journal receipt is unavailable to this account.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/NoStore"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                },
+                {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "const": "not_found"
+                        }
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            "example": {
+              "apiVersion": 1,
+              "error": {
+                "code": "not_found",
+                "retryable": false
+              }
+            }
+          }
+        }
+      },
+      "MethodNotAllowed": {
+        "description": "The request method is unsupported for this resource.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/NoStore"
+          },
+          "Allow": {
+            "schema": {
+              "type": "string"
+            }
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                },
+                {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "const": "method_not_allowed"
+                        }
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            "example": {
+              "apiVersion": 1,
+              "error": {
+                "code": "method_not_allowed",
+                "retryable": false
+              }
+            }
+          }
+        }
+      },
+      "Conflict": {
+        "description": "The provider reports a conflict.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/NoStore"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                },
+                {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "const": "conflict"
+                        }
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            "example": {
+              "apiVersion": 1,
+              "error": {
+                "code": "conflict",
+                "retryable": false
+              }
+            }
+          }
+        }
+      },
+      "WriteConflict": {
+        "description": "Request key conflict, stale trade status, or pending or unknown write outcome. Check the receipt before deciding what to do next.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/NoStore"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                },
+                {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "conflict",
+                            "wrong_trade_state",
+                            "operation_pending",
+                            "operation_unknown"
+                          ]
+                        }
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            "example": {
+              "apiVersion": 1,
+              "error": {
+                "code": "operation_unknown",
+                "retryable": false
+              }
+            }
+          }
+        }
+      },
+      "PayloadTooLarge": {
+        "description": "JSON body exceeds 8 KiB.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/NoStore"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                },
+                {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "const": "payload_too_large"
+                        }
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            "example": {
+              "apiVersion": 1,
+              "error": {
+                "code": "payload_too_large",
+                "retryable": false
+              }
+            }
+          }
+        }
+      },
+      "UnsupportedMediaType": {
+        "description": "Send uncompressed application/json, optionally with charset=utf-8.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/NoStore"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                },
+                {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "const": "unsupported_media_type"
+                        }
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            "example": {
+              "apiVersion": 1,
+              "error": {
+                "code": "unsupported_media_type",
+                "retryable": false
+              }
+            }
+          }
+        }
+      },
+      "ProviderRejected": {
+        "description": "The provider rejected the request.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/NoStore"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                },
+                {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "const": "provider_rejected"
+                        }
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            "example": {
+              "apiVersion": 1,
+              "error": {
+                "code": "provider_rejected",
+                "retryable": false
+              }
+            }
+          }
+        }
+      },
+      "RateLimited": {
+        "description": "The provider rate limit is active. Honor the supplied retry time.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/NoStore"
+          },
+          "Retry-After": {
+            "$ref": "#/components/headers/RetryAfter"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                },
+                {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "const": "rate_limited"
+                        }
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            "example": {
+              "apiVersion": 1,
+              "error": {
+                "code": "rate_limited",
+                "retryable": true,
+                "retryAfterSeconds": 60
+              }
+            }
+          }
+        }
+      },
+      "InvalidProviderResponse": {
+        "description": "The provider response failed validation or exceeded its response limit.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/NoStore"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                },
+                {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "const": "invalid_provider_response"
+                        }
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            "example": {
+              "apiVersion": 1,
+              "error": {
+                "code": "invalid_provider_response",
+                "retryable": false
+              }
+            }
+          }
+        }
+      },
+      "Unavailable": {
+        "description": "The provider or gateway is temporarily unavailable.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/NoStore"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                },
+                {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "const": "unavailable"
+                        }
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            "example": {
+              "apiVersion": 1,
+              "error": {
+                "code": "unavailable",
+                "retryable": true
+              }
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "Uuid": {
+        "type": "string",
+        "format": "uuid",
+        "pattern": "^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[1-5][0-9A-Fa-f]{3}-[89ABab][0-9A-Fa-f]{3}-[0-9A-Fa-f]{12}$"
+      },
+      "Intent": {
+        "type": "string",
+        "enum": ["buy", "sell"]
+      },
+      "Country": {
+        "type": "string",
+        "pattern": "^[A-Z]{2}$"
+      },
+      "Username": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9_.@+-]{1,150}$"
+      },
+      "InputText": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 1000,
+        "pattern": "\\S",
+        "description": "Nonblank text up to 1,000 UTF-16 code units. The gateway normalizes line endings and rejects unsafe control and directional characters."
+      },
+      "NullableTimestamp": {
+        "type": ["integer", "null"],
+        "minimum": 0,
+        "maximum": 2147483647000,
+        "description": "Unix milliseconds. A null value means the provider supplied no timestamp."
+      },
+      "Status": {
+        "type": "string",
+        "enum": [
+          "CREATED",
+          "ACCEPTED",
+          "REJECTED",
+          "WAITING_FOR_ESCROW",
+          "BROADCASTING_ESCROW",
+          "BROADCASTING_ESCROW_FAILED",
+          "WAITING_FOR_MIN_ESCROW_CONFIRMS",
+          "CRYPTO_ESC",
+          "CRYPTO_ESC_FAILED",
+          "FUND_PAID",
+          "FUND_RECEIVED",
+          "COMPLETED",
+          "EXPIRED",
+          "DISPUTED",
+          "WAITING_FOR_DISPUTE_CONFIRMS",
+          "DISPUTE_RESOLVE_BUYER",
+          "DISPUTE_RESOLVE_SELLER",
+          "CANCELLATION_REQUESTED",
+          "CANCELLED",
+          "CANCELLED_AFTER_ESCROW",
+          "CANCELLATION_REJECTED",
+          "BROADCASTING_RELEASE",
+          "BROADCASTING_RELEASE_FAILED",
+          "WAITING_FOR_CRYPTO_RELEASE_CONFIRMS",
+          "CRYPTO_REL",
+          "CRYPTO_REL_FAILED",
+          "WAITING_FOR_MIN_APPROVE_CONFIRMS",
+          "TRANSFER_APPROVED",
+          "WAITING_FOR_TRANSFER_APPROVE"
+        ]
+      },
+      "Capabilities": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["mode", "authenticated", "tradeActions", "btcExecution"],
+        "properties": {
+          "mode": {
+            "type": "string",
+            "enum": ["fixture", "public", "account"]
+          },
+          "authenticated": {
+            "type": "boolean"
+          },
+          "tradeActions": {
+            "type": "boolean"
+          },
+          "btcExecution": {
+            "const": false,
+            "description": "Native bitcoin escrow execution is unavailable in this development gateway."
+          }
+        }
+      },
+      "Offer": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "intent",
+          "country",
+          "currency",
+          "paymentMethod",
+          "pricePerBtcCents",
+          "exactPricePerBtc",
+          "minFiatCents",
+          "maxFiatCents",
+          "maker",
+          "terms",
+          "active",
+          "observedAtMs"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "intent": {
+            "$ref": "#/components/schemas/Intent"
+          },
+          "country": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Country"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "currency": {
+            "const": "EUR"
+          },
+          "paymentMethod": {
+            "const": "sepa_instant"
+          },
+          "pricePerBtcCents": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "exactPricePerBtc": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["units", "scale"],
+            "properties": {
+              "units": {
+                "type": "string",
+                "pattern": "^[1-9][0-9]{0,35}$"
+              },
+              "scale": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 18
+              }
+            },
+            "description": "Exact EUR/BTC price equals units divided by 10 to the power of scale."
+          },
+          "minFiatCents": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "maxFiatCents": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "maker": {
+            "$ref": "#/components/schemas/Username"
+          },
+          "terms": {
+            "type": ["string", "null"],
+            "maxLength": 16000
+          },
+          "active": {
+            "type": "boolean"
+          },
+          "observedAtMs": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        }
+      },
+      "Trade": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "status",
+          "buyer",
+          "seller",
+          "fiatCents",
+          "bitcoinSats",
+          "createdAtMs",
+          "expiresAtMs"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "status": {
+            "$ref": "#/components/schemas/Status"
+          },
+          "buyer": {
+            "$ref": "#/components/schemas/Username"
+          },
+          "seller": {
+            "$ref": "#/components/schemas/Username"
+          },
+          "fiatCents": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "bitcoinSats": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "createdAtMs": {
+            "$ref": "#/components/schemas/NullableTimestamp"
+          },
+          "expiresAtMs": {
+            "$ref": "#/components/schemas/NullableTimestamp"
+          }
+        }
+      },
+      "TradeStatus": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "status"],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "status": {
+            "$ref": "#/components/schemas/Status"
+          }
+        }
+      },
+      "Message": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "sender", "content", "createdAtMs", "hasAttachment"],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "sender": {
+            "$ref": "#/components/schemas/Username"
+          },
+          "content": {
+            "type": ["string", "null"],
+            "maxLength": 1000
+          },
+          "createdAtMs": {
+            "$ref": "#/components/schemas/NullableTimestamp"
+          },
+          "hasAttachment": {
+            "type": "boolean"
+          }
+        }
+      },
+      "OfferPage": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["items", "nextOffset", "total"],
+        "properties": {
+          "items": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "$ref": "#/components/schemas/Offer"
+            }
+          },
+          "nextOffset": {
+            "type": ["integer", "null"],
+            "minimum": 0,
+            "maximum": 10000
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        }
+      },
+      "TradePage": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["items", "nextOffset", "total"],
+        "properties": {
+          "items": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "$ref": "#/components/schemas/Trade"
+            }
+          },
+          "nextOffset": {
+            "type": ["integer", "null"],
+            "minimum": 0,
+            "maximum": 10000
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        }
+      },
+      "BtcTransactionType": {
+        "type": "string",
+        "enum": ["DEPOSIT", "WITHDRAW", "ESCROW", "ESCROW_RELEASE", "ESCROW_REFUND", "ESCROW_FEE"]
+      },
+      "BtcTransaction": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "txid", "type", "sats", "confirmed", "firstSeenAtMs", "confirmedAtMs"],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991,
+            "description": "Provider row ID."
+          },
+          "txid": {
+            "type": ["string", "null"],
+            "pattern": "^[0-9a-f]{64}$",
+            "description": "Lowercase Bitcoin transaction ID when available."
+          },
+          "type": {
+            "$ref": "#/components/schemas/BtcTransactionType"
+          },
+          "sats": {
+            "type": ["integer", "null"],
+            "minimum": -2100000000000000,
+            "maximum": 2100000000000000,
+            "description": "Signed provider amount in satoshis when available."
+          },
+          "confirmed": {
+            "type": ["boolean", "null"],
+            "description": "Provider confirmation state when available."
+          },
+          "firstSeenAtMs": {
+            "$ref": "#/components/schemas/NullableTimestamp"
+          },
+          "confirmedAtMs": {
+            "$ref": "#/components/schemas/NullableTimestamp"
+          }
+        }
+      },
+      "BtcTransactionPage": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["items", "nextOffset", "total"],
+        "properties": {
+          "items": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "$ref": "#/components/schemas/BtcTransaction"
+            }
+          },
+          "nextOffset": {
+            "type": ["integer", "null"],
+            "minimum": 0,
+            "maximum": 10000
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        }
+      },
+      "MessagePage": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["items", "nextOffset", "total"],
+        "properties": {
+          "items": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "$ref": "#/components/schemas/Message"
+            }
+          },
+          "nextOffset": {
+            "type": ["integer", "null"],
+            "minimum": 0,
+            "maximum": 10000
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        }
+      },
+      "LatestMessagePage": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["items", "nextOffset", "total", "offset"],
+        "properties": {
+          "items": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "$ref": "#/components/schemas/Message"
+            }
+          },
+          "nextOffset": {
+            "const": null
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10000,
+            "description": "Starting index in the message list."
+          }
+        }
+      },
+      "SendMessage": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["content"],
+        "properties": {
+          "content": {
+            "$ref": "#/components/schemas/InputText"
+          }
+        }
+      },
+      "TradeAction": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["action", "expectedStatus"],
+            "properties": {
+              "action": {
+                "const": "mark_paid"
+              },
+              "expectedStatus": {
+                "const": "CRYPTO_ESC"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["action", "expectedStatus", "description"],
+            "properties": {
+              "action": {
+                "const": "open_dispute"
+              },
+              "expectedStatus": {
+                "type": "string",
+                "enum": ["CRYPTO_ESC", "FUND_PAID"]
+              },
+              "description": {
+                "$ref": "#/components/schemas/InputText"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["action", "expectedStatus"],
+            "properties": {
+              "action": {
+                "const": "withdraw_dispute"
+              },
+              "expectedStatus": {
+                "const": "DISPUTED"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["action", "expectedStatus"],
+            "properties": {
+              "action": {
+                "const": "cancel_unfunded"
+              },
+              "expectedStatus": {
+                "const": "CREATED"
+              }
+            }
+          }
+        ]
+      },
+      "Operation": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["status"],
+            "properties": {
+              "status": {
+                "const": "pending"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["status", "data"],
+            "properties": {
+              "status": {
+                "const": "succeeded"
+              },
+              "data": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/Trade"
+                  },
+                  {
+                    "$ref": "#/components/schemas/TradeStatus"
+                  },
+                  {
+                    "$ref": "#/components/schemas/Message"
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["status", "error"],
+            "properties": {
+              "status": {
+                "const": "rejected"
+              },
+              "error": {
+                "$ref": "#/components/schemas/ErrorBody"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["status"],
+            "properties": {
+              "status": {
+                "const": "unknown"
+              },
+              "error": {
+                "$ref": "#/components/schemas/ErrorBody"
+              }
+            }
+          }
+        ]
+      },
+      "ErrorBody": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["code", "retryable"],
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "invalid_request",
+              "unauthorized",
+              "provider_unauthenticated",
+              "forbidden",
+              "provider_forbidden",
+              "writes_disabled",
+              "not_found",
+              "method_not_allowed",
+              "conflict",
+              "wrong_trade_state",
+              "operation_pending",
+              "operation_unknown",
+              "payload_too_large",
+              "unsupported_media_type",
+              "provider_rejected",
+              "rate_limited",
+              "invalid_provider_response",
+              "unavailable"
+            ]
+          },
+          "retryable": {
+            "type": "boolean",
+            "description": "Retry guidance for a read or a known rejected request. Reconcile uncertain writes by request UUID."
+          },
+          "retryAfterSeconds": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 86400
+          }
+        }
+      },
+      "ErrorEnvelope": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["apiVersion", "error"],
+        "properties": {
+          "apiVersion": {
+            "const": 1
+          },
+          "error": {
+            "$ref": "#/components/schemas/ErrorBody"
+          }
+        }
+      }
+    }
+  },
+  "x-unsupported-method-response": {
+    "$ref": "#/components/responses/MethodNotAllowed"
+  }
+}

@@ -22,7 +22,21 @@ describe('market-data privacy boundary', () => {
 
     expect(runtimeSources).not.toMatch(/market_(ticker|history|stats)/);
     expect(runtimeSources).not.toContain('sats-signal');
-    expect(runtimeSources).not.toContain('/market');
+    // ADR 0111 permits an optional /marketplace preview, not the removed /market ticker.
+    expect(runtimeSources).not.toMatch(/['"]\/market(?:['"/?#])/);
     expect(runtimeSources).not.toContain('$lib/market');
+  });
+
+  it('keeps the optional marketplace preview free of provider or price requests', () => {
+    const previewSources = [
+      source('src/routes/marketplace/+page.svelte'),
+      source('src/lib/marketplace/index.ts'),
+      source('src/lib/marketplace/rehearsal.ts'),
+      source('packages/marketplace/core.ts'),
+      source('packages/marketplace/hodlhodl.ts'),
+      source('packages/marketplace/localcoinswap.ts')
+    ].join('\n');
+    expect(previewSources).not.toMatch(/\bfetch\s*\(|XMLHttpRequest|WebSocket|EventSource/);
+    expect(previewSources).not.toMatch(/localStorage|sessionStorage|@tauri-apps|walletService\./);
   });
 });

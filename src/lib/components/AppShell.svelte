@@ -1,7 +1,15 @@
 <script lang="ts">
   import { translate, localizedError } from '$lib/i18n-catalog';
   import { page } from '$app/state';
-  import { Activity, CircleDot, LayoutGrid, Plus, Settings, ShieldCheck } from '@lucide/svelte';
+  import {
+    Activity,
+    ArrowDownToLine,
+    CircleDot,
+    LayoutGrid,
+    Plus,
+    Settings,
+    ShieldCheck
+  } from '@lucide/svelte';
   import BrandLockup from './BrandLockup.svelte';
   import BuildIdentity from './BuildIdentity.svelte';
   import DiscardMultisigSetupModal from './DiscardMultisigSetupModal.svelte';
@@ -34,6 +42,13 @@
     updateErrorCopy
   } from '$lib/app-updates';
   import type { UpdateOffer, PreparedUpdate } from '$lib/wallet/contracts';
+  const marketplaceDiscoveryRoute = $derived(page.url.pathname === '/marketplace/discover');
+  const marketplaceProviderRoute = $derived(
+    __GROOT_LOCALCOINSWAP__ && /^\/marketplace\/provider\/?$/.test(page.url.pathname)
+  );
+  const marketplaceTradeRoute = $derived(
+    __GROOT_MARKETPLACE_BACKEND__ && /^\/marketplace\/backend\/?$/.test(page.url.pathname)
+  );
   let notesPending = $state(false);
   let notesOpen = $state(false);
   let updatesOpen = $state(false);
@@ -978,7 +993,7 @@
   class:native-mobile={mobileRuntime}
   class:wallet-unlocked={selectedWalletUnlocked}
   class:mobile-navigation-visible={!restrictedUtilityRoute && !onboardingRoute && !mobileSetupRoute}
-  class:prototype-shell={isPrototypeWallet}
+  class:prototype-shell={isPrototypeWallet && !marketplaceProviderRoute}
   class:locked-setup-visible={showSetupResume && lockedRoute}
   class:navigation-pending={navigationPending}
 >
@@ -1023,6 +1038,18 @@
               ><item.icon size={17} /><span>{t(item.label, $locale)}</span></a
             >
           {/each}
+          {#if isPrototypeWallet}
+            <a
+              href={__GROOT_LOCALCOINSWAP__
+                ? '/marketplace/provider'
+                : __GROOT_MARKETPLACE_BACKEND__
+                  ? '/marketplace/backend'
+                  : '/marketplace'}
+              class:active={active('/marketplace')}
+              aria-current={active('/marketplace') ? 'page' : undefined}
+              ><ArrowDownToLine size={17} /><span>{translate($locale, 'Trade bitcoin')}</span></a
+            >
+          {/if}
         </nav>
       {/if}
       <div class="sidebar-bottom">
@@ -1061,9 +1088,17 @@
     >
 
     <main class="main" bind:this={mainElement}>
-      {#if isPrototypeWallet}<div class="demo-banner" role="status">
+      {#if isPrototypeWallet && !marketplaceTradeRoute && !marketplaceProviderRoute}<div
+          class="demo-banner"
+          role="status"
+        >
           <strong>{translate($locale, 'Interactive prototype')}</strong><span
-            >{translate($locale, 'Dummy data only · Never use real funds or recovery words')}</span
+            >{translate(
+              $locale,
+              marketplaceDiscoveryRoute
+                ? 'Wallet demo · Never use real funds or recovery words'
+                : 'Dummy data only · Never use real funds or recovery words'
+            )}</span
           >
         </div>{/if}
       {#if showSetupResume && multisigSetupDraft}
@@ -1147,7 +1182,8 @@
       }}
       onconfirm={discardSetupDraft}
     />
-    {#if (!initialApprovalWalletId || walletLocked) && !notesOpen && !updatesOpen}<ToastHost />{/if}
+    {#if (!initialApprovalWalletId || walletLocked) && !notesOpen && !updatesOpen && !marketplaceTradeRoute}<ToastHost
+      />{/if}
   {/if}
 </div>
 

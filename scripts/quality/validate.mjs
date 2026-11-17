@@ -9,6 +9,8 @@ const independentChecks = [
   'format:check',
   'test:ci-harness',
   'test:boundaries',
+  'test:marketplace-transport',
+  'test:marketplace-provider',
   'test:release-gate',
   'test:agent-scaffolding',
   'test:ci-workflows',

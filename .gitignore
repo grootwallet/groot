@@ -28,3 +28,9 @@ __pycache__/
 *.py[cod]
 test-results/
 playwright-report/
+outputs/marketplace/
+outputs/marketplace-discovery/
+outputs/marketplace-rehearsal/
+outputs/marketplace-readiness/
+outputs/marketplace-focus-visibility/
+/outputs/marketplace-backend/

@@ -33,6 +33,7 @@ export function toast(input: Omit<Toast, 'id'>) {
     () => toasts.update((items) => items.filter((item) => item.id !== id)),
     input.action ? 8_000 : 4_200
   );
+  return id;
 }
 
 export function dismissToast(id: number) {

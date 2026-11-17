@@ -90,7 +90,17 @@
     "validate:internal": "node scripts/quality/validate.mjs --internal",
     "test:release-gate:internal": "node scripts/release/internal-release-gate.mjs",
     "test:ci-workflows": "node --test scripts/quality/ci-workflows.test.mjs",
-    "test:ci-harness": "node --test scripts/quality/validate.test.mjs scripts/quality/rust-coverage-harness.test.mjs scripts/release/internal-release-gate.test.mjs scripts/release/internal-candidate-source.test.mjs"
+    "test:ci-harness": "node --test scripts/quality/validate.test.mjs scripts/quality/rust-coverage-harness.test.mjs scripts/release/internal-release-gate.test.mjs scripts/release/internal-candidate-source.test.mjs",
+    "dev:marketplace-backend": "node scripts/marketplace/dev-backend.mjs",
+    "dev:marketplace-provider": "GROOT_LOCALCOINSWAP_MODE=${GROOT_LOCALCOINSWAP_MODE:-fixture} vite --mode regtest",
+    "dev:marketplace-account-check": "bash scripts/dev/marketplace-account-check.sh",
+    "test:marketplace-provider": "node --test scripts/marketplace/localcoinswap-*.test.mjs",
+    "test:marketplace-backend": "node scripts/marketplace/verify-backend.mjs",
+    "package:marketplace-sandbox": "node scripts/marketplace/package-sandbox.mjs",
+    "test:marketplace-deployment": "node scripts/marketplace/verify-deployment.mjs",
+    "dev:marketplace": "GROOT_MARKETPLACE_DISCOVERY=0 vite --mode regtest --host 127.0.0.1 --port 5196",
+    "test:marketplace-transport": "node --test scripts/marketplace/discovery-server.test.mjs",
+    "verify:marketplace": "node scripts/marketplace/verify-readiness.mjs"
   },
   "devDependencies": {
     "@playwright/test": "1.62.1",

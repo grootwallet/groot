@@ -1,0 +1,87 @@
+services:
+  edge:
+    labels: { com.groot.marketplace.scope: private-sandbox-v1 }
+    image: groot-marketplace-sandbox-edge:2.11.4-capless-v1
+    build:
+      context: .
+      dockerfile: Dockerfile.edge
+      network: none
+    user: '1000:1000'
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ['no-new-privileges:true']
+    pids_limit: 64
+    mem_limit: 128m
+    restart: unless-stopped
+    command: ['caddy', 'run', '--config', '/etc/caddy/Caddyfile', '--adapter', 'caddyfile']
+    environment:
+      GROOT_SANDBOX_AUTHORITY: '${GROOT_SANDBOX_AUTHORITY:?Use operations/control.mjs}'
+      GROOT_SANDBOX_ACCESS_HASH: '${GROOT_SANDBOX_ACCESS_HASH:?An access password hash is required}'
+      XDG_CONFIG_HOME: /tmp/config
+      XDG_DATA_HOME: /tmp/data
+    ports:
+      - '${GROOT_SANDBOX_BIND:-127.0.0.1}:${GROOT_SANDBOX_PORT:-5298}:8443'
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./site:/srv/site:ro
+      - '${GROOT_SANDBOX_TLS_DIR:?A certificate directory is required}:/certs:ro'
+    tmpfs:
+      - /tmp:uid=1000,gid=1000,mode=0700
+    networks: [ingress, isolated]
+
+  backend:
+    labels: { com.groot.marketplace.scope: private-sandbox-v1 }
+    image: node:24.19.0-bookworm-slim@sha256:a9f5f7c91a432850b2a8a7797adf5eadb6c733ceed61167806cee7ea7fbc29df
+    user: '1000:1000'
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ['no-new-privileges:true']
+    pids_limit: 64
+    mem_limit: 512m
+    restart: unless-stopped
+    networks: [isolated]
+    depends_on: [edge]
+    working_dir: /app
+    command: ['node', 'src/main.mjs']
+    environment:
+      GROOT_MARKETPLACE_MODE: sandbox
+      GROOT_MARKETPLACE_HOST: 0.0.0.0
+      GROOT_MARKETPLACE_PORT: '5200'
+      GROOT_MARKETPLACE_ORIGIN: '${GROOT_SANDBOX_ORIGIN:?An exact HTTPS origin is required}'
+      GROOT_MARKETPLACE_DATABASE: /state/marketplace-v1.sqlite
+      GROOT_MARKETPLACE_SECURE_COOKIES: '1'
+    volumes:
+      - ./backend:/app:ro
+      - state:/state
+    tmpfs:
+      - /tmp:uid=1000,gid=1000,mode=0700
+    stop_grace_period: 15s
+
+  initialize-state:
+    labels: { com.groot.marketplace.scope: private-sandbox-v1 }
+    image: node:24.19.0-bookworm-slim@sha256:a9f5f7c91a432850b2a8a7797adf5eadb6c733ceed61167806cee7ea7fbc29df
+    profiles: [tools]
+    network_mode: none
+    read_only: true
+    cap_drop: [ALL]
+    cap_add: [CHOWN, FOWNER, DAC_OVERRIDE]
+    security_opt: ['no-new-privileges:true']
+    pids_limit: 16
+    mem_limit: 64m
+    command:
+      - node
+      - -e
+      - "const f=require('node:fs'); f.chownSync('/state',1000,1000); f.chmodSync('/state',0o700)"
+    volumes:
+      - state:/state
+
+volumes:
+  state:
+    labels: { com.groot.marketplace.scope: private-sandbox-v1 }
+
+networks:
+  ingress:
+    labels: { com.groot.marketplace.scope: private-sandbox-v1 }
+  isolated:
+    internal: true
+    labels: { com.groot.marketplace.scope: private-sandbox-v1 }

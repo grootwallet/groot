@@ -12,6 +12,7 @@
     HeartPulse,
     History,
     KeyRound,
+    Landmark,
     Keyboard,
     LockKeyhole,
     Moon,
@@ -1910,6 +1911,22 @@
         </div>{/if}
     </div>
   </section>
+  {#if isPrototypeWallet}
+    <section class="settings-group">
+      <h2>{translate($locale, 'Optional add-on')}</h2>
+      <div class="settings-list">
+        <a class="setting-row" href="/marketplace">
+          <span class="setting-icon"><Landmark size={18} /></span>
+          <span
+            ><strong>{translate($locale, 'Trade bitcoin')}</strong><small
+              >{translate($locale, 'Open marketplace preview')}</small
+            ></span
+          >
+          <ChevronRight size={16} />
+        </a>
+      </div>
+    </section>
+  {/if}
   <section class="settings-group">
     <h2>{translate($locale, 'App logs')}</h2>
     <div class="settings-list">

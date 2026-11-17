@@ -13,6 +13,7 @@
     children?: Snippet;
     class?: string;
     ariaLabel?: string;
+    ariaPressed?: boolean;
   };
 
   let {
@@ -26,7 +27,8 @@
     onclick = undefined,
     children,
     class: className = '',
-    ariaLabel = undefined
+    ariaLabel = undefined,
+    ariaPressed = undefined
   }: Props = $props();
   let unavailable = $derived(disabled || loading);
 
@@ -57,6 +59,7 @@
     {type}
     disabled={unavailable}
     aria-label={ariaLabel}
+    aria-pressed={ariaPressed}
     aria-busy={loading}
     {onclick}
     class="button {variant} {size === 'default' ? '' : size} {className}"

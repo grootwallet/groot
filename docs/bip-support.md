@@ -70,3 +70,21 @@ The current presentation/ownership cleanup has no BIP, derivation, PSBT encoding
 Phone pairing resume uses the existing encrypted staging file and BIP129 records. Background lock and restart change how the pending key is reached. Refusing to replace a staged key and checking the displayed session before accepting its final QR change no BIP support, derivation, QR encoding, stored format or signer compatibility.
 
 The mobile wallet presentation changes no BIP support, spend eligibility, descriptor values, backup proof or persistence. The Send shortcut reads the current committed snapshot. Transaction review and signing still use the native authority.
+
+The optional marketplace design preview and local public-listing research (ADRs 0111–0113) have **no BIP impact**: arithmetic/state, public-offer normalization and bounded development HTTP transport add no derivation, descriptor, transaction, PSBT or wallet-data behavior. No escrow interoperability, key protocol or Mainnet trading support is claimed.
+
+ADR 0114's separate persistent sandbox API and opt-in SvelteKit screen have **no BIP impact**. They handle synthetic integer-cent/satoshi quotes and independent marketplace account/trade records, never derivation, keys, addresses, descriptors, PSBTs, Bitcoin network traffic or wallet persisted formats. Simulated escrow is not interoperable Bitcoin escrow support and does not authorize Mainnet trading.
+
+ADR 0115's isolated production-assets test distribution, TLS/container deployment and service backup/restore tooling also have **no BIP impact**. Existing wallet formats and the service v1 schema remain unchanged. Restored trading accounts require fresh login; no wallet credential, key or escrow recovery material is involved.
+
+The marketplace workspace snapshot, staged quote/receipt UX, incident-stop and proxy-log privacy refinements have **no BIP impact**. They change no wallet/profile/backup/proposal/registry format, key derivation, descriptor, transaction, PSBT, native signing or escrow protocol. The separate sandbox service keeps its existing SQLite v1 format.
+
+ADR 0116’s guided sandbox has **no BIP impact**: it groups explicitly requested synthetic events and changes presentation without touching derivation, signing, transaction formats, onchain protocol support or persisted wallet formats.
+
+ADR 0119 adds a sandbox-only BIP21-shaped Regtest fixture for QR and clipboard rehearsal. There is no change to supported wallet payment requests, destination validation, persisted wallet formats, signing, network access or broadcast.
+
+[ADR 0121](adr/0121-isolate-the-localcoinswap-account-gateway.md) has **no BIP impact**. The LocalCoinSwap gateway handles off-chain offer, trade, chat and dispute metadata with integer satoshi and fiat fields. Its independent receipt journal changes no wallet format. The preview has no keys, addresses, Bitcoin transaction construction, PSBT, signing, broadcast or escrow authority.
+
+Latest-message paging, cancelling an unaccepted request and opening a dispute after escrow funding are off-chain gateway operations with **no BIP impact**. The upstream Bitcoin contract describes external behavior. Groot's native capabilities and wallet formats remain unchanged.
+
+The provider account's read-only bitcoin transaction history and **Trading terms** disclosure have **no BIP impact**. The history displays provider-reported transaction IDs, amounts, dates and confirmation status as metadata.
