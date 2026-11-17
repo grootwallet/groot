@@ -217,6 +217,8 @@ jobs:
     timeout-minutes: 90
     env:
       CARGO_LLVM_COV_TARGET_DIR: ${{ github.workspace }}/src-tauri/target/coverage
+      # Leave CPU for the parallel funded fixtures. Those binaries use one thread.
+      RUST_TEST_THREADS: '2'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
