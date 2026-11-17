@@ -24,6 +24,12 @@ async function expectAmountUnitsSeparated(scope: Locator) {
 }
 
 async function expectModalContained(page: Page, dialog: Locator) {
+  await dialog.evaluate(async (element) => {
+    const animations = element
+      .getAnimations()
+      .filter((animation) => Number.isFinite(animation.effect?.getComputedTiming().endTime));
+    await Promise.all(animations.map((animation) => animation.finished));
+  });
   const bounds = await dialog.boundingBox();
   const layerBounds = await dialog.locator('xpath=..').boundingBox();
   const viewport = await page.evaluate(() => ({ width: innerWidth, height: innerHeight }));

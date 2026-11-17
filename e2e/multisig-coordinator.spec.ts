@@ -652,7 +652,7 @@ test('spends end-to-end from the ready-made demo wallet', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Family wallet' })).toBeVisible();
   await expect(page.locator('.vault-policy-tags .policy-pill')).toHaveText('2 of 3 keys');
   await expect(page.getByText('Ready-to-test demo wallet')).toHaveCount(0);
-  const walletBalance = page.locator('.vault-balance');
+  const walletBalance = page.locator('.desktop-policy-balance');
   if ((page.viewportSize()?.width ?? 1180) <= 760) {
     await expect(walletBalance).toBeHidden();
   } else {
@@ -924,7 +924,7 @@ test('requires explicit confirmation before discarding a multisig proposal', asy
   await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible();
   await page.goto('/multisig');
   await expect(page.getByRole('heading', { name: 'Family wallet' })).toBeVisible();
-  const walletBalance = page.locator('.vault-balance');
+  const walletBalance = page.locator('.desktop-policy-balance');
   if ((page.viewportSize()?.width ?? 1180) <= 760) {
     await expect(walletBalance).toBeHidden();
   } else {
