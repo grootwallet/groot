@@ -158,13 +158,14 @@ test('browser projects keep their complete case inventory and independent failur
   const browser = ci.jobs.browser;
   assert.equal(browser.strategy['fail-fast'], false);
   const matrix = browser.strategy.matrix.include;
-  assert.equal(assertBrowserShardPlan(matrix), 5);
+  assert.equal(assertBrowserShardPlan(matrix), 6);
   assert.deepEqual(matrix, [
     { project: 'desktop', browser: 'chromium', shard: 1, shards: 2 },
     { project: 'desktop', browser: 'chromium', shard: 2, shards: 2 },
-    { project: 'mobile', browser: 'webkit', shard: 1, shards: 3 },
-    { project: 'mobile', browser: 'webkit', shard: 2, shards: 3 },
-    { project: 'mobile', browser: 'webkit', shard: 3, shards: 3 }
+    { project: 'mobile', browser: 'webkit', shard: 1, shards: 4 },
+    { project: 'mobile', browser: 'webkit', shard: 2, shards: 4 },
+    { project: 'mobile', browser: 'webkit', shard: 3, shards: 4 },
+    { project: 'mobile', browser: 'webkit', shard: 4, shards: 4 }
   ]);
   const commands = runs(browser);
   const sync = 'pnpm exec svelte-kit sync';
@@ -211,9 +212,10 @@ test('browser shard validation rejects missing, overlapping and unexpected inven
   const validMatrix = [
     { project: 'desktop', browser: 'chromium', shard: 1, shards: 2 },
     { project: 'desktop', browser: 'chromium', shard: 2, shards: 2 },
-    { project: 'mobile', browser: 'webkit', shard: 1, shards: 3 },
-    { project: 'mobile', browser: 'webkit', shard: 2, shards: 3 },
-    { project: 'mobile', browser: 'webkit', shard: 3, shards: 3 }
+    { project: 'mobile', browser: 'webkit', shard: 1, shards: 4 },
+    { project: 'mobile', browser: 'webkit', shard: 2, shards: 4 },
+    { project: 'mobile', browser: 'webkit', shard: 3, shards: 4 },
+    { project: 'mobile', browser: 'webkit', shard: 4, shards: 4 }
   ];
   assert.throws(() => assertBrowserShardPlan(validMatrix.slice(1)), /missing/i);
   assert.throws(() => assertBrowserShardPlan([...validMatrix, validMatrix[0]]), /overlap/i);
@@ -275,12 +277,24 @@ test('CI uses one full frontend coverage pass and keeps native obligations', () 
   );
   assert.equal(rustSetup.id, 'toolchain');
   assert.ok(commands.includes('pnpm audit --prod --audit-level high'));
-  const native = runs(ci.jobs.rust).join('\n');
-  assert.match(native, /cargo fmt --check/);
-  assert.match(native, /cargo clippy --locked --all-targets --all-features -- -D warnings/);
-  assert.match(native, /cargo test --locked --all-targets --all-features/);
-  assert.match(native, /cargo test --locked --doc --all-features/);
-  assert.match(native, /cargo doc --locked --no-deps --all-features/);
+  const ordinaryRust = ci.jobs.rust;
+  assert.deepEqual(ordinaryRust.strategy, {
+    'fail-fast': false,
+    matrix: { lane: ['test', 'checks'] }
+  });
+  for (const [command, lane] of [
+    ['cargo fmt --check', 'checks'],
+    ['cargo clippy --locked --all-targets --all-features -- -D warnings', 'checks'],
+    ['cargo test --locked --all-targets --all-features', 'test'],
+    ['cargo test --locked --doc --all-features', 'test'],
+    ['cargo doc --locked --no-deps --all-features', 'checks'],
+    ['scripts/network/check-native-builds.sh', 'checks']
+  ]) {
+    const steps = ordinaryRust.steps.filter((step) => step.run?.includes(command));
+    assert.equal(steps.length, 1, command);
+    assert.equal(steps[0].if, `matrix.lane == '${lane}'`, command);
+  }
+  const native = runs(ordinaryRust).join('\n');
   const audit = ci.jobs['rust-audit'];
   assert.deepEqual(runs(audit), [
     'cargo install cargo-audit --locked --version 0.22.2',
@@ -289,12 +303,6 @@ test('CI uses one full frontend coverage pass and keeps native obligations', () 
   assert.equal(audit.defaults.run['working-directory'], 'src-tauri');
   assert.equal(audit.needs, undefined);
   assert.doesNotMatch(native, /cargo audit|cargo install cargo-audit/);
-  assert.ok(
-    native.indexOf('cargo test --locked --doc --all-features') <
-      native.indexOf('scripts/network/check-native-builds.sh')
-  );
-
-  assert.match(native, /scripts\/network\/check-native-builds\.sh/);
   assert.doesNotMatch(native, /cargo clean|scripts\/regtest\/test\.sh|check-rust-.*coverage\.sh/);
   const coverage = runs(ci.jobs['rust-coverage']).join('\n');
   assert.equal((coverage.match(/scripts\/quality\/check-rust-full-coverage\.sh/g) ?? []).length, 1);
@@ -321,6 +329,10 @@ test('ordinary and instrumented caches cannot include workspace or packaged app 
   });
   assert.equal(caches.length, 2);
   assert.notEqual(caches[0].with.key, caches[1].with.key);
+  assert.equal(
+    caches[0].with['save-if'],
+    "${{ github.ref == 'refs/heads/main' && matrix.lane == 'test' }}"
+  );
   assert.deepEqual(caches.map((step) => step.with.workspaces).sort(), [
     'src-tauri -> target/coverage',
     'src-tauri -> target/normal'

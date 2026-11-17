@@ -75,15 +75,19 @@ jobs:
           - project: mobile
             browser: webkit
             shard: 1
-            shards: 3
+            shards: 4
           - project: mobile
             browser: webkit
             shard: 2
-            shards: 3
+            shards: 4
           - project: mobile
             browser: webkit
             shard: 3
-            shards: 3
+            shards: 4
+          - project: mobile
+            browser: webkit
+            shard: 4
+            shards: 4
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -119,6 +123,10 @@ jobs:
   rust:
     runs-on: ubuntu-latest
     timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        lane: [test, checks]
     env:
       CARGO_TARGET_DIR: ${{ github.workspace }}/src-tauri/target/normal
     defaults:
@@ -150,19 +158,25 @@ jobs:
           workspaces: src-tauri -> target/normal
           key: ordinary-v2-audit-0.22.2
           cache-workspace-crates: false
-          save-if: ${{ github.ref == 'refs/heads/main' }}
+          save-if: ${{ github.ref == 'refs/heads/main' && matrix.lane == 'test' }}
       - run: cargo fmt --check
+        if: matrix.lane == 'checks'
       - run: cargo clippy --locked --all-targets --all-features -- -D warnings
+        if: matrix.lane == 'checks'
       - name: Rust unit and integration tests (pyramid base and middle)
+        if: matrix.lane == 'test'
         run: |
           set -o pipefail
           TIMEFORMAT='real %3R s; user %3U s; sys %3S s'
           { time cargo test --locked --all-targets --all-features; } 2>&1 | tee "$RUNNER_TEMP/rust-tests.log"
       - name: Execute Rust documentation examples
+        if: matrix.lane == 'test'
         run: cargo test --locked --doc --all-features
       - name: Build Rust API documentation with warnings denied
+        if: matrix.lane == 'checks'
         run: RUSTDOCFLAGS="-D warnings" cargo doc --locked --no-deps --all-features
       - name: Compile every permitted native network
+        if: matrix.lane == 'checks'
         run: bash ../scripts/network/check-native-builds.sh
       - name: Record ordinary Rust disk usage
         if: always()
@@ -176,10 +190,8 @@ jobs:
         if: always()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
-          name: native-validation-${{ github.sha }}
-          path: |
-            ${{ runner.temp }}/rust-tests.log
-            ${{ runner.temp }}/rust-disk.log
+          name: native-validation-${{ matrix.lane }}-${{ github.sha }}
+          path: ${{ runner.temp }}/rust-*.log
           if-no-files-found: warn
           retention-days: 14
 

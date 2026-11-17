@@ -1,6 +1,6 @@
 export const REQUIRED_BROWSER_SHARDS = Object.freeze({
   desktop: Object.freeze({ browser: 'chromium', shards: 2 }),
-  mobile: Object.freeze({ browser: 'webkit', shards: 3 })
+  mobile: Object.freeze({ browser: 'webkit', shards: 4 })
 });
 
 export function assertBrowserShardPlan(rows, expected = REQUIRED_BROWSER_SHARDS) {

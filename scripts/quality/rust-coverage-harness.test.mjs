@@ -96,7 +96,8 @@ elif [[ "$kind" == instrumented-library || "$kind" == instrumented-descriptor ]]
   [[ "$#" == 0 ]] && phase=units
 fi
 printf '%s\\0' "$kind" "$phase" "$CARGO_TARGET_DIR" "$CARGO_LLVM_COV_TARGET_DIR" \\
-  "$GROOT_REGTEST_DIR" "$GROOT_RUN_REGTEST" "$GROOT_COMPACT_FILTER_TEST_PEER" "$LLVM_PROFILE_FILE" "$#" "$@" >> "$GROOT_STUB_LOG"
+  "$GROOT_REGTEST_DIR" "$GROOT_RUN_REGTEST" "$GROOT_COMPACT_FILTER_TEST_PEER" \\
+  "$GROOT_RPC_PORT" "$GROOT_P2P_PORT" "$LLVM_PROFILE_FILE" "$#" "$@" >> "$GROOT_STUB_LOG"
 if [[ -n "$GROOT_STUB_FAIL" ]]; then
   [[ "$GROOT_STUB_FAIL" == "$phase" ]] && exit 17
   [[ "$GROOT_STUB_FAIL" == regtest_multisig && "$kind" == instrumented-descriptor ]] && exit 17
@@ -152,8 +153,20 @@ exit 0
   writeFileSync(
     join(repository, 'scripts', 'regtest', 'start.sh'),
     `#!/bin/bash
-start_regtest_node() { shift; /bin/bash ${quote(stub)} core-start "$@"; }
-stop_regtest_child() { /bin/bash ${quote(stub)} core-stop; }
+start_regtest_node() {
+  local lifecycle="$1"
+  shift
+  /bin/bash ${quote(stub)} core-start "$@" || return
+  if [[ "$lifecycle" == foreground && "$GROOT_REGTEST_DIR" != "\${GROOT_STUB_PREEXISTING_DIR:-}" ]]; then
+    REGTEST_OWNED_PID=123
+  fi
+}
+stop_regtest_child() {
+  if [[ -n "$REGTEST_OWNED_PID" ]]; then
+    /bin/bash ${quote(stub)} core-stop || return
+    REGTEST_OWNED_PID=""
+  fi
+}
 if [[ "$0" == */start.sh ]]; then start_regtest_node daemon "$@"; fi
 `
   );
@@ -164,8 +177,9 @@ if [[ "$0" == */start.sh ]]; then start_regtest_node daemon "$@"; fi
   return {
     directory,
     repository,
-    run(script = 'scripts/quality/check-rust-full-coverage.sh', env = {}) {
-      const result = spawnSync('/bin/bash', [join(repository, script)], {
+    tools,
+    run(script = 'scripts/quality/check-rust-full-coverage.sh', env = {}, args = []) {
+      const result = spawnSync('/bin/bash', [join(repository, script), ...args], {
         encoding: 'utf8',
         timeout: 15_000,
         env: {
@@ -182,8 +196,19 @@ if [[ "$0" == */start.sh ]]; then start_regtest_node daemon "$@"; fi
       const events = [];
       const fields = existsSync(log) ? readFileSync(log, 'utf8').split('\0') : [];
       while (fields.length > 1) {
-        const [kind, phase, target, coverage, regtest, runRegtest, compactPeer, profile, count] =
-          fields.splice(0, 9);
+        const [
+          kind,
+          phase,
+          target,
+          coverage,
+          regtest,
+          runRegtest,
+          compactPeer,
+          rpcPort,
+          p2pPort,
+          profile,
+          count
+        ] = fields.splice(0, 11);
         const args = fields.splice(0, Number(count));
         events.push({
           kind,
@@ -193,6 +218,8 @@ if [[ "$0" == */start.sh ]]; then start_regtest_node daemon "$@"; fi
           regtest,
           runRegtest,
           compactPeer,
+          rpcPort,
+          p2pPort,
           profile,
           args
         });
@@ -344,25 +371,54 @@ for (const phase of ['clean', 'instrument', 'build', 'units', 'core-report']) {
   );
 }
 
+const fullGateFailures = new Set([
+  libraryScenarios[0],
+  'regtest_multisig',
+  'funded_continuity_all_named_paths_renew_reorg_and_restore'
+]);
 for (const name of [...libraryScenarios, 'regtest_multisig']) {
-  testBash(`${name} failure cleans its fixture and withholds the final report`, () => {
-    withFixture(({ run }) => {
-      const { result, events } = run(undefined, { GROOT_STUB_FAIL: name });
-      assert.notEqual(result.status, 0, result.stderr);
-      assert.ok(events.every(({ phase }) => phase !== 'all-report'));
-      for (const { regtest } of events.filter(({ phase }) => phase === 'core-start')) {
-        assert.equal(existsSync(regtest), false);
-      }
-      const final = scenarios(events).at(-1);
-      assert.ok(final);
-      assert.equal(
-        name === 'regtest_multisig'
-          ? final.kind === 'instrumented-descriptor'
-          : final.args[0].endsWith(`::${name}`),
-        true
-      );
-    });
-  });
+  const fullGate = fullGateFailures.has(name);
+  testBash(
+    fullGate
+      ? `${name} failure cleans its fixture and withholds the final report`
+      : `${name} failure cleans its fixture and propagates its exit code`,
+    () => {
+      withFixture(({ run, directory, tools }) => {
+        // Test each group's effect on the final report once. Exercise other
+        // named failures directly without rerunning artificial build and report stages.
+        const group = name.startsWith('funded_continuity_') ? 'continuity' : 'primary';
+        const { result, events } = fullGate
+          ? run(undefined, { GROOT_STUB_FAIL: name })
+          : run(
+              'scripts/regtest/test.sh',
+              {
+                GROOT_STUB_FAIL: name,
+                GROOT_RUST_COVERAGE_LIB: join(tools, 'fake-lib-test'),
+                GROOT_RUST_COVERAGE_DESCRIPTOR: join(tools, 'fake-descriptor-test'),
+                LLVM_PROFILE_FILE: join(directory, 'direct-%p-%10m.profraw')
+              },
+              [group]
+            );
+        if (fullGate) {
+          assert.notEqual(result.status, 0, result.stderr);
+          assert.ok(events.every(({ phase }) => phase !== 'all-report'));
+        } else {
+          assert.equal(result.status, 17, result.stderr);
+        }
+        for (const { regtest } of events.filter(({ phase }) => phase === 'core-start')) {
+          assert.equal(existsSync(regtest), false);
+        }
+        const final = scenarios(events).at(-1);
+        assert.ok(final);
+        assert.equal(
+          name === 'regtest_multisig'
+            ? final.kind === 'instrumented-descriptor'
+            : final.args[0].endsWith(`::${name}`),
+          true
+        );
+      });
+    }
+  );
 }
 
 for (const [fault, value] of [
@@ -387,6 +443,46 @@ testBash('whole-library threshold failure remains a failure after every Core sce
     assert.equal(events.at(-1).phase, 'all-report');
   });
 });
+
+testBash(
+  'an active caller-owned primary keeps its ports while disposable suites use fresh ports',
+  () => {
+    withFixture(({ run, directory, tools }) => {
+      const primary = join(directory, 'caller primary');
+      const allocator = join(directory, 'fake allocator');
+      mkdirSync(primary);
+      mkdirSync(allocator);
+      writeFileSync(join(allocator, 'python3'), '#!/bin/bash\nprintf "%s\\n" "20443 20444"\n', {
+        mode: 0o700
+      });
+      const { result, events } = run('scripts/regtest/test.sh', {
+        PATH: `${allocator}:${tools}:/usr/bin:/bin`,
+        GROOT_REGTEST_DIR: primary,
+        GROOT_STUB_PREEXISTING_DIR: primary,
+        GROOT_RUST_COVERAGE_LIB: join(tools, 'fake-lib-test'),
+        GROOT_RUST_COVERAGE_DESCRIPTOR: join(tools, 'fake-descriptor-test'),
+        LLVM_PROFILE_FILE: join(directory, 'caller-%p-%10m.profraw')
+      });
+      assert.equal(result.status, 0, result.stderr);
+      const starts = events.filter(({ phase }) => phase === 'core-start');
+      assert.equal(starts[0].regtest, primary);
+      assert.deepEqual(
+        starts.map(({ rpcPort, p2pPort }) => [rpcPort, p2pPort]),
+        [
+          ['18443', '18444'],
+          ['20443', '20444'],
+          ['20443', '20444']
+        ]
+      );
+      const stops = events.filter(({ phase }) => phase === 'core-stop');
+      assert.deepEqual(
+        stops.map(({ regtest }) => regtest),
+        starts.slice(1).map(({ regtest }) => regtest)
+      );
+      assert.equal(existsSync(primary), true);
+    });
+  }
+);
 
 testBash('a standalone core gate starts fresh and never calls Core', () => {
   withFixture(({ run }) => {

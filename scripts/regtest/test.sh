@@ -32,7 +32,8 @@ if [[ -z "${GROOT_REGTEST_DIR:-}" ]]; then
 fi
 PRIMARY_REGTEST_DIR="${GROOT_REGTEST_DIR}"
 
-if [[ -z "${GROOT_RPC_PORT:-}" || -z "${GROOT_P2P_PORT:-}" ]]; then
+allocate_missing_ports() {
+  if [[ -n "${GROOT_RPC_PORT:-}" && -n "${GROOT_P2P_PORT:-}" ]]; then return; fi
   command -v python3 >/dev/null 2>&1 || {
     echo "Missing required command: python3 (set GROOT_RPC_PORT and GROOT_P2P_PORT to bypass automatic port allocation)" >&2
     exit 1
@@ -46,7 +47,8 @@ print(*(item.getsockname()[1] for item in sockets))
 ')
   export GROOT_RPC_PORT="${GROOT_RPC_PORT:-${AVAILABLE_RPC_PORT}}"
   export GROOT_P2P_PORT="${GROOT_P2P_PORT:-${AVAILABLE_P2P_PORT}}"
-fi
+}
+allocate_missing_ports
 
 cleanup_owned_dir() {
   local directory="$1"
@@ -190,6 +192,12 @@ case "${suite}" in
   continuity) run_continuity ;;
   all)
     run_primary
+    if [[ -n "${coverage_lib}" && "${OWNS_REGTEST_DIR}" == 0 && -z "${REGTEST_OWNED_PID}" ]]; then
+      # The caller's already-running primary node keeps its data and ports.
+      # Assign a new pair for the remaining disposable fixtures.
+      unset GROOT_RPC_PORT GROOT_P2P_PORT
+      allocate_missing_ports
+    fi
     stop_fixture
     if [[ -z "${coverage_lib}" ]]; then
       # Release stale Groot artifacts before building the independent descriptor suite.
