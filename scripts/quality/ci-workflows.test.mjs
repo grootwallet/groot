@@ -4,7 +4,14 @@ import { mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 import { parseDocument } from 'yaml';
+import {
+  REQUIRED_BROWSER_SHARDS,
+  assertBrowserShardPlan,
+  assertCompleteShardInventory,
+  parsePlaywrightList
+} from './browser-shard-inventory.mjs';
 import {
   INTERNAL_ATTESTATION_POLICY,
   assertApprovedAttestationResults,
@@ -33,8 +40,22 @@ const aggregate = ci.jobs.frontend;
 const aggregateStep = aggregate.steps.find((step) => step.env?.CI_REQUIRED_RESULTS);
 const aggregateCode = aggregateStep.run.match(/<<'NODE'\n([\s\S]*?)\nNODE\s*$/)?.[1];
 assert.ok(aggregateCode, 'the required gate must have an executable result validator');
-const lanes = ['frontend-checks', 'browser', 'rust', 'rust-coverage'];
+const lanes = ['frontend-checks', 'browser', 'rust', 'rust-audit', 'rust-coverage'];
 const successful = () => Object.fromEntries(lanes.map((lane) => [lane, { result: 'success' }]));
+
+function listBrowserTests(project, shard) {
+  const args = ['exec', 'playwright', 'test', '--list', '--fully-parallel', `--project=${project}`];
+  if (shard) args.push(`--shard=${shard.shard}/${shard.shards}`);
+  const result = spawnSync(process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm', args, {
+    cwd: fileURLToPath(root),
+    encoding: 'utf8',
+    env: { ...process.env, FORCE_COLOR: '0' }
+  });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  const inventory = parsePlaywrightList(result.stdout, project);
+  assert.ok(inventory.length > 0, `${project} browser inventory must not be empty`);
+  return inventory;
+}
 
 function derLength(length) {
   if (length < 0x80) return Buffer.from([length]);
@@ -136,9 +157,15 @@ test('required acceptance gate rejects missing, unexpected and malformed results
 test('browser projects keep their complete case inventory and independent failure evidence', () => {
   const browser = ci.jobs.browser;
   assert.equal(browser.strategy['fail-fast'], false);
-  assert.deepEqual(browser.strategy.matrix.include, [
-    { project: 'desktop', browser: 'chromium' },
-    { project: 'mobile', browser: 'webkit' }
+  const matrix = browser.strategy.matrix.include;
+  assert.equal(assertBrowserShardPlan(matrix), 6);
+  assert.deepEqual(matrix, [
+    { project: 'desktop', browser: 'chromium', shard: 1, shards: 2 },
+    { project: 'desktop', browser: 'chromium', shard: 2, shards: 2 },
+    { project: 'mobile', browser: 'webkit', shard: 1, shards: 4 },
+    { project: 'mobile', browser: 'webkit', shard: 2, shards: 4 },
+    { project: 'mobile', browser: 'webkit', shard: 3, shards: 4 },
+    { project: 'mobile', browser: 'webkit', shard: 4, shards: 4 }
   ]);
   const commands = runs(browser);
   const sync = 'pnpm exec svelte-kit sync';
@@ -148,12 +175,80 @@ test('browser projects keep their complete case inventory and independent failur
   assert.ok(acceptance);
   assert.ok(commands.indexOf(sync) < commands.indexOf(acceptance));
   assert.match(acceptance, /--global-timeout=1500000(?:[;\s]|$)/);
-  assert.match(acceptance, /--project=\$\{\{ matrix\.project \}\} --workers=1(?:[;\s]|$)/);
-  assert.doesNotMatch(acceptance, /--(?:grep|shard|pass-with-no-tests|retries)(?:[=\s]|$)/);
+  assert.match(acceptance, /--fully-parallel(?:[;\s]|$)/);
+  assert.match(acceptance, /--project=\$\{\{ matrix\.project \}\}/);
+  assert.match(acceptance, /--shard=\$\{\{ matrix\.shard \}\}\/\$\{\{ matrix\.shards \}\}/);
+  assert.match(acceptance, /--workers=1(?:[;\s]|$)/);
+  assert.doesNotMatch(acceptance, /--(?:grep|pass-with-no-tests|retries)(?:[=\s]|$)/);
   const evidence = browser.steps.find((step) => step.uses?.startsWith('actions/upload-artifact@'));
   assert.equal(evidence.if, 'always()');
-  assert.match(evidence.with.name, /matrix\.project/);
+  assert.equal(
+    evidence.with.name,
+    'browser-${{ matrix.project }}-shard-${{ matrix.shard }}-of-${{ matrix.shards }}-${{ github.sha }}'
+  );
+  assert.match(evidence.with.path, /matrix\.project/);
+  assert.match(evidence.with.path, /matrix\.shard/);
+  assert.match(evidence.with.path, /matrix\.shards/);
   assert.match(evidence.with.path, /test-results\//);
+});
+
+test('browser shard lists cover each project exactly once', () => {
+  const matrix = ci.jobs.browser.strategy.matrix.include;
+  for (const project of Object.keys(REQUIRED_BROWSER_SHARDS)) {
+    const rows = matrix.filter((row) => row.project === project);
+    const fullInventory = listBrowserTests(project);
+    const shardInventories = rows.map((row) => ({
+      label: `${project}:${row.shard}/${row.shards}`,
+      tests: listBrowserTests(project, row)
+    }));
+    assert.equal(
+      assertCompleteShardInventory(fullInventory, shardInventories),
+      fullInventory.length
+    );
+  }
+});
+
+test('browser shard validation rejects missing, overlapping and unexpected inventories', () => {
+  const validMatrix = [
+    { project: 'desktop', browser: 'chromium', shard: 1, shards: 2 },
+    { project: 'desktop', browser: 'chromium', shard: 2, shards: 2 },
+    { project: 'mobile', browser: 'webkit', shard: 1, shards: 4 },
+    { project: 'mobile', browser: 'webkit', shard: 2, shards: 4 },
+    { project: 'mobile', browser: 'webkit', shard: 3, shards: 4 },
+    { project: 'mobile', browser: 'webkit', shard: 4, shards: 4 }
+  ];
+  assert.throws(() => assertBrowserShardPlan(validMatrix.slice(1)), /missing/i);
+  assert.throws(() => assertBrowserShardPlan([...validMatrix, validMatrix[0]]), /overlap/i);
+  assert.throws(
+    () =>
+      assertBrowserShardPlan([
+        ...validMatrix,
+        { project: 'tablet', browser: 'webkit', shard: 1, shards: 1 }
+      ]),
+    /unexpected/i
+  );
+
+  const full = ['case-a', 'case-b', 'case-c'];
+  assert.throws(
+    () => assertCompleteShardInventory(full, [{ label: '1/2', tests: ['case-a'] }]),
+    /missing/i
+  );
+  assert.throws(
+    () =>
+      assertCompleteShardInventory(full, [
+        { label: '1/2', tests: ['case-a', 'case-b'] },
+        { label: '2/2', tests: ['case-b', 'case-c'] }
+      ]),
+    /overlap/i
+  );
+  assert.throws(
+    () =>
+      assertCompleteShardInventory(full, [
+        { label: '1/2', tests: ['case-a', 'case-b'] },
+        { label: '2/2', tests: ['case-c', 'case-d'] }
+      ]),
+    /unexpected/i
+  );
 });
 
 test('CI uses one full frontend coverage pass and keeps native obligations', () => {
@@ -171,20 +266,43 @@ test('CI uses one full frontend coverage pass and keeps native obligations', () 
     0
   );
   assert.ok(commands.includes('pnpm test:sbom'));
-  assert.ok(commands.includes('pnpm audit --prod --audit-level high'));
-  const native = runs(ci.jobs.rust).join('\n');
-  assert.match(native, /cargo fmt --check/);
-  assert.match(native, /cargo clippy --locked --all-targets --all-features -- -D warnings/);
-  assert.match(native, /cargo test --locked --all-targets --all-features/);
-  assert.match(native, /cargo test --locked --doc --all-features/);
-  assert.match(native, /cargo doc --locked --no-deps --all-features/);
-  assert.match(native, /cargo audit --file Cargo\.lock/);
-  assert.ok(
-    native.indexOf('cargo test --locked --doc --all-features') <
-      native.indexOf('scripts/network/check-native-builds.sh')
+  const sbom = frontend.steps.find((step) => step.run === 'pnpm test:sbom');
+  assert.equal(
+    sbom.if,
+    "${{ !cancelled() && steps.dependencies.outcome == 'success' && steps.toolchain.outcome == 'success' }}"
   );
-
-  assert.match(native, /scripts\/network\/check-native-builds\.sh/);
+  assert.equal(
+    frontend.steps.find((step) => step.id === 'dependencies')?.run,
+    'pnpm install --frozen-lockfile'
+  );
+  assert.equal(rustSetup.id, 'toolchain');
+  assert.ok(commands.includes('pnpm audit --prod --audit-level high'));
+  const ordinaryRust = ci.jobs.rust;
+  assert.deepEqual(ordinaryRust.strategy, {
+    'fail-fast': false,
+    matrix: { lane: ['test', 'checks'] }
+  });
+  for (const [command, lane] of [
+    ['cargo fmt --check', 'checks'],
+    ['cargo clippy --locked --all-targets --all-features -- -D warnings', 'checks'],
+    ['cargo test --locked --all-targets --all-features', 'test'],
+    ['cargo test --locked --doc --all-features', 'test'],
+    ['cargo doc --locked --no-deps --all-features', 'checks'],
+    ['scripts/network/check-native-builds.sh', 'checks']
+  ]) {
+    const steps = ordinaryRust.steps.filter((step) => step.run?.includes(command));
+    assert.equal(steps.length, 1, command);
+    assert.equal(steps[0].if, `matrix.lane == '${lane}'`, command);
+  }
+  const native = runs(ordinaryRust).join('\n');
+  const audit = ci.jobs['rust-audit'];
+  assert.deepEqual(runs(audit), [
+    'cargo install cargo-audit --locked --version 0.22.2',
+    'cargo audit --file Cargo.lock'
+  ]);
+  assert.equal(audit.defaults.run['working-directory'], 'src-tauri');
+  assert.equal(audit.needs, undefined);
+  assert.doesNotMatch(native, /cargo audit|cargo install cargo-audit/);
   assert.doesNotMatch(native, /cargo clean|scripts\/regtest\/test\.sh|check-rust-.*coverage\.sh/);
   const coverage = runs(ci.jobs['rust-coverage']).join('\n');
   assert.equal((coverage.match(/scripts\/quality\/check-rust-full-coverage\.sh/g) ?? []).length, 1);
@@ -211,6 +329,10 @@ test('ordinary and instrumented caches cannot include workspace or packaged app 
   });
   assert.equal(caches.length, 2);
   assert.notEqual(caches[0].with.key, caches[1].with.key);
+  assert.equal(
+    caches[0].with['save-if'],
+    "${{ github.ref == 'refs/heads/main' && matrix.lane == 'test' }}"
+  );
   assert.deepEqual(caches.map((step) => step.with.workspaces).sort(), [
     'src-tauri -> target/coverage',
     'src-tauri -> target/normal'
@@ -507,7 +629,9 @@ test('timed evidence pipelines retain output and propagate a failing command', (
             /\{ time [^;]+; \}/,
             `{ time sh -c 'printf \"injected operation\\n\"; exit ${status}'; }`
           )
-          .replaceAll('${{ matrix.project }}', 'desktop');
+          .replaceAll('${{ matrix.project }}', 'desktop')
+          .replaceAll('${{ matrix.shard }}', '1')
+          .replaceAll('${{ matrix.shards }}', '2');
         const result = spawnSync(
           process.platform === 'win32' ? 'bash' : '/bin/bash',
           ['-e', '-c', `set -o pipefail\n${fixture}`],

@@ -268,16 +268,10 @@ test('Family assistance keeps collecting until both required role groups sign', 
   page
 }) => {
   await page.goto('/coins?fixture-continuity=family');
-  const outpoint = await page.evaluate(async () => {
-    const modulePath = '/src/lib/wallet/index.ts';
-    const { walletService } = await import(/* @vite-ignore */ modulePath);
-    return (await walletService.snapshot()).utxos.find(
-      (coin: { policyMaturity?: unknown }) => coin.policyMaturity
-    )?.outpoint;
-  });
-  await page.goto(
-    `/multisig/send?fixture-continuity=family&coins=${encodeURIComponent(outpoint)}&delayedSpend=1`
-  );
+  const coin = page.locator('article.coin-row').first();
+  await coin.locator('.coin-details-toggle').click();
+  await coin.getByRole('link', { name: 'Choose spending path', exact: true }).click();
+  await expect(page).toHaveURL(/\/multisig\/send\?.*delayedSpend=1/);
   await page.getByLabel('Bitcoin address').fill('bcrt1qdummy00085n8k2r7v4cx9s6jlawephgzuqf5t8ul');
   await page.getByLabel('Label', { exact: true }).fill('Family role fixture');
   await page.getByRole('button', { name: /Review .*payment/ }).click();
