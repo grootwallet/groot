@@ -32,8 +32,10 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends ripgrep
       - run: pnpm install --frozen-lockfile
+        id: dependencies
       - run: pnpm audit --prod --audit-level high
       - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+        id: toolchain
         with:
           toolchain: 1.97.1
           components: clippy,rustfmt,llvm-tools-preview
@@ -44,6 +46,7 @@ jobs:
           TIMEFORMAT='real %3R s; user %3U s; sys %3S s'
           { time pnpm validate:ci; } 2>&1 | tee "$RUNNER_TEMP/frontend-validation.log"
       - name: Deterministic CycloneDX SBOM and dependency-license evidence
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' && steps.toolchain.outcome == 'success' }}
         run: pnpm test:sbom
       - name: Retain validation evidence
         if: always()
@@ -63,8 +66,24 @@ jobs:
         include:
           - project: desktop
             browser: chromium
+            shard: 1
+            shards: 2
+          - project: desktop
+            browser: chromium
+            shard: 2
+            shards: 2
           - project: mobile
             browser: webkit
+            shard: 1
+            shards: 3
+          - project: mobile
+            browser: webkit
+            shard: 2
+            shards: 3
+          - project: mobile
+            browser: webkit
+            shard: 3
+            shards: 3
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -80,19 +99,19 @@ jobs:
       - name: Generate SvelteKit TypeScript configuration
         run: pnpm exec svelte-kit sync
       - run: pnpm exec playwright install --with-deps ${{ matrix.browser }}
-      - name: Browser acceptance tests (one isolated worker per project)
+      - name: Browser acceptance tests (one isolated worker per shard)
         shell: bash
         run: |
           set -o pipefail
           TIMEFORMAT='real %3R s; user %3U s; sys %3S s'
-          { time pnpm test:acceptance --project=${{ matrix.project }} --workers=1 --global-timeout=1500000; } 2>&1 | tee "$RUNNER_TEMP/browser-${{ matrix.project }}.log"
+          { time pnpm test:acceptance --fully-parallel --project=${{ matrix.project }} --shard=${{ matrix.shard }}/${{ matrix.shards }} --workers=1 --global-timeout=1500000; } 2>&1 | tee "$RUNNER_TEMP/browser-${{ matrix.project }}-shard-${{ matrix.shard }}-of-${{ matrix.shards }}.log"
       - name: Retain browser logs and failure traces
         if: always()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
-          name: browser-${{ matrix.project }}-${{ github.sha }}
+          name: browser-${{ matrix.project }}-shard-${{ matrix.shard }}-of-${{ matrix.shards }}-${{ github.sha }}
           path: |
-            ${{ runner.temp }}/browser-${{ matrix.project }}.log
+            ${{ runner.temp }}/browser-${{ matrix.project }}-shard-${{ matrix.shard }}-of-${{ matrix.shards }}.log
             test-results/
           if-no-files-found: warn
           retention-days: 14
@@ -125,7 +144,7 @@ jobs:
         with:
           toolchain: 1.97.1
           components: clippy,rustfmt
-      - name: Cache ordinary Rust dependencies and audit tool
+      - name: Cache ordinary Rust dependencies
         uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
         with:
           workspaces: src-tauri -> target/normal
@@ -145,8 +164,6 @@ jobs:
         run: RUSTDOCFLAGS="-D warnings" cargo doc --locked --no-deps --all-features
       - name: Compile every permitted native network
         run: bash ../scripts/network/check-native-builds.sh
-      - run: cargo install cargo-audit --locked --version 0.22.2
-      - run: cargo audit --file Cargo.lock
       - name: Record ordinary Rust disk usage
         if: always()
         run: |
@@ -166,6 +183,23 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
+  rust-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: src-tauri
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+        with:
+          toolchain: 1.97.1
+      - run: cargo install cargo-audit --locked --version 0.22.2
+      - run: cargo audit --file Cargo.lock
+
   rust-coverage:
     runs-on: ubuntu-latest
     timeout-minutes: 90
@@ -175,17 +209,6 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Install Tauri Linux dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            build-essential \
-            libappindicator3-dev \
-            librsvg2-dev \
-            libssl-dev \
-            libudev-dev \
-            libwebkit2gtk-4.1-dev \
-            patchelf
       - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
         with:
           toolchain: 1.97.1
@@ -197,16 +220,33 @@ jobs:
           key: coverage-v2-llvm-cov-0.8.7
           cache-workspace-crates: false
           save-if: ${{ github.ref == 'refs/heads/main' }}
-      - name: Install pinned Bitcoin Core 31.1 for isolated Regtest
+      - name: Provision Linux, locked coverage tooling, and checksum-pinned Core
         run: |
-          archive=/tmp/bitcoin-31.1-x86_64-linux-gnu.tar.gz
-          curl --proto '=https' --tlsv1.2 --fail --location --silent --show-error \
-            --output "$archive" \
-            https://bitcoincore.org/bin/bitcoin-core-31.1/bitcoin-31.1-x86_64-linux-gnu.tar.gz
-          echo "b80d9c3e04da78fb6f0569685673418cf686fadba9042d926d13fb87ff503f9e  $archive" | sha256sum --check --strict
-          tar --extract --gzip --file "$archive" --directory /tmp
-          echo "/tmp/bitcoin-31.1/bin" >> "$GITHUB_PATH"
-      - run: cargo install cargo-llvm-cov --locked --version 0.8.7
+          set -euo pipefail
+          (
+            sudo apt-get update
+            sudo apt-get install -y --no-install-recommends \
+              build-essential libappindicator3-dev librsvg2-dev libssl-dev libudev-dev \
+              libwebkit2gtk-4.1-dev patchelf
+          ) &
+          linux_pid=$!
+          cargo install cargo-llvm-cov --locked --version 0.8.7 &
+          tool_pid=$!
+          (
+            archive="$RUNNER_TEMP/bitcoin-31.1-x86_64-linux-gnu.tar.gz"
+            curl --proto '=https' --tlsv1.2 --fail --location --silent --show-error \
+              --output "$archive" \
+              https://bitcoincore.org/bin/bitcoin-core-31.1/bitcoin-31.1-x86_64-linux-gnu.tar.gz
+            echo "b80d9c3e04da78fb6f0569685673418cf686fadba9042d926d13fb87ff503f9e  $archive" | sha256sum --check --strict
+            tar --extract --gzip --file "$archive" --directory "$RUNNER_TEMP"
+          ) &
+          core_pid=$!
+          result=0
+          for pid in "$linux_pid" "$tool_pid" "$core_pid"; do
+            wait "$pid" || result=1
+          done
+          if [[ "$result" != 0 ]]; then exit "$result"; fi
+          echo "$RUNNER_TEMP/bitcoin-31.1/bin" >> "$GITHUB_PATH"
       - name: Enforce deterministic-core coverage, then whole-library coverage with real Core
         run: |
           set -o pipefail
@@ -234,7 +274,7 @@ jobs:
   # Preserve the existing required frontend check as the full acceptance gate.
   frontend:
     if: always()
-    needs: [frontend-checks, browser, rust, rust-coverage]
+    needs: [frontend-checks, browser, rust, rust-audit, rust-coverage]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -246,7 +286,7 @@ jobs:
           CI_REQUIRED_RESULTS: ${{ toJSON(needs) }}
         run: |
           node --input-type=module <<'NODE'
-          const expected = ['frontend-checks', 'browser', 'rust', 'rust-coverage'];
+          const expected = ['frontend-checks', 'browser', 'rust', 'rust-audit', 'rust-coverage'];
           const results = JSON.parse(process.env.CI_REQUIRED_RESULTS);
           if (Object.keys(results).length !== expected.length) {
             throw new Error('Acceptance result inventory is incomplete or unexpected');

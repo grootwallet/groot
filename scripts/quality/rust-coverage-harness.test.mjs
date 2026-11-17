@@ -6,6 +6,7 @@ import {
   mkdtempSync,
   readFileSync,
   readdirSync,
+  realpathSync,
   rmSync,
   writeFileSync
 } from 'node:fs';
@@ -37,6 +38,8 @@ const fixtureScripts = [
   'scripts/quality/check-rust-coverage.sh',
   'scripts/quality/check-rust-full-coverage.sh',
   'scripts/quality/rust-coverage/.cargo/config.toml',
+  'scripts/quality/rust-coverage/common.sh',
+  'scripts/quality/rust-coverage/full.py',
   'scripts/regtest/test.sh'
 ];
 const quote = (value) => `'${value.replaceAll("'", "'\\''")}'`;
@@ -55,7 +58,7 @@ const testBash = (name, run) =>
   );
 
 function fixture() {
-  const directory = mkdtempSync(join(tmpdir(), 'groot-coverage-harness-'));
+  const directory = mkdtempSync(join(realpathSync(tmpdir()), 'groot-coverage-harness-'));
   const repository = join(directory, 'repository');
   const tools = join(directory, 'tools');
   const log = join(directory, 'commands.jsonl');
@@ -77,28 +80,60 @@ shift
 phase="$kind"
 if [[ "$kind" == cargo ]]; then
   phase=units
-  if [[ "$1" == clean && " $* " == *" --profile coverage "* ]]; then
-    phase=clean-coverage-workspace
-  fi
-  for arg in "$@"; do
-    [[ "$arg" == --ignored ]] && phase=scenario
-  done
-  if [[ "\${2:-}" == clean ]]; then
-    phase=clean
-  elif [[ "\${2:-}" == report ]]; then
-    phase=all-report
+  case "$1 $2" in
+    "clean --locked") phase=clean-coverage-workspace ;;
+    "llvm-cov clean") phase=clean ;;
+    "llvm-cov show-env") phase=instrument ;;
+    "llvm-cov report")
+      phase=all-report
+      [[ " $* " == *" --ignore-filename-regex "* ]] && phase=core-report ;;
+    "test --locked")
+      [[ " $* " == *" --no-run "* ]] && phase=build ;;
+  esac
+  [[ " $* " == *" --ignored "* ]] && phase=scenario
+elif [[ "$kind" == instrumented-library || "$kind" == instrumented-descriptor ]]; then
+  phase=scenario
+  [[ "$#" == 0 ]] && phase=units
+fi
+printf '%s\\0' "$kind" "$phase" "$CARGO_TARGET_DIR" "$CARGO_LLVM_COV_TARGET_DIR" \\
+  "$GROOT_REGTEST_DIR" "$GROOT_RUN_REGTEST" "$GROOT_COMPACT_FILTER_TEST_PEER" "$LLVM_PROFILE_FILE" "$#" "$@" >> "$GROOT_STUB_LOG"
+if [[ -n "$GROOT_STUB_FAIL" ]]; then
+  [[ "$GROOT_STUB_FAIL" == "$phase" ]] && exit 17
+  [[ "$GROOT_STUB_FAIL" == regtest_multisig && "$kind" == instrumented-descriptor ]] && exit 17
+  if [[ "$phase" != build ]]; then
     for arg in "$@"; do
-      [[ "$arg" == --ignore-filename-regex ]] && phase=core-report
+      case "$arg" in "$GROOT_STUB_FAIL"|*::"$GROOT_STUB_FAIL") exit 17 ;; esac
     done
   fi
 fi
-printf '%s\\0' "$kind" "$phase" "\${CARGO_TARGET_DIR:-}" "\${CARGO_LLVM_COV_TARGET_DIR:-}" \\
-  "\${GROOT_REGTEST_DIR:-}" "\${GROOT_RUN_REGTEST:-}" "\${GROOT_COMPACT_FILTER_TEST_PEER:-}" "$#" "$@" >> "$GROOT_STUB_LOG"
-if [[ -n "\${GROOT_STUB_FAIL:-}" ]]; then
-  [[ "$GROOT_STUB_FAIL" == "$phase" ]] && exit 17
-  for arg in "$@"; do
-    [[ "$GROOT_STUB_FAIL" == "$arg" ]] && exit 17
+if [[ "$phase" == build ]]; then
+  deps="$CARGO_LLVM_COV_TARGET_DIR/coverage/deps"
+  mkdir -p "$deps"
+  cp "$GROOT_STUB_TOOLS/fake-lib-test" "$deps/groot_lib-fixture"
+  cp "$GROOT_STUB_TOOLS/fake-descriptor-test" "$deps/regtest_multisig-fixture"
+  printf '{"reason":"compiler-artifact","profile":{"test":true},"manifest_path":"%s/src-tauri/Cargo.toml","target":{"name":"groot_lib"},"executable":"%s/groot_lib-fixture"}\\n' "$GROOT_STUB_REPOSITORY" "$deps"
+  if [[ "$GROOT_STUB_NO_DESCRIPTOR" != 1 ]]; then
+    printf '{"reason":"compiler-artifact","profile":{"test":true},"manifest_path":"%s/src-tauri/Cargo.toml","target":{"name":"regtest_multisig"},"executable":"%s/regtest_multisig-fixture"}\\n' "$GROOT_STUB_REPOSITORY" "$deps"
+  fi
+elif [[ "$kind" == instrumented-library || "$kind" == instrumented-descriptor ]]; then
+  expected=1
+  [[ "$kind" == instrumented-descriptor ]] && expected=4
+  [[ "$phase" == units ]] && expected=2
+  [[ "$GROOT_STUB_ZERO_MATCHES" == 1 && "$phase" == scenario ]] && expected=0
+  if [[ "$GROOT_STUB_EMPTY_PROFILE" != "$phase" ]]; then
+    prefix=$(printf '%s' "$LLVM_PROFILE_FILE" | cut -d % -f 1)
+    printf 'raw profile\\n' >"$prefix$$.profraw"
+  fi
+  printf 'test result: ok. %s passed; 0 failed; 0 ignored; 0 measured; 0 filtered out\\n' "$expected"
+elif [[ "$phase" == core-report && "$CARGO_LLVM_COV_TARGET_DIR" == */core-report ]]; then
+  [[ -x "$CARGO_LLVM_COV_TARGET_DIR/coverage/deps/groot_lib-fixture" ]] || exit 21
+  [[ ! -e "$CARGO_LLVM_COV_TARGET_DIR/coverage/deps/regtest_multisig-fixture" ]] || exit 21
+  for raw in "$CARGO_LLVM_COV_TARGET_DIR"/*.profraw; do
+    [[ "$raw" == */units-*.profraw ]] || exit 21
   done
+elif [[ "$phase" == all-report ]]; then
+  compgen -G "$CARGO_LLVM_COV_TARGET_DIR/units-*.profraw" >/dev/null || exit 21
+  compgen -G "$CARGO_LLVM_COV_TARGET_DIR/all-*.profraw" >/dev/null || exit 21
 fi
 exit 0
 `
@@ -106,12 +141,26 @@ exit 0
   writeFileSync(join(tools, 'cargo'), `#!/bin/bash\nexec /bin/bash ${quote(stub)} cargo "$@"\n`, {
     mode: 0o700
   });
-  for (const action of ['start', 'stop']) {
-    writeFileSync(
-      join(repository, 'scripts', 'regtest', `${action}.sh`),
-      `#!/bin/bash\n/bin/bash ${quote(stub)} core-${action} "$@"\n`
-    );
+  for (const [file, kind] of [
+    ['fake-lib-test', 'instrumented-library'],
+    ['fake-descriptor-test', 'instrumented-descriptor']
+  ]) {
+    writeFileSync(join(tools, file), `#!/bin/bash\nexec /bin/bash ${quote(stub)} ${kind} "$@"\n`, {
+      mode: 0o700
+    });
   }
+  writeFileSync(
+    join(repository, 'scripts', 'regtest', 'start.sh'),
+    `#!/bin/bash
+start_regtest_node() { shift; /bin/bash ${quote(stub)} core-start "$@"; }
+stop_regtest_child() { /bin/bash ${quote(stub)} core-stop; }
+if [[ "$0" == */start.sh ]]; then start_regtest_node daemon "$@"; fi
+`
+  );
+  writeFileSync(
+    join(repository, 'scripts', 'regtest', 'stop.sh'),
+    `#!/bin/bash\n/bin/bash ${quote(stub)} core-stop "$@"\n`
+  );
   return {
     directory,
     repository,
@@ -123,6 +172,8 @@ exit 0
           PATH: `${tools}:/usr/bin:/bin`,
           TMPDIR: directory,
           GROOT_STUB_LOG: log,
+          GROOT_STUB_REPOSITORY: repository,
+          GROOT_STUB_TOOLS: tools,
           GROOT_RPC_PORT: '18443',
           GROOT_P2P_PORT: '18444',
           ...env
@@ -131,10 +182,20 @@ exit 0
       const events = [];
       const fields = existsSync(log) ? readFileSync(log, 'utf8').split('\0') : [];
       while (fields.length > 1) {
-        const [kind, phase, target, coverage, regtest, runRegtest, compactPeer, count] =
-          fields.splice(0, 8);
+        const [kind, phase, target, coverage, regtest, runRegtest, compactPeer, profile, count] =
+          fields.splice(0, 9);
         const args = fields.splice(0, Number(count));
-        events.push({ kind, phase, target, coverage, regtest, runRegtest, compactPeer, args });
+        events.push({
+          kind,
+          phase,
+          target,
+          coverage,
+          regtest,
+          runRegtest,
+          compactPeer,
+          profile,
+          args
+        });
       }
       return { result, events };
     },
@@ -163,7 +224,7 @@ function assertThresholds(event, lines, functions, regions) {
   assert.equal(value('--fail-under-regions'), String(regions));
 }
 
-test('the coverage profile optimizes only Miniscript and Base58Check dependencies', () => {
+test('the coverage profile optimizes only the measured Bitcoin dependencies', () => {
   const profile = readFileSync('scripts/quality/rust-coverage/.cargo/config.toml', 'utf8')
     .split('\n')
     .map((line) => line.trim())
@@ -171,55 +232,64 @@ test('the coverage profile optimizes only Miniscript and Base58Check dependencie
   assert.deepEqual(profile, [
     '[profile.coverage]',
     'inherits = "test"',
+    'debug = "line-tables-only"',
     '[profile.coverage.package.miniscript]',
     'opt-level = 3',
     '[profile.coverage.package.base58ck]',
+    'opt-level = 3',
+    '[profile.coverage.package.bitcoin_hashes]',
+    'opt-level = 3',
+    '[profile.coverage.package.bitcoin]',
+    'opt-level = 3',
+    '[profile.coverage.package.bdk_chain]',
     'opt-level = 3'
   ]);
 });
 
 testBash(
-  'full lane gates deterministic units before appending every Core scenario exactly once',
+  'one instrumented build runs every funded case and merges only after both jobs pass',
   () => {
     withFixture(({ run, repository }) => {
       const { result, events } = run();
       assert.equal(result.status, 0, result.stderr);
-      assert.deepEqual(
-        events.slice(0, 4).map(({ phase }) => phase),
-        ['clean', 'units', 'core-report', 'core-start']
-      );
-      assert.equal(events.at(-1).phase, 'all-report');
-      assert.equal(events.filter(({ phase }) => phase === 'units').length, 1);
-      assert.equal(events.filter(({ phase }) => phase === 'clean').length, 1);
-      assertThresholds(events[2], 99, 100, 97);
+      const phases = events.map(({ phase }) => phase);
+      assert.deepEqual(phases.slice(0, 3), ['clean', 'instrument', 'build']);
+      assert.equal(phases.filter((phase) => phase === 'build').length, 1);
+      assert.equal(phases.filter((phase) => phase === 'units').length, 1);
+      assert.equal(phases.at(-1), 'all-report');
+      const core = events.find(({ phase }) => phase === 'core-report');
+      assert.match(core.coverage, /\/core-report$/);
+      assertThresholds(core, 99, 100, 97);
       assertThresholds(events.at(-1), 62, 59, 59);
       const calls = scenarios(events);
       assert.equal(calls.length, 12);
       assert.deepEqual(
         calls
-          .filter(({ args }) => args.includes('--lib'))
-          .map(({ args }) => args[args.indexOf('--') + 1]),
+          .filter(({ kind }) => kind === 'instrumented-library')
+          .map(({ args }) => args[0].split('::').at(-1)),
         libraryScenarios
       );
-      assert.equal(calls.filter(({ args }) => args.includes('regtest_multisig')).length, 1);
+      assert.equal(calls.filter(({ kind }) => kind === 'instrumented-descriptor').length, 1);
       assert.equal(calls[0].compactPeer, '127.0.0.1:18444');
       assert.ok(calls.slice(1).every(({ runRegtest }) => runRegtest === '1'));
       for (const event of events.filter(({ kind }) => kind === 'cargo')) {
         assert.ok(event.args.includes('--locked'));
-        assert.equal(event.coverage, join(repository, 'src-tauri', 'target', 'llvm-cov-target'));
-        if (event.phase !== 'clean') {
-          const profileIndex = event.args.indexOf('--profile');
-          assert.ok(profileIndex !== -1);
-          assert.equal(event.args[profileIndex + 1], 'coverage');
+        if (event !== core) {
+          assert.equal(event.coverage, join(repository, 'src-tauri', 'target', 'llvm-cov-target'));
         }
       }
-      for (const { args } of calls) {
-        assert.equal(args.includes('--no-clean'), false);
-        assert.ok(args.includes('--no-report'));
+      const build = events.find(({ phase }) => phase === 'build');
+      for (const flag of ['--no-run', '--lib', '--test', '--profile'])
+        assert.ok(build.args.includes(flag));
+      for (const { kind, args, profile } of calls) {
         assert.deepEqual(args.slice(-3), ['--ignored', '--nocapture', '--test-threads=1']);
+        assert.equal(args.includes('--exact'), kind === 'instrumented-library');
+        assert.match(profile, /\/all\/all-%p-%10m\.profraw$/);
       }
-      const stops = events.filter(({ phase }) => phase === 'core-stop');
+      const units = events.find(({ phase }) => phase === 'units');
+      assert.match(units.profile, /\/units\/units-%p-%10m\.profraw$/);
       const starts = events.filter(({ phase }) => phase === 'core-start');
+      const stops = events.filter(({ phase }) => phase === 'core-stop');
       assert.deepEqual(
         starts.map(({ args }) => args),
         [[], [], ['--long-continuity']]
@@ -257,48 +327,62 @@ test('descriptor integration invocation retains its four independently named sce
   assert.equal(libraryScenarios.length + names.length, 15);
 });
 
-for (const phase of ['clean', 'units', 'core-report']) {
+for (const phase of ['clean', 'instrument', 'build', 'units', 'core-report']) {
   testBash(
-    `${phase} failure stops before starting Core or publishing whole-library coverage`,
+    `${phase} failure blocks the whole-library report and reaps any started fixtures`,
     () => {
       withFixture(({ run }) => {
         const { result, events } = run(undefined, { GROOT_STUB_FAIL: phase });
-        assert.equal(result.status, 17, result.stderr);
-        assert.equal(events.at(-1).phase, phase);
-        assert.equal(
-          events.some(({ phase }) => phase === 'core-start' || phase === 'all-report'),
-          false
-        );
+        assert.notEqual(result.status, 0, result.stderr);
+        assert.ok(events.some((event) => event.phase === phase));
+        assert.ok(events.every((event) => event.phase !== 'all-report'));
+        for (const { regtest } of events.filter((event) => event.phase === 'core-start')) {
+          assert.equal(existsSync(regtest), false);
+        }
       });
     }
   );
 }
 
 for (const name of [...libraryScenarios, 'regtest_multisig']) {
-  testBash(
-    `${name} failure stops the lane, cleans its Core fixture and withholds the final report`,
-    () => {
-      withFixture(({ run }) => {
-        const { result, events } = run(undefined, { GROOT_STUB_FAIL: name });
-        assert.equal(result.status, 17, result.stderr);
-        assert.equal(events.at(-1).phase, 'core-stop');
-        assert.equal(
-          events.some(({ phase }) => phase === 'all-report'),
-          false
-        );
-        for (const event of events.filter(({ phase }) => phase === 'core-start')) {
-          assert.equal(existsSync(event.regtest), false);
-        }
-        assert.equal(scenarios(events).at(-1).args.includes(name), true);
-      });
-    }
-  );
+  testBash(`${name} failure cleans its fixture and withholds the final report`, () => {
+    withFixture(({ run }) => {
+      const { result, events } = run(undefined, { GROOT_STUB_FAIL: name });
+      assert.notEqual(result.status, 0, result.stderr);
+      assert.ok(events.every(({ phase }) => phase !== 'all-report'));
+      for (const { regtest } of events.filter(({ phase }) => phase === 'core-start')) {
+        assert.equal(existsSync(regtest), false);
+      }
+      const final = scenarios(events).at(-1);
+      assert.ok(final);
+      assert.equal(
+        name === 'regtest_multisig'
+          ? final.kind === 'instrumented-descriptor'
+          : final.args[0].endsWith(`::${name}`),
+        true
+      );
+    });
+  });
+}
+
+for (const [fault, value] of [
+  ['GROOT_STUB_NO_DESCRIPTOR', '1'],
+  ['GROOT_STUB_ZERO_MATCHES', '1'],
+  ['GROOT_STUB_EMPTY_PROFILE', 'scenario']
+]) {
+  testBash(`${fault} cannot certify missing artifacts or cases`, () => {
+    withFixture(({ run }) => {
+      const { result, events } = run(undefined, { [fault]: value });
+      assert.notEqual(result.status, 0, result.stderr);
+      assert.ok(events.every(({ phase }) => phase !== 'all-report'));
+    });
+  });
 }
 
 testBash('whole-library threshold failure remains a failure after every Core scenario', () => {
   withFixture(({ run }) => {
     const { result, events } = run(undefined, { GROOT_STUB_FAIL: 'all-report' });
-    assert.equal(result.status, 17, result.stderr);
+    assert.notEqual(result.status, 0, result.stderr);
     assert.equal(scenarios(events).length, 12);
     assert.equal(events.at(-1).phase, 'all-report');
   });
@@ -375,20 +459,29 @@ testBash('custom ordinary target directory stays separate from the coverage work
     const { result, events } = run(undefined, { CARGO_TARGET_DIR: ordinary });
     assert.equal(result.status, 0, result.stderr);
     for (const event of events.filter(({ kind }) => kind === 'cargo')) {
-      assert.equal(event.target, ordinary);
-      assert.equal(event.coverage, join(ordinary, 'llvm-cov-target'));
+      assert.equal(
+        event.target,
+        ['instrument', 'build'].includes(event.phase) ? join(ordinary, 'llvm-cov-target') : ordinary
+      );
+      assert.ok(event.coverage.startsWith(join(ordinary, 'llvm-cov-target')));
       assert.equal(event.args.includes('clean') && event.args[0] !== 'llvm-cov', false);
     }
   });
 });
 
-testBash('an explicit instrumented target is reused across both reports and every scenario', () => {
+testBash('the core report workspace sits inside the explicit instrumented target', () => {
   withFixture(({ run, directory }) => {
     const target = join(directory, 'instrumented target');
     const { result, events } = run(undefined, { CARGO_LLVM_COV_TARGET_DIR: target });
     assert.equal(result.status, 0, result.stderr);
     assert.ok(
-      events.filter(({ kind }) => kind === 'cargo').every(({ coverage }) => coverage === target)
+      events
+        .filter(({ kind }) => kind === 'cargo')
+        .every(({ coverage, phase }) =>
+          phase === 'core-report'
+            ? coverage.startsWith(`${target}/`) && coverage.endsWith('/core-report')
+            : coverage === target
+        )
     );
   });
 });

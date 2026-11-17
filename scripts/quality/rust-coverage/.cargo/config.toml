@@ -1,11 +1,21 @@
-# Optimize measured costs in Miniscript planning and Base58Check key encoding.
+# Optimize measured costs in Miniscript planning, key encoding, and chain updates.
 # Keep Groot's instrumentation on the test profile.
 # Only the coverage harness runs Cargo from this directory.
 [profile.coverage]
 inherits = "test"
+debug = "line-tables-only"
 
 [profile.coverage.package.miniscript]
 opt-level = 3
 
 [profile.coverage.package.base58ck]
+opt-level = 3
+
+[profile.coverage.package.bitcoin_hashes]
+opt-level = 3
+
+[profile.coverage.package.bitcoin]
+opt-level = 3
+
+[profile.coverage.package.bdk_chain]
 opt-level = 3

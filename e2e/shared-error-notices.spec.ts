@@ -78,12 +78,13 @@ for (const theme of ['light', 'dark']) {
     await page.goto('/activity?fixture-large-history=1&fixture-history-page-error=1');
     await page.getByRole('button', { name: 'Load more', exact: true }).click();
     await expect(page.getByRole('alert')).toContainText('Transactions are unavailable');
-    await page.getByRole('button', { name: 'Try again', exact: true }).scrollIntoViewIfNeeded();
+    const retry = page.getByRole('button', { name: 'Try again', exact: true });
+    await retry.evaluate((element) => element.scrollIntoView({ block: 'center' }));
     await page.screenshot({
       path: test.info().outputPath(`load-error-${theme}.png`),
       fullPage: true
     });
-    await page.getByRole('button', { name: 'Try again', exact: true }).click();
+    await retry.click();
     await expect(page.locator('.tx-row')).toHaveCount(100);
     await page.goto('/unlock?fixture-locked-wallet-switch=1');
     const credential = page.getByLabel('Wallet passphrase', { exact: true });
