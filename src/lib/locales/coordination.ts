@@ -88,11 +88,6 @@ export const coordinationCopy = {
   },
 
   'Receive on desktop': { fr: 'Recevoir sur ordinateur', es: 'Recibir en el ordenador' },
-  'Create receive requests on desktop for paired and watch-only wallets. This avoids allocating the same address on two devices.':
-    {
-      fr: 'Créez les demandes de réception sur ordinateur pour les portefeuilles jumelés ou en lecture seule. Cela évite d’attribuer la même adresse sur deux appareils.',
-      es: 'Crea las solicitudes de recepción en el ordenador para carteras vinculadas o de solo lectura. Así se evita asignar la misma dirección en dos dispositivos.'
-    },
   RBF: { fr: 'RBF', es: 'RBF' },
   vB: { fr: 'vB', es: 'vB' },
   'Estimated size': { fr: 'Taille estimée', es: 'Tamaño estimado' },
@@ -341,10 +336,6 @@ export const coordinationCopy = {
     fr: 'Un téléphone, une invitation',
     es: 'Un teléfono, una invitación'
   },
-  'Only Blockchain Commons crypto-psbt UR frames are accepted.': {
-    fr: 'Seules les trames UR crypto-psbt de Blockchain Commons sont acceptées.',
-    es: 'Solo se aceptan fragmentos UR crypto-psbt de Blockchain Commons.'
-  },
   'Pairing comparison code': {
     fr: 'Code de comparaison du jumelage',
     es: 'Código de comparación de vinculación'
@@ -438,11 +429,6 @@ export const coordinationCopy = {
     fr: 'Jumelage du portefeuille en cours',
     es: 'Vinculación de cartera en curso'
   },
-  'Review the exact transaction on this phone. Signing never broadcasts or changes the desktop proposal.':
-    {
-      fr: 'Vérifiez la transaction exacte sur ce téléphone. La signature ne diffuse ni ne modifie jamais la proposition de l’ordinateur.',
-      es: 'Revisa la transacción exacta en este teléfono. Firmar nunca transmite ni cambia la propuesta del ordenador.'
-    },
   'Scan phone QR code': {
     fr: 'Scanner le code QR du téléphone',
     es: 'Escanear el código QR del teléfono'
@@ -505,10 +491,6 @@ export const coordinationCopy = {
       fr: 'Scannez le descripteur public depuis l’ordinateur. Aucune graine matérielle, clé de signature ni compte Groot n’est transféré.',
       es: 'Escanea el descriptor público del ordenador. No se transfiere ninguna semilla física, clave de firma ni cuenta Groot.'
     },
-  'Scan unsigned PSBT from desktop': {
-    fr: 'Scanner la PSBT non signée depuis l’ordinateur',
-    es: 'Escanear PSBT sin firmar del ordenador'
-  },
   'Shared wallet · this desktop coordinates the policy and hardware signers.': {
     fr: 'Portefeuille partagé · cet ordinateur coordonne la politique et les signataires matériels.',
     es: 'Cartera compartida · este ordenador coordina la política y los firmantes físicos.'
@@ -518,10 +500,11 @@ export const coordinationCopy = {
     es: 'Cartera compartida · este teléfono guarda un firmante de software y puede firmar PSBT revisadas en el ordenador.'
   },
   'Shared wallet paired': { fr: 'Portefeuille partagé jumelé', es: 'Cartera compartida vinculada' },
-  'Sign a desktop PSBT': {
-    fr: 'Signer une PSBT de l’ordinateur',
-    es: 'Firmar una PSBT del ordenador'
+  'Scan the QR code shown on desktop.': {
+    fr: 'Scannez le code QR affiché sur l’ordinateur.',
+    es: 'Escanea el código QR que aparece en el ordenador.'
   },
+  'Sign payment': { fr: 'Signer le paiement', es: 'Firmar el pago' },
   'Sign another PSBT': { fr: 'Signer une autre PSBT', es: 'Firmar otra PSBT' },
   'Sign desktop PSBT': { fr: 'Signer la PSBT de l’ordinateur', es: 'Firmar PSBT del ordenador' },
   'Sign this exact PSBT': { fr: 'Signer exactement cette PSBT', es: 'Firmar esta PSBT exacta' },

@@ -70,10 +70,18 @@
   let savedSignerFingerprint = $state<string | null>(null);
   let savedSignerLabel = $state<string | null>(null);
   let receiveOnDesktop = $state(false);
+  let loadedWalletId = $state<string | null>(null);
   const walletShell = useWalletShellContext();
   let externalSigner = $derived(
     walletShell.profiles().find((profile) => profile.id === walletShell.selectedWalletId())
       ?.kind === 'watch_only'
+  );
+  const canManageAddresses = $derived(
+    !loading &&
+      !loadError &&
+      !receiveOnDesktop &&
+      loadedWalletId !== null &&
+      walletShell.selectedWalletId() === loadedWalletId
   );
   let awaiting = $derived(awaitingPaymentAddresses(addresses));
   let history = $derived(addresses.filter((address) => address.status !== 'awaiting'));
@@ -108,28 +116,35 @@
   async function load() {
     loading = true;
     loadError = '';
-    receiveOnDesktop = false;
+    loadedWalletId = null;
     try {
-      const snapshot = await walletService.snapshot();
-      applyAddresses(snapshot.receiveAddresses);
-      labelSuggestions = snapshot.labelSuggestions;
       const shellWallets = walletShell.profiles();
       const shellSelectedWalletId = walletShell.selectedWalletId();
       const registry =
         shellWallets.length && shellSelectedWalletId
           ? { wallets: shellWallets, selectedWalletId: shellSelectedWalletId }
           : await walletService.profiles();
-      if (
-        registry.wallets.find((profile) => profile.id === registry.selectedWalletId)?.kind ===
-        'watch_only'
-      ) {
+      const selected = registry.wallets.find((profile) => profile.id === registry.selectedWalletId);
+      if (selected?.kind === 'multisig') {
+        await goto('/multisig/receive', { replaceState: true });
+        return;
+      }
+      if (selected?.kind === 'watch_only') {
         const runtime = await walletService.runtimePlatform();
         receiveOnDesktop = runtime.mobile && runtime.platform !== 'browser';
-        const savedSigner = (await walletService.externalSignerWallet()).signer;
-        savedSignerDeviceType = savedSigner.deviceType;
-        savedSignerFingerprint = savedSigner.fingerprint;
-        savedSignerLabel = savedSigner.label;
+        if (!receiveOnDesktop) {
+          const savedSigner = (await walletService.externalSignerWallet()).signer;
+          savedSignerDeviceType = savedSigner.deviceType;
+          savedSignerFingerprint = savedSigner.fingerprint;
+          savedSignerLabel = savedSigner.label;
+        }
+      } else {
+        receiveOnDesktop = false;
       }
+      const snapshot = await walletService.snapshot();
+      applyAddresses(snapshot.receiveAddresses);
+      labelSuggestions = snapshot.labelSuggestions;
+      loadedWalletId = registry.selectedWalletId;
       loading = false;
     } catch (cause) {
       loadError = localizedError(cause, $locale);
@@ -181,12 +196,13 @@
     current = nextAwaiting.find((address) => address.id === current?.id) ?? nextAwaiting[0] ?? null;
   }
   const generate = async () => {
-    if (!submissionLabels.length) return;
+    if (!canManageAddresses || busy || !submissionLabels.length) return;
     busy = true;
     let automaticSyncPaused = false;
     try {
       await walletShell.pauseAutomaticSync();
       automaticSyncPaused = true;
+      if (!canManageAddresses) return;
       current = await walletService.createAddress(submissionLabels);
       addresses = [current, ...addresses];
       try {
@@ -255,7 +271,7 @@
     }
   }
   const discard = async () => {
-    if (!discardTarget) return;
+    if (!canManageAddresses || !discardTarget) return;
     busy = true;
     try {
       const discardedId = discardTarget.id;
@@ -281,6 +297,7 @@
     }
   };
   const requestDiscard = (address: ReceiveAddress) => {
+    if (!canManageAddresses) return;
     discardAddressCopied = false;
     discardTarget = address;
     showDiscard = true;
@@ -326,15 +343,7 @@
   {:else if loading}
     <WalletSkeleton variant="balance" />
   {:else if receiveOnDesktop}
-    <WarningNotice
-      role="note"
-      icon
-      title={translate($locale, 'Receive on desktop')}
-      body={translate(
-        $locale,
-        'Create receive requests on desktop for paired and watch-only wallets. This avoids allocating the same address on two devices.'
-      )}
-    />
+    <WarningNotice role="note" icon title={translate($locale, 'Receive on desktop')} />
   {:else if current}
     <section class="receive-card" bind:this={receiveCard}>
       <button
@@ -425,7 +434,7 @@
       <span class="empty-icon"><QrCode size={24} /></span>
       <h2>{translate($locale, 'No address awaiting payment')}</h2>
       <p>{translate($locale, 'Generate a new address and give it a label.')}</p>
-      <Button onclick={() => (showGenerate = true)}
+      <Button disabled={!canManageAddresses} onclick={() => (showGenerate = true)}
         ><Plus size={17} />{translate($locale, 'New address')}</Button
       >
     </section>
@@ -439,12 +448,14 @@
           {translate($locale, awaiting.length === 1 ? 'address' : 'addresses')}
         </p>
       </div>
-      <Button
-        variant="secondary"
-        size="small"
-        onclick={() => (showGenerate = true)}
-        ariaLabel="New receive address"><Plus size={15} />{translate($locale, 'New')}</Button
-      >
+      {#if canManageAddresses}
+        <Button
+          variant="secondary"
+          size="small"
+          onclick={() => (showGenerate = true)}
+          ariaLabel="New receive address"><Plus size={15} />{translate($locale, 'New')}</Button
+        >
+      {/if}
     </div>
     <div class="awaiting-addresses">
       {#each awaiting as address}
@@ -460,8 +471,12 @@
                 : ''
             }`}
             onclick={() => {
-              current = address;
-              showDetails = false;
+              if (receiveOnDesktop) {
+                detailAddress = address;
+              } else {
+                current = address;
+                showDetails = false;
+              }
             }}
             ><span class="status-dot"></span><span
               ><PermanentLabelTags labels={address.labels ?? [address.label]} prominent /><small
@@ -483,11 +498,11 @@
               ></span
             ></button
           >
-          <button
-            class="awaiting-discard"
-            aria-label={translate($locale, 'Discard {label}', { label: address.label })}
-            onclick={() => requestDiscard(address)}><Trash2 size={15} /></button
-          >
+          {#if canManageAddresses}<button
+              class="awaiting-discard"
+              aria-label={translate($locale, 'Discard {label}', { label: address.label })}
+              onclick={() => requestDiscard(address)}><Trash2 size={15} /></button
+            >{/if}
         </article>
       {:else}
         <p class="list-empty">{translate($locale, 'No active payment requests.')}</p>
@@ -520,7 +535,7 @@
 </div>
 
 <Modal
-  open={showGenerate}
+  open={canManageAddresses && showGenerate}
   title={translate($locale, 'New receive address')}
   description={translate(
     $locale,
@@ -575,7 +590,7 @@
     </div>{/if}
 </Modal>
 <Modal
-  open={showDiscard}
+  open={canManageAddresses && showDiscard}
   title={translate($locale, 'Discard {label}?', {
     label: discardTarget?.label ?? translate($locale, 'this address')
   })}

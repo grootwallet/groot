@@ -1050,12 +1050,19 @@ test('keeps advanced wallet actions compact with one multipath descriptor', asyn
   page
 }, testInfo) => {
   await page.goto('/multisig');
-  await page.getByRole('button', { name: 'More wallet actions' }).click();
-  await expect(page.getByRole('menuitem', { name: /Show descriptors/ })).toBeVisible();
-  await expect(page.getByRole('menuitem', { name: /Export & verify/ })).toBeVisible();
-  await expect(page.getByRole('menuitem', { name: /Recovery policy lab/ })).toHaveCount(0);
+  const more = page.getByRole('button', { name: 'More wallet actions' });
+  if (testInfo.project.name === 'mobile') {
+    await expect(more).toBeHidden();
+    await expect(page.getByRole('link', { name: 'Export & verify', exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Show descriptors', exact: true }).click();
+  } else {
+    await more.click();
+    await expect(page.getByRole('menuitem', { name: /Show descriptors/ })).toBeVisible();
+    await expect(page.getByRole('menuitem', { name: /Export & verify/ })).toBeVisible();
+    await expect(page.getByRole('menuitem', { name: /Recovery policy lab/ })).toHaveCount(0);
+    await page.getByRole('menuitem', { name: /Show descriptors/ }).click();
+  }
   await expect(page.getByRole('link', { name: 'Recovery policy lab' })).toHaveCount(0);
-  await page.getByRole('menuitem', { name: /Show descriptors/ }).click();
   const descriptors = page.getByRole('dialog', { name: 'Wallet descriptors' });
   await expect(descriptors.getByText('Portable wallet descriptor', { exact: true })).toBeVisible();
   await expect(descriptors.getByText('/<0;1>/*', { exact: false })).toBeVisible();

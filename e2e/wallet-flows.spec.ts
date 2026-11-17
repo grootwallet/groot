@@ -1353,7 +1353,7 @@ test('overview, activity, UTXOs, and settings expose durable states', async ({ p
   const referenceAction =
     (page.viewportSize()?.width ?? 1180) > 760
       ? page.locator('.primary-actions .overview-inline-primary').first()
-      : page.locator('.mobile-actions .mobile-action').first();
+      : page.locator('.mobile-actions .button').first();
   expect(actionHeight).toBe((await referenceAction.boundingBox())?.height);
   await overviewMore.click();
   const overviewMenu = page.getByRole('menu', { name: 'More wallet actions' });

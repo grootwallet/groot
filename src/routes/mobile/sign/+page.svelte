@@ -103,14 +103,7 @@
 <div class="page narrow-page mobile-sign-page">
   <header class="page-header">
     <div>
-      <p class="eyebrow">{translate($locale, 'PHONE SIGNER')}</p>
-      <h1>{translate($locale, 'Sign a desktop PSBT')}</h1>
-      <p class="subtitle">
-        {translate(
-          $locale,
-          'Review the exact transaction on this phone. Signing never broadcasts or changes the desktop proposal.'
-        )}
-      </p>
+      <h1>{translate($locale, 'Sign payment')}</h1>
     </div>
   </header>
 
@@ -216,12 +209,7 @@
     <InstructionCard>
       <span class="status-icon"><QrCode size={22} /></span>
       <div class="scan-heading">
-        <strong>{translate($locale, 'Scan unsigned PSBT from desktop')}</strong><small
-          >{translate(
-            $locale,
-            'Only Blockchain Commons crypto-psbt UR frames are accepted.'
-          )}</small
-        >
+        <strong>{translate($locale, 'Scan the QR code shown on desktop.')}</strong>
       </div>
       {#if error}<WarningNotice
           tone="danger"

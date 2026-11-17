@@ -23,7 +23,7 @@
   }
   .app-shell > .sidebar,
   .app-shell > .mobile-nav,
-  .app-shell > .mobile-actions,
+  .app-shell .mobile-actions,
   .app-shell > .toast-region {
     display: none !important;
   }

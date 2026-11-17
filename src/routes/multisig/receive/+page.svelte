@@ -73,6 +73,13 @@
   let history = $derived(addresses.filter((address) => address.status !== 'awaiting'));
   let wallet = $state<MultisigWallet | null>(null);
   let receiveOnDesktop = $state(false);
+  let loadedWalletId = $state<string | null>(null);
+  const canManageAddresses = $derived(
+    ready &&
+      !receiveOnDesktop &&
+      loadedWalletId !== null &&
+      walletShell.selectedWalletId() === loadedWalletId
+  );
   let supportsHardwareVerification = $derived(wallet !== null && !wallet.recoveryTemplate);
   let eligibleDeviceTypes = $derived([
     ...new Set(
@@ -122,9 +129,11 @@
         wallet = savedWallet;
         receiveOnDesktop =
           coordination.role === 'mobile_cosigner' ||
+          coordination.role === 'mobile_watch_only' ||
           (runtime.mobile && runtime.platform !== 'browser');
         applyAddresses(state.receiveAddresses);
         labelSuggestions = state.labelSuggestions;
+        loadedWalletId = registry.selectedWalletId;
         ready = true;
       } catch (cause) {
         if (!active) return;
@@ -192,7 +201,7 @@
     }
   }
   async function generate() {
-    if (busy || !ready || !submissionLabels.length) return;
+    if (!canManageAddresses || busy || !submissionLabels.length) return;
     busy = true;
     generateError = '';
     policyVerificationNeeded = false;
@@ -200,6 +209,7 @@
     try {
       await walletShell.pauseAutomaticSync();
       automaticSyncPaused = true;
+      if (!canManageAddresses) return;
       current = await walletService.createMultisigAddress(submissionLabels);
       addresses = [current, ...addresses];
       try {
@@ -239,7 +249,7 @@
     }
   }
   async function discard() {
-    if (!discardTarget) return;
+    if (!canManageAddresses || !discardTarget) return;
     busy = true;
     try {
       const id = discardTarget.id;
@@ -278,6 +288,7 @@
     current = nextAwaiting.find((address) => address.id === current?.id) ?? nextAwaiting[0] ?? null;
   }
   const requestDiscard = (address: ReceiveAddress) => {
+    if (!canManageAddresses) return;
     discardAddressCopied = false;
     discardTarget = address;
     showDiscard = true;
@@ -327,10 +338,6 @@
       role="note"
       icon
       title={translate($locale, 'Receive on desktop')}
-      body={translate(
-        $locale,
-        'Create receive requests on desktop for paired and watch-only wallets. This avoids allocating the same address on two devices.'
-      )}
     />
   {:else if current}<section class="receive-card">
       <button
@@ -429,7 +436,7 @@
         )}
       </p>
       <Button
-        disabled={!ready}
+        disabled={!canManageAddresses}
         onclick={() => {
           generateError = '';
           showGenerate = true;
@@ -445,16 +452,17 @@
           {translate($locale, awaiting.length === 1 ? 'address' : 'addresses')}
         </p>
       </div>
-      <Button
-        variant="secondary"
-        size="small"
-        disabled={!ready}
-        onclick={() => {
-          generateError = '';
-          showGenerate = true;
-        }}
-        ariaLabel="New receive address"><Plus size={15} />{translate($locale, 'New')}</Button
-      >
+      {#if canManageAddresses}
+        <Button
+          variant="secondary"
+          size="small"
+          onclick={() => {
+            generateError = '';
+            showGenerate = true;
+          }}
+          ariaLabel="New receive address"><Plus size={15} />{translate($locale, 'New')}</Button
+        >
+      {/if}
     </div>
     <div class="awaiting-addresses">
       {#each awaiting as address}<article class:active={current?.id === address.id}>
@@ -469,8 +477,12 @@
                 : ''
             }`}
             onclick={() => {
-              current = address;
-              showDetails = false;
+              if (receiveOnDesktop) {
+                detailAddress = address;
+              } else {
+                current = address;
+                showDetails = false;
+              }
             }}
             ><span class="status-dot"></span><span
               ><PermanentLabelTags labels={address.labels ?? [address.label]} prominent /><small
@@ -491,11 +503,11 @@
                 ><LocalTimestamp value={address.created} /></small
               ></span
             ></button
-          ><button
-            class="awaiting-discard"
-            aria-label={translate($locale, 'Discard {label}', { label: address.label })}
-            onclick={() => requestDiscard(address)}><Trash2 size={15} /></button
-          >
+          >{#if canManageAddresses}<button
+              class="awaiting-discard"
+              aria-label={translate($locale, 'Discard {label}', { label: address.label })}
+              onclick={() => requestDiscard(address)}><Trash2 size={15} /></button
+            >{/if}
         </article>{:else}<p class="list-empty">
           {translate($locale, 'No active payment requests.')}
         </p>{/each}
@@ -523,7 +535,7 @@
 </div>
 
 <Modal
-  open={showGenerate}
+  open={canManageAddresses && showGenerate}
   title={translate($locale, 'New receive address')}
   description={translate(
     $locale,
@@ -590,7 +602,7 @@
   </form></Modal
 >
 <Modal
-  open={showDiscard}
+  open={canManageAddresses && showDiscard}
   title={translate($locale, 'Discard {label}?', {
     label: discardTarget?.label ?? translate($locale, 'this receive address')
   })}

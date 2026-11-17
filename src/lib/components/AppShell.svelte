@@ -1,16 +1,7 @@
 <script lang="ts">
   import { translate, localizedError } from '$lib/i18n-catalog';
   import { page } from '$app/state';
-  import {
-    Activity,
-    ArrowDownToLine,
-    ArrowUpFromLine,
-    CircleDot,
-    LayoutGrid,
-    Plus,
-    Settings,
-    ShieldCheck
-  } from '@lucide/svelte';
+  import { Activity, CircleDot, LayoutGrid, Plus, Settings, ShieldCheck } from '@lucide/svelte';
   import BrandLockup from './BrandLockup.svelte';
   import BuildIdentity from './BuildIdentity.svelte';
   import DiscardMultisigSetupModal from './DiscardMultisigSetupModal.svelte';
@@ -170,10 +161,6 @@
     usesCommandModifier
   } from '$lib/keyboard-shortcuts';
   import { configureMobileViewport } from '$lib/mobile-viewport';
-  import {
-    shouldShowMobileSend,
-    type MobileQuickActionSnapshot
-  } from '$lib/wallet/mobile-quick-actions';
   import { applyZoom, changeZoom, initZoom } from '$lib/zoom';
   let { children } = $props();
   let mainElement = $state<HTMLElement>();
@@ -225,7 +212,6 @@
   let shortcutLockPending = $state(false);
   let walletSelectionTask: Promise<void> | undefined;
   let mobileRuntime = $state(false);
-  let mobileQuickActions = $state<{ walletId: string; showSend: boolean } | null>(null);
   let pendingUnlockSyncWalletId: string | null = null;
   let runtimeIdentity = $state<RuntimePlatform | null>(null);
   let startupFailure = $state('');
@@ -256,16 +242,10 @@
       mobileSetupRoute ||
       shortcutLockPending
   );
-  const showQuickActions = $derived(
-    !restrictedUtilityRoute && (page.url.pathname === '/' || page.url.pathname === '/coins')
-  );
   const receiveHref = $derived(
     selectedProfile?.kind === 'multisig' ? '/multisig/receive' : '/receive'
   );
   const sendHref = $derived(selectedProfile?.kind === 'multisig' ? '/multisig/send' : '/send');
-  const showSendQuickAction = $derived(
-    mobileQuickActions?.walletId === selectedWalletId && mobileQuickActions.showSend
-  );
   const showSetupResume = $derived(
     Boolean(multisigSetupDraft) && !onboardingRoute && !diagnosticsRoute
   );
@@ -525,7 +505,6 @@
     try {
       const registry = await walletService.profiles();
       if (generation === profileReadGeneration) {
-        if (registry.selectedWalletId !== selectedWalletId) mobileQuickActions = null;
         profiles = registry.wallets;
         selectedWalletId = registry.selectedWalletId;
       }
@@ -665,7 +644,6 @@
       const selection = await walletService.selectWallet(walletId);
       // Change the routed wallet context only after Rust has atomically selected
       // the same profile. The keyed route then reloads against one wallet kind.
-      mobileQuickActions = null;
       selectedWalletId = selection.profile.id;
       selectedWalletUnlocked = selection.unlocked;
       await goto(selection.unlocked ? '/' : '/unlock');
@@ -718,13 +696,6 @@
     automaticSyncPauseCount = Math.max(0, automaticSyncPauseCount - 1);
     if (automaticSyncPauseCount === 0 && !isPrototypeWallet && !syncPausedRoute) liveSync?.start();
   }
-  function reportMobileQuickActionSnapshot(
-    walletId: string,
-    snapshot: MobileQuickActionSnapshot | null
-  ) {
-    if (walletId !== selectedWalletId) return;
-    mobileQuickActions = snapshot ? { walletId, showSend: shouldShowMobileSend(snapshot) } : null;
-  }
   provideWalletShellContext({
     profiles: () => profiles,
     selectedWalletId: () => selectedWalletId,
@@ -734,7 +705,6 @@
     beginHardwareReview,
     requestUnlockSync,
     requestInitialHistoryApproval,
-    reportMobileQuickActionSnapshot,
     initialHistoryScanRunning: (walletId) => initialHistoryScanWalletId === walletId,
     consumeUnlockSync,
     pauseAutomaticSync,
@@ -923,7 +893,6 @@
         profiles = known
           ? profiles.map((profile) => (profile.id === event.profile.id ? event.profile : profile))
           : [...profiles, event.profile];
-        if (event.profile.id !== selectedWalletId) mobileQuickActions = null;
         selectedWalletId = event.profile.id;
       }
     });
@@ -1009,7 +978,6 @@
   class:native-mobile={mobileRuntime}
   class:wallet-unlocked={selectedWalletUnlocked}
   class:mobile-navigation-visible={!restrictedUtilityRoute && !onboardingRoute && !mobileSetupRoute}
-  class:mobile-actions-visible={showQuickActions}
   class:prototype-shell={isPrototypeWallet}
   class:locked-setup-visible={showSetupResume && lockedRoute}
   class:navigation-pending={navigationPending}
@@ -1169,16 +1137,6 @@
         />
       </div>{/if}
 
-    {#if showQuickActions}
-      <div class="mobile-actions" class:single-action={!showSendQuickAction}>
-        <a class="mobile-action secondary" href={receiveHref}
-          ><ArrowDownToLine size={18} />{t('receive', $locale)}</a
-        >
-        {#if showSendQuickAction}<a class="mobile-action primary" href={sendHref}
-            ><ArrowUpFromLine size={18} />{t('send', $locale)}</a
-          >{/if}
-      </div>
-    {/if}
     <DiscardMultisigSetupModal
       open={discardSetupOpen}
       busy={discardingSetup}
@@ -1476,8 +1434,7 @@
   :global(.side-nav):where(.side-nav) :global(a svg),
   :global(.sidebar-bottom):where(.sidebar-bottom) > :global(a svg),
   :global(.wallet-switcher):where(.wallet-switcher) :global(a svg),
-  :global(.mobile-nav):where(.mobile-nav) :global(a svg),
-  :global(.mobile-action):where(.mobile-action) :global(svg) {
+  :global(.mobile-nav):where(.mobile-nav) :global(a svg) {
     transition:
       color 0.16s ease,
       transform 0.16s cubic-bezier(0.2, 0.75, 0.3, 1);
@@ -1490,14 +1447,12 @@
   :global(.side-nav):where(.side-nav) :global(a:hover svg),
   :global(.sidebar-bottom):where(.sidebar-bottom) > :global(a:hover svg),
   :global(.wallet-switcher):where(.wallet-switcher) :global(a:hover svg),
-  :global(.mobile-nav):where(.mobile-nav) :global(a:hover svg),
-  :global(.mobile-action:hover):where(.mobile-action) :global(svg) {
+  :global(.mobile-nav):where(.mobile-nav) :global(a:hover svg) {
     transform: translateY(-1px) scale(1.025);
   }
   :global(.side-nav):where(.side-nav) :global(a:active),
   :global(.sidebar-bottom):where(.sidebar-bottom) > :global(a:active),
-  :global(.mobile-nav):where(.mobile-nav) :global(a:active),
-  :global(.mobile-action:active):where(.mobile-action) {
+  :global(.mobile-nav):where(.mobile-nav) :global(a:active) {
     transform: scale(0.992);
   }
   :global(.side-nav):where(.side-nav) :global(a.active),
@@ -1566,11 +1521,9 @@
   }
   :global(.mobile-brand):where(.mobile-brand),
   :global(.mobile-nav):where(.mobile-nav),
-  :global(.mobile-actions):where(.mobile-actions),
   :global(.app-shell.onboarding-shell):where(.app-shell) :global(.sidebar),
   :global(.app-shell.onboarding-shell):where(.app-shell) :global(.mobile-brand),
-  :global(.app-shell.onboarding-shell):where(.app-shell) :global(.mobile-nav),
-  :global(.app-shell.onboarding-shell):where(.app-shell) :global(.mobile-actions) {
+  :global(.app-shell.onboarding-shell):where(.app-shell) :global(.mobile-nav) {
     display: none;
   }
   :global(.app-shell.onboarding-shell):where(.app-shell) :global(.main) {
@@ -1581,6 +1534,9 @@
 
   @media (max-width: 760px) {
     :global(.app-shell):where(.app-shell) {
+      --mobile-dock-height: 60px;
+      --mobile-dock-bottom: max(12px, env(safe-area-inset-bottom));
+      --mobile-dock-reserve: calc(var(--mobile-dock-height) + var(--mobile-dock-bottom) + 8px);
       --locked-setup-notice-top: max(64px, calc(env(safe-area-inset-top) + 56px));
       --locked-setup-notice-right: 18px;
       --locked-setup-notice-left: 18px;
@@ -1620,18 +1576,24 @@
     :global(.app-shell.prototype-shell):where(.app-shell) :global(.send-page.signing-page) {
       padding-top: max(120px, calc(env(safe-area-inset-top) + 108px));
     }
-    :global(.app-shell:not(.mobile-actions-visible)):where(.app-shell) :global(.page) {
-      padding-bottom: calc(84px + env(safe-area-inset-bottom));
+    :global(.app-shell.mobile-navigation-visible):where(.app-shell) :global(.page) {
+      padding-bottom: calc(var(--mobile-dock-reserve) + 12px);
     }
     :global(.mobile-nav):where(.mobile-nav) {
       position: fixed;
       display: grid;
       grid-template-columns: repeat(4, 1fr);
-      inset: auto 0 0;
-      height: calc(64px + env(safe-area-inset-bottom));
-      padding-bottom: env(safe-area-inset-bottom);
-      background: var(--sidebar);
-      border-top: 1px solid var(--border);
+      inset: auto max(12px, env(safe-area-inset-right)) var(--mobile-dock-bottom)
+        max(12px, env(safe-area-inset-left));
+      max-width: 420px;
+      height: var(--mobile-dock-height);
+      margin-inline: auto;
+      padding: 4px;
+      gap: 2px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 32px;
+      box-shadow: 0 5px 20px color-mix(in srgb, var(--text) 12%, transparent);
       z-index: 20;
     }
     :global(.navigation-progress):where(.navigation-progress) {
@@ -1645,9 +1607,13 @@
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      gap: 4px;
+      min-width: 0;
+      gap: 3px;
+      border-radius: 26px;
       color: var(--muted-2);
-      font-size: var(--font-size-meta);
+      text-align: center;
+      font-size: 12px;
+      line-height: 1.1;
     }
     :global(.mobile-nav):where(.mobile-nav) :global(a.active) {
       color: var(--text);
@@ -1706,41 +1672,8 @@
       :global(.locked-mobile-utilities .network-popover) {
       top: 98px;
     }
-    :global(.mobile-actions):where(.mobile-actions) {
-      position: fixed;
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 8px;
-      bottom: calc(76px + env(safe-area-inset-bottom));
-      left: 18px;
-      right: 18px;
-      z-index: 19;
-    }
-    :global(.mobile-actions.single-action):where(.mobile-actions) {
-      grid-template-columns: minmax(0, 1fr);
-    }
-    :global(.mobile-action):where(.mobile-action) {
-      min-height: 46px;
-      border-radius: var(--radius-control);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
-      font-size: 14px;
-      font-weight: 550;
-      box-shadow: 0 7px 25px rgba(0, 0, 0, 0.28);
-    }
-    :global(.mobile-action.primary):where(.mobile-action) {
-      background: var(--primary-bg);
-      color: var(--primary-fg);
-    }
-    :global(.mobile-action.secondary):where(.mobile-action) {
-      color: var(--text);
-      background: var(--surface-control);
-      border: 1px solid var(--control-border);
-    }
-    :global(.app-shell:not(.mobile-actions-visible)):where(.app-shell) :global(.toast-region) {
-      bottom: calc(76px + env(safe-area-inset-bottom));
+    :global(.app-shell.mobile-navigation-visible):where(.app-shell) :global(.toast-region) {
+      bottom: calc(var(--mobile-dock-reserve) + 6px);
     }
   }
 
@@ -1802,31 +1735,7 @@
       --mobile-bottom-reserve: 0px;
     }
     :global(.app-shell.native-mobile.mobile-navigation-visible) {
-      --mobile-bottom-reserve: calc(49px + env(safe-area-inset-bottom, 0px));
-    }
-    :global(.app-shell.native-mobile.mobile-actions-visible) {
-      --mobile-bottom-reserve: calc(119px + env(safe-area-inset-bottom, 0px));
-    }
-    :global(.app-shell.native-mobile .mobile-nav) {
-      height: calc(49px + env(safe-area-inset-bottom, 0px));
-    }
-    :global(.app-shell.native-mobile .mobile-nav a) {
-      gap: 2px;
-      font-size: 12px;
-    }
-    :global(.app-shell.native-mobile .mobile-nav a) {
-      position: relative;
-      isolation: isolate;
-    }
-    :global(.app-shell.native-mobile .mobile-nav a.active) {
-      background: var(--surface-active);
-    }
-    :global(.app-shell.native-mobile .mobile-nav a svg) {
-      width: 20px;
-      height: 20px;
-    }
-    :global(.app-shell.native-mobile .mobile-actions) {
-      bottom: calc(61px + env(safe-area-inset-bottom, 0px));
+      --mobile-bottom-reserve: var(--mobile-dock-reserve);
     }
     :global(.app-shell.native-mobile:not(.onboarding-shell) .main) {
       position: fixed;

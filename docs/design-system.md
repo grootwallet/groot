@@ -29,7 +29,7 @@ Source-contract tests resolve imports and component/route styles through `readUi
 
 ## Layout
 
-Desktop: 224px rail and centered content. Mobile: four navigation destinations, safe-area spacing and keyboard-safe actions. Review at **1180×780** and **390×844** in both themes, including translated copy. Page content must not overflow horizontally; long tables/raw JSON scroll within their container.
+Desktop: 224px rail and centered content. Mobile: four navigation destinations, plus Policy for multisig. Review safe-area spacing and keyboard-safe actions at **1180×780** and **390×844** in both themes, including translated copy. Page content must not overflow horizontally; long tables/raw JSON scroll within their container.
 
 Dialogs cover the usable window including desktop title-bar overlap, keep visible viewport padding and scroll their body. Hardware-signing dialogs are top-weighted on desktop; other dialogs center. Mobile uses the existing bottom sheet. Action grids respond to their card width without word fragmentation.
 
@@ -79,9 +79,7 @@ Native mobile setup keeps build information in Settings instead of a fixed foote
 
 Unlocked mobile screens omit the brand header and start below the system safe area. Sync and backup reminders use compact inline actions with 44px touch targets; recovery verification remains available. Overview shows each sync fact once. The balance card shows a verified total, including zero, or labels a zero from an empty local snapshot **Unverified balance** while the first scan is idle. Discreet mode masks both amounts. Saved-payment resume is separate from the availability of a new Send action. This presentation change has no BIP or persisted-format impact.
 
-Native mobile navigation uses a 49px tab row plus the system bottom safe area, 20px icons and 12px labels. Keep the home indicator clear; do not add a second bottom spacer.
-
-The selected native tab uses a square background extending through the bottom safe-area strip. Icons and labels stay in the safe 49px row; the selection does not create a blank band below the active tab.
+Mobile navigation floats in an opaque rounded bar above the home indicator. Icons and labels stay inside rounded 44px-or-larger tap targets. Reserve space once for the bar and its safe area; wallet actions scroll with Overview content. Show sync setup before the balance and backup verification as a secondary inline reminder.
 
 Active operation and validation errors use WarningNotice with danger tone and alert semantics, including hardware enrollment, recovery, credential fields, settings and QR permission failures. LoadFailure composes the same notice and keeps its retry action. Do not introduce plain red paragraphs or route-local error cards. Invalid-field borders, historical diagnostic codes, status badges and toasts retain their own existing semantics.
 

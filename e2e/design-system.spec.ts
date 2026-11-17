@@ -110,7 +110,9 @@ test('local font failure never blocks balance, navigation, or editable payment f
   );
 });
 
-test('settings language icon aligns with the shared setting-row grid', async ({ page }) => {
+test('settings language icon aligns with the shared setting-row grid', async ({
+  page
+}, testInfo) => {
   await page.goto('/settings');
   await settled(page);
   const languageRow = page.locator('.language-setting-row');
@@ -119,14 +121,27 @@ test('settings language icon aligns with the shared setting-row grid', async ({ 
   });
   const languageIcon = await languageRow.locator('.setting-icon').boundingBox();
   const languageCopy = await languageRow.locator('.language-control-copy').boundingBox();
+  const languageToggle = await languageRow.locator('.language-toggle').boundingBox();
   const themeIcon = await themeRow.locator('.setting-icon').boundingBox();
-  expect(languageIcon && languageCopy && themeIcon).toBeTruthy();
+  expect(languageIcon && languageCopy && languageToggle && themeIcon).toBeTruthy();
   expect(Math.abs(languageIcon!.x - themeIcon!.x)).toBeLessThanOrEqual(1);
   expect(
     Math.abs(
       languageIcon!.y + languageIcon!.height / 2 - (languageCopy!.y + languageCopy!.height / 2)
     )
   ).toBeLessThanOrEqual(1);
+  if (testInfo.project.name === 'mobile') {
+    expect(Math.abs(languageToggle!.x - languageCopy!.x)).toBeLessThanOrEqual(1);
+    expect(languageToggle!.y - (languageCopy!.y + languageCopy!.height)).toBeGreaterThanOrEqual(9);
+    expect(Math.abs(languageToggle!.width - languageCopy!.width)).toBeLessThanOrEqual(1);
+  } else {
+    expect(languageToggle!.x).toBeGreaterThan(languageCopy!.x + languageCopy!.width);
+  }
+  await languageRow.scrollIntoViewIfNeeded();
+  await page.screenshot({
+    path: test.info().outputPath(`settings-language-${testInfo.project.name}.png`),
+    animations: 'disabled'
+  });
   await contained(page);
 });
 

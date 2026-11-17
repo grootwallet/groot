@@ -30,7 +30,7 @@ test.describe('native mobile Overview', () => {
 
     const actions = page.locator('.mobile-actions');
     await expect(actions.getByRole('link', { name: 'Receive', exact: true })).toBeVisible();
-    await expect(actions.getByRole('link', { name: 'Send', exact: true })).toHaveCount(0);
+    await expect(actions.getByRole('button', { name: 'Send', exact: true })).toBeDisabled();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
       true
     );
@@ -51,12 +51,12 @@ test.describe('native mobile Overview', () => {
 
     await expect(page.getByText('Set up wallet sync', { exact: true })).toBeVisible();
     await expect(page.locator('.balance-card')).toHaveCount(0);
-    await expect(page.locator('.mobile-actions').getByRole('link', { name: 'Send' })).toHaveCount(
-      0
-    );
+    await expect(
+      page.locator('.mobile-actions').getByRole('button', { name: 'Send' })
+    ).toBeDisabled();
   });
 
-  test('keeps Receive but omits new Send for a verified empty wallet', async ({ page }) => {
+  test('keeps Receive and disables Send for a verified empty wallet', async ({ page }) => {
     await page.goto('/?fixture-native-mobile=1&fixture-empty-wallet=1');
 
     const balance = page.locator('.balance-card');
@@ -70,20 +70,22 @@ test.describe('native mobile Overview', () => {
 
     const actions = page.locator('.mobile-actions');
     await expect(actions.getByRole('link', { name: 'Receive', exact: true })).toBeVisible();
-    await expect(actions.getByRole('link', { name: 'Send', exact: true })).toHaveCount(0);
+    await expect(actions.getByRole('button', { name: 'Send', exact: true })).toBeDisabled();
     await page.screenshot({
       path: test.info().outputPath('overview-known-zero.png'),
       animations: 'disabled'
     });
   });
 
-  test('shows funded actions and keeps every wallet action reachable', async ({ page }) => {
+  test('keeps shared-wallet actions reachable without offering a local receive request', async ({
+    page
+  }) => {
     await page.setViewportSize({ width: 390, height: 750 });
     await page.goto('/?fixture-native-mobile=1&fixture-selected-multisig=1');
 
-    const actions = page.locator('.mobile-actions');
-    await expect(actions.getByRole('link', { name: 'Receive', exact: true })).toBeVisible();
-    await expect(actions.getByRole('link', { name: 'Send', exact: true })).toBeVisible();
+    await expect(page.getByText('Receive on desktop', { exact: true })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Receive', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('link', { name: 'Send', exact: true })).toHaveCount(0);
 
     const trigger = page.getByRole('button', { name: 'More wallet actions' });
     await expect(trigger).toHaveAttribute('aria-haspopup', 'dialog');

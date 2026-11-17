@@ -3,7 +3,7 @@ import { expect, test } from '@playwright/test';
 for (const family of [false, true]) {
   test(`${family ? 'Family' : 'Partner'} backup preserves verified paths and signer roles`, async ({
     page
-  }) => {
+  }, testInfo) => {
     await page.goto(`/multisig/backup?fixture-continuity=${family ? 'family' : 'partner'}`);
 
     const policy = page.locator('.continuity-backup-policy');
@@ -35,8 +35,28 @@ for (const family of [false, true]) {
       await expect(estate).toContainText('Estate guardian');
     }
 
-    await page.getByLabel('Backup app PIN', { exact: true }).fill('prototype-passphrase');
-    await page.getByRole('button', { name: 'Authorize & prepare backup' }).click();
+    const backupPin = page.getByLabel('Backup app PIN', { exact: true });
+    const authorize = page.getByRole('button', { name: 'Authorize & prepare backup' });
+    await backupPin.scrollIntoViewIfNeeded();
+    const pinBounds = await backupPin.boundingBox();
+    const authorizeBounds = await authorize.boundingBox();
+    expect(pinBounds && authorizeBounds).toBeTruthy();
+    if (testInfo.project.name === 'mobile') {
+      expect(authorizeBounds!.y - (pinBounds!.y + pinBounds!.height)).toBeGreaterThanOrEqual(9);
+      expect(Math.abs(authorizeBounds!.x - pinBounds!.x)).toBeLessThanOrEqual(1);
+      expect(Math.abs(authorizeBounds!.width - pinBounds!.width)).toBeLessThanOrEqual(1);
+    } else {
+      expect(authorizeBounds!.x - (pinBounds!.x + pinBounds!.width)).toBeGreaterThanOrEqual(9);
+    }
+    if (family) {
+      await authorize.evaluate((element) => element.scrollIntoView({ block: 'center' }));
+      await page.screenshot({
+        path: test.info().outputPath(`backup-auth-${testInfo.project.name}.png`),
+        animations: 'disabled'
+      });
+    }
+    await backupPin.fill('prototype-passphrase');
+    await authorize.click();
     await page.emulateMedia({ media: 'print' });
 
     const printSheet = page.locator('.backup-print-sheet');

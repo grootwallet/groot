@@ -1,6 +1,7 @@
 <script lang="ts">
   import { formatInteger, locale } from '$lib/i18n';
   import { translate, localizedError } from '$lib/i18n-catalog';
+  import { discreetMode } from '$lib/privacy';
   import {
     ChevronRight,
     Clock3,
@@ -88,6 +89,13 @@
   let walletLoadError = $state('');
   let snapshot = $state<WalletSnapshot | null>(null);
   let coordination = $state<CoordinationStatus | null>(null);
+  let nativeMobileRuntime = $state<boolean | null>(null);
+  const receiveOnDesktop = $derived(
+    nativeMobileRuntime !== false ||
+      coordination === null ||
+      coordination.role === 'mobile_cosigner' ||
+      coordination.role === 'mobile_watch_only'
+  );
   let statusError = $state('');
   let selectedSigner = $state<CosignerDraft | null>(null);
   let showDescriptors = $state(false);
@@ -239,6 +247,10 @@
   async function loadPolicyWallet() {
     walletLoading = true;
     walletLoadError = '';
+    void walletService.runtimePlatform().then(
+      (runtime) => (nativeMobileRuntime = runtime.mobile && runtime.platform !== 'browser'),
+      () => (nativeMobileRuntime = null)
+    );
     try {
       wallet = await walletService.multisigWallet();
     } catch (cause) {
@@ -752,7 +764,21 @@
     <section class="vault-hero">
       <span><ShieldCheck size={22} /></span>
       <div class="vault-summary">
-        <strong class="vault-balance"><Amount value={snapshot?.balance.total ?? 0} /></strong>
+        <strong class="vault-balance desktop-policy-balance"
+          ><Amount value={snapshot?.balance.total ?? 0} /></strong
+        >
+        {#if snapshot && (snapshot.syncedAt || snapshot.balance.total === 0)}
+          {@const balanceLabel = translate(
+            $locale,
+            snapshot.syncedAt ? 'Total balance' : 'Unverified balance'
+          )}
+          <div class="mobile-policy-balance" role="group" aria-label={balanceLabel}>
+            <small>{balanceLabel}</small>
+            <strong class="vault-balance"
+              ><Amount value={snapshot.balance.total} hidden={$discreetMode} /></strong
+            >
+          </div>
+        {/if}
         <div class="vault-policy-tags" aria-label={translate($locale, 'Spending policy')}>
           {#if continuityPolicy && policyPresentation?.delayed}
             <span class="policy-pill"
@@ -838,10 +864,14 @@
                 >{/if}
             </div>{/if}
         </div>
-        <Button variant="secondary" href="/multisig/receive">{translate($locale, 'Receive')}</Button
+        <Button variant="secondary" href="/multisig/receive"
+          >{translate($locale, receiveOnDesktop ? 'Address history' : 'Receive')}</Button
         >{#if coordination?.canSignOnThisDevice}<Button href="/mobile/sign"
-            ><Smartphone size={16} />{translate($locale, 'Sign desktop PSBT')}</Button
-          >{:else}<Button
+            ><Smartphone size={16} />
+            <span class="desktop-sign-action">{translate($locale, 'Sign desktop PSBT')}</span>
+            <span class="mobile-sign-action">{translate($locale, 'Sign payment')}</span>
+          </Button>
+        {:else if !receiveOnDesktop}<Button
             class={snapshot && shouldShowMobileSend(snapshot) ? '' : 'empty-wallet-send'}
             href="/multisig/send">{translate($locale, 'Send')}</Button
           >{/if}
@@ -1150,6 +1180,11 @@
             {translate($locale, 'Back up the policy and verify its first address.')}
           </p>
         </div>
+        <Button
+          variant="secondary"
+          class="full mobile-descriptors"
+          onclick={() => (showDescriptors = true)}>{translate($locale, 'Show descriptors')}</Button
+        >
         <Button variant="secondary" class="full" href="/multisig/backup"
           >{translate($locale, 'Export & verify')}</Button
         >{#if coordination?.role === 'desktop_coordinator'}<Button
@@ -1782,7 +1817,43 @@
     }
   }
 
+  .mobile-policy-balance,
+  .mobile-sign-action,
+  :global(.vault-backup-card .mobile-descriptors) {
+    display: none;
+  }
+
+  .mobile-policy-balance {
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.2rem 0.65rem;
+    margin-bottom: 0.5rem;
+  }
+
+  :global(.native-mobile) .desktop-sign-action,
+  :global(.native-mobile .vault-actions .wallet-more),
+  :global(.native-mobile) .desktop-policy-balance {
+    display: none;
+  }
+
+  :global(.native-mobile) .mobile-sign-action,
+  :global(.native-mobile .vault-backup-card .mobile-descriptors) {
+    display: inline-flex;
+  }
+
+  :global(.native-mobile) .mobile-policy-balance {
+    display: flex;
+  }
+
   @media (max-width: 760px) {
+    .desktop-sign-action,
+    :global(.vault-actions .wallet-more) {
+      display: none;
+    }
+    .mobile-sign-action,
+    :global(.vault-backup-card .mobile-descriptors) {
+      display: inline-flex;
+    }
     .coordinator-page > .page-header {
       min-height: auto;
       margin-bottom: 0.75rem;
@@ -1797,8 +1868,11 @@
       margin-bottom: 1rem;
     }
     :global(.vault-hero):where(.vault-hero) > :global(span),
-    :global(.vault-hero):where(.vault-hero) :global(.vault-balance) {
+    .desktop-policy-balance {
       display: none;
+    }
+    .mobile-policy-balance {
+      display: flex;
     }
     :global(.vault-policy-tags):where(.vault-policy-tags) {
       margin: 0 0 0.25rem;
@@ -1806,10 +1880,8 @@
     :global(.vault-actions):where(.vault-actions) {
       grid-column: 1 / -1;
       display: grid;
-      grid-template-columns: auto repeat(2, minmax(0, 1fr));
-    }
-    :global(.vault-actions):where(.vault-actions):has(:global(.empty-wallet-send)) {
-      grid-template-columns: auto minmax(0, 1fr);
+      grid-auto-flow: column;
+      grid-auto-columns: minmax(0, 1fr);
     }
     :global(.vault-actions):where(.vault-actions) :global(.empty-wallet-send) {
       display: none;
@@ -1828,11 +1900,6 @@
     }
     :global(.saved-cosigner-list):where(.saved-cosigner-list) :global(.row-chevron) {
       display: none;
-    }
-    :global(.vault-actions):where(.vault-actions) :global(.wallet-more-menu) {
-      right: 18px;
-      left: 18px;
-      width: auto;
     }
     .phone-recovery-actions {
       display: grid;

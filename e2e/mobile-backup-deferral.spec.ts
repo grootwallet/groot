@@ -197,6 +197,14 @@ for (const theme of ['light', 'dark']) {
         .locator('.mobile-nav')
         .getByRole('link', { name: 'Overview', exact: true })
         .click();
+      await expect(
+        page.locator('.mobile-actions').getByRole('link', { name: 'Sign payment' })
+      ).toBeVisible();
+      await expect(page.getByText('Receive on desktop', { exact: true })).toBeVisible();
+      await expect(page.getByRole('link', { name: 'Receive', exact: true })).toHaveCount(0);
+      await expect(
+        page.locator('.mobile-backup-reminder').getByText('Recovery backup not verified')
+      ).toBeVisible();
       await page.getByRole('button', { name: 'Verify now', exact: true }).click();
       await expect(dialog).toBeVisible();
       expect(new URL(page.url()).pathname).toBe('/');

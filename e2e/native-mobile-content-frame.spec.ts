@@ -14,39 +14,39 @@ for (const theme of ['light', 'dark']) {
     });
     const main = page.locator('main.main');
     await expect(page.locator('.mobile-brand')).toBeHidden();
-    const actions = page.locator('.mobile-actions');
+    const actions = main.locator('.mobile-actions');
     const navigation = page.locator('.mobile-nav');
+    await expect(actions.getByRole('link', { name: 'Receive' })).toBeVisible();
+    await expect(actions.getByRole('link', { name: 'Send' })).toBeVisible();
     const mainBox = await main.boundingBox(),
       actionBox = await actions.boundingBox(),
       navBox = await navigation.boundingBox();
     expect(mainBox && actionBox && navBox).toBeTruthy();
     expect(mainBox!.y).toBe(0);
-    expect(navBox!.height).toBe(49);
-    expect(navBox!.y + navBox!.height).toBe(844);
+    expect(navBox!.height).toBeGreaterThanOrEqual(54);
+    expect(navBox!.x).toBeGreaterThan(0);
+    expect(navBox!.x + navBox!.width).toBeLessThan(390);
+    expect(navBox!.y + navBox!.height).toBeLessThan(844);
     const activeNavigation = navigation.locator('a.active');
     const selection = await activeNavigation.evaluate((node) => {
       const style = getComputedStyle(node);
       return {
         background: style.backgroundColor,
-        decoration: getComputedStyle(node, '::before').content
+        radius: Number.parseFloat(style.borderTopLeftRadius)
       };
     });
     expect(selection.background).not.toBe('rgba(0, 0, 0, 0)');
-    expect(selection.decoration).toBe('none');
+    expect(selection.radius).toBeGreaterThanOrEqual(20);
     const activeNavigationBox = await activeNavigation.boundingBox();
-    const navigationItemCount = await navigation.getByRole('link').count();
-    const navigationBorderTop = await navigation.evaluate((element) =>
-      Number.parseFloat(getComputedStyle(element).borderTopWidth)
-    );
+    await expect(navigation.getByRole('link')).toHaveCount(4);
     expect(activeNavigationBox).toBeTruthy();
-    expect(activeNavigationBox!.width).toBeCloseTo(navBox!.width / navigationItemCount, 1);
-    expect(activeNavigationBox!.y).toBeCloseTo(navBox!.y + navigationBorderTop, 1);
-    expect(activeNavigationBox!.y + activeNavigationBox!.height).toBeCloseTo(
-      navBox!.y + navBox!.height,
-      1
+    expect(activeNavigationBox!.height).toBeGreaterThanOrEqual(44);
+    expect(activeNavigationBox!.y).toBeGreaterThan(navBox!.y);
+    expect(activeNavigationBox!.y + activeNavigationBox!.height).toBeLessThan(
+      navBox!.y + navBox!.height
     );
-    expect(mainBox!.y + mainBox!.height).toBeLessThanOrEqual(actionBox!.y - 8);
-    expect(actionBox!.y + actionBox!.height).toBeLessThanOrEqual(navBox!.y - 8);
+    expect(mainBox!.y + mainBox!.height).toBeLessThanOrEqual(navBox!.y - 8);
+    expect(actionBox!.y + actionBox!.height).toBeLessThan(navBox!.y);
     await main.evaluate((node) => {
       node.scrollTop = node.scrollHeight;
     });

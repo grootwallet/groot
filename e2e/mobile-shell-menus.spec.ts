@@ -44,19 +44,14 @@ test('short native-mobile shell keeps wallet choices and navigation targets cont
     const selectedNavigation = navigation.getByRole('link', { name: 'Overview', exact: true });
     const navigationBounds = await navigation.boundingBox();
     const selectedNavigationBounds = await selectedNavigation.boundingBox();
-    const navigationBorderTop = await navigation.evaluate((element) =>
-      Number.parseFloat(getComputedStyle(element).borderTopWidth)
-    );
     expect(navigationBounds && selectedNavigationBounds).toBeTruthy();
-    expect(navigationBounds!.y + navigationBounds!.height).toBeCloseTo(height, 1);
-    expect(selectedNavigationBounds!.width).toBeCloseTo(
-      navigationBounds!.width / (await navigation.getByRole('link').count()),
-      1
-    );
-    expect(selectedNavigationBounds!.y).toBeCloseTo(navigationBounds!.y + navigationBorderTop, 1);
-    expect(selectedNavigationBounds!.y + selectedNavigationBounds!.height).toBeCloseTo(
-      navigationBounds!.y + navigationBounds!.height,
-      1
+    expect(navigationBounds!.x).toBeGreaterThan(0);
+    expect(navigationBounds!.y + navigationBounds!.height).toBeLessThan(height);
+    expect(selectedNavigationBounds!.width).toBeGreaterThanOrEqual(44);
+    expect(selectedNavigationBounds!.height).toBeGreaterThanOrEqual(44);
+    expect(selectedNavigationBounds!.y).toBeGreaterThan(navigationBounds!.y);
+    expect(selectedNavigationBounds!.y + selectedNavigationBounds!.height).toBeLessThan(
+      navigationBounds!.y + navigationBounds!.height
     );
     expect(
       await selectedNavigation.evaluate((element) => getComputedStyle(element).backgroundColor)
@@ -76,7 +71,7 @@ test('short native-mobile shell keeps wallet choices and navigation targets cont
   }
 });
 
-test('Coins uses a concise empty selection and exposes Send only for a verified spendable snapshot', async ({
+test('Coins uses a concise empty selection with wallet actions on Overview', async ({
   page
 }, info) => {
   test.skip(info.project.name !== 'mobile', 'mobile-only quick actions');
@@ -89,16 +84,11 @@ test('Coins uses a concise empty selection and exposes Send only for a verified 
   await expect(
     page.getByText('Automatic selection remains the default', { exact: true })
   ).toHaveCount(0);
-  const emptyActions = page.locator('.mobile-actions');
-  await expect(emptyActions.getByRole('link', { name: 'Receive', exact: true })).toBeVisible();
-  await expect(emptyActions.getByRole('link', { name: 'Send', exact: true })).toHaveCount(0);
-  await expect(emptyActions).toHaveClass(/single-action/);
+  await expect(page.locator('.mobile-actions')).toHaveCount(0);
 
   await page.goto('/coins?fixture-native-mobile=1');
   await expect(page.locator('.coin-list .coin-row').first()).toBeVisible();
-  const fundedActions = page.locator('.mobile-actions');
-  await expect(fundedActions.getByRole('link', { name: 'Receive', exact: true })).toBeVisible();
-  await expect(fundedActions.getByRole('link', { name: 'Send', exact: true })).toBeVisible();
-  await expect(fundedActions).not.toHaveClass(/single-action/);
+  await expect(page.locator('.mobile-actions')).toHaveCount(0);
+  await expect(page.locator('.mobile-nav').getByRole('link', { name: 'Overview' })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });

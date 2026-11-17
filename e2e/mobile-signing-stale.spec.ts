@@ -95,7 +95,7 @@ for (const phase of ['decode', 'review', 'sign'] as const) {
         await page.evaluate((ok) => (window as any).finishPhone(ok), success);
         if (departure === 'reset')
           await expect(
-            page.getByText('Scan unsigned PSBT from desktop', { exact: true })
+            page.getByText('Scan the QR code shown on desktop.', { exact: true })
           ).toBeVisible();
         if (phase === 'decode')
           expect(await page.evaluate(() => (window as any).reviewCalls)).toBe(0);

@@ -1123,7 +1123,7 @@
   @media (max-width: 760px) {
     :global(.backup-auth):where(.backup-auth) {
       grid-template-columns: 1fr;
-      gap: 0;
+      gap: 10px;
     }
     :global(.backup-actions):where(.backup-actions),
     :global(.backup-format-grid):where(.backup-format-grid),

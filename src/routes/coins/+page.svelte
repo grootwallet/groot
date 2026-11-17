@@ -236,7 +236,6 @@
         transactions = event.snapshot.transactions;
         chainTip = event.snapshot.chainTip;
         policyPaths = event.snapshot.policyPaths ?? [];
-        walletShell.reportMobileQuickActionSnapshot(event.walletId, event.snapshot);
         selected = selected.filter((outpoint) =>
           utxos.some((coin) => coin.outpoint === outpoint && !coin.frozen)
         );
@@ -288,8 +287,6 @@
       transactions = snapshot.transactions;
       chainTip = snapshot.chainTip;
       policyPaths = snapshot.policyPaths ?? [];
-      if (requestedWalletId)
-        walletShell.reportMobileQuickActionSnapshot(requestedWalletId, snapshot);
       const requestedCoin = new URLSearchParams(location.search).get('coin');
       if (requestedCoin && utxos.some((coin) => coin.outpoint === requestedCoin)) {
         expanded = [requestedCoin];
@@ -305,7 +302,6 @@
         return;
       }
       loadError = localizedError(cause, $locale, 'Coin data could not be read.');
-      if (requestedWalletId) walletShell.reportMobileQuickActionSnapshot(requestedWalletId, null);
       toast({ title: 'Could not load coins', description: loadError, tone: 'danger' });
     } finally {
       loading = false;
@@ -314,15 +310,12 @@
 
   async function syncNow() {
     if (syncing) return;
-    const requestedWalletId = walletShell.selectedWalletId();
     syncing = true;
     try {
       const snapshot = multisig ? await walletService.syncMultisig() : await walletService.sync();
       utxos = snapshot.utxos;
       transactions = snapshot.transactions;
       chainTip = snapshot.chainTip;
-      if (requestedWalletId)
-        walletShell.reportMobileQuickActionSnapshot(requestedWalletId, snapshot);
       toast({
         title: 'Coins are up to date',
         description: 'Protection timelines were refreshed.',

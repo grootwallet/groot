@@ -55,7 +55,7 @@ describe('foreground wallet navigation', () => {
     expect(appShell).not.toContain('foregroundWalletRoutes');
     const paused = appShell.slice(
       appShell.indexOf('let syncPausedRoute'),
-      appShell.indexOf('const showQuickActions')
+      appShell.indexOf('const receiveHref')
     );
     expect(paused).not.toContain("'/settings'");
     expect(appShell).not.toContain('5_000');

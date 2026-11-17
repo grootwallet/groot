@@ -36,6 +36,7 @@
     WalletError,
     type WalletErrorDetails,
     type CosignerHealthCheck,
+    type CoordinationStatus,
     type CoreNodeConfig,
     type ExternalSignerWallet,
     type MultisigProposal,
@@ -76,6 +77,7 @@
   import EmptyState from '$lib/components/EmptyState.svelte';
   import MultisigDescriptorsModal from '$lib/components/MultisigDescriptorsModal.svelte';
   import { useWalletShellContext } from '$lib/wallet/shell-context';
+  import { shouldShowMobileSend } from '$lib/wallet/mobile-quick-actions';
   import { fly } from 'svelte/transition';
   import { presentLocalTimestamp, syncAge } from '$lib/date-time';
   const walletShell = useWalletShellContext();
@@ -112,6 +114,7 @@
   let networkSetupRequired = $state(false);
   let selectedProfile = $state<WalletProfile | null>(null);
   let phoneBackupUnverified = $state(false);
+  let coordination = $state<CoordinationStatus | null>(null);
   let verifyOpen = $state(false);
   let verifyPhoneKey = $state(false);
   let verifyCredential = $state('');
@@ -124,6 +127,13 @@
   let syncSource = $state<WalletSyncSource | null>(null);
   let syncStatus = $state<WalletSyncStatus | null>(null);
   let mobileRuntime = $state(false);
+  const mobileReceiveOnDesktop = $derived(
+    mobileRuntime && selectedProfile !== null && selectedProfile.kind !== 'single_key'
+  );
+  const mobileCanSignPayment = $derived(
+    mobileRuntime && coordination?.role === 'mobile_cosigner' && coordination.canSignOnThisDevice
+  );
+  const mobileSendReady = $derived(snapshot !== null && shouldShowMobileSend(snapshot));
   let nodeConfig = $state<CoreNodeConfig | null>(null);
   let syncPollToken = 0;
   let syncStatusReadGeneration = 0;
@@ -424,6 +434,8 @@
     loadErrorCode = '';
     networkSetupRequired = false;
     initialDataLoading = true;
+    coordination = null;
+    phoneBackupUnverified = false;
     checkingNode = false;
     nodeReady = false;
     try {
@@ -507,7 +519,6 @@
       if (!current()) return;
       automaticInitialScanPending = false;
       snapshot = nextSnapshot;
-      walletShell.reportMobileQuickActionSnapshot(profile.id, nextSnapshot);
       initialDataLoading = false;
       void loadSecondaryDetails(generation);
       if (firstHistory) await loadRecoveryState(generation);
@@ -534,8 +545,6 @@
           : networkSetupRequired
             ? 'Connect this wallet to Bitcoin Core in Settings to load network data.'
             : localizedError(cause, $locale, 'The wallet data could not be read.');
-      if (!snapshot && selectedProfile)
-        walletShell.reportMobileQuickActionSnapshot(selectedProfile.id, null);
       initialDataLoading = false;
       toast({
         title:
@@ -567,11 +576,13 @@
         if (current()) pendingMobilePairingCount = value.length;
       });
     const results = await Promise.allSettled([
-      (profile.kind === 'multisig' && !profile.backupVerified
-        ? walletService.coordinationStatus().then((status) => status.role === 'mobile_cosigner')
-        : Promise.resolve(false)
+      (profile.kind === 'multisig' && (mobileRuntime || !profile.backupVerified)
+        ? walletService.coordinationStatus()
+        : Promise.resolve(null)
       ).then((value) => {
-        if (current()) phoneBackupUnverified = value;
+        if (!current()) return;
+        coordination = value;
+        phoneBackupUnverified = value?.role === 'mobile_cosigner' && !profile.backupVerified;
       }),
       // Connection hints must not block cached wallet data or the separate
       // fail-closed wallet-history privacy disclosure.
@@ -662,7 +673,6 @@
       ) {
         multisig = event.walletKind === 'multisig';
         snapshot = event.snapshot;
-        walletShell.reportMobileQuickActionSnapshot(event.walletId, event.snapshot);
         loadError = '';
         loadErrorCode = '';
         syncError = '';
@@ -824,7 +834,6 @@
       ]);
       if (!current()) return;
       snapshot = nextSnapshot;
-      walletShell.reportMobileQuickActionSnapshot(walletId, nextSnapshot);
       if (manual)
         toast({
           title: 'Wallet is up to date',
@@ -1172,7 +1181,7 @@
       />
     </div>
   {/if}
-  {#if phoneBackupUnverified}
+  {#if phoneBackupUnverified && !mobileRuntime}
     <WarningNotice
       title={translate($locale, 'Recovery backup not verified')}
       class="compact-action"
@@ -1182,7 +1191,7 @@
       >
     </WarningNotice>
   {/if}
-  {#if selectedProfile?.kind === 'single_key' && !selectedProfile.backupVerified}
+  {#if !mobileRuntime && selectedProfile?.kind === 'single_key' && !selectedProfile.backupVerified}
     <section
       class="backup-verification-banner"
       aria-label={translate($locale, 'Recovery backup status')}
@@ -1433,17 +1442,58 @@
           </div>
         {/if}
       </div>
-      <a
-        class="button secondary large overview-inline-primary"
-        href={multisig ? '/multisig/receive' : '/receive'}
-        ><ArrowDownToLine size={18} />{translate($locale, 'Receive')}</a
-      >
-      <a
-        class="button default large overview-inline-primary"
-        href={multisig ? '/multisig/send' : '/send'}
-        ><ArrowUpFromLine size={18} />{translate($locale, 'Send')}</a
-      >
+      {#if !mobileRuntime}
+        <a
+          class="button secondary large overview-inline-primary"
+          href={multisig ? '/multisig/receive' : '/receive'}
+          ><ArrowDownToLine size={18} />{translate($locale, 'Receive')}</a
+        >
+        <a
+          class="button default large overview-inline-primary"
+          href={multisig ? '/multisig/send' : '/send'}
+          ><ArrowUpFromLine size={18} />{translate($locale, 'Send')}</a
+        >
+      {/if}
     </div>
+    {#if snapshot && selectedProfile}
+      {#if mobileReceiveOnDesktop}
+        {#if mobileCanSignPayment}
+          <div class="mobile-actions">
+            <Button size="large" href="/mobile/sign"
+              ><Smartphone size={18} />{translate($locale, 'Sign payment')}</Button
+            >
+          </div>
+        {/if}
+        <p class="mobile-receive-note">{translate($locale, 'Receive on desktop')}</p>
+      {:else}
+        <div class="mobile-actions">
+          <Button
+            size="large"
+            variant="secondary"
+            href={multisig ? '/multisig/receive' : '/receive'}
+            ><ArrowDownToLine size={18} />{translate($locale, 'Receive')}</Button
+          >
+          <Button
+            size="large"
+            href={mobileSendReady ? (multisig ? '/multisig/send' : '/send') : undefined}
+            disabled={!mobileSendReady}
+            ><ArrowUpFromLine size={18} />{translate($locale, 'Send')}</Button
+          >
+        </div>
+      {/if}
+    {/if}
+    {#if mobileRuntime && (phoneBackupUnverified || (selectedProfile?.kind === 'single_key' && !selectedProfile.backupVerified))}
+      <div class="mobile-backup-reminder">
+        <ShieldCheck size={16} aria-hidden="true" />
+        <span>{translate($locale, 'Recovery backup not verified')}</span>
+        <Button
+          size="small"
+          variant="ghost"
+          onclick={() => openBackupVerification(phoneBackupUnverified)}
+          >{translate($locale, 'Verify now')}</Button
+        >
+      </div>
+    {/if}
     {#if !(mobileRuntime && initialHistoryRequired)}<section class="section-block">
         <div class="section-heading">
           <div><h2>{translate($locale, 'Recent activity')}</h2></div>
@@ -1617,6 +1667,50 @@
 </Modal>
 
 <style>
+  .mobile-actions,
+  .mobile-receive-note {
+    display: none;
+  }
+  .mobile-actions {
+    grid-auto-columns: minmax(0, 1fr);
+    grid-auto-flow: column;
+    gap: 10px;
+    margin-top: 12px;
+  }
+  .native-mobile-overview .mobile-actions {
+    display: grid;
+  }
+  .mobile-actions :global(.button) {
+    min-width: 0;
+    min-height: 46px;
+  }
+  .mobile-receive-note {
+    margin: 8px 0 0;
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+  }
+  .native-mobile-overview .mobile-receive-note {
+    display: block;
+  }
+  .mobile-backup-reminder {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 12px;
+    padding: 2px 4px;
+    border-top: 1px solid var(--border);
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+  }
+  .mobile-backup-reminder :global(svg) {
+    flex: none;
+  }
+  .mobile-backup-reminder :global(.button) {
+    min-height: 44px;
+    margin-inline-start: auto;
+    color: var(--link);
+  }
+
   .unverified-balance {
     display: flex;
     align-items: baseline;
@@ -1640,6 +1734,9 @@
     margin-inline: 0;
   }
   @media (max-width: 760px) {
+    .mobile-actions {
+      display: grid;
+    }
     .dashboard-page .page-header {
       min-height: 46px;
       margin-bottom: 18px;

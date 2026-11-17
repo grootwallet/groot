@@ -88,10 +88,22 @@
     background: var(--fr-blue);
   }
 
-  @media (max-width: 540px) {
+  @media (max-width: 760px) {
     .language-control.labelled {
+      grid-template-columns: 33px minmax(0, 1fr);
       gap: 10px;
     }
+    .language-control.labelled .language-toggle {
+      grid-column: 2 / -1;
+      width: 100%;
+      margin-top: 2px;
+    }
+    .language-control.labelled .language-toggle button {
+      flex: 1;
+    }
+  }
+
+  @media (max-width: 540px) {
     .language-toggle button {
       min-width: 29px;
       padding-inline: 5px;
