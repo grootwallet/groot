@@ -306,6 +306,26 @@ test('the exact internal snapshot rejects all unreviewed drift and preserves the
   );
   assert.throws(() => verifyInternalSourcePolicy(read), /text and binary-safe readers/);
 });
+const reviewedMobileSources = [
+  'src/lib/components/AppShell.svelte',
+  'src/routes/+page.svelte',
+  'src/routes/receive/+page.svelte',
+  'src/routes/multisig/receive/+page.svelte',
+  'src/routes/multisig/backup/+page.svelte'
+];
+for (const sourcePath of reviewedMobileSources) {
+  test(`reviewed mobile snapshot rejects later byte drift: ${sourcePath}`, () => {
+    const changed = (path) => (path === sourcePath ? `${read(path)}\n` : read(path));
+    assert.throws(
+      () => verifyInternalSourcePolicy(changed, bytes),
+      (error) =>
+        !isSourceApprovalRequired(error) &&
+        error.message.includes('reviewed internal source snapshot mismatch:') &&
+        error.message.includes(sourcePath)
+    );
+  });
+}
+
 test('actual Node events reject a second failure and a missing test beside the expected stop', () => {
   const dir = mkdtempSync(join(tmpdir(), 'groot-internal-gate-'));
   try {

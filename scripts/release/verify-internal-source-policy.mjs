@@ -11,7 +11,16 @@ import {
 
 // Exact reviewed 0.5.4 internal-candidate bytes that intentionally differ from
 // the frozen public-release snapshot. Public/Mainnet pins remain unchanged.
+// Mobile review: docs/testing/0.5.4-mobile-source-review-2026-11-17.md
 const internalTextOverrides = new Map([
+  [
+    'src/routes/receive/+page.svelte',
+    'a3078315d471efd1b7362dcf9016b833cefcf75dac2d5ce34594463d7db9e2a8'
+  ],
+  [
+    'src/routes/multisig/receive/+page.svelte',
+    '383daa84ea10c0d3043ebf5409eefcf8eca07286bdabb3bfa09df183b1145c94'
+  ],
   [
     'src/routes/welcome/+page.svelte',
     '90c67fe622c75069646710693c14129af2a3489dbf90d6790b55e86cc087214c'
@@ -98,13 +107,13 @@ const internalTextOverrides = new Map([
   ['src/lib/release-notes.ts', '619a9397c1012603575d56e1055546c17415695488149c4456e4f08ef36a8260'],
   [
     'src/lib/components/AppShell.svelte',
-    '78b8164f53e7e1e3bf93b864dcb008c12ed9fe466fb1a5e8e785dd99f603fe67'
+    '59a9b8a3ae2026d9ae9b572d3c6ff7a0d6fed1e135e7ed17a3ffa59c5d177ff6'
   ],
   [
     'src/lib/wallet/live-sync.ts',
     '6dfb771e83c4a6db7dedfef3667ebe026f99ca41a4db1f0b650c14a9d003be15'
   ],
-  ['src/routes/+page.svelte', 'a56085252580916f35f926d734b0785d8d555f88a93f3554b718c217eb8e1db0'],
+  ['src/routes/+page.svelte', 'bd8e982f0aa11aa2d0666f98ca4465b4cfc8bf76ebf1e28d40e19bd3e52786bc'],
   [
     'src/routes/settings/+page.svelte',
     '188eb46a8980ca831b629bb7a4149de8a4d90eaca140f27e75e3172105ea79d5'
@@ -119,7 +128,7 @@ const internalTextOverrides = new Map([
   ],
   [
     'src/routes/multisig/backup/+page.svelte',
-    '4e70c970967dabe2da1f83e161d355130c53053d6a5ed0f17acea8a35efafda8'
+    '7004aa1efc147e4f855a304fb64c4aae1f830338e19dd67c907fb65b56daf0b5'
   ],
   [
     'scripts/release/build-mainnet-internal-rc.mjs',

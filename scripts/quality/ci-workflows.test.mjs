@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { parseDocument } from 'yaml';
+import { selectCiValidationScript } from './ci-validation-mode.mjs';
 import {
   REQUIRED_BROWSER_SHARDS,
   assertBrowserShardPlan,
@@ -120,6 +121,150 @@ function checkResults(results) {
     env: { ...process.env, CI_REQUIRED_RESULTS: JSON.stringify(results) }
   });
 }
+
+function ciValidationStep() {
+  const steps = ci.jobs['frontend-checks'].steps.filter((step) =>
+    step.run?.includes('node scripts/quality/ci-validation-mode.mjs')
+  );
+  assert.equal(steps.length, 1, 'CI must select one complete validation command');
+  return steps[0];
+}
+
+function checkCiValidationWorkflow({ eventName, ref, status = 0, selectorOutput }) {
+  const directory = mkdtempSync(join(tmpdir(), 'groot-ci-context-'));
+  const selected = join(directory, 'selected-script');
+  try {
+    const result = spawnSync(
+      process.platform === 'win32' ? 'bash' : '/bin/bash',
+      [
+        '-e',
+        '-c',
+        `pnpm() {
+          printf '%s\\n' "$@" >> "$GROOT_CI_TEST_SELECTED"
+          return "$GROOT_CI_TEST_STATUS"
+        }
+        if [[ "$GROOT_CI_TEST_OVERRIDE_SELECTOR" == 1 ]]; then
+          node() { printf '%s\\n' "$GROOT_CI_TEST_SELECTOR_OUTPUT"; }
+        fi
+        ${ciValidationStep().run}`
+      ],
+      {
+        cwd: fileURLToPath(root),
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          GITHUB_EVENT_NAME: eventName ?? '',
+          GITHUB_REF: ref ?? '',
+          RUNNER_TEMP: directory.replaceAll('\\', '/'),
+          GROOT_CI_TEST_SELECTED: selected.replaceAll('\\', '/'),
+          GROOT_CI_TEST_STATUS: String(status),
+          GROOT_CI_TEST_OVERRIDE_SELECTOR: selectorOutput === undefined ? '0' : '1',
+          GROOT_CI_TEST_SELECTOR_OUTPUT: selectorOutput ?? ''
+        }
+      }
+    );
+    return {
+      ...result,
+      selectedScript: existsSync(selected) ? readFileSync(selected, 'utf8') : null
+    };
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+}
+
+test('CI validation keeps main strict and recognizes only canonical pull-request merge refs', () => {
+  assert.deepEqual(ci.on, { pull_request: null, push: { branches: ['main'] } });
+  assert.equal(selectCiValidationScript('push', 'refs/heads/main'), 'validate:ci');
+  for (const number of [1, 122, Number.MAX_SAFE_INTEGER]) {
+    assert.equal(
+      selectCiValidationScript('pull_request', `refs/pull/${number}/merge`),
+      'validate:internal'
+    );
+  }
+  for (const [eventName, ref] of [
+    [undefined, undefined],
+    ['', ''],
+    ['pull_request_target', 'refs/pull/122/merge'],
+    ['workflow_dispatch', 'refs/heads/main'],
+    ['workflow_run', 'refs/heads/main'],
+    ['push', 'refs/heads/codex/post-53-maintainability'],
+    ['push', 'refs/pull/122/merge'],
+    ['push', 'refs/tags/v5.3.0'],
+    ['push', 'refs/heads/main\n'],
+    ['pull_request', 'refs/heads/main'],
+    ['pull_request', 'refs/pull/122/head'],
+    ['pull_request', 'refs/pull/0/merge'],
+    ['pull_request', 'refs/pull/01/merge'],
+    ['pull_request', 'refs/pull/-1/merge'],
+    ['pull_request', 'refs/pull/9007199254740992/merge'],
+    ['pull_request', 'refs/pull/122/merge\n'],
+    ['pull_request', ' refs/pull/122/merge'],
+    ['pull_request', 'refs/pull/122/merge; exit 0'],
+    ['pull_request', undefined],
+    ['pull_request', null],
+    ['pull_request', 122]
+  ]) {
+    assert.throws(
+      () => selectCiValidationScript(eventName, ref),
+      /Unsupported GitHub CI event\/ref context/
+    );
+  }
+});
+
+test('CI validation selector CLI emits only fixed scripts and rejects missing context or arguments', () => {
+  const selector = fileURLToPath(new URL('scripts/quality/ci-validation-mode.mjs', root));
+  for (const [eventName, ref, expected] of [
+    ['push', 'refs/heads/main', 'validate:ci\n'],
+    ['pull_request', 'refs/pull/122/merge', 'validate:internal\n']
+  ]) {
+    const result = spawnSync(process.execPath, [selector], {
+      encoding: 'utf8',
+      env: { ...process.env, GITHUB_EVENT_NAME: eventName, GITHUB_REF: ref }
+    });
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout, expected);
+  }
+  for (const [args, eventName, ref] of [
+    [[], '', ''],
+    [['validate:internal'], 'push', 'refs/heads/main']
+  ]) {
+    const result = spawnSync(process.execPath, [selector, ...args], {
+      encoding: 'utf8',
+      env: { ...process.env, GITHUB_EVENT_NAME: eventName, GITHUB_REF: ref }
+    });
+    assert.notEqual(result.status, 0);
+    assert.equal(result.stdout, '');
+  }
+});
+
+test('CI validation executes one complete selected pass and propagates its failure through tee', () => {
+  for (const [eventName, ref, script] of [
+    ['push', 'refs/heads/main', 'validate:ci'],
+    ['pull_request', 'refs/pull/122/merge', 'validate:internal']
+  ]) {
+    for (const status of [0, 17]) {
+      const result = checkCiValidationWorkflow({ eventName, ref, status });
+      assert.equal(result.status, status, result.stderr);
+      assert.equal(result.selectedScript, `${script}\n`);
+    }
+  }
+});
+
+test('CI validation rejects unsupported contexts and unexpected selector output before invoking pnpm', () => {
+  for (const context of [
+    { eventName: '', ref: '' },
+    { eventName: 'pull_request_target', ref: 'refs/pull/122/merge' },
+    { eventName: 'push', ref: 'refs/heads/feature' },
+    { eventName: 'pull_request', ref: 'refs/pull/122/head' },
+    ...['', 'validate:ci extra', 'validate:internal\nvalidate:ci', 'validate:ci; exit 0'].map(
+      (selectorOutput) => ({ eventName: 'push', ref: 'refs/heads/main', selectorOutput })
+    )
+  ]) {
+    const result = checkCiValidationWorkflow(context);
+    assert.notEqual(result.status, 0);
+    assert.equal(result.selectedScript, null);
+  }
+});
 
 test('required acceptance gate succeeds only with the complete successful inventory', () => {
   assert.equal(aggregate.if, 'always()');
@@ -256,11 +401,15 @@ test('CI uses one full frontend coverage pass and keeps native obligations', () 
   const commands = runs(frontend);
   const rustSetup = frontend.steps.find((step) => step.uses?.startsWith('dtolnay/rust-toolchain@'));
   assert.equal(rustSetup?.with.toolchain, '1.97.1');
-  assert.ok(
-    frontend.steps.indexOf(rustSetup) <
-      frontend.steps.findIndex((step) => step.run?.includes('pnpm validate:ci'))
+  assert.ok(frontend.steps.indexOf(rustSetup) < frontend.steps.indexOf(ciValidationStep()));
+  assert.equal(
+    commands.filter((command) => command.includes('node scripts/quality/ci-validation-mode.mjs'))
+      .length,
+    1
   );
-  assert.equal(commands.filter((command) => /pnpm validate:ci\b/.test(command)).length, 1);
+  assert.match(ciValidationStep().run, /set -eu/);
+  assert.match(ciValidationStep().run, /validate:ci\|validate:internal/);
+  assert.match(ciValidationStep().run, /time pnpm "\$ci_validation_script"/);
   assert.equal(
     commands.filter((command) => /pnpm test(?::coverage)?(?:\s|$)/.test(command)).length,
     0

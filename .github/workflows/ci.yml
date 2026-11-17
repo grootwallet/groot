@@ -43,8 +43,14 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
+          set -eu
+          ci_validation_script="$(node scripts/quality/ci-validation-mode.mjs)"
+          case "$ci_validation_script" in
+            validate:ci|validate:internal) ;;
+            *) printf 'Unknown CI validation script\n' >&2; exit 1 ;;
+          esac
           TIMEFORMAT='real %3R s; user %3U s; sys %3S s'
-          { time pnpm validate:ci; } 2>&1 | tee "$RUNNER_TEMP/frontend-validation.log"
+          { time pnpm "$ci_validation_script"; } 2>&1 | tee "$RUNNER_TEMP/frontend-validation.log"
       - name: Deterministic CycloneDX SBOM and dependency-license evidence
         if: ${{ !cancelled() && steps.dependencies.outcome == 'success' && steps.toolchain.outcome == 'success' }}
         run: pnpm test:sbom
