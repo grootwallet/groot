@@ -786,6 +786,297 @@ fn mobile_signing_adds_only_the_expected_signatures_without_private_descriptors(
     }));
 }
 
+fn mobile_approval_fixture() -> (
+    Mnemonic,
+    Vec<HardwareKey>,
+    MultisigWalletDto,
+    CoordinationMetadata,
+    Psbt,
+) {
+    use bdk_wallet::{
+        bitcoin::{
+            absolute::LockTime, hashes::Hash, transaction::Version, CompressedPublicKey, PublicKey,
+            ScriptBuf, Sequence, TxOut, Witness,
+        },
+        miniscript::psbt::PsbtInputExt,
+    };
+
+    let (mnemonic, hardware, metadata, coordination) = coordinated_wallet();
+    let wallet = Wallet::create(
+        metadata.external_descriptor.clone(),
+        metadata.internal_descriptor.clone(),
+    )
+    .network(Network::Regtest)
+    .create_wallet_no_persist()
+    .unwrap();
+    let mut tx_inputs = Vec::new();
+    let mut inputs = Vec::new();
+    for (position, (keychain, index)) in [(KeychainKind::External, 0), (KeychainKind::Internal, 2)]
+        .into_iter()
+        .enumerate()
+    {
+        let previous = Transaction {
+            version: Version::TWO,
+            lock_time: LockTime::ZERO,
+            input: vec![TxIn {
+                previous_output: OutPoint::new(Txid::from_byte_array([80 + position as u8; 32]), 0),
+                script_sig: ScriptBuf::new(),
+                sequence: Sequence::ENABLE_RBF_NO_LOCKTIME,
+                witness: Witness::new(),
+            }],
+            output: vec![TxOut {
+                value: Amount::from_sat(150_000),
+                script_pubkey: wallet.peek_address(keychain, index).address.script_pubkey(),
+            }],
+        };
+        tx_inputs.push(TxIn {
+            previous_output: OutPoint::new(previous.compute_txid(), 0),
+            script_sig: ScriptBuf::new(),
+            sequence: Sequence::ENABLE_RBF_NO_LOCKTIME,
+            witness: Witness::new(),
+        });
+        let mut input = bdk_wallet::bitcoin::psbt::Input::default();
+        input
+            .update_with_descriptor_unchecked(
+                &wallet
+                    .public_descriptor(keychain)
+                    .at_derivation_index(index)
+                    .unwrap(),
+            )
+            .unwrap();
+        input.witness_utxo = Some(previous.output[0].clone());
+        input.non_witness_utxo = Some(previous);
+        inputs.push(input);
+    }
+    let destination = Address::p2wpkh(
+        &CompressedPublicKey(
+            PublicKey::from_str(
+                "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+            )
+            .unwrap()
+            .inner,
+        ),
+        Network::Regtest,
+    );
+    let mut psbt = Psbt::from_unsigned_tx(Transaction {
+        version: Version::TWO,
+        lock_time: LockTime::ZERO,
+        input: tx_inputs,
+        output: vec![TxOut {
+            value: Amount::from_sat(299_000),
+            script_pubkey: destination.script_pubkey(),
+        }],
+    })
+    .unwrap();
+    psbt.inputs = inputs;
+    (mnemonic, hardware, metadata, coordination, psbt)
+}
+
+fn mobile_approval_sign_input(
+    psbt: &mut Psbt,
+    index: usize,
+    secret: &bdk_wallet::bitcoin::secp256k1::SecretKey,
+    public: bdk_wallet::bitcoin::PublicKey,
+) {
+    let secp = Secp256k1::new();
+    let mut cache = bdk_wallet::bitcoin::sighash::SighashCache::new(&psbt.unsigned_tx);
+    let (message, sighash_type) = psbt.sighash_ecdsa(index, &mut cache).unwrap();
+    psbt.inputs[index].partial_sigs.insert(
+        public,
+        bdk_wallet::bitcoin::ecdsa::Signature {
+            signature: secp.sign_ecdsa(&message, secret),
+            sighash_type,
+        },
+    );
+}
+
+fn mobile_approval_forge_key(psbt: &mut Psbt, index: usize, fingerprint: Fingerprint) {
+    let input = &mut psbt.inputs[index];
+    let (original_key, origin) = input
+        .bip32_derivation
+        .iter()
+        .find(|(_, (owner, _))| *owner == fingerprint)
+        .map(|(key, origin)| (*key, origin.clone()))
+        .unwrap();
+    input.bip32_derivation.remove(&original_key);
+    input.partial_sigs.clear();
+    let secret = bdk_wallet::bitcoin::secp256k1::SecretKey::from_slice(&[71; 32]).unwrap();
+    let public = bdk_wallet::bitcoin::PublicKey::new(secret.public_key(&Secp256k1::new()));
+    input.bip32_derivation.insert(public.inner, origin);
+    mobile_approval_sign_input(psbt, index, &secret, public);
+}
+
+#[test]
+fn mobile_approval_rejects_unrelated_keys_claiming_registered_fingerprints() {
+    let (_, hardware, metadata, coordination, mut psbt) = mobile_approval_fixture();
+    let claimed = Fingerprint::from_str(&hardware[0].fingerprint).unwrap();
+    for index in 0..psbt.inputs.len() {
+        mobile_approval_forge_key(&mut psbt, index, claimed);
+    }
+    assert_eq!(
+        review_mobile_psbt_for(&metadata, &coordination, &encode_psbt(&psbt))
+            .err()
+            .map(|error| error.code),
+        Some("unknown_signer")
+    );
+}
+
+#[test]
+fn mobile_approval_rejects_a_forged_key_on_a_later_input() {
+    let (_, hardware, metadata, coordination, unsigned) = mobile_approval_fixture();
+    let mut psbt = hardware_sign(&metadata, &hardware[0], &unsigned);
+    mobile_approval_forge_key(
+        &mut psbt,
+        1,
+        Fingerprint::from_str(&hardware[0].fingerprint).unwrap(),
+    );
+    assert_eq!(
+        review_mobile_psbt_for(&metadata, &coordination, &encode_psbt(&psbt))
+            .err()
+            .map(|error| error.code),
+        Some("unknown_signer")
+    );
+}
+
+#[test]
+fn mobile_approval_rejects_missing_or_substituted_policy_origins() {
+    let (_, hardware, metadata, coordination, unsigned) = mobile_approval_fixture();
+    let signed = hardware_sign(&metadata, &hardware[0], &unsigned);
+    let public = *signed.inputs[0].partial_sigs.keys().next().unwrap();
+    let origin = signed.inputs[0].bip32_derivation[&public.inner].clone();
+    let alternate = Fingerprint::from_str(&hardware[1].fingerprint).unwrap();
+    let paths = [
+        format!("{}/1/0", multisig_account_path()),
+        format!("{}/0/1", multisig_account_path()),
+        format!("{}/0/0'", multisig_account_path()),
+    ];
+    let mut origins = vec![None, Some((alternate, origin.1))];
+    origins.extend(
+        paths
+            .iter()
+            .map(|path| Some((origin.0, DerivationPath::from_str(path).unwrap()))),
+    );
+    for replacement in origins {
+        let mut psbt = signed.clone();
+        if let Some(replacement) = replacement {
+            psbt.inputs[0]
+                .bip32_derivation
+                .insert(public.inner, replacement);
+        } else {
+            psbt.inputs[0].bip32_derivation.remove(&public.inner);
+        }
+        assert_eq!(
+            review_mobile_psbt_for(&metadata, &coordination, &encode_psbt(&psbt))
+                .err()
+                .map(|error| error.code),
+            Some("unknown_signer")
+        );
+    }
+}
+
+#[test]
+fn mobile_approval_counts_genuine_signers_on_every_receive_and_change_input() {
+    let (mnemonic, hardware, metadata, coordination, unsigned) = mobile_approval_fixture();
+    let review = review_mobile_psbt_for(&metadata, &coordination, &encode_psbt(&unsigned)).unwrap();
+    assert!(review.already_signed_by.is_empty());
+    for key in &hardware {
+        let signed = hardware_sign(&metadata, key, &unsigned);
+        let review =
+            review_mobile_psbt_for(&metadata, &coordination, &encode_psbt(&signed)).unwrap();
+        assert_eq!(review.already_signed_by, vec![key.fingerprint.clone()]);
+    }
+    let signed = sign_mobile_psbt_for(
+        &metadata,
+        &mnemonic,
+        &encode_psbt(&unsigned),
+        review.revision_id,
+    )
+    .unwrap();
+    let review = review_mobile_psbt_for(&metadata, &coordination, &signed.signed_psbt).unwrap();
+    assert_eq!(
+        review.already_signed_by,
+        vec![coordination.mobile_signer_fingerprint.unwrap()]
+    );
+}
+
+#[test]
+fn mobile_approval_does_not_union_signers_across_different_inputs() {
+    let (_, hardware, metadata, coordination, unsigned) = mobile_approval_fixture();
+    let mut first = hardware_sign(&metadata, &hardware[0], &unsigned);
+    let second = hardware_sign(&metadata, &hardware[1], &unsigned);
+    first.inputs[1].partial_sigs.clear();
+    let review = review_mobile_psbt_for(&metadata, &coordination, &encode_psbt(&first)).unwrap();
+    assert!(review.already_signed_by.is_empty());
+    first.inputs[1].partial_sigs = second.inputs[1].partial_sigs.clone();
+    let review = review_mobile_psbt_for(&metadata, &coordination, &encode_psbt(&first)).unwrap();
+    assert!(review.already_signed_by.is_empty());
+}
+
+#[test]
+fn mobile_approval_accepts_unsigned_and_partial_inputs_with_only_needed_origins() {
+    let (mnemonic, _, metadata, coordination, mut unsigned) = mobile_approval_fixture();
+    let phone =
+        Fingerprint::from_str(coordination.mobile_signer_fingerprint.as_deref().unwrap()).unwrap();
+    for input in &mut unsigned.inputs {
+        input
+            .bip32_derivation
+            .retain(|_, (owner, _)| *owner == phone);
+    }
+    let encoded = encode_psbt(&unsigned);
+    let review = review_mobile_psbt_for(&metadata, &coordination, &encoded).unwrap();
+    assert!(review.already_signed_by.is_empty());
+    let mut incomplete = unsigned.clone();
+    for input in &mut incomplete.inputs {
+        input.witness_script = None;
+    }
+    assert!(
+        review_mobile_psbt_for(&metadata, &coordination, &encode_psbt(&incomplete))
+            .unwrap()
+            .already_signed_by
+            .is_empty()
+    );
+    let signed = sign_mobile_psbt_for(&metadata, &mnemonic, &encoded, review.revision_id).unwrap();
+    let review = review_mobile_psbt_for(&metadata, &coordination, &signed.signed_psbt).unwrap();
+    assert_eq!(review.already_signed_by, vec![phone.to_string()]);
+}
+
+#[test]
+fn mobile_approval_rejects_signatures_over_a_noncanonical_witness_script() {
+    let (_, hardware, metadata, coordination, mut psbt) = mobile_approval_fixture();
+    let secret = hardware[0]
+        .account_private
+        .derive_priv(
+            &Secp256k1::new(),
+            &DerivationPath::from_str("m/0/0").unwrap(),
+        )
+        .unwrap()
+        .private_key;
+    let public = bdk_wallet::bitcoin::PublicKey::new(secret.public_key(&Secp256k1::new()));
+    psbt.inputs[0].witness_script = psbt.inputs[1].witness_script.clone();
+    mobile_approval_sign_input(&mut psbt, 0, &secret, public);
+    assert_eq!(
+        review_mobile_psbt_for(&metadata, &coordination, &encode_psbt(&psbt))
+            .err()
+            .map(|error| error.code),
+        Some("proposal_mismatch")
+    );
+}
+
+#[test]
+fn mobile_approval_requires_a_valid_signature_after_policy_identity_matches() {
+    let (_, hardware, metadata, coordination, unsigned) = mobile_approval_fixture();
+    let mut psbt = hardware_sign(&metadata, &hardware[0], &unsigned);
+    let public = *psbt.inputs[0].partial_sigs.keys().next().unwrap();
+    let wrong_secret = bdk_wallet::bitcoin::secp256k1::SecretKey::from_slice(&[72; 32]).unwrap();
+    mobile_approval_sign_input(&mut psbt, 0, &wrong_secret, public);
+    assert_eq!(
+        review_mobile_psbt_for(&metadata, &coordination, &encode_psbt(&psbt))
+            .err()
+            .map(|error| error.code),
+        Some("invalid_signature")
+    );
+}
+
 #[test]
 #[ignore = "requires the isolated Bitcoin Core regtest harness"]
 fn funded_mobile_cosigner_round_trip_reviews_merges_finalizes_and_broadcasts() {

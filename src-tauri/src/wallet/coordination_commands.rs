@@ -7,6 +7,7 @@ use crate::{
     },
     coordination_transport::{self, CoordinationUrType},
 };
+use bdk_wallet::miniscript::psbt::PsbtInputExt;
 
 const FRAGMENT_BYTES: usize = 220;
 const MOBILE_RESPONSE_FRAGMENT_BYTES: usize = 160;
@@ -1618,8 +1619,6 @@ fn review_mobile_psbt_for(
         .iter()
         .map(|signer| Fingerprint::from_str(&signer.fingerprint).map_err(internal))
         .collect::<ApiResult<Vec<_>>>()?;
-    let progress =
-        signature_progress(&psbt, &allowed, metadata.threshold).map_err(proposal_api_error)?;
     let signer_fingerprint = coordination
         .mobile_signer_fingerprint
         .as_deref()
@@ -1644,16 +1643,39 @@ fn review_mobile_psbt_for(
             })?;
             let (keychain, index) =
                 owned_derivation(input.bip32_derivation.values(), signer_fingerprint)?;
-            if public_wallet
-                .peek_address(keychain, index)
-                .address
-                .script_pubkey()
-                != output.script_pubkey
+            // Origins supplied by the PSBT cannot authenticate a co-signer.
+            // Derive every counted key and its full origin from the paired policy.
+            let descriptor = public_wallet
+                .public_descriptor(keychain)
+                .at_derivation_index(index)
+                .map_err(internal)?;
+            let mut canonical = bdk_wallet::bitcoin::psbt::Input::default();
+            let derived = canonical
+                .update_with_descriptor_unchecked(&descriptor)
+                .map_err(internal)?;
+            if derived.script_pubkey() != output.script_pubkey
+                || input
+                    .witness_script
+                    .as_ref()
+                    .is_some_and(|script| Some(script) != canonical.witness_script.as_ref())
             {
                 return Err(api_error(
                     "proposal_mismatch",
                     "An input does not belong to the exact paired wallet policy.",
                 ));
+            }
+            for public_key in input.partial_sigs.keys() {
+                if canonical
+                    .bip32_derivation
+                    .get(&public_key.inner)
+                    .is_none_or(|origin| {
+                        input.bip32_derivation.get(&public_key.inner) != Some(origin)
+                    })
+                {
+                    return Err(proposal_api_error(
+                        crate::proposal::ProposalError::UnknownSigner,
+                    ));
+                }
             }
             Ok(output.value.to_sat())
         })
@@ -1664,6 +1686,8 @@ fn review_mobile_psbt_for(
                     .ok_or_else(|| api_error("malformed_psbt", "The PSBT input total overflowed."))
             })
         })?;
+    let progress =
+        signature_progress(&psbt, &allowed, metadata.threshold).map_err(proposal_api_error)?;
     let output_total = psbt
         .unsigned_tx
         .output
