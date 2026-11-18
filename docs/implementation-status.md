@@ -42,6 +42,8 @@ The released desktop baseline is [v5.3.0](https://github.com/grootwallet/groot/r
 
 The current branch separates native profile lifecycle, notification delivery and recovery commands. Frontend helpers own Settings reads, request lifetimes, node forms and acceleration quotes. Phone review requires complete previous transactions and reserves signed-response QR capacity before key access. Prepared label statements reuse SQL preparation without caching wallet results or authorization. These changes preserve existing wallet, registry, backup, credential and proposal formats.
 
+Maintenance also binds queued metadata/unlock work to its initiating selection and session, bounds the complete Tor request with one deadline, and authenticates phone approval identities against the paired descriptor. Existing wallet and credential formats remain compatible; physical acceptance still belongs to the exact packaged candidate.
+
 The [October assessment](testing/post-5.3-final-status.md) and [execution record](testing/post-5.3-execution.md) describe their exact tested sources, not every later commit. Physical phone/Miniscript acceptance and current-source approval remain separate. The [current maintenance record](testing/maintenance-2026-11-07.md) owns this campaign's checks and remaining work.
 
 Keep this page about current capabilities. Dated results, branch inventories and release history belong in evidence records. Update [`bip-support.md`](bip-support.md) when standards behavior or interoperability evidence changes.

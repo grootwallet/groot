@@ -4,6 +4,8 @@
 
 The 0.5.4-rc01 Windows/Linux work, version correction and ADR 0109 exact-commit package approval have no BIP impact. They package the existing BIP84/BIP48/BIP174 and fixed Miniscript implementation on additional internal Testnet4 hosts; they change no descriptor, derivation, PSBT, transaction or persisted-wallet semantics. Platform compilation and driver probes are not interoperability certification.
 
+The November maintenance fixes preserve BIP support and encodings. Phone approval attribution now derives each signed input key, full BIP32 origin and witness script from the paired BIP48 descriptor before BIP174 signature counting; genuine approvals must still cover every input. Complete previous-transaction authentication and the existing work/QR limits remain mandatory. Queued-command context binding and Tor deadlines have no BIP impact. These checks add no wallet format, signer certification or Mainnet phone support.
+
 ## Implemented and in-progress BIPs
 
 | BIP                                                                                                                                                                                                               | Groot scope                                                                                  | Limitation                                                                                                                                                                    |

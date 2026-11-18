@@ -39,6 +39,8 @@ Native operation serialization protects selected-wallet context, database transa
 
 Every asynchronous result/event binds the immutable wallet identity and current operation/session generation. Wallet switch, lock, deletion, cancellation or teardown invalidate stale delivery. Durable proposals and labels live in Rust; temporary presentation state lives with its route/controller, not a wallet-truth global store.
 
+Queued metadata access and wallet unlock capture the initiating wallet, session identity and process-local selection epoch before scheduling. Their guards recheck that context before credential use or profile access, including a switch away and back. Metadata sinks bind the captured UUID and hold a short active-session lease; selection and explicit lock remain serialized with them. This adds no persisted state.
+
 ## Transaction boundary
 
 1. Validate recipient/network, amount, fee and eligible coins.
@@ -57,9 +59,12 @@ Mainnet fee protection, Bitcoin supply bounds, the single-recipient rule and coi
 Core owns chain/mempool truth, fees and broadcast. The temporary fee-estimate DTO permits a null value per missing target; native conversion validates every returned rate, preserves available targets and never fills unavailable targets. Existing complete-target mempool adjustment remains bounded. This changes no persisted data format. Check the selected chain name and exact genesis before wallet-data reads. Mainnet database permits bind purpose, profile and the verified saved route; the separate throttle permit grants no wallet-data access.
 
 - Local Core is loopback-only.
-- Direct remote Core is HTTPS with platform certificate validation, no redirects, and bounded I/O. v3 onion HTTP requires an explicit numeric loopback SOCKS5 proxy; no local DNS/direct fallback.
+- Direct remote Core is HTTPS with platform certificate validation, no redirects, and bounded I/O. v3 onion HTTP requires an explicit numeric loopback SOCKS5 proxy; no local DNS/direct fallback. One monotonic Tor request deadline covers connection, SOCKS negotiation, request writes and bounded HTTP header/body reads. A complete Content-Length response does not wait for the peer to close.
 - Managed Mainnet enrollment happens in Rust and protects each revocable principal under that wallet credential. The private Fulcrum history index must match Core's tip; matched transactions are verified against full active-chain blocks. Omission/availability and metadata exposure remain operator trust boundaries.
 - Custom remote Core uses bounded filter-index `scanblocks`; local Core retains its full-block path. A pruned node cannot supply missing history.
+
+The candidate gateway admission design in [ADR 0123](adr/0123-stateless-managed-gateway-enrollment.md) preserves existing verifier records and the native credential contract. Future anonymous issuance uses a separately initialized server-owned signing key, persistent bounded admission and permanent explicit revocations without adding a principal row per enrollment. Its custody and rollout review remains a service-operator prerequisite; changing wallet source does not deploy it.
+
 - Optional Kyoto compact filters discover confirmed activity on test networks. Core still provides fees/broadcast. Manual/proxy modes forbid public-discovery fallback. Wallet checkpoints are durable; peer filters are memory-only. [Remaining work](compact-filter-deferred-work.md) limits support claims.
 
 Initial genesis scans need explicit privacy consent. Shell-owned pause/resume prevents automatic sync races; saved scan status can reattach after route changes, lock or restart. Only atomic completion is verified history. Normal selected-wallet foreground sync runs every 35 seconds after each settled attempt.

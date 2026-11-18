@@ -12,6 +12,8 @@ import {
 // Exact reviewed 0.5.4 internal-candidate bytes that intentionally differ from
 // the frozen public-release snapshot. Public/Mainnet pins remain unchanged.
 // Mobile review: docs/testing/0.5.4-mobile-source-review-2026-11-17.md
+// Queued-command review: docs/testing/maintenance-2026-11-07.md (18 November follow-up).
+// Gateway capacity/revocation review: the same follow-up and ADR 0123.
 const internalTextOverrides = new Map([
   [
     'src/routes/receive/+page.svelte',
@@ -59,18 +61,18 @@ const internalTextOverrides = new Map([
     '2b6be467444dc413cb72f593fd2d87ffe3f649bc475ab934d56a32e05e0df915'
   ],
   ['src-tauri/src/proposal.rs', '20a1b4b60af932819948b48c5405c38289b2c2693f73fd4fb94f1b1da601e0a0'],
-  ['src-tauri/src/wallet.rs', '9bc581b2b93785fe26d75dcd2ea93fdb8047e6469ccf534b70cd123365d90993'],
+  ['src-tauri/src/wallet.rs', '5bfad2188db6f07e5f77c8f8e79d711737abf124c74ad9f85528db860f2b79df'],
   [
     'src-tauri/src/wallet/export_commands.rs',
     '81221e759733bf6f905f8386c420b0b587a9c815fbda2dec87a5a9402f3a5998'
   ],
   [
     'src-tauri/src/wallet/multisig_setup_commands.rs',
-    '65a62066114cec993bb31768ac99a3e411636b5b1113f3e78578fbb233730a06'
+    '653ea8fdef9836460d4e9a97a61fff20b0c0af5641d15e87942bfb22a2fff057'
   ],
   [
     'src-tauri/src/wallet/hardware_commands.rs',
-    '1394eadb81e9ac8781bf62ace9ec06a8fc14252b703f9b12f09feb648c6e46df'
+    '9f29242818fe5bee29ba64641c05b52bd5f5775270f6b2aad7020ca909ab212b'
   ],
   [
     'src-tauri/src/wallet/multisig_proposal_commands.rs',
@@ -82,7 +84,15 @@ const internalTextOverrides = new Map([
   ],
   [
     'src-tauri/src/wallet/profile_commands.rs',
-    '26d5b6fbc0ed13b2eeb2630a60688ff5953ad77a4cbd510741e63abaf0dd0a08'
+    '1b79caed5ff346c3f246abd429cea5e9737c09c3b8c2173e0c377f2b6ccbdd8c'
+  ],
+  [
+    'services/core-gateway/gateway.py',
+    'f252127dc9f5cd61764bbae59b4e5e744e72393a149bf2e4036ab8a44daf122d'
+  ],
+  [
+    'services/core-gateway/provision_client.py',
+    'c2d64dc513902a57bde74452bd80c88ff18770ce1abbc93eb61e70187f257d6e'
   ],
   [
     'scripts/release/package-macos-ga.mjs',
