@@ -2887,11 +2887,13 @@ pub async fn external_signer_create(
 
 #[tauri::command]
 pub async fn external_signer_wallet(app: AppHandle) -> ApiResult<ExternalSignerWallet> {
+    let context = capture_unlocked_wallet_command_context(&app)?;
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<AppState>();
-        let wallet_id = require_unlocked(&app, &state)?;
-        let _operation = metadata_operation_guard(&state, wallet_id)?;
-        read_external_signer_metadata(&app)
+        let _operation = metadata_operation_guard(&state, context, || {
+            recheck_unlocked_wallet_command_context(&app, &state, context)
+        })?;
+        read_external_signer_metadata_for(&app, context.wallet_id)
     })
     .await
     .map_err(internal)?
@@ -2914,17 +2916,22 @@ pub async fn external_signer_rename(
     app: AppHandle,
     label: String,
 ) -> ApiResult<ExternalSignerWallet> {
+    let context = capture_unlocked_wallet_command_context(&app)?;
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<AppState>();
-        let wallet_id = require_unlocked(&app, &state)?;
-        let _operation = metadata_operation_guard(&state, wallet_id)?;
-        let mut metadata = read_external_signer_metadata(&app)?;
+        let _operation = metadata_operation_guard(&state, context, || {
+            recheck_unlocked_wallet_command_context(&app, &state, context)
+        })?;
+        let mut metadata = read_external_signer_metadata_for(&app, context.wallet_id)?;
         metadata.signer.label = normalize_external_signer_label(&label)?;
         metadata
             .signer
             .validate()
             .map_err(external_signer_api_error)?;
-        write_private_json(&external_signer_metadata_path(&app)?, &metadata)?;
+        write_private_json(
+            &external_signer_metadata_path_for(&app, context.wallet_id)?,
+            &metadata,
+        )?;
         Ok(metadata)
     })
     .await

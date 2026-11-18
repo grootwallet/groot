@@ -27,7 +27,18 @@ pub(super) fn ensure_registry_network(registry: &WalletRegistry) -> ApiResult<()
 }
 
 pub(super) fn save_registry(app: &AppHandle, registry: &WalletRegistry) -> ApiResult<()> {
-    registry::save_atomic(&registry_path(app)?, registry).map_err(registry_api_error)
+    let path = registry_path(app)?;
+    let previous = match registry::load(&path) {
+        Ok(previous) => previous.selected_wallet_id,
+        Err(RegistryError::Missing) => None,
+        Err(error) => return Err(registry_api_error(error)),
+    };
+    if previous != registry.selected_wallet_id {
+        // Invalidate before the write: an uncertain atomic-write outcome must
+        // never preserve a queued command's authority over a changed selection.
+        invalidate_wallet_command_context(&app.state::<AppState>())?;
+    }
+    registry::save_atomic(&path, registry).map_err(registry_api_error)
 }
 
 pub(super) fn profile_directory(app: &AppHandle, id: Uuid) -> ApiResult<PathBuf> {
@@ -87,9 +98,11 @@ pub(super) fn node_auth_context(wallet_id: Uuid) -> secure_store::SecureStoreCon
     secure_store::SecureStoreContext::new(wallet_id, secure_store::SecureStorePurpose::NodeAuth)
 }
 
-pub(super) fn external_signer_metadata_path(app: &AppHandle) -> ApiResult<PathBuf> {
-    let profile = selected_profile_of_kind(app, WalletKind::WatchOnly)?;
-    Ok(profile_directory(app, profile.id)?.join("wallet.json"))
+pub(super) fn external_signer_metadata_path_for(
+    app: &AppHandle,
+    wallet_id: Uuid,
+) -> ApiResult<PathBuf> {
+    Ok(profile_directory(app, wallet_id)?.join("wallet.json"))
 }
 
 pub(super) fn multisig_dir(app: &AppHandle) -> ApiResult<PathBuf> {

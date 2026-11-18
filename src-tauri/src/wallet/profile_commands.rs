@@ -168,11 +168,19 @@ pub fn network_setup_sources(
 
 #[tauri::command]
 pub async fn wallet_rename(app: AppHandle, name: String) -> ApiResult<WalletProfile> {
+    let context = capture_unlocked_wallet_command_context(&app)?;
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<AppState>();
-        let wallet_id = require_unlocked(&app, &state)?;
-        let _operation = metadata_operation_guard(&state, wallet_id)?;
+        let _operation = metadata_operation_guard(&state, context, || {
+            recheck_unlocked_wallet_command_context(&app, &state, context)
+        })?;
         let mut registry = load_registry(&app)?;
+        validate_read_wallet(
+            registry
+                .selected_wallet_id
+                .ok_or_else(|| registry_api_error(RegistryError::UnknownSelection))?,
+            context.wallet_id,
+        )?;
         let renamed = registry
             .rename_selected(&name)
             .map_err(registry_api_error)?;
@@ -588,9 +596,12 @@ pub async fn wallet_reveal_and_verify_backup(
 #[tauri::command]
 pub async fn wallet_unlock(app: AppHandle, credential: String) -> ApiResult<()> {
     let credential = Zeroizing::new(credential);
+    let context = capture_selected_wallet_command_context(&app)?;
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<AppState>();
-        let _operation = operation_guard(&state)?;
+        let _operation = wallet_unlock_operation_guard(&state, context, || {
+            wallet_command_context(&state, selected_profile(&app)?.id)
+        })?;
         check_auth_throttle(&app, &state)?;
         let result = match selected_profile(&app)?.kind {
             WalletKind::SingleKey => {
@@ -684,6 +695,7 @@ pub async fn wallet_lock_all(app: AppHandle) -> ApiResult<()> {
         cancel_foreground_sync(&state)?;
         let _operation = operation_guard(&state)?;
         state.proposals.lock().map_err(internal)?.clear();
+        invalidate_wallet_command_context(&state)?;
         state.unlocked_wallets.lock().map_err(internal)?.lock_all();
         *state.pending_mnemonic.lock().map_err(internal)? = None;
         state.verified_recovery.lock().map_err(internal)?.clear();

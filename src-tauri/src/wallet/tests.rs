@@ -1486,7 +1486,7 @@ fn metadata_operations_do_not_wait_for_the_selected_wallet_sync() {
         });
     let _sync_operation = state.operations.lock().unwrap();
 
-    assert!(metadata_operation_guard(&state, wallet_id)
+    assert!(metadata_operation_lock(&state, wallet_id)
         .unwrap()
         ._operation
         .is_none());
@@ -1495,7 +1495,7 @@ fn metadata_operations_do_not_wait_for_the_selected_wallet_sync() {
 #[test]
 fn metadata_operations_serialize_when_the_wallet_is_idle() {
     let state = AppState::default();
-    assert!(metadata_operation_guard(&state, Uuid::new_v4())
+    assert!(metadata_operation_lock(&state, Uuid::new_v4())
         .unwrap()
         ._operation
         .is_some());
@@ -1517,12 +1517,12 @@ fn metadata_fast_path_serializes_selected_wallet_mutations() {
             persisted_reads_safe: Arc::new(AtomicBool::new(true)),
         });
     let _sync_operation = state.operations.lock().unwrap();
-    let first = metadata_operation_guard(&state, wallet_id).unwrap();
+    let first = metadata_operation_lock(&state, wallet_id).unwrap();
     let (sender, receiver) = mpsc::channel();
 
     thread::scope(|scope| {
         scope.spawn(|| {
-            let guard = metadata_operation_guard(&state, wallet_id).unwrap();
+            let guard = metadata_operation_lock(&state, wallet_id).unwrap();
             sender.send(guard._operation.is_none()).unwrap();
         });
         assert!(receiver.recv_timeout(Duration::from_millis(100)).is_err());
@@ -1547,7 +1547,7 @@ fn ordinary_operations_wait_for_in_flight_metadata_mutations() {
             persisted_reads_safe: Arc::new(AtomicBool::new(true)),
         });
     let sync_operation = state.operations.lock().unwrap();
-    let metadata = metadata_operation_guard(&state, wallet_id).unwrap();
+    let metadata = metadata_operation_lock(&state, wallet_id).unwrap();
     let (sender, receiver) = mpsc::channel();
 
     thread::scope(|scope| {
@@ -1560,6 +1560,326 @@ fn ordinary_operations_wait_for_in_flight_metadata_mutations() {
         drop(metadata);
         receiver.recv_timeout(Duration::from_secs(1)).unwrap();
     });
+}
+
+// Exercise the production serialization boundary with a synthetic selection
+// and metadata sink, without opening native windows or any saved wallet.
+fn queued_wallet_context_attempt(
+    metadata: bool,
+    transition: impl FnOnce(&AppState, &Mutex<Uuid>, Uuid, Uuid),
+) -> (ApiResult<()>, bool, bool) {
+    use std::sync::mpsc;
+    let state = AppState::default();
+    let first = Uuid::new_v4();
+    let second = Uuid::new_v4();
+    if metadata {
+        state.unlocked_wallets.lock().unwrap().unlock(first);
+    }
+    let selected = Mutex::new(first);
+    let expected = wallet_command_context(&state, first).unwrap();
+    let accessed = AtomicBool::new(false);
+    let verified = AtomicBool::new(false);
+    let (started_tx, started_rx) = mpsc::channel();
+    let (finished_tx, finished_rx) = mpsc::channel();
+    let operation = operation_guard(&state).unwrap();
+    thread::scope(|scope| {
+        scope.spawn(|| {
+            started_tx.send(()).unwrap();
+            let current = || wallet_command_context(&state, *selected.lock().unwrap());
+            let result = if metadata {
+                metadata_operation_guard(&state, expected, current).map(|_guard| {
+                    accessed.store(true, Ordering::Release);
+                })
+            } else {
+                wallet_unlock_operation_guard(&state, expected, current).map(|_guard| {
+                    // Both synthetic wallets accept this same credential. A
+                    // stale request must stop before even attempting it.
+                    let credential = Zeroizing::new("same valid app PIN".to_owned());
+                    assert_eq!(credential.as_str(), "same valid app PIN");
+                    verified.store(true, Ordering::Release);
+                })
+            };
+            finished_tx.send(result).unwrap();
+        });
+        started_rx.recv().unwrap();
+        transition(&state, &selected, first, second);
+        drop(operation);
+        let result = finished_rx.recv().unwrap();
+        (
+            result,
+            accessed.load(Ordering::Acquire),
+            verified.load(Ordering::Acquire),
+        )
+    })
+}
+
+#[test]
+fn wallet_context_metadata_rejects_cross_wallet_and_aba_selection_before_access() {
+    for return_to_first in [false, true] {
+        let (result, accessed, _) =
+            queued_wallet_context_attempt(true, |state, selected, first, second| {
+                invalidate_wallet_command_context(state).unwrap();
+                *selected.lock().unwrap() = second;
+                if return_to_first {
+                    invalidate_wallet_command_context(state).unwrap();
+                    *selected.lock().unwrap() = first;
+                }
+            });
+        assert_eq!(result.unwrap_err().code, "wallet_selection_changed");
+        assert!(!accessed);
+    }
+}
+
+#[test]
+fn wallet_context_unlock_rejects_cross_wallet_and_aba_even_with_equal_credentials() {
+    for return_to_first in [false, true] {
+        let (result, _, verified) =
+            queued_wallet_context_attempt(false, |state, selected, first, second| {
+                invalidate_wallet_command_context(state).unwrap();
+                *selected.lock().unwrap() = second;
+                if return_to_first {
+                    invalidate_wallet_command_context(state).unwrap();
+                    *selected.lock().unwrap() = first;
+                }
+            });
+        assert_eq!(result.unwrap_err().code, "wallet_selection_changed");
+        assert!(!verified);
+    }
+}
+
+#[test]
+fn wallet_context_rejects_lock_reunlock_and_explicit_lock_of_an_already_locked_wallet() {
+    for metadata in [false, true] {
+        for reopen in [false, true] {
+            let (result, accessed, verified) =
+                queued_wallet_context_attempt(metadata, |state, _, wallet_id, _| {
+                    invalidate_wallet_command_context(state).unwrap();
+                    state.unlocked_wallets.lock().unwrap().lock(wallet_id);
+                    if reopen {
+                        invalidate_wallet_command_context(state).unwrap();
+                        state.unlocked_wallets.lock().unwrap().unlock(wallet_id);
+                    }
+                });
+            assert_eq!(result.unwrap_err().code, "wallet_selection_changed");
+            assert!(!accessed);
+            assert!(!verified);
+        }
+    }
+}
+
+#[test]
+fn wallet_context_rejects_global_lock_and_session_expiry_before_queued_work() {
+    for metadata in [false, true] {
+        let (result, accessed, verified) =
+            queued_wallet_context_attempt(metadata, |state, _, _, _| {
+                invalidate_wallet_command_context(state).unwrap();
+                state.unlocked_wallets.lock().unwrap().lock_all();
+            });
+        assert_eq!(result.unwrap_err().code, "wallet_selection_changed");
+        assert!(!accessed);
+        assert!(!verified);
+    }
+    let (result, accessed, _) = queued_wallet_context_attempt(true, |state, _, wallet_id, _| {
+        state.unlocked_wallets.lock().unwrap().lock(wallet_id);
+    });
+    assert_eq!(result.unwrap_err().code, "wallet_selection_changed");
+    assert!(!accessed);
+}
+
+#[test]
+fn wallet_context_capture_is_nonblocking_and_rejects_transition_during_capture() {
+    let state = AppState::default();
+    let wallet_id = Uuid::new_v4();
+    let _operation = operation_guard(&state).unwrap();
+    capture_wallet_command_context(&state, || Ok(wallet_id)).unwrap();
+    let result = capture_wallet_command_context(&state, || {
+        invalidate_wallet_command_context(&state)?;
+        Ok(wallet_id)
+    });
+    assert_eq!(result.unwrap_err().code, "wallet_selection_changed");
+}
+
+#[test]
+fn wallet_context_metadata_guard_never_accepts_a_locked_context() {
+    let state = AppState::default();
+    let wallet_id = Uuid::new_v4();
+    let context = wallet_command_context(&state, wallet_id).unwrap();
+    assert_eq!(
+        metadata_operation_guard(&state, context, || Ok(context))
+            .err()
+            .unwrap()
+            .code,
+        "wallet_locked"
+    );
+}
+
+#[test]
+fn wallet_context_current_metadata_and_unlock_remain_available() {
+    for metadata in [false, true] {
+        let (result, accessed, verified) = queued_wallet_context_attempt(metadata, |_, _, _, _| {});
+        result.unwrap();
+        assert_eq!(accessed, metadata);
+        assert_eq!(verified, !metadata);
+    }
+}
+
+#[test]
+fn wallet_context_fast_metadata_lane_revalidates_while_sync_keeps_operation_lock() {
+    let state = AppState::default();
+    let wallet_id = Uuid::new_v4();
+    state.unlocked_wallets.lock().unwrap().unlock(wallet_id);
+    let context = wallet_command_context(&state, wallet_id).unwrap();
+    state
+        .foreground_sync
+        .lock()
+        .unwrap()
+        .replace(ActiveForegroundSync {
+            wallet_id,
+            cancel: Arc::new(AtomicBool::new(false)),
+            persisted_reads_safe: Arc::new(AtomicBool::new(true)),
+        });
+    let _sync = state.operations.lock().unwrap();
+    let guard = metadata_operation_guard(&state, context, || {
+        wallet_command_context(&state, wallet_id)
+    })
+    .unwrap();
+    assert!(guard._operation.is_none());
+    drop(guard);
+    invalidate_wallet_command_context(&state).unwrap();
+    assert_eq!(
+        metadata_operation_guard(&state, context, || wallet_command_context(
+            &state, wallet_id
+        ))
+        .err()
+        .unwrap()
+        .code,
+        "wallet_selection_changed"
+    );
+}
+
+#[test]
+fn wallet_context_staged_sync_lock_waits_for_metadata_and_idle_expiry_cannot_interrupt_sink() {
+    use std::sync::mpsc;
+    let state = AppState::default();
+    let wallet_id = Uuid::new_v4();
+    state.unlocked_wallets.lock().unwrap().unlock(wallet_id);
+    let context = wallet_command_context(&state, wallet_id).unwrap();
+    state
+        .foreground_sync
+        .lock()
+        .unwrap()
+        .replace(ActiveForegroundSync {
+            wallet_id,
+            cancel: Arc::new(AtomicBool::new(false)),
+            persisted_reads_safe: Arc::new(AtomicBool::new(true)),
+        });
+    let _sync = state.operations.lock().unwrap();
+    let metadata = metadata_operation_guard(&state, context, || {
+        wallet_command_context(&state, wallet_id)
+    })
+    .unwrap();
+    let future = Instant::now() + Duration::from_secs(121);
+    assert!(state
+        .unlocked_wallets
+        .lock()
+        .unwrap()
+        .prune_expired_at(future, Duration::from_secs(60))
+        .is_empty());
+    let (blocked_tx, blocked_rx) = mpsc::channel();
+    let (locked_tx, locked_rx) = mpsc::channel();
+    thread::scope(|scope| {
+        scope.spawn(|| {
+            let _read = foreground_sync_read_gate(&state, wallet_id, true)
+                .unwrap()
+                .unwrap();
+            assert!(matches!(
+                state.metadata_operations.try_lock(),
+                Err(TryLockError::WouldBlock)
+            ));
+            blocked_tx.send(()).unwrap();
+            let _metadata = state.metadata_operations.lock().unwrap();
+            invalidate_wallet_command_context(&state).unwrap();
+            state.unlocked_wallets.lock().unwrap().lock(wallet_id);
+            locked_tx.send(()).unwrap();
+        });
+        blocked_rx.recv().unwrap();
+        assert!(state
+            .unlocked_wallets
+            .lock()
+            .unwrap()
+            .is_unlocked(wallet_id));
+        drop(metadata);
+        locked_rx.recv().unwrap();
+        assert!(!state
+            .unlocked_wallets
+            .lock()
+            .unwrap()
+            .is_unlocked(wallet_id));
+    });
+}
+
+#[test]
+fn wallet_context_all_metadata_commands_capture_before_queue_and_use_shared_guard() {
+    for (source, name) in [
+        (include_str!("profile_commands.rs"), "wallet_rename"),
+        (
+            include_str!("hardware_commands.rs"),
+            "external_signer_wallet",
+        ),
+        (
+            include_str!("hardware_commands.rs"),
+            "external_signer_rename",
+        ),
+        (
+            include_str!("multisig_setup_commands.rs"),
+            "multisig_wallet",
+        ),
+    ] {
+        let command = source
+            .split(&format!("pub async fn {name}("))
+            .nth(1)
+            .unwrap()
+            .split("#[tauri::command]")
+            .next()
+            .unwrap();
+        let queued = command.find("spawn_blocking").unwrap();
+        assert!(
+            command[..queued].contains("wallet_command_context"),
+            "{name}"
+        );
+        assert!(
+            command[queued..].contains("metadata_operation_guard(&state, context"),
+            "{name}"
+        );
+        assert!(
+            command[queued..].contains("recheck_unlocked_wallet_command_context"),
+            "{name}"
+        );
+    }
+    let source = include_str!("profile_commands.rs");
+    let command = source
+        .split("pub async fn wallet_unlock(")
+        .nth(1)
+        .unwrap()
+        .split("#[tauri::command]")
+        .next()
+        .unwrap();
+    assert!(
+        command.find("Zeroizing::new(credential)").unwrap()
+            < command
+                .find("capture_selected_wallet_command_context")
+                .unwrap()
+    );
+    assert!(
+        command
+            .find("capture_selected_wallet_command_context")
+            .unwrap()
+            < command.find("spawn_blocking").unwrap()
+    );
+    assert!(
+        command.find("wallet_unlock_operation_guard").unwrap()
+            < command.find("check_auth_throttle").unwrap()
+    );
 }
 
 #[test]

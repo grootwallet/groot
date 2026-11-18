@@ -368,6 +368,7 @@ struct OperationGuard<'a> {
 }
 
 struct MetadataOperationGuard<'a> {
+    _activity: Option<ActiveWalletOperation<'a>>,
     _operation: Option<MutexGuard<'a, ()>>,
     _metadata: MutexGuard<'a, ()>,
 }
@@ -388,7 +389,7 @@ fn operation_guard(state: &AppState) -> ApiResult<OperationGuard<'_>> {
 // Display-only profile and signer metadata live outside the wallet database.
 // Let those tiny operations proceed while a foreground sync owns the database
 // lock; every other competing operation continues to serialize normally.
-fn metadata_operation_guard<'a>(
+fn metadata_operation_lock<'a>(
     state: &'a AppState,
     wallet_id: Uuid,
 ) -> ApiResult<MetadataOperationGuard<'a>> {
@@ -396,6 +397,7 @@ fn metadata_operation_guard<'a>(
         Ok(operation) => {
             let metadata = state.metadata_operations.lock().map_err(internal)?;
             Ok(MetadataOperationGuard {
+                _activity: None,
                 _operation: Some(operation),
                 _metadata: metadata,
             })
@@ -410,18 +412,147 @@ fn metadata_operation_guard<'a>(
                 .is_some_and(|sync| sync.wallet_id == wallet_id);
             if syncing_selected_wallet {
                 Ok(MetadataOperationGuard {
+                    _activity: None,
                     _operation: None,
                     _metadata: state.metadata_operations.lock().map_err(internal)?,
                 })
             } else {
                 let guard = operation_guard(state)?;
                 Ok(MetadataOperationGuard {
+                    _activity: None,
                     _operation: Some(guard._operation),
                     _metadata: guard._metadata,
                 })
             }
         }
     }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct WalletCommandContext {
+    wallet_id: Uuid,
+    epoch: Uuid,
+    session_id: Option<Uuid>,
+}
+
+// The capture path brackets this snapshot with the command epoch; guarded
+// rechecks run while selection and explicit session transitions are serialized.
+fn wallet_command_context(state: &AppState, wallet_id: Uuid) -> ApiResult<WalletCommandContext> {
+    Ok(WalletCommandContext {
+        wallet_id,
+        epoch: *state.wallet_command_epoch.lock().map_err(internal)?,
+        session_id: state
+            .unlocked_wallets
+            .lock()
+            .map_err(internal)?
+            .identity(wallet_id),
+    })
+}
+
+fn invalidate_wallet_command_context(state: &AppState) -> ApiResult<()> {
+    *state.wallet_command_epoch.lock().map_err(internal)? = Uuid::new_v4();
+    Ok(())
+}
+
+fn validate_wallet_command_context(
+    expected: WalletCommandContext,
+    current: WalletCommandContext,
+) -> ApiResult<()> {
+    validate_read_wallet(current.wallet_id, expected.wallet_id)?;
+    if current.epoch != expected.epoch || current.session_id != expected.session_id {
+        return Err(api_error(
+            "wallet_selection_changed",
+            "The wallet selection or session changed. Retry from the current wallet.",
+        ));
+    }
+    Ok(())
+}
+
+fn unlocked_wallet_command_context(
+    app: &AppHandle,
+    state: &State<'_, AppState>,
+) -> ApiResult<WalletCommandContext> {
+    wallet_command_context(state, require_unlocked(app, state)?)
+}
+
+fn recheck_unlocked_wallet_command_context(
+    app: &AppHandle,
+    state: &State<'_, AppState>,
+    expected: WalletCommandContext,
+) -> ApiResult<WalletCommandContext> {
+    validate_read_wallet(selected_profile(app)?.id, expected.wallet_id)?;
+    wallet_command_context(state, require_unlocked_for_background_sync(app, state)?)
+}
+
+fn finish_wallet_command_context_capture(
+    state: &AppState,
+    wallet_id: Uuid,
+    epoch: Uuid,
+) -> ApiResult<WalletCommandContext> {
+    let context = wallet_command_context(state, wallet_id)?;
+    validate_wallet_command_context(WalletCommandContext { epoch, ..context }, context)?;
+    Ok(context)
+}
+
+// Do not wait on operation/metadata serialization before capturing identity.
+// Epoch bracketing rejects a selection/session transition during the read;
+// the owning guard checks it again after queueing.
+fn capture_wallet_command_context(
+    state: &AppState,
+    selected: impl FnOnce() -> ApiResult<Uuid>,
+) -> ApiResult<WalletCommandContext> {
+    let epoch = *state.wallet_command_epoch.lock().map_err(internal)?;
+    finish_wallet_command_context_capture(state, selected()?, epoch)
+}
+
+fn capture_unlocked_wallet_command_context(app: &AppHandle) -> ApiResult<WalletCommandContext> {
+    let state = app.state::<AppState>();
+    capture_wallet_command_context(&state, || require_unlocked(app, &state))
+}
+
+fn capture_selected_wallet_command_context(app: &AppHandle) -> ApiResult<WalletCommandContext> {
+    let state = app.state::<AppState>();
+    capture_wallet_command_context(&state, || Ok(selected_profile(app)?.id))
+}
+
+fn metadata_operation_guard<'a>(
+    state: &'a AppState,
+    expected: WalletCommandContext,
+    current: impl FnOnce() -> ApiResult<WalletCommandContext>,
+) -> ApiResult<MetadataOperationGuard<'a>> {
+    let mut guard = metadata_operation_lock(state, expected.wallet_id)?;
+    let observed = current()?;
+    validate_wallet_command_context(expected, observed)?;
+    validate_read_session(observed.session_id, expected.session_id)?;
+    let session_id = {
+        let mut sessions = state.unlocked_wallets.lock().map_err(internal)?;
+        if !sessions.is_unlocked(expected.wallet_id) {
+            return Err(api_error(
+                "wallet_locked",
+                "Unlock the wallet before continuing.",
+            ));
+        }
+        sessions
+            .begin_user_operation(expected.wallet_id)
+            .ok_or_else(|| api_error("wallet_locked", "Unlock the wallet before continuing."))?
+    };
+    guard._activity = Some(ActiveWalletOperation {
+        state,
+        wallet_id: expected.wallet_id,
+        session_id,
+    });
+    validate_read_session(Some(session_id), expected.session_id)?;
+    Ok(guard)
+}
+
+fn wallet_unlock_operation_guard<'a>(
+    state: &'a AppState,
+    expected: WalletCommandContext,
+    current: impl FnOnce() -> ApiResult<WalletCommandContext>,
+) -> ApiResult<OperationGuard<'a>> {
+    let guard = operation_guard(state)?;
+    validate_wallet_command_context(expected, current()?)?;
+    Ok(guard)
 }
 
 // A Core refresh stages its BDK update in memory until one SQLite commit. A
@@ -694,6 +825,7 @@ fn validate_read_session(current: Option<Uuid>, expected: Option<Uuid>) -> ApiRe
 
 fn unlock_selected(app: &AppHandle, state: &State<'_, AppState>) -> ApiResult<()> {
     let selected = selected_profile(app)?.id;
+    invalidate_wallet_command_context(state)?;
     state
         .unlocked_wallets
         .lock()
@@ -703,6 +835,7 @@ fn unlock_selected(app: &AppHandle, state: &State<'_, AppState>) -> ApiResult<()
 }
 
 fn lock_wallet(state: &State<'_, AppState>, wallet_id: Uuid) -> ApiResult<()> {
+    invalidate_wallet_command_context(state)?;
     state
         .unlocked_wallets
         .lock()
@@ -722,6 +855,7 @@ fn lock_wallet(state: &State<'_, AppState>, wallet_id: Uuid) -> ApiResult<()> {
 pub struct AppState {
     operations: Mutex<()>,
     metadata_operations: Mutex<()>,
+    wallet_command_epoch: Mutex<Uuid>,
     fee_estimate_request: Mutex<()>,
     foreground_sync: Mutex<Option<ActiveForegroundSync>>,
     persisted_sync_reads: RwLock<()>,
@@ -4947,7 +5081,29 @@ fn read_multisig_metadata(app: &AppHandle) -> ApiResult<MultisigWalletDto> {
 }
 
 fn read_external_signer_metadata(app: &AppHandle) -> ApiResult<ExternalSignerWallet> {
-    let encoded = read_private_text(&external_signer_metadata_path(app)?).map_err(|_| {
+    read_external_signer_metadata_for(
+        app,
+        selected_profile_of_kind(app, WalletKind::WatchOnly)?.id,
+    )
+}
+
+fn read_external_signer_metadata_for(
+    app: &AppHandle,
+    wallet_id: Uuid,
+) -> ApiResult<ExternalSignerWallet> {
+    let profile = load_registry(app)?
+        .wallets
+        .into_iter()
+        .find(|profile| profile.id == wallet_id)
+        .ok_or_else(|| registry_api_error(RegistryError::UnknownSelection))?;
+    if profile.kind != WalletKind::WatchOnly {
+        return Err(api_error(
+            "wrong_wallet_kind",
+            "The selected wallet does not support this operation.",
+        ));
+    }
+    let path = external_signer_metadata_path_for(app, wallet_id)?;
+    let encoded = read_private_text(&path).map_err(|_| {
         api_error(
             "wallet_not_found",
             "No external-signer wallet exists on this device.",
@@ -4960,7 +5116,6 @@ fn read_external_signer_metadata(app: &AppHandle) -> ApiResult<ExternalSignerWal
         .map_err(external_signer_api_error)?;
     let (external, internal_descriptor) =
         external_signer::descriptors(&wallet.signer).map_err(external_signer_api_error)?;
-    let profile = selected_profile_of_kind(app, WalletKind::WatchOnly)?;
     if wallet.version != 1
         || external != wallet.external_descriptor
         || internal_descriptor != wallet.internal_descriptor
