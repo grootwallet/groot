@@ -5,7 +5,7 @@ use std::{
     fmt,
     io::{Read, Write},
     net::{Shutdown, SocketAddr, TcpStream},
-    time::Duration,
+    time::{Duration, Instant},
 };
 use thiserror::Error;
 use url::Url;
@@ -92,7 +92,12 @@ impl TorRpcTransport {
         if body.len() > MAX_RPC_BODY_BYTES {
             return Err(transport_error(TorRpcError::RequestTooLarge));
         }
-        let mut stream = self.connect()?;
+        // One monotonic budget covers every network phase. A socket timeout
+        // alone restarts after each successful partial read or write.
+        let deadline = Instant::now()
+            .checked_add(self.timeout)
+            .ok_or_else(|| transport_error(TorRpcError::TimedOut))?;
+        let mut stream = self.connect(deadline)?;
         let request = Zeroizing::new(format!(
             "POST {} HTTP/1.1\r\nHost: {}:{}\r\nAuthorization: Basic {}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
             self.request_path,
@@ -101,34 +106,28 @@ impl TorRpcTransport {
             self.authorization.as_str(),
             body.len()
         ));
-        write_all(&mut stream, request.as_bytes())?;
-        write_all(&mut stream, &body)?;
+        write_all(&mut stream, request.as_bytes(), deadline)?;
+        write_all(&mut stream, &body, deadline)?;
         stream.shutdown(Shutdown::Write).map_err(map_stream_error)?;
-
-        let mut encoded = Vec::new();
-        stream
-            .take((MAX_HTTP_HEADER_BYTES + MAX_RPC_BODY_BYTES + 1) as u64)
-            .read_to_end(&mut encoded)
-            .map_err(map_stream_error)?;
-        if encoded.len() > MAX_HTTP_HEADER_BYTES + MAX_RPC_BODY_BYTES {
-            return Err(transport_error(TorRpcError::ResponseTooLarge));
-        }
+        let encoded = read_http_response(&mut stream, deadline)?;
         let body = parse_http_response(&encoded)?;
+        remaining(deadline)?;
         serde_json::from_slice(body).map_err(JsonRpcError::Json)
     }
 
-    fn connect(&self) -> Result<TcpStream, JsonRpcError> {
-        let mut stream = TcpStream::connect_timeout(&self.proxy, self.timeout)
-            .map_err(|_| transport_error(TorRpcError::ProxyUnavailable))?;
-        stream
-            .set_read_timeout(Some(self.timeout))
-            .map_err(map_stream_error)?;
-        stream
-            .set_write_timeout(Some(self.timeout))
-            .map_err(map_stream_error)?;
-        write_all(&mut stream, &[5, 1, 0])?;
+    fn connect(&self, deadline: Instant) -> Result<TcpStream, JsonRpcError> {
+        let mut stream =
+            TcpStream::connect_timeout(&self.proxy, remaining(deadline)?).map_err(|error| {
+                match error.kind() {
+                    std::io::ErrorKind::TimedOut | std::io::ErrorKind::WouldBlock => {
+                        transport_error(TorRpcError::TimedOut)
+                    }
+                    _ => transport_error(TorRpcError::ProxyUnavailable),
+                }
+            })?;
+        write_all(&mut stream, &[5, 1, 0], deadline)?;
         let mut greeting = [0_u8; 2];
-        read_exact(&mut stream, &mut greeting)?;
+        read_exact(&mut stream, &mut greeting, deadline)?;
         if greeting != [5, 0] {
             return Err(transport_error(TorRpcError::ProxyHandshake));
         }
@@ -139,9 +138,9 @@ impl TorRpcTransport {
         connect.extend_from_slice(&[5, 1, 0, 3, host_len]);
         connect.extend_from_slice(host);
         connect.extend_from_slice(&self.onion_port.to_be_bytes());
-        write_all(&mut stream, &connect)?;
+        write_all(&mut stream, &connect, deadline)?;
         let mut reply = [0_u8; 4];
-        read_exact(&mut stream, &mut reply)?;
+        read_exact(&mut stream, &mut reply, deadline)?;
         if reply[0] != 5 || reply[2] != 0 {
             return Err(transport_error(TorRpcError::ProxyHandshake));
         }
@@ -152,14 +151,14 @@ impl TorRpcTransport {
             1 => 4,
             3 => {
                 let mut length = [0_u8; 1];
-                read_exact(&mut stream, &mut length)?;
+                read_exact(&mut stream, &mut length, deadline)?;
                 usize::from(length[0])
             }
             4 => 16,
             _ => return Err(transport_error(TorRpcError::ProxyHandshake)),
         };
         let mut bound_address_and_port = vec![0_u8; address_len + 2];
-        read_exact(&mut stream, &mut bound_address_and_port)?;
+        read_exact(&mut stream, &mut bound_address_and_port, deadline)?;
         Ok(stream)
     }
 }
@@ -194,10 +193,19 @@ fn parse_http_response(encoded: &[u8]) -> Result<&[u8], JsonRpcError> {
         .position(|window| window == b"\r\n\r\n")
         .map(|index| index + 4)
         .ok_or_else(|| transport_error(TorRpcError::MalformedResponse))?;
-    if header_end > MAX_HTTP_HEADER_BYTES {
+    let expected = parse_http_header(&encoded[..header_end])?;
+    let body = &encoded[header_end..];
+    if body.len() != expected {
+        return Err(transport_error(TorRpcError::MalformedResponse));
+    }
+    Ok(body)
+}
+
+fn parse_http_header(encoded: &[u8]) -> Result<usize, JsonRpcError> {
+    if encoded.len() > MAX_HTTP_HEADER_BYTES {
         return Err(transport_error(TorRpcError::ResponseTooLarge));
     }
-    let header = std::str::from_utf8(&encoded[..header_end])
+    let header = std::str::from_utf8(encoded)
         .map_err(|_| transport_error(TorRpcError::MalformedResponse))?;
     let mut lines = header.split("\r\n");
     let mut status_line = lines
@@ -235,23 +243,102 @@ fn parse_http_response(encoded: &[u8]) -> Result<&[u8], JsonRpcError> {
             }
         }
     }
-    let body = &encoded[header_end..];
     let expected = content_length.ok_or_else(|| transport_error(TorRpcError::MalformedResponse))?;
     if expected > MAX_RPC_BODY_BYTES {
         return Err(transport_error(TorRpcError::ResponseTooLarge));
     }
-    if body.len() != expected {
-        return Err(transport_error(TorRpcError::MalformedResponse));
+    Ok(expected)
+}
+
+fn remaining(deadline: Instant) -> Result<Duration, JsonRpcError> {
+    deadline
+        .checked_duration_since(Instant::now())
+        .filter(|duration| !duration.is_zero())
+        .ok_or_else(|| transport_error(TorRpcError::TimedOut))
+}
+
+fn write_all(
+    stream: &mut TcpStream,
+    mut bytes: &[u8],
+    deadline: Instant,
+) -> Result<(), JsonRpcError> {
+    while !bytes.is_empty() {
+        stream
+            .set_write_timeout(Some(remaining(deadline)?))
+            .map_err(map_stream_error)?;
+        match stream.write(bytes) {
+            Ok(0) => return Err(transport_error(TorRpcError::ProxyHandshake)),
+            Ok(written) => bytes = &bytes[written..],
+            Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
+            Err(error) => return Err(map_stream_error(error)),
+        }
     }
-    Ok(body)
+    remaining(deadline).map(|_| ())
 }
 
-fn write_all(stream: &mut TcpStream, bytes: &[u8]) -> Result<(), JsonRpcError> {
-    stream.write_all(bytes).map_err(map_stream_error)
+fn read_some(
+    stream: &mut TcpStream,
+    bytes: &mut [u8],
+    deadline: Instant,
+) -> Result<usize, JsonRpcError> {
+    loop {
+        stream
+            .set_read_timeout(Some(remaining(deadline)?))
+            .map_err(map_stream_error)?;
+        match stream.read(bytes) {
+            Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
+            result => {
+                let read = result.map_err(map_stream_error)?;
+                remaining(deadline)?;
+                return Ok(read);
+            }
+        }
+    }
 }
 
-fn read_exact(stream: &mut TcpStream, bytes: &mut [u8]) -> Result<(), JsonRpcError> {
-    stream.read_exact(bytes).map_err(map_stream_error)
+fn read_exact(
+    stream: &mut TcpStream,
+    mut bytes: &mut [u8],
+    deadline: Instant,
+) -> Result<(), JsonRpcError> {
+    while !bytes.is_empty() {
+        let read = read_some(stream, bytes, deadline)?;
+        if read == 0 {
+            return Err(transport_error(TorRpcError::ProxyHandshake));
+        }
+        bytes = &mut bytes[read..];
+    }
+    Ok(())
+}
+
+fn read_http_response(stream: &mut TcpStream, deadline: Instant) -> Result<Vec<u8>, JsonRpcError> {
+    let mut encoded = Vec::new();
+    let mut expected_total = None;
+    let mut chunk = [0; 8192];
+    loop {
+        let available = expected_total.unwrap_or(MAX_HTTP_HEADER_BYTES + 1) - encoded.len();
+        if available == 0 {
+            return Ok(encoded);
+        }
+        let limit = chunk.len().min(available);
+        let read = read_some(stream, &mut chunk[..limit], deadline)?;
+        if read == 0 {
+            return Err(transport_error(TorRpcError::MalformedResponse));
+        }
+        encoded.extend_from_slice(&chunk[..read]);
+        if expected_total.is_none() {
+            if let Some(end) = encoded.windows(4).position(|bytes| bytes == b"\r\n\r\n") {
+                let header_end = end + 4;
+                let total = header_end + parse_http_header(&encoded[..header_end])?;
+                if encoded.len() > total {
+                    return Err(transport_error(TorRpcError::MalformedResponse));
+                }
+                expected_total = Some(total);
+            } else if encoded.len() > MAX_HTTP_HEADER_BYTES {
+                return Err(transport_error(TorRpcError::ResponseTooLarge));
+            }
+        }
+    }
 }
 
 fn map_stream_error(error: std::io::Error) -> JsonRpcError {
@@ -378,6 +465,141 @@ mod tests {
         }
     }
 
+    // All peers are disposable loopback sockets. Each byte arrives sooner than
+    // the socket timeout, but the whole exchange exceeds the request budget.
+    fn slow_proxy(stage: &'static str) -> (SocketAddr, thread::JoinHandle<()>) {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let worker = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            stream
+                .set_read_timeout(Some(Duration::from_secs(2)))
+                .unwrap();
+            let mut greeting = [0; 3];
+            stream.read_exact(&mut greeting).unwrap();
+            for byte in [5, 0] {
+                if stage == "socks" {
+                    thread::sleep(Duration::from_millis(90));
+                }
+                if stream.write_all(&[byte]).is_err() {
+                    return;
+                }
+            }
+            let mut connect = [0; 5];
+            if stream.read_exact(&mut connect).is_err() {
+                return;
+            }
+            let mut destination = vec![0; usize::from(connect[4]) + 2];
+            stream.read_exact(&mut destination).unwrap();
+            if stream.write_all(&[5, 0, 0, 1, 127, 0, 0, 1, 0, 0]).is_err() {
+                return;
+            }
+            read_http_request(&mut stream);
+            let body = r#"{"result":true,"error":null,"id":1,"jsonrpc":"2.0"}"#;
+            let response = rpc_response(body);
+            let header_end = response
+                .windows(4)
+                .position(|bytes| bytes == b"\r\n\r\n")
+                .unwrap()
+                + 4;
+            for (index, byte) in response.into_iter().enumerate() {
+                if (stage == "headers" && index < header_end)
+                    || (stage == "body" && index >= header_end)
+                {
+                    thread::sleep(Duration::from_millis(25));
+                }
+                if stream.write_all(&[byte]).is_err() {
+                    return;
+                }
+            }
+            if stage == "keep-open" {
+                thread::sleep(Duration::from_millis(400));
+            }
+        });
+        (address, worker)
+    }
+
+    #[test]
+    fn one_deadline_bounds_slow_socks_headers_and_body() {
+        for stage in ["socks", "headers", "body"] {
+            let (proxy, worker) = slow_proxy(stage);
+            let transport = TorRpcTransport::new(
+                &endpoint(),
+                "groot",
+                "secret",
+                proxy,
+                Duration::from_millis(150),
+            )
+            .unwrap();
+            let started = std::time::Instant::now();
+            let error = transport.send_request(request()).unwrap_err();
+            assert!(error.to_string().contains("timed out"), "{stage}: {error}");
+            assert!(started.elapsed() < Duration::from_millis(700), "{stage}");
+            worker.join().unwrap();
+        }
+    }
+
+    #[test]
+    fn complete_content_length_does_not_wait_for_peer_close() {
+        let (proxy, worker) = slow_proxy("keep-open");
+        let transport = TorRpcTransport::new(
+            &endpoint(),
+            "groot",
+            "secret",
+            proxy,
+            Duration::from_millis(150),
+        )
+        .unwrap();
+        assert_eq!(
+            transport.send_request(request()).unwrap().id,
+            serde_json::json!(1)
+        );
+        worker.join().unwrap();
+    }
+
+    #[test]
+    fn expired_deadline_prevents_both_reads_and_writes() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let mut stream = TcpStream::connect(listener.local_addr().unwrap()).unwrap();
+        let (mut peer, _) = listener.accept().unwrap();
+        peer.set_nonblocking(true).unwrap();
+        let deadline = Instant::now() - Duration::from_millis(1);
+        assert!(write_all(&mut stream, b"request", deadline)
+            .unwrap_err()
+            .to_string()
+            .contains("timed out"));
+        assert!(read_exact(&mut stream, &mut [0], deadline)
+            .unwrap_err()
+            .to_string()
+            .contains("timed out"));
+        assert_eq!(
+            peer.read(&mut [0]).unwrap_err().kind(),
+            std::io::ErrorKind::WouldBlock
+        );
+    }
+
+    #[test]
+    fn batch_requests_share_the_same_bounded_transport() {
+        let body = r#"[{"result":true,"error":null,"id":1,"jsonrpc":"2.0"}]"#;
+        let (proxy, observed) = serve_proxy(Some(rpc_response(body)), 0);
+        let transport = TorRpcTransport::new(
+            &endpoint(),
+            "groot",
+            "secret",
+            proxy,
+            Duration::from_secs(1),
+        )
+        .unwrap();
+        assert_eq!(
+            transport.send_batch(&[request()]).unwrap()[0].id,
+            serde_json::json!(1)
+        );
+        let (_, _, request) = observed.recv().unwrap();
+        assert!(request
+            .windows(b"[{\"method\"".len())
+            .any(|bytes| bytes == b"[{\"method\""));
+    }
+
     #[test]
     fn sends_the_onion_hostname_to_socks_without_local_resolution() {
         let body = r#"{"result":{"chain":"regtest"},"error":null,"id":1,"jsonrpc":"2.0"}"#;
@@ -455,5 +677,27 @@ mod tests {
             b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nContent-Length: 2\r\n\r\n{}"
         )
         .is_err());
+        for response in [
+            b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\n{".as_slice(),
+            b"HTTP/1.1 200 OK\r\nContent-Length: 1\r\n\r\n{}".as_slice(),
+            b"HTTP/1.1 200 OK\r\nContent-Length: -1\r\n\r\n".as_slice(),
+            b"HTTP/1.1 200 OK\r\n\r\n{}".as_slice(),
+        ] {
+            assert!(parse_http_response(response).is_err());
+        }
+        assert!(parse_http_response(
+            format!(
+                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n",
+                MAX_RPC_BODY_BYTES + 1
+            )
+            .as_bytes()
+        )
+        .unwrap_err()
+        .to_string()
+        .contains("size limit"));
+        assert!(parse_http_header(&vec![b'x'; MAX_HTTP_HEADER_BYTES + 1])
+            .unwrap_err()
+            .to_string()
+            .contains("size limit"));
     }
 }
