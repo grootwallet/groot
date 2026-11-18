@@ -82,3 +82,41 @@
     </div>
   {/if}
 </Modal>
+
+<style>
+  .descriptor-primary {
+    padding: 18px;
+  }
+  .descriptor-primary > div {
+    gap: 5px;
+    margin-bottom: 14px;
+  }
+  .descriptor-primary span {
+    font-size: 15px;
+  }
+  .descriptor-primary small {
+    font-size: 13px;
+    line-height: 1.45;
+  }
+  .descriptor-primary code {
+    max-height: min(280px, 40dvh);
+    padding: 14px;
+    font-size: clamp(13px, 1.6vw, 15px);
+    line-height: 1.65;
+  }
+  .descriptor-primary button {
+    min-height: 44px;
+    font-size: 13px;
+  }
+
+  @media (max-width: 760px) {
+    .descriptor-primary {
+      padding: 14px;
+    }
+    .descriptor-primary code {
+      max-height: min(300px, 42dvh);
+      font-size: 14px;
+      line-height: 1.7;
+    }
+  }
+</style>

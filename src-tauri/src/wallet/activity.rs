@@ -159,6 +159,7 @@ mod tests {
                 observed_at: None,
                 status: "unknown",
             },
+            policy_paths: Vec::new(),
         };
         let overview = overview_from_snapshot(snapshot).unwrap();
         assert_eq!(overview.transactions.len(), 3);

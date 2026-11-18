@@ -6,11 +6,13 @@ from __future__ import annotations
 import argparse
 import base64
 import binascii
+import fcntl
 import hashlib
 import hmac
 import http.client
 import ipaddress
 import json
+import math
 import os
 import re
 import secrets
@@ -19,6 +21,7 @@ import stat
 import tempfile
 import threading
 import time
+from contextlib import contextmanager
 from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -31,7 +34,15 @@ MAX_BATCH_SIZE = 256
 MAX_UPSTREAM_CONCURRENCY = 16
 MAX_HANDLER_CONCURRENCY = 16
 MAX_ENROLL_REQUEST_BYTES = 64
-MAX_ENROLLED_PRINCIPALS = 10_000
+MAX_ENROLLED_PRINCIPALS = 10_000  # Existing v1 records remain readable; public issuance adds none.
+MAX_ENROLLMENT_PREFIXES = 4096
+MAX_ENROLLMENT_REVOCATIONS = 10_000
+ENROLLMENT_GLOBAL_BURST = 32.0
+ENROLLMENT_GLOBAL_RATE = 1.0 / 60.0
+ENROLLMENT_PREFIX_BURST = 8.0
+ENROLLMENT_PREFIX_RATE = 1.0 / 3600.0
+ENROLLMENT_PREFIX_RETENTION = 16 * 3600.0
+ENROLLMENT_PASSWORD_DOMAIN = b"Groot public gateway credential v1\x00"
 MAX_CREDENTIAL_FILE_BYTES = 4 * 1024 * 1024
 MAX_HISTORY_SCRIPTHASHES = 256
 MAX_HISTORY_ENTRIES = 10_000
@@ -75,12 +86,14 @@ class CredentialStore:
         self._stamp: tuple[tuple[int, int], ...] | None = None
         self._principals: dict[str, Principal] = {}
 
-    def authenticate(self, authorization: str | None) -> str | None:
+    def authenticate(
+        self, authorization: str | None, enrollment: EnrollmentStore | None = None
+    ) -> str | None:
         parsed = parse_basic_authorization(authorization)
         if parsed is None:
             return None
         username, password = parsed
-        self._reload_if_changed()
+        self._reload_if_changed(allow_empty=enrollment is not None)
         principal = self._principals.get(username)
         if principal is None:
             # Match the cost of a real credential check without keeping a shared
@@ -93,7 +106,7 @@ class CredentialStore:
                 p=1,
                 dklen=32,
             )
-            return None
+            return enrollment.authenticate(username, password) if enrollment is not None else None
         candidate = hashlib.scrypt(
             password,
             salt=principal.salt,
@@ -104,11 +117,17 @@ class CredentialStore:
         )
         return username if hmac.compare_digest(candidate, principal.password_scrypt) else None
 
-    def _reload_if_changed(self) -> None:
+    def usernames(self) -> set[str]:
+        self._reload_if_changed(allow_empty=True)
+        return set(self._principals)
+
+    def _reload_if_changed(self, *, allow_empty: bool = False) -> None:
         files = [read_private_file(path, MAX_CREDENTIAL_FILE_BYTES) for path in self._paths]
         stamp = tuple(item[0] for item in files)
         with self._lock:
             if stamp == self._stamp:
+                if not self._principals and not allow_empty:
+                    raise ValueError("at least one client principal is required")
                 return
             principals: dict[str, Principal] = {}
             for _, raw in files:
@@ -133,59 +152,227 @@ class CredentialStore:
                     salt = decode_b64(item.get("salt"), 16, 64)
                     password_scrypt = decode_b64(item.get("password_scrypt"), 32, 32)
                     principals[username] = Principal(username, salt, password_scrypt, n, r, p)
-            if not principals:
+            if not principals and not allow_empty:
                 raise ValueError("at least one client principal is required")
             self._principals = principals
             self._stamp = stamp
 
 
 class EnrollmentStore:
+    """Stateless future credentials; existing v1 verifier bytes are never rewritten."""
+
     def __init__(self, path: Path):
         self._path = path
+        self._state_path = path.with_name(f"{path.name}.issuer.json")
+        self._lock_path = path.with_name(f"{path.name}.issuer.lock")
         self._lock = threading.Lock()
         if not path.exists():
-            self._write({"version": 1, "principals": []})
+            self._write(path, {"version": 1, "principals": []})
 
-    def issue(self) -> tuple[str, str]:
-        username = f"groot-{secrets.token_hex(12)}"
-        password = secrets.token_urlsafe(32)
-        salt = secrets.token_bytes(16)
-        digest = hashlib.scrypt(
-            password.encode("ascii"), salt=salt, n=1 << 14, r=8, p=1, dklen=32
-        )
-        record = {
-            "username": username,
-            "salt": base64.b64encode(salt).decode("ascii"),
-            "password_scrypt": base64.b64encode(digest).decode("ascii"),
-            "n": 1 << 14,
-            "r": 8,
-            "p": 1,
-        }
+    @contextmanager
+    def _locked(self):
         with self._lock:
-            _, raw = read_private_file(self._path, MAX_CREDENTIAL_FILE_BYTES)
-            document = json.loads(raw)
-            principals = document.get("principals")
-            if document.get("version") != 1 or not isinstance(principals, list):
-                raise ValueError("unsupported enrolled-client file")
-            if len(principals) >= MAX_ENROLLED_PRINCIPALS:
-                raise RequestRejected(503, "enrollment_unavailable")
-            self._write({"version": 1, "principals": principals + [record]})
-        return username, password
+            try:
+                issuer_metadata = self._state_path.lstat()
+            except FileNotFoundError:
+                issuer_metadata = None
+            if issuer_metadata is not None and (
+                not stat.S_ISREG(issuer_metadata.st_mode)
+                or stat.S_IMODE(issuer_metadata.st_mode) & 0o077
+            ):
+                raise ValueError("private issuer state permissions are unsafe")
+            descriptor = os.open(
+                self._lock_path,
+                os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0),
+                0o600,
+            )
+            try:
+                metadata = os.fstat(descriptor)
+                if not stat.S_ISREG(metadata.st_mode) or stat.S_IMODE(metadata.st_mode) & 0o077:
+                    raise ValueError("issuer lock permissions are unsafe")
+                if issuer_metadata is not None:
+                    # Backups need not retain the empty lock file. A root-run
+                    # revoke must recreate it for the daemon, not for root.
+                    os.fchown(descriptor, issuer_metadata.st_uid, issuer_metadata.st_gid)
+                fcntl.flock(descriptor, fcntl.LOCK_EX)
+                yield
+            finally:
+                os.close(descriptor)
 
-    def _write(self, document: dict[str, Any]) -> None:
-        self._path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-        descriptor, temporary = tempfile.mkstemp(prefix=f".{self._path.name}.", dir=self._path.parent)
+    def initialize(self) -> None:
+        """Explicit operator action only; never replace an existing issuer key."""
+        with self._locked():
+            self._write(self._state_path, {
+                "version": 1,
+                "signing_key": base64.b64encode(secrets.token_bytes(32)).decode("ascii"),
+                "global": [ENROLLMENT_GLOBAL_BURST, time.time()],
+                "prefixes": {},
+                "revoked": [],
+            }, exclusive=True)
+
+    @staticmethod
+    def _bucket(value: Any, maximum: float) -> tuple[float, float]:
+        if (
+            not isinstance(value, list)
+            or len(value) != 2
+            or any(type(item) not in {int, float} or not 0 <= item <= 2**53 for item in value)
+            or not 0 <= value[0] <= maximum
+            or value[1] < 0
+        ):
+            raise ValueError("invalid issuer admission bucket")
+        return float(value[0]), float(value[1])
+
+    def _read(self) -> dict[str, Any]:
+        _, raw = read_private_file(self._state_path, MAX_CREDENTIAL_FILE_BYTES, owner_only=True)
+        state = json.loads(raw)
+        if (
+            not isinstance(state, dict)
+            or set(state) != {"version", "signing_key", "global", "prefixes", "revoked"}
+            or type(state["version"]) is not int
+            or state["version"] != 1
+            or not isinstance(state["prefixes"], dict)
+            or len(state["prefixes"]) > MAX_ENROLLMENT_PREFIXES
+            or not isinstance(state["revoked"], list)
+            or len(state["revoked"]) > MAX_ENROLLMENT_REVOCATIONS
+        ):
+            raise ValueError("unsupported enrollment issuer state")
+        decode_b64(state["signing_key"], 32, 32)
+        self._bucket(state["global"], ENROLLMENT_GLOBAL_BURST)
+        for prefix, bucket in state["prefixes"].items():
+            if not isinstance(prefix, str) or enrollment_prefix(prefix.split("/")[0]) != prefix:
+                raise ValueError("invalid issuer source prefix")
+            self._bucket(bucket, ENROLLMENT_PREFIX_BURST)
+        revoked = state["revoked"]
+        if any(not is_public_username(name) for name in revoked) or len(set(revoked)) != len(revoked):
+            raise ValueError("invalid issuer revocation ledger")
+        return state
+
+    @staticmethod
+    def _password(key: bytes, username: str) -> bytes:
+        digest = hmac.new(key, ENROLLMENT_PASSWORD_DOMAIN + username.encode("ascii"), hashlib.sha256)
+        return base64.urlsafe_b64encode(digest.digest()).rstrip(b"=")
+
+    def authenticate(self, username: str, password: bytes) -> str | None:
+        if not is_public_username(username):
+            return None
+        with self._locked():
+            state = self._read()
+            expected = self._password(decode_b64(state["signing_key"], 32, 32), username)
+            if username in state["revoked"] or not hmac.compare_digest(password, expected):
+                return None
+        return username
+
+    def issue(self, client_ip: str, occupied: set[str]) -> tuple[str, str]:
+        prefix = enrollment_prefix(client_ip)
+        with self._locked():
+            state = self._read()
+            if len(state["revoked"]) >= MAX_ENROLLMENT_REVOCATIONS:
+                raise RequestRejected(503, "enrollment_unavailable")
+            now = time.time()
+            if not math.isfinite(now) or now < 0:
+                raise ValueError("invalid issuer clock")
+            prefixes = {
+                key: value for key, value in state["prefixes"].items()
+                if now - value[1] < ENROLLMENT_PREFIX_RETENTION
+            }
+            if prefix not in prefixes and len(prefixes) >= MAX_ENROLLMENT_PREFIXES:
+                raise RequestRejected(429, "rate_limited")
+            global_tokens, global_updated = self._bucket(state["global"], ENROLLMENT_GLOBAL_BURST)
+            prefix_tokens, prefix_updated = self._bucket(
+                prefixes.get(prefix, [ENROLLMENT_PREFIX_BURST, now]), ENROLLMENT_PREFIX_BURST
+            )
+            global_tokens = min(
+                ENROLLMENT_GLOBAL_BURST,
+                global_tokens + max(0.0, now - global_updated) * ENROLLMENT_GLOBAL_RATE,
+            )
+            prefix_tokens = min(
+                ENROLLMENT_PREFIX_BURST,
+                prefix_tokens + max(0.0, now - prefix_updated) * ENROLLMENT_PREFIX_RATE,
+            )
+            if global_tokens < 1.0 or prefix_tokens < 1.0:
+                raise RequestRejected(429, "rate_limited")
+            for _ in range(32):
+                username = f"groot-{secrets.token_hex(12)}"
+                if username not in occupied and username not in state["revoked"]:
+                    break
+            else:
+                raise RequestRejected(503, "enrollment_unavailable")
+            password = self._password(decode_b64(state["signing_key"], 32, 32), username)
+            state["global"] = [global_tokens - 1.0, max(now, global_updated)]
+            prefixes[prefix] = [prefix_tokens - 1.0, max(now, prefix_updated)]
+            state["prefixes"] = prefixes
+            self._write(self._state_path, state)
+        return username, password.decode("ascii")
+
+    def revoke(self, username: str) -> None:
+        if not is_public_username(username):
+            raise ValueError("not a public enrollment username")
+        with self._locked():
+            state = self._read()
+            if username in state["revoked"]:
+                return
+            if len(state["revoked"]) >= MAX_ENROLLMENT_REVOCATIONS:
+                raise ValueError("issuer revocation ledger is full; no revocation was recorded")
+            state["revoked"].append(username)
+            self._write(self._state_path, state)
+
+    @staticmethod
+    def _sync_directory(path: Path) -> None:
+        descriptor = os.open(path, os.O_RDONLY)
         try:
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
+
+    @classmethod
+    def _write(
+        cls, path: Path, document: dict[str, Any], *, exclusive: bool = False
+    ) -> None:
+        encoded = (json.dumps(document, separators=(",", ":"), sort_keys=True) + "\n").encode("utf-8")
+        if len(encoded) > MAX_CREDENTIAL_FILE_BYTES:
+            raise ValueError("private issuer state is too large")
+        path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        try:
+            metadata = path.lstat()
+        except FileNotFoundError:
+            metadata = None
+        if exclusive and metadata is not None:
+            raise FileExistsError("issuer state already exists")
+        if metadata is not None and (
+            not stat.S_ISREG(metadata.st_mode) or stat.S_IMODE(metadata.st_mode) & 0o077
+        ):
+            raise ValueError("private issuer state permissions are unsafe")
+        descriptor, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+        try:
+            if metadata is not None:
+                # Root-run revocation must retain the daemon owner, including
+                # owner-only key readability after the atomic replacement.
+                os.fchown(descriptor, metadata.st_uid, metadata.st_gid)
             os.fchmod(descriptor, 0o600)
-            with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
-                json.dump(document, handle, separators=(",", ":"), sort_keys=True)
-                handle.write("\n")
+            with os.fdopen(descriptor, "wb") as handle:
+                handle.write(encoded)
                 handle.flush()
                 os.fsync(handle.fileno())
-            os.replace(temporary, self._path)
+            if exclusive:
+                os.link(temporary, path, follow_symlinks=False)
+            else:
+                os.replace(temporary, path)
+            cls._sync_directory(path.parent)
         finally:
             if os.path.exists(temporary):
                 os.unlink(temporary)
+
+
+def is_public_username(value: Any) -> bool:
+    return isinstance(value, str) and re.fullmatch(r"groot-[0-9a-f]{24}", value) is not None
+
+
+def enrollment_prefix(value: str) -> str:
+    address = ipaddress.ip_address(value)
+    if isinstance(address, ipaddress.IPv6Address) and address.ipv4_mapped is not None:
+        address = address.ipv4_mapped
+    width = 24 if isinstance(address, ipaddress.IPv4Address) else 48
+    return str(ipaddress.ip_network((address, width), strict=False))
 
 
 class CoreCookie:
@@ -209,13 +396,15 @@ class CoreCookie:
             return self._authorization
 
 
-def read_private_file(path: Path, maximum: int) -> tuple[tuple[int, int], bytes]:
+def read_private_file(
+    path: Path, maximum: int, *, owner_only: bool = False
+) -> tuple[tuple[int, int], bytes]:
     flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
     descriptor = os.open(path, flags)
     try:
         metadata = os.fstat(descriptor)
         mode = stat.S_IMODE(metadata.st_mode)
-        if not stat.S_ISREG(metadata.st_mode) or mode & 0o027:
+        if not stat.S_ISREG(metadata.st_mode) or mode & (0o077 if owner_only else 0o027):
             raise ValueError("private file permissions are unsafe")
         if metadata.st_size > maximum:
             raise ValueError("private file is too large")
@@ -236,15 +425,21 @@ def read_private_file(path: Path, maximum: int) -> tuple[tuple[int, int], bytes]
 
 
 class TokenBuckets:
-    def __init__(self, rate: float, burst: float):
+    def __init__(self, rate: float, burst: float, *, maximum: int | None = None):
         self._rate = rate
         self._burst = burst
+        self._maximum = maximum
         self._lock = threading.Lock()
         self._buckets: dict[str, tuple[float, float]] = {}
 
     def allow(self, key: str) -> bool:
         now = time.monotonic()
         with self._lock:
+            if self._maximum is not None and key not in self._buckets:
+                expiry = now - (self._burst / self._rate) * 2
+                self._buckets = {k: v for k, v in self._buckets.items() if v[1] >= expiry}
+                if len(self._buckets) >= self._maximum:
+                    return False
             tokens, updated = self._buckets.get(key, (self._burst, now))
             tokens = min(self._burst, tokens + (now - updated) * self._rate)
             allowed = tokens >= 1.0
@@ -280,7 +475,7 @@ class Gateway:
         self.config = config
         self.ip_limits = TokenBuckets(rate=10.0, burst=20.0)
         self.principal_limits = TokenBuckets(rate=25.0, burst=100.0)
-        self.enrollment_ip_limits = TokenBuckets(rate=1.0 / 3600.0, burst=8.0)
+        self.enrollment_ip_limits = TokenBuckets(rate=1.0 / 3600.0, burst=8.0, maximum=4096)
         self.upstream_slots = threading.BoundedSemaphore(MAX_UPSTREAM_CONCURRENCY)
         # Bitcoin Core exposes one process-wide scanblocks worker. Reject a
         # second indexed scan at the gateway instead of letting it collide
@@ -293,7 +488,7 @@ class Gateway:
         if not self.ip_limits.allow(client_ip):
             raise RequestRejected(429, "rate_limited")
         try:
-            principal = self.config.clients.authenticate(authorization)
+            principal = self.config.clients.authenticate(authorization, self.config.enrollment)
         except (OSError, ValueError, json.JSONDecodeError):
             raise RequestRejected(503, "gateway_unavailable") from None
         if principal is None:
@@ -327,7 +522,7 @@ class Gateway:
         if not self.enrollment_ip_limits.allow(client_ip):
             raise RequestRejected(429, "rate_limited")
         try:
-            username, password = self.config.enrollment.issue()
+            username, password = self.config.enrollment.issue(client_ip, self.config.clients.usernames())
         except RequestRejected:
             raise
         except (OSError, ValueError, json.JSONDecodeError):

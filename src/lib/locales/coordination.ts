@@ -1,6 +1,27 @@
 import type { CatalogSection } from './types';
 
 export const coordinationCopy = {
+  'Mobile signing requires the complete previous transaction for every input. Export the full PSBT from the coordinator.':
+    {
+      fr: 'La signature mobile nécessite la transaction précédente complète pour chaque entrée. Exportez la PSBT complète depuis le coordinateur.',
+      es: 'La firma móvil requiere la transacción anterior completa para cada entrada. Exporta la PSBT completa desde el coordinador.'
+    },
+  'A PSBT input does not match its authenticated previous output.': {
+    fr: 'Une entrée PSBT ne correspond pas à sa sortie précédente authentifiée.',
+    es: 'Una entrada PSBT no coincide con su salida anterior autenticada.'
+  },
+  'A PSBT input does not match its previous transaction.': {
+    fr: 'Une entrée PSBT ne correspond pas à sa transaction précédente.',
+    es: 'Una entrada PSBT no coincide con su transacción anterior.'
+  },
+  'A PSBT input points outside its previous transaction.': {
+    fr: 'Une entrée PSBT référence une sortie inexistante de sa transaction précédente.',
+    es: 'Una entrada PSBT apunta a una salida inexistente de su transacción anterior.'
+  },
+  'The PSBT repeats an input.': {
+    fr: 'La PSBT contient une entrée en double.',
+    es: 'La PSBT repite una entrada.'
+  },
   'Pair phone': { fr: 'Associer le téléphone', es: 'Emparejar teléfono' },
   'Back up the policy and verify its first address.': {
     fr: 'Sauvegardez la politique et vérifiez sa première adresse.',
@@ -17,9 +38,17 @@ export const coordinationCopy = {
   },
   'Desktop coordinator': { fr: 'Coordinateur sur ordinateur', es: 'Coordinador de escritorio' },
   'Finish on desktop': { fr: 'Terminer sur ordinateur', es: 'Terminar en el ordenador' },
-  'Phone signer · QR connection': {
-    fr: 'Signataire mobile · connexion QR',
-    es: 'Firmante móvil · conexión QR'
+  'Phone signer': {
+    fr: 'Signataire mobile',
+    es: 'Firmante móvil'
+  },
+  'Verify backup': {
+    fr: 'Vérifier la sauvegarde',
+    es: 'Verificar la copia'
+  },
+  'Have your 24 recovery words ready.': {
+    fr: 'Préparez vos 24 mots de récupération.',
+    es: 'Ten listas tus 24 palabras de recuperación.'
   },
   'QR connection': { fr: 'Connexion QR', es: 'Conexión QR' },
   'QR verified': { fr: 'QR vérifié', es: 'QR verificado' },
@@ -59,11 +88,6 @@ export const coordinationCopy = {
   },
 
   'Receive on desktop': { fr: 'Recevoir sur ordinateur', es: 'Recibir en el ordenador' },
-  'Create receive requests on desktop for paired and watch-only wallets. This avoids allocating the same address on two devices.':
-    {
-      fr: 'Créez les demandes de réception sur ordinateur pour les portefeuilles jumelés ou en lecture seule. Cela évite d’attribuer la même adresse sur deux appareils.',
-      es: 'Crea las solicitudes de recepción en el ordenador para carteras vinculadas o de solo lectura. Así se evita asignar la misma dirección en dos dispositivos.'
-    },
   RBF: { fr: 'RBF', es: 'RBF' },
   vB: { fr: 'vB', es: 'vB' },
   'Estimated size': { fr: 'Taille estimée', es: 'Tamaño estimado' },
@@ -108,9 +132,9 @@ export const coordinationCopy = {
     es: 'Sin cuenta · vinculación cifrada con dos QR'
   },
   'Add a Groot phone': { fr: 'Ajouter un téléphone Groot', es: 'Añadir un teléfono Groot' },
-  'Create one words-only phone signer.': {
-    fr: 'Créez un signataire téléphonique récupérable avec ses mots.',
-    es: 'Crea un firmante en el teléfono recuperable con sus palabras.'
+  'Add one recoverable phone signer to this wallet.': {
+    fr: 'Ajoutez à ce portefeuille un signataire mobile récupérable.',
+    es: 'Añade a esta cartera un firmante móvil recuperable.'
   },
   'One Groot phone signer per wallet in V1': {
     fr: 'Un signataire téléphonique Groot par portefeuille dans la V1',
@@ -294,27 +318,23 @@ export const coordinationCopy = {
       fr: 'Sur l’ordinateur, choisissez « Scanner la PSBT signée ». Toute signature ne correspondant pas exactement à la proposition vérifiée sera refusée.',
       es: 'En el ordenador, elige « Escanear PSBT firmada ». Se rechazará cualquier firma que no coincida exactamente con la propuesta revisada.'
     },
-  'On the fresh phone choose “Connect desktop app,” scan this QR, and keep the response private.': {
-    fr: 'Sur le nouveau téléphone, choisissez « Connecter l’application de bureau », scannez ce QR et gardez la réponse privée.',
-    es: 'En el teléfono nuevo, elige « Conectar aplicación de escritorio », escanea este QR y mantén privada la respuesta.'
-  },
+  'On the phone, choose “Connect desktop app” and scan this one-time QR. Keep the response private.':
+    {
+      fr: 'Sur le téléphone, choisissez « Connecter l’application de bureau » et scannez ce QR à usage unique. Gardez la réponse privée.',
+      es: 'En el teléfono, elige « Conectar aplicación de escritorio » y escanea este QR de un solo uso. Mantén privada la respuesta.'
+    },
   'On the phone choose “Watch desktop wallet.” This QR contains public descriptors only and cannot sign.':
     {
       fr: 'Sur le téléphone, choisissez « Surveiller le portefeuille de l’ordinateur ». Ce QR ne contient que des descripteurs publics et ne peut pas signer.',
       es: 'En el teléfono, elige « Ver cartera del ordenador ». Este QR solo contiene descriptores públicos y no puede firmar.'
     },
-  'On the phone, check the same threshold and first address. Pairing is not complete until the phone accepts this policy.':
-    {
-      fr: 'Sur le téléphone, vérifiez le même seuil et la première adresse. Le jumelage n’est terminé qu’après acceptation de cette politique.',
-      es: 'En el teléfono, comprueba el mismo umbral y la primera dirección. La vinculación no termina hasta aceptar esta política.'
-    },
+  'Accept on the phone, then compare the policy and first address before funding.': {
+    fr: 'Acceptez sur le téléphone, puis comparez la politique et la première adresse avant de déposer des fonds.',
+    es: 'Acepta en el teléfono y, después, compara la política y la primera dirección antes de depositar fondos.'
+  },
   'One phone, one invitation': {
     fr: 'Un téléphone, une invitation',
     es: 'Un teléfono, una invitación'
-  },
-  'Only Blockchain Commons crypto-psbt UR frames are accepted.': {
-    fr: 'Seules les trames UR crypto-psbt de Blockchain Commons sont acceptées.',
-    es: 'Solo se aceptan fragmentos UR crypto-psbt de Blockchain Commons.'
   },
   'Pairing comparison code': {
     fr: 'Code de comparaison du jumelage',
@@ -375,11 +395,28 @@ export const coordinationCopy = {
     fr: 'PSBT signée sur ce téléphone',
     es: 'PSBT firmada en este teléfono'
   },
-  'Return the final policy to the phone': {
-    fr: 'Renvoyer la politique finale au téléphone',
-    es: 'Devolver la política final al teléfono'
+  'Finish pairing on the phone': {
+    fr: 'Terminer le jumelage sur le téléphone',
+    es: 'Completar la vinculación en el teléfono'
   },
   'Resume pairing': { fr: 'Reprendre le jumelage', es: 'Reanudar vinculación' },
+  'Phone key saved': { fr: 'Clé du téléphone enregistrée', es: 'Clave del teléfono guardada' },
+  'Use this phone as a signer.': {
+    fr: 'Utilisez ce téléphone pour signer.',
+    es: 'Usa este teléfono para firmar.'
+  },
+  'Scan this QR on desktop': {
+    fr: 'Scannez ce QR sur l’ordinateur',
+    es: 'Escanea este QR en el ordenador'
+  },
+  'Tap the QR to enlarge it.': {
+    fr: 'Touchez le QR pour l’agrandir.',
+    es: 'Toca el QR para ampliarlo.'
+  },
+  'Scan the QR for this pairing.': {
+    fr: 'Scannez le QR de ce jumelage.',
+    es: 'Escanea el QR de esta vinculación.'
+  },
   'Enter the pairing PIN once. Groot does not retain it after the app restarts.': {
     fr: 'Saisissez une fois le PIN du jumelage. Groot ne le conserve pas après le redémarrage de l’application.',
     es: 'Introduce una vez el PIN de vinculación. Groot no lo conserva después de reiniciar la aplicación.'
@@ -392,11 +429,6 @@ export const coordinationCopy = {
     fr: 'Jumelage du portefeuille en cours',
     es: 'Vinculación de cartera en curso'
   },
-  'Review the exact transaction on this phone. Signing never broadcasts or changes the desktop proposal.':
-    {
-      fr: 'Vérifiez la transaction exacte sur ce téléphone. La signature ne diffuse ni ne modifie jamais la proposition de l’ordinateur.',
-      es: 'Revisa la transacción exacta en este teléfono. Firmar nunca transmite ni cambia la propuesta del ordenador.'
-    },
   'Scan phone QR code': {
     fr: 'Scanner le code QR du téléphone',
     es: 'Escanear el código QR del teléfono'
@@ -430,11 +462,10 @@ export const coordinationCopy = {
     fr: 'Clé du téléphone ajoutée',
     es: 'Clave del teléfono añadida'
   },
-  'Keep the phone on its waiting screen. After you add the remaining signers and create the wallet, desktop will show one final QR for the phone.':
-    {
-      fr: 'Gardez le téléphone sur son écran d’attente. Après l’ajout des autres signataires et la création du portefeuille, l’ordinateur affichera un dernier QR pour le téléphone.',
-      es: 'Mantén el teléfono en su pantalla de espera. Después de añadir los demás firmantes y crear la cartera, el ordenador mostrará un último QR para el teléfono.'
-    },
+  'Finish setting up the wallet to get the final QR.': {
+    fr: 'Terminez la configuration du portefeuille pour obtenir le QR final.',
+    es: 'Termina de configurar la cartera para obtener el QR final.'
+  },
   'Continue wallet setup': {
     fr: 'Continuer la configuration',
     es: 'Continuar configuración'
@@ -460,10 +491,6 @@ export const coordinationCopy = {
       fr: 'Scannez le descripteur public depuis l’ordinateur. Aucune graine matérielle, clé de signature ni compte Groot n’est transféré.',
       es: 'Escanea el descriptor público del ordenador. No se transfiere ninguna semilla física, clave de firma ni cuenta Groot.'
     },
-  'Scan unsigned PSBT from desktop': {
-    fr: 'Scanner la PSBT non signée depuis l’ordinateur',
-    es: 'Escanear PSBT sin firmar del ordenador'
-  },
   'Shared wallet · this desktop coordinates the policy and hardware signers.': {
     fr: 'Portefeuille partagé · cet ordinateur coordonne la politique et les signataires matériels.',
     es: 'Cartera compartida · este ordenador coordina la política y los firmantes físicos.'
@@ -473,10 +500,11 @@ export const coordinationCopy = {
     es: 'Cartera compartida · este teléfono guarda un firmante de software y puede firmar PSBT revisadas en el ordenador.'
   },
   'Shared wallet paired': { fr: 'Portefeuille partagé jumelé', es: 'Cartera compartida vinculada' },
-  'Sign a desktop PSBT': {
-    fr: 'Signer une PSBT de l’ordinateur',
-    es: 'Firmar una PSBT del ordenador'
+  'Scan the QR code shown on desktop.': {
+    fr: 'Scannez le code QR affiché sur l’ordinateur.',
+    es: 'Escanea el código QR que aparece en el ordenador.'
   },
+  'Sign payment': { fr: 'Signer le paiement', es: 'Firmar el pago' },
   'Sign another PSBT': { fr: 'Signer une autre PSBT', es: 'Firmar otra PSBT' },
   'Sign desktop PSBT': { fr: 'Signer la PSBT de l’ordinateur', es: 'Firmar PSBT del ordenador' },
   'Sign this exact PSBT': { fr: 'Signer exactement cette PSBT', es: 'Firmar esta PSBT exacta' },
@@ -524,9 +552,9 @@ export const coordinationCopy = {
     fr: 'Ce téléphone détient un signataire ; l’ordinateur reste le coordinateur.',
     es: 'Este teléfono guarda un firmante; el ordenador sigue siendo el coordinador.'
   },
-  'Final phone step. This encrypted QR commits the wallet policy and first address.': {
-    fr: 'Dernière étape sur le téléphone. Ce QR chiffré engage la politique du portefeuille et la première adresse.',
-    es: 'Último paso en el teléfono. Este QR cifrado confirma la política de la cartera y la primera dirección.'
+  'Scan this QR in Groot on your phone.': {
+    fr: 'Scannez ce QR dans Groot sur votre téléphone.',
+    es: 'Escanea este QR en Groot en tu teléfono.'
   },
   'Transaction verified': { fr: 'Transaction vérifiée', es: 'Transacción verificada' },
   'Verified wallet change': {

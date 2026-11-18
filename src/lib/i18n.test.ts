@@ -182,6 +182,35 @@ describe('locale preferences', () => {
     expect(translate('fr', 'More information')).toBe('Plus d’informations');
   });
 
+  it('keeps per-coin spending-path guidance specific in every language', () => {
+    expect(
+      translate(
+        'fr',
+        'Delayed spending paths become available separately for each coin. The primary path remains available.'
+      )
+    ).toBe(
+      'Les chemins de dépense différés deviennent disponibles séparément pour chaque pièce. Le chemin principal reste disponible.'
+    );
+    expect(
+      translate(
+        'es',
+        'Recovery-key access becomes available separately for each coin. Your normal keys keep working.'
+      )
+    ).toBe(
+      'El acceso con la clave de recuperación se habilita por separado para cada moneda. Tus claves normales siguen funcionando.'
+    );
+    expect(
+      translate(
+        'fr',
+        'Heir access becomes available separately for each coin. Your normal keys keep working.'
+      )
+    ).toBe(
+      'L’accès de l’héritier devient disponible séparément pour chaque pièce. Vos clés normales continuent de fonctionner.'
+    );
+    expect(translate('fr', 'Who can sign')).toBe('Qui peut signer');
+    expect(translate('es', 'Who can sign')).toBe('Quién puede firmar');
+  });
+
   it('provides non-empty French and Spanish copy for every catalog entry', () => {
     expect(Object.keys(copyCatalog).length).toBeGreaterThan(800);
     for (const translation of Object.values(copyCatalog)) {

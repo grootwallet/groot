@@ -835,26 +835,38 @@ pub fn recovery_policy_analyze(
 
 #[tauri::command]
 pub async fn multisig_wallet(app: AppHandle) -> ApiResult<Option<MultisigWalletDto>> {
-    tauri::async_runtime::spawn_blocking(move || {
+    let context = {
         let state = app.state::<AppState>();
-        let _operation = operation_guard(&state)?;
+        let epoch = *state.wallet_command_epoch.lock().map_err(internal)?;
         let registry = load_registry(&app)?;
-        let Some(selected) = registry.selected_wallet_id else {
+        let Some(wallet_id) = registry.selected_wallet_id else {
             return Ok(None);
         };
-        let Some(profile) = registry.wallets.iter().find(|wallet| wallet.id == selected) else {
-            return Err(registry_api_error(RegistryError::UnknownSelection));
-        };
+        let profile = registry
+            .wallets
+            .iter()
+            .find(|wallet| wallet.id == wallet_id)
+            .ok_or_else(|| registry_api_error(RegistryError::UnknownSelection))?;
         if profile.kind != WalletKind::Multisig {
             return Ok(None);
         }
-        require_unlocked(&app, &state)?;
-        let path = multisig_metadata_path(&app)?;
-        if !path.exists() {
-            return Ok(None);
-        }
-        let encoded = read_private_text(&path)?;
-        serde_json::from_str(&encoded).map(Some).map_err(internal)
+        validate_read_wallet(require_unlocked(&app, &state)?, wallet_id)?;
+        finish_wallet_command_context_capture(&state, wallet_id, epoch)?
+    };
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let _operation = metadata_operation_guard(&state, context, || {
+            recheck_unlocked_wallet_command_context(&app, &state, context)
+        })?;
+        let path = profile_directory(&app, context.wallet_id)?.join("wallet.json");
+        let wallet = if path.exists() {
+            let encoded = read_private_text(&path)?;
+            Some(serde_json::from_str(&encoded).map_err(internal)?)
+        } else {
+            None
+        };
+        validate_wallet_command_context(context, unlocked_wallet_command_context(&app, &state)?)?;
+        Ok(wallet)
     })
     .await
     .map_err(internal)?
@@ -1077,6 +1089,8 @@ pub fn multisig_bsms_inspect(
         cosigners,
         first_address: derived_first,
         matches_current_wallet,
+        policy_type: None,
+        policy_paths: Vec::new(),
     })
 }
 
@@ -1246,6 +1260,9 @@ pub async fn multisig_recovery_drill(
             .transpose()
             .map_err(bsms_api_error)?
             .unwrap_or(false);
+        // Finish every fallible backup and presentation check before recording a
+        // successful drill or mutating the in-memory verification marker.
+        let (policy_type, policy_paths) = recovery_drill_policy_presentation(&backup.wallet)?;
         if matches_current_wallet {
             let wallet_id = selected_profile_of_kind(&app, WalletKind::Multisig)?.id;
             let descriptor = current_wallet
@@ -1275,6 +1292,8 @@ pub async fn multisig_recovery_drill(
             cosigners: backup.wallet.cosigners,
             first_address,
             matches_current_wallet,
+            policy_type,
+            policy_paths,
         })
     })
     .await

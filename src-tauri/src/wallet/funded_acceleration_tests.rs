@@ -278,10 +278,19 @@ fn funded_delayed_policy_tracks_each_coin_restarts_and_rearms_after_reorg() {
     let analysis = analyze_template(&template, &cosigners).unwrap();
     let public_external_descriptor = analysis.external_descriptor.clone();
     let public_internal_descriptor = analysis.internal_descriptor.clone();
-    let policy = DelayedPolicyContext {
+    let metadata = MultisigWalletDto {
+        kind: "multisig".to_owned(),
+        name: "Funded delayed policy".to_owned(),
+        threshold: 2,
+        cosigners: cosigners.clone(),
+        external_descriptor: public_external_descriptor.clone(),
+        internal_descriptor: public_internal_descriptor.clone(),
+        created_at: now().to_string(),
         policy_type: "recovery".to_owned(),
-        delay_blocks: 144,
+        recovery_template: Some(template.clone()),
+        spending_paths: analysis.paths.clone(),
     };
+    let policy = delayed_policy_context(&metadata).unwrap().unwrap();
     let database = TemporaryDatabase::new();
     let mut db = Connection::open(&database.0).unwrap();
     init_app_schema(&db).unwrap();

@@ -2887,11 +2887,13 @@ pub async fn external_signer_create(
 
 #[tauri::command]
 pub async fn external_signer_wallet(app: AppHandle) -> ApiResult<ExternalSignerWallet> {
+    let context = capture_unlocked_wallet_command_context(&app)?;
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<AppState>();
-        let wallet_id = require_unlocked(&app, &state)?;
-        let _operation = metadata_operation_guard(&state, wallet_id)?;
-        read_external_signer_metadata(&app)
+        let _operation = metadata_operation_guard(&state, context, || {
+            recheck_unlocked_wallet_command_context(&app, &state, context)
+        })?;
+        read_external_signer_metadata_for(&app, context.wallet_id)
     })
     .await
     .map_err(internal)?
@@ -2914,17 +2916,22 @@ pub async fn external_signer_rename(
     app: AppHandle,
     label: String,
 ) -> ApiResult<ExternalSignerWallet> {
+    let context = capture_unlocked_wallet_command_context(&app)?;
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<AppState>();
-        let wallet_id = require_unlocked(&app, &state)?;
-        let _operation = metadata_operation_guard(&state, wallet_id)?;
-        let mut metadata = read_external_signer_metadata(&app)?;
+        let _operation = metadata_operation_guard(&state, context, || {
+            recheck_unlocked_wallet_command_context(&app, &state, context)
+        })?;
+        let mut metadata = read_external_signer_metadata_for(&app, context.wallet_id)?;
         metadata.signer.label = normalize_external_signer_label(&label)?;
         metadata
             .signer
             .validate()
             .map_err(external_signer_api_error)?;
-        write_private_json(&external_signer_metadata_path(&app)?, &metadata)?;
+        write_private_json(
+            &external_signer_metadata_path_for(&app, context.wallet_id)?,
+            &metadata,
+        )?;
         Ok(metadata)
     })
     .await
@@ -3087,13 +3094,9 @@ pub(crate) fn load_external_proposal(
 
 #[tauri::command]
 pub async fn external_signer_proposals(app: AppHandle) -> ApiResult<Vec<MultisigProposalDto>> {
-    tauri::async_runtime::spawn_blocking(move || {
-        let state = app.state::<AppState>();
-        let _operation = operation_guard(&state)?;
-        require_unlocked(&app, &state)?;
-        let metadata = read_external_signer_metadata(&app)?;
-        let mut db = open_db(&app)?;
-        let wallet = load_wallet(&mut db)?;
+    with_selected_proposal_db(app, false, |app, db| {
+        let metadata = read_external_signer_metadata(app)?;
+        let wallet = load_wallet(db)?;
         let mut statement = db.prepare(
             "SELECT proposal_id, recipient, label, amount, fee, fee_rate, psbt, status, created_at, selection_strategy, fee_difference_vs_private FROM groot_proposals WHERE status IN ('collecting','ready') ORDER BY created_at DESC",
         ).map_err(internal)?;
@@ -3119,13 +3122,12 @@ pub async fn external_signer_proposals(app: AppHandle) -> ApiResult<Vec<Multisig
                 row.map_err(internal)?,
                 &metadata.signer.fingerprint,
                 &wallet,
-                &db,
+                db,
             )
         })
         .collect()
     })
     .await
-    .map_err(internal)?
 }
 
 fn import_external_proposal_in_db(

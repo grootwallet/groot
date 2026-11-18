@@ -9,13 +9,13 @@ A non-custodial onchain Bitcoin wallet and multisig coordinator built with Svelt
 
 ## Download
 
-[Public v0.5.1](https://github.com/grootwallet/groot/releases/tag/v0.5.1) is for macOS Apple silicon. Its Mainnet authorization applies to exact commit `c731fa1c`, not later development builds. The current feedback branch contains internal `5.2.0-rc04` changes; it is not a public release.
+[Public v5.3.0](https://github.com/grootwallet/groot/releases/tag/v5.3.0) is for macOS Apple silicon, published 2026-10-23 from `6a39bf50b2a6a042354b43369765a9af2174d061`. Development uses `0.5.4-rc01` under [the corrected pre-1.0 numbering](docs/adr/0107-restore-pre-1-0-versioning.md). [Current status](docs/implementation-status.md) separates internal Windows/Linux and iOS Testnet4 candidates from public platform support.
 
 Download the DMG, open it, and drag Groot into Applications. The release is Developer ID signed, notarized and stapled. Verify a downloaded installer with the [GitHub CLI](https://cli.github.com/):
 
 ```sh
-gh release verify v0.5.1 -R grootwallet/groot
-gh release verify-asset v0.5.1 Groot-0.5.1-macos-arm64.dmg -R grootwallet/groot
+gh release verify v5.3.0 -R grootwallet/groot
+gh release verify-asset v5.3.0 Groot-5.3.0-macos-arm64.dmg -R grootwallet/groot
 ```
 
 [Signing and source verification](docs/release-git-tag-signing.md) explains the separate Git-tag, Apple and release-attestation trust boundaries. Checksums alone do not authenticate a download.

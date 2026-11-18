@@ -1,4 +1,5 @@
 import type { CosignerDraft, PolicyDraft } from '$lib/multisig/policy';
+import type { PolicyPathDefinition, PolicySignerGroup } from '$lib/types';
 import type { PaymentProposal } from './transactions';
 
 export type MultisigWallet = PolicyDraft & {
@@ -71,6 +72,8 @@ export type RecoveryDrill = {
   matchesCurrentWallet: boolean;
   threshold?: number;
   cosigners?: CosignerDraft[];
+  policyType?: MultisigWallet['policyType'];
+  policyPaths?: PolicyPathDefinition[];
 };
 
 export type MultisigSetupStage = 'policy' | 'keys' | 'review' | 'backup';
@@ -101,9 +104,11 @@ export type MultisigSetupDraft = {
 
 export type SpendingPathDetails = {
   index: number;
+  code: string;
   name: string;
   required: number;
   eligibleSignerFingerprints: string[];
+  signerGroups: PolicySignerGroup[];
   availableAfterBlocks: number;
   remainingBlocks: number | null;
   available: boolean;

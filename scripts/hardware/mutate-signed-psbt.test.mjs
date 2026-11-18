@@ -3,6 +3,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
+import { fileURLToPath } from 'node:url';
 import { mutateSignedPsbt } from './mutate-signed-psbt.mjs';
 
 function compact(value) {
@@ -75,7 +76,7 @@ test('refuses unsigned input and never overwrites an existing output', async () 
   const result = spawnSync(
     process.execPath,
     [
-      new URL('./mutate-signed-psbt.mjs', import.meta.url).pathname,
+      fileURLToPath(new URL('./mutate-signed-psbt.mjs', import.meta.url)),
       '--input',
       input,
       '--output',

@@ -1,5 +1,7 @@
 # Mainnet release checklist
 
+Current desktop baseline: [v5.3.0](https://github.com/grootwallet/groot/releases/tag/v5.3.0), published 2026-10-23 at `6a39bf50b2a6a042354b43369765a9af2174d061`. Publication is verified separately from the historical rows below. Post-release source changes require fresh review and exact-candidate evidence; this maintenance work does not reverify package signatures/notarization or certify phone/Continuity previews.
+
 Current policy amendment: [ADR 0099](adr/0099-remove-mainnet-rollout-amount-ceiling.md)
 removes the historical 1,000,000-sat payment/debit ceiling after the owner's
 explicit request. The first-release evidence below remains historical; it does
@@ -10,11 +12,13 @@ The owner authorized the exact 5.3.0 release campaign in
 [ADR 0105](adr/0105-authorize-5-3-0-release-campaign.md), including the
 Developer ID-signed sealed fast HWI runtime approved in ADR 0104. For this
 version only, the owner authorized two clean, isolated builds on the same Mac
-in place of the standing two-machine rule. Compare their unsigned executables, then sign,
-notarize, staple and verify the exact app. The owner will test that signed
-package before public GitHub publication. The completed checklist below is
+in place of the standing two-machine rule. The release campaign required comparing their unsigned executables, signing,
+notarizing, stapling and verifying the exact app, followed by owner testing
+before public GitHub publication. The completed checklist below is
 historical first-release evidence; the 5.3.0 package has no transferred
 physical or reproducibility certification.
+
+## Historical first-release approval
 
 Release decision: APPROVED
 

@@ -1,5 +1,6 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { createHash } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
 import { resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -41,12 +42,45 @@ export function verifyIosArchiveResources(app) {
   }
 }
 
+/**
+ * @param {{UIApplicationSceneManifest?: {
+ *   UIApplicationSupportsMultipleScenes?: boolean,
+ *   UISceneConfigurations?: Record<string, Record<string, string>[]>
+ * }}} info
+ */
+export function verifyIosSceneManifest(info) {
+  const manifest = info.UIApplicationSceneManifest;
+  const configurations = manifest?.UISceneConfigurations;
+  const application = configurations?.UIWindowSceneSessionRoleApplication;
+  if (
+    manifest?.UIApplicationSupportsMultipleScenes !== false ||
+    Object.keys(configurations ?? {}).length !== 1 ||
+    !Array.isArray(application) ||
+    application.length !== 1 ||
+    application[0]?.UISceneConfigurationName !== 'Default Configuration' ||
+    application[0].UISceneClassName !== 'UIWindowScene' ||
+    application[0].UISceneDelegateClassName !== 'TaoSceneDelegate' ||
+    Object.hasOwn(application[0], 'UISceneStoryboardFile')
+  ) {
+    throw new Error(
+      'The iOS app must declare one Tao window scene without multiple scenes. Do not install this archive.'
+    );
+  }
+}
+
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  const app =
+    'src-tauri/gen/apple/build/groot_iOS.xcarchive/Products/Applications/Groot Testnet4 Dev.app';
   verifyIosFoundationBuild(process.argv[2], 'src-tauri/gen/apple/Externals/arm64/debug/libapp.a');
-  verifyIosArchiveResources(
-    'src-tauri/gen/apple/build/groot_iOS.xcarchive/Products/Applications/Groot Testnet4 Dev.app'
+  verifyIosArchiveResources(app);
+  verifyIosSceneManifest(
+    JSON.parse(
+      execFileSync('/usr/bin/plutil', ['-convert', 'json', '-o', '-', join(app, 'Info.plist')], {
+        encoding: 'utf8'
+      })
+    )
   );
   console.log(
-    'iOS native build verified: Testnet4, and Xcode uses the exact compiled Cargo library.'
+    'iOS native build verified: Testnet4, exact linked Cargo library, and one Tao window scene.'
   );
 }

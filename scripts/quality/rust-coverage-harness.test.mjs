@@ -1,0 +1,609 @@
+import assert from 'node:assert/strict';
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  realpathSync,
+  rmSync,
+  writeFileSync
+} from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { test } from 'node:test';
+
+const libraryScenarios = [
+  'funded_regtest_reorg_restart_reanchor_and_false_positive_are_consistent',
+  'funded_rbf_and_cpfp_cross_groot_proposal_boundaries',
+  'funded_mobile_cosigner_round_trip_reviews_merges_finalizes_and_broadcasts',
+  'clean_storage_descriptor_recovery_restores_known_history_and_survives_reopen',
+  'current_tip_initial_scan_allows_later_bitcoin_core_sync',
+  'explicit_rescan_waits_when_core_falls_behind_the_wallet_checkpoint',
+  'birthday_only_checkpoint_recovers_after_a_deep_reorg',
+  'existing_wallet_can_repeat_full_rescan_from_an_earlier_birthday',
+  'funded_delayed_policy_tracks_each_coin_restarts_and_rearms_after_reorg',
+  'funded_continuity_all_named_paths_renew_reorg_and_restore',
+  'funded_continuity_descriptors_restore_history_in_core'
+];
+const descriptorScenarios = [
+  'bitcoin_core_imports_groot_descriptors_and_recovers_funded_history',
+  'funds_builds_signs_and_broadcasts_a_real_two_of_three_psbt',
+  'birthday_and_gap_limits_omit_then_restore_known_history',
+  'extended_gap_large_history_recovers_within_the_ci_resource_envelope'
+];
+const fixtureScripts = [
+  'scripts/quality/check-rust-coverage.sh',
+  'scripts/quality/check-rust-full-coverage.sh',
+  'scripts/quality/rust-coverage/.cargo/config.toml',
+  'scripts/quality/rust-coverage/common.sh',
+  'scripts/quality/rust-coverage/full.py',
+  'scripts/regtest/test.sh'
+];
+const quote = (value) => `'${value.replaceAll("'", "'\\''")}'`;
+// This shell harness owns the Linux/macOS LLVM/Core lane. Windows still runs
+// both source inventories below; Linux CI executes every command fixture.
+const testBash = (name, run) =>
+  test(
+    name,
+    {
+      skip:
+        process.platform === 'win32'
+          ? 'The LLVM/Core command harness requires a Unix host and runs fully in Linux CI.'
+          : false
+    },
+    run
+  );
+
+function fixture() {
+  const directory = mkdtempSync(join(realpathSync(tmpdir()), 'groot-coverage-harness-'));
+  const repository = join(directory, 'repository');
+  const tools = join(directory, 'tools');
+  const log = join(directory, 'commands.jsonl');
+  mkdirSync(tools);
+  mkdirSync(join(repository, 'src-tauri', 'src'), { recursive: true });
+  for (const file of fixtureScripts) {
+    mkdirSync(join(repository, file, '..'), { recursive: true });
+    copyFileSync(resolve(file), join(repository, file));
+  }
+  for (const file of readdirSync(resolve('src-tauri/src')).filter((file) => file.endsWith('.rs'))) {
+    writeFileSync(join(repository, 'src-tauri', 'src', file), '');
+  }
+  const stub = join(directory, 'stub.sh');
+  writeFileSync(
+    stub,
+    `#!/bin/bash
+kind="$1"
+shift
+phase="$kind"
+if [[ "$kind" == cargo ]]; then
+  phase=units
+  case "$1 $2" in
+    "clean --locked") phase=clean-coverage-workspace ;;
+    "llvm-cov clean") phase=clean ;;
+    "llvm-cov show-env") phase=instrument ;;
+    "llvm-cov report")
+      phase=all-report
+      [[ " $* " == *" --ignore-filename-regex "* ]] && phase=core-report ;;
+    "test --locked")
+      [[ " $* " == *" --no-run "* ]] && phase=build ;;
+  esac
+  [[ " $* " == *" --ignored "* ]] && phase=scenario
+elif [[ "$kind" == instrumented-library || "$kind" == instrumented-descriptor ]]; then
+  phase=scenario
+  [[ "$#" == 0 ]] && phase=units
+fi
+printf '%s\\0' "$kind" "$phase" "$CARGO_TARGET_DIR" "$CARGO_LLVM_COV_TARGET_DIR" \\
+  "$GROOT_REGTEST_DIR" "$GROOT_RUN_REGTEST" "$GROOT_COMPACT_FILTER_TEST_PEER" \\
+  "$GROOT_RPC_PORT" "$GROOT_P2P_PORT" "$LLVM_PROFILE_FILE" "$#" "$@" >> "$GROOT_STUB_LOG"
+if [[ -n "$GROOT_STUB_FAIL" ]]; then
+  [[ "$GROOT_STUB_FAIL" == "$phase" ]] && exit 17
+  [[ "$GROOT_STUB_FAIL" == regtest_multisig && "$kind" == instrumented-descriptor ]] && exit 17
+  if [[ "$phase" != build ]]; then
+    for arg in "$@"; do
+      case "$arg" in "$GROOT_STUB_FAIL"|*::"$GROOT_STUB_FAIL") exit 17 ;; esac
+    done
+  fi
+fi
+if [[ "$phase" == build ]]; then
+  deps="$CARGO_LLVM_COV_TARGET_DIR/coverage/deps"
+  mkdir -p "$deps"
+  cp "$GROOT_STUB_TOOLS/fake-lib-test" "$deps/groot_lib-fixture"
+  cp "$GROOT_STUB_TOOLS/fake-descriptor-test" "$deps/regtest_multisig-fixture"
+  printf '{"reason":"compiler-artifact","profile":{"test":true},"manifest_path":"%s/src-tauri/Cargo.toml","target":{"name":"groot_lib"},"executable":"%s/groot_lib-fixture"}\\n' "$GROOT_STUB_REPOSITORY" "$deps"
+  if [[ "$GROOT_STUB_NO_DESCRIPTOR" != 1 ]]; then
+    printf '{"reason":"compiler-artifact","profile":{"test":true},"manifest_path":"%s/src-tauri/Cargo.toml","target":{"name":"regtest_multisig"},"executable":"%s/regtest_multisig-fixture"}\\n' "$GROOT_STUB_REPOSITORY" "$deps"
+  fi
+elif [[ "$kind" == instrumented-library || "$kind" == instrumented-descriptor ]]; then
+  expected=1
+  [[ "$kind" == instrumented-descriptor ]] && expected=4
+  [[ "$phase" == units ]] && expected=2
+  [[ "$GROOT_STUB_ZERO_MATCHES" == 1 && "$phase" == scenario ]] && expected=0
+  if [[ "$GROOT_STUB_EMPTY_PROFILE" != "$phase" ]]; then
+    prefix=$(printf '%s' "$LLVM_PROFILE_FILE" | cut -d % -f 1)
+    printf 'raw profile\\n' >"$prefix$$.profraw"
+  fi
+  printf 'test result: ok. %s passed; 0 failed; 0 ignored; 0 measured; 0 filtered out\\n' "$expected"
+elif [[ "$phase" == core-report && "$CARGO_LLVM_COV_TARGET_DIR" == */core-report ]]; then
+  [[ -x "$CARGO_LLVM_COV_TARGET_DIR/coverage/deps/groot_lib-fixture" ]] || exit 21
+  [[ ! -e "$CARGO_LLVM_COV_TARGET_DIR/coverage/deps/regtest_multisig-fixture" ]] || exit 21
+  for raw in "$CARGO_LLVM_COV_TARGET_DIR"/*.profraw; do
+    [[ "$raw" == */units-*.profraw ]] || exit 21
+  done
+elif [[ "$phase" == all-report ]]; then
+  compgen -G "$CARGO_LLVM_COV_TARGET_DIR/units-*.profraw" >/dev/null || exit 21
+  compgen -G "$CARGO_LLVM_COV_TARGET_DIR/all-*.profraw" >/dev/null || exit 21
+fi
+exit 0
+`
+  );
+  writeFileSync(join(tools, 'cargo'), `#!/bin/bash\nexec /bin/bash ${quote(stub)} cargo "$@"\n`, {
+    mode: 0o700
+  });
+  for (const [file, kind] of [
+    ['fake-lib-test', 'instrumented-library'],
+    ['fake-descriptor-test', 'instrumented-descriptor']
+  ]) {
+    writeFileSync(join(tools, file), `#!/bin/bash\nexec /bin/bash ${quote(stub)} ${kind} "$@"\n`, {
+      mode: 0o700
+    });
+  }
+  writeFileSync(
+    join(repository, 'scripts', 'regtest', 'start.sh'),
+    `#!/bin/bash
+start_regtest_node() {
+  local lifecycle="$1"
+  shift
+  /bin/bash ${quote(stub)} core-start "$@" || return
+  if [[ "$lifecycle" == foreground && "$GROOT_REGTEST_DIR" != "\${GROOT_STUB_PREEXISTING_DIR:-}" ]]; then
+    REGTEST_OWNED_PID=123
+  fi
+}
+stop_regtest_child() {
+  if [[ -n "$REGTEST_OWNED_PID" ]]; then
+    /bin/bash ${quote(stub)} core-stop || return
+    REGTEST_OWNED_PID=""
+  fi
+}
+if [[ "$0" == */start.sh ]]; then start_regtest_node daemon "$@"; fi
+`
+  );
+  writeFileSync(
+    join(repository, 'scripts', 'regtest', 'stop.sh'),
+    `#!/bin/bash\n/bin/bash ${quote(stub)} core-stop "$@"\n`
+  );
+  return {
+    directory,
+    repository,
+    tools,
+    run(script = 'scripts/quality/check-rust-full-coverage.sh', env = {}, args = []) {
+      const result = spawnSync('/bin/bash', [join(repository, script), ...args], {
+        encoding: 'utf8',
+        timeout: 15_000,
+        env: {
+          PATH: `${tools}:/usr/bin:/bin`,
+          TMPDIR: directory,
+          GROOT_STUB_LOG: log,
+          GROOT_STUB_REPOSITORY: repository,
+          GROOT_STUB_TOOLS: tools,
+          GROOT_RPC_PORT: '18443',
+          GROOT_P2P_PORT: '18444',
+          ...env
+        }
+      });
+      const events = [];
+      const fields = existsSync(log) ? readFileSync(log, 'utf8').split('\0') : [];
+      while (fields.length > 1) {
+        const [
+          kind,
+          phase,
+          target,
+          coverage,
+          regtest,
+          runRegtest,
+          compactPeer,
+          rpcPort,
+          p2pPort,
+          profile,
+          count
+        ] = fields.splice(0, 11);
+        const args = fields.splice(0, Number(count));
+        events.push({
+          kind,
+          phase,
+          target,
+          coverage,
+          regtest,
+          runRegtest,
+          compactPeer,
+          rpcPort,
+          p2pPort,
+          profile,
+          args
+        });
+      }
+      return { result, events };
+    },
+    cleanup() {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  };
+}
+
+function withFixture(callback) {
+  const current = fixture();
+  try {
+    callback(current);
+  } finally {
+    current.cleanup();
+  }
+}
+
+function scenarios(events) {
+  return events.filter(({ phase }) => phase === 'scenario');
+}
+function assertThresholds(event, lines, functions, regions) {
+  const value = (flag) => event.args[event.args.indexOf(flag) + 1];
+  assert.equal(value('--fail-under-lines'), String(lines));
+  assert.equal(value('--fail-under-functions'), String(functions));
+  assert.equal(value('--fail-under-regions'), String(regions));
+}
+
+test('the coverage profile optimizes only the measured Bitcoin dependencies', () => {
+  const profile = readFileSync('scripts/quality/rust-coverage/.cargo/config.toml', 'utf8')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line && !line.startsWith('#'));
+  assert.deepEqual(profile, [
+    '[profile.coverage]',
+    'inherits = "test"',
+    'debug = "line-tables-only"',
+    '[profile.coverage.package.miniscript]',
+    'opt-level = 3',
+    '[profile.coverage.package.base58ck]',
+    'opt-level = 3',
+    '[profile.coverage.package.bitcoin_hashes]',
+    'opt-level = 3',
+    '[profile.coverage.package.bitcoin]',
+    'opt-level = 3',
+    '[profile.coverage.package.bdk_chain]',
+    'opt-level = 3'
+  ]);
+});
+
+testBash(
+  'one instrumented build runs every funded case and merges only after both jobs pass',
+  () => {
+    withFixture(({ run, repository }) => {
+      const { result, events } = run();
+      assert.equal(result.status, 0, result.stderr);
+      const phases = events.map(({ phase }) => phase);
+      assert.deepEqual(phases.slice(0, 3), ['clean', 'instrument', 'build']);
+      assert.equal(phases.filter((phase) => phase === 'build').length, 1);
+      assert.equal(phases.filter((phase) => phase === 'units').length, 1);
+      assert.equal(phases.at(-1), 'all-report');
+      const core = events.find(({ phase }) => phase === 'core-report');
+      assert.match(core.coverage, /\/core-report$/);
+      assertThresholds(core, 99, 100, 97);
+      assertThresholds(events.at(-1), 62, 59, 59);
+      const calls = scenarios(events);
+      assert.equal(calls.length, 12);
+      assert.deepEqual(
+        calls
+          .filter(({ kind }) => kind === 'instrumented-library')
+          .map(({ args }) => args[0].split('::').at(-1)),
+        libraryScenarios
+      );
+      assert.equal(calls.filter(({ kind }) => kind === 'instrumented-descriptor').length, 1);
+      assert.equal(calls[0].compactPeer, '127.0.0.1:18444');
+      assert.ok(calls.slice(1).every(({ runRegtest }) => runRegtest === '1'));
+      for (const event of events.filter(({ kind }) => kind === 'cargo')) {
+        assert.ok(event.args.includes('--locked'));
+        if (event !== core) {
+          assert.equal(event.coverage, join(repository, 'src-tauri', 'target', 'llvm-cov-target'));
+        }
+      }
+      const build = events.find(({ phase }) => phase === 'build');
+      for (const flag of ['--no-run', '--lib', '--test', '--profile'])
+        assert.ok(build.args.includes(flag));
+      for (const { kind, args, profile } of calls) {
+        assert.deepEqual(args.slice(-3), ['--ignored', '--nocapture', '--test-threads=1']);
+        assert.equal(args.includes('--exact'), kind === 'instrumented-library');
+        assert.match(profile, /\/all\/all-%p-%10m\.profraw$/);
+      }
+      const units = events.find(({ phase }) => phase === 'units');
+      assert.match(units.profile, /\/units\/units-%p-%10m\.profraw$/);
+      const starts = events.filter(({ phase }) => phase === 'core-start');
+      const stops = events.filter(({ phase }) => phase === 'core-stop');
+      assert.deepEqual(
+        starts.map(({ args }) => args),
+        [[], [], ['--long-continuity']]
+      );
+      assert.equal(stops.length, 3);
+      assert.equal(new Set(starts.map(({ regtest }) => regtest)).size, 3);
+      assert.ok(calls.slice(0, 9).every(({ regtest }) => regtest === starts[0].regtest));
+      assert.equal(calls[9].regtest, starts[1].regtest);
+      assert.ok(calls.slice(10).every(({ regtest }) => regtest === starts[2].regtest));
+      for (const { regtest } of starts) assert.equal(existsSync(regtest), false);
+    });
+  }
+);
+
+test('every named library Core scenario remains a real explicitly ignored Rust test', () => {
+  const sourceDirectory = resolve('src-tauri/src');
+  const source = readdirSync(sourceDirectory, { recursive: true })
+    .filter((file) => file.endsWith('.rs'))
+    .map((file) => readFileSync(join(sourceDirectory, file), 'utf8'))
+    .join('\n');
+  const names = [...source.matchAll(/#\[test\]\s*#\[ignore[^\n]*\]\s*fn (\w+)\(/g)].map(
+    (match) => match[1]
+  );
+  for (const scenario of libraryScenarios) {
+    assert.equal(names.filter((name) => name === scenario).length, 1, scenario);
+  }
+});
+
+test('descriptor integration invocation retains its four independently named scenarios', () => {
+  const source = readFileSync(resolve('src-tauri/tests/regtest_multisig.rs'), 'utf8');
+  const names = [...source.matchAll(/#\[test\]\s*#\[ignore[^\n]*\]\s*fn (\w+)\(/g)].map(
+    (match) => match[1]
+  );
+  assert.deepEqual(names, descriptorScenarios);
+  assert.equal(libraryScenarios.length + names.length, 15);
+});
+
+for (const phase of ['clean', 'instrument', 'build', 'units', 'core-report']) {
+  testBash(
+    `${phase} failure blocks the whole-library report and reaps any started fixtures`,
+    () => {
+      withFixture(({ run }) => {
+        const { result, events } = run(undefined, { GROOT_STUB_FAIL: phase });
+        assert.notEqual(result.status, 0, result.stderr);
+        assert.ok(events.some((event) => event.phase === phase));
+        assert.ok(events.every((event) => event.phase !== 'all-report'));
+        for (const { regtest } of events.filter((event) => event.phase === 'core-start')) {
+          assert.equal(existsSync(regtest), false);
+        }
+      });
+    }
+  );
+}
+
+const fullGateFailures = new Set([
+  libraryScenarios[0],
+  'regtest_multisig',
+  'funded_continuity_all_named_paths_renew_reorg_and_restore'
+]);
+for (const name of [...libraryScenarios, 'regtest_multisig']) {
+  const fullGate = fullGateFailures.has(name);
+  testBash(
+    fullGate
+      ? `${name} failure cleans its fixture and withholds the final report`
+      : `${name} failure cleans its fixture and propagates its exit code`,
+    () => {
+      withFixture(({ run, directory, tools }) => {
+        // Test each group's effect on the final report once. Exercise other
+        // named failures directly without rerunning artificial build and report stages.
+        const group = name.startsWith('funded_continuity_') ? 'continuity' : 'primary';
+        const { result, events } = fullGate
+          ? run(undefined, { GROOT_STUB_FAIL: name })
+          : run(
+              'scripts/regtest/test.sh',
+              {
+                GROOT_STUB_FAIL: name,
+                GROOT_RUST_COVERAGE_LIB: join(tools, 'fake-lib-test'),
+                GROOT_RUST_COVERAGE_DESCRIPTOR: join(tools, 'fake-descriptor-test'),
+                LLVM_PROFILE_FILE: join(directory, 'direct-%p-%10m.profraw')
+              },
+              [group]
+            );
+        if (fullGate) {
+          assert.notEqual(result.status, 0, result.stderr);
+          assert.ok(events.every(({ phase }) => phase !== 'all-report'));
+        } else {
+          assert.equal(result.status, 17, result.stderr);
+        }
+        for (const { regtest } of events.filter(({ phase }) => phase === 'core-start')) {
+          assert.equal(existsSync(regtest), false);
+        }
+        const final = scenarios(events).at(-1);
+        assert.ok(final);
+        assert.equal(
+          name === 'regtest_multisig'
+            ? final.kind === 'instrumented-descriptor'
+            : final.args[0].endsWith(`::${name}`),
+          true
+        );
+      });
+    }
+  );
+}
+
+for (const [fault, value] of [
+  ['GROOT_STUB_NO_DESCRIPTOR', '1'],
+  ['GROOT_STUB_ZERO_MATCHES', '1'],
+  ['GROOT_STUB_EMPTY_PROFILE', 'scenario']
+]) {
+  testBash(`${fault} cannot certify missing artifacts or cases`, () => {
+    withFixture(({ run }) => {
+      const { result, events } = run(undefined, { [fault]: value });
+      assert.notEqual(result.status, 0, result.stderr);
+      assert.ok(events.every(({ phase }) => phase !== 'all-report'));
+    });
+  });
+}
+
+testBash('whole-library threshold failure remains a failure after every Core scenario', () => {
+  withFixture(({ run }) => {
+    const { result, events } = run(undefined, { GROOT_STUB_FAIL: 'all-report' });
+    assert.notEqual(result.status, 0, result.stderr);
+    assert.equal(scenarios(events).length, 12);
+    assert.equal(events.at(-1).phase, 'all-report');
+  });
+});
+
+testBash(
+  'an active caller-owned primary keeps its ports while disposable suites use fresh ports',
+  () => {
+    withFixture(({ run, directory, tools }) => {
+      const primary = join(directory, 'caller primary');
+      const allocator = join(directory, 'fake allocator');
+      mkdirSync(primary);
+      mkdirSync(allocator);
+      writeFileSync(join(allocator, 'python3'), '#!/bin/bash\nprintf "%s\\n" "20443 20444"\n', {
+        mode: 0o700
+      });
+      const { result, events } = run('scripts/regtest/test.sh', {
+        PATH: `${allocator}:${tools}:/usr/bin:/bin`,
+        GROOT_REGTEST_DIR: primary,
+        GROOT_STUB_PREEXISTING_DIR: primary,
+        GROOT_RUST_COVERAGE_LIB: join(tools, 'fake-lib-test'),
+        GROOT_RUST_COVERAGE_DESCRIPTOR: join(tools, 'fake-descriptor-test'),
+        LLVM_PROFILE_FILE: join(directory, 'caller-%p-%10m.profraw')
+      });
+      assert.equal(result.status, 0, result.stderr);
+      const starts = events.filter(({ phase }) => phase === 'core-start');
+      assert.equal(starts[0].regtest, primary);
+      assert.deepEqual(
+        starts.map(({ rpcPort, p2pPort }) => [rpcPort, p2pPort]),
+        [
+          ['18443', '18444'],
+          ['20443', '20444'],
+          ['20443', '20444']
+        ]
+      );
+      const stops = events.filter(({ phase }) => phase === 'core-stop');
+      assert.deepEqual(
+        stops.map(({ regtest }) => regtest),
+        starts.slice(1).map(({ regtest }) => regtest)
+      );
+      assert.equal(existsSync(primary), true);
+    });
+  }
+);
+
+testBash('a standalone core gate starts fresh and never calls Core', () => {
+  withFixture(({ run }) => {
+    const { result, events } = run('scripts/quality/check-rust-coverage.sh');
+    assert.equal(result.status, 0, result.stderr);
+    assert.deepEqual(
+      events.map(({ phase }) => phase),
+      ['clean', 'units', 'core-report']
+    );
+  });
+});
+
+for (const failedClean of [false, true]) {
+  testBash(
+    failedClean
+      ? 'a failed warm custom-profile cleanup stops before tests'
+      : 'warm coverage removes only Groot custom-profile artifacts before tests',
+    () => {
+      withFixture(({ run, directory, repository }) => {
+        const target = join(directory, 'existing instrumented target');
+        mkdirSync(join(target, 'coverage'), { recursive: true });
+        const { result, events } = run('scripts/quality/check-rust-coverage.sh', {
+          CARGO_LLVM_COV_TARGET_DIR: target,
+          GROOT_STUB_FAIL: failedClean ? 'clean-coverage-workspace' : ''
+        });
+        assert.equal(result.status, failedClean ? 17 : 0, result.stderr);
+        assert.deepEqual(
+          events.map(({ phase }) => phase),
+          failedClean
+            ? ['clean', 'clean-coverage-workspace']
+            : ['clean', 'clean-coverage-workspace', 'units', 'core-report']
+        );
+        assert.deepEqual(events[1].args, [
+          'clean',
+          '--locked',
+          '--manifest-path',
+          join(repository, 'src-tauri', 'Cargo.toml'),
+          '--target-dir',
+          target,
+          '--profile',
+          'coverage',
+          '--package',
+          'groot'
+        ]);
+      });
+    }
+  );
+}
+
+for (const missing of [false, true]) {
+  testBash(
+    `coverage rejects ${missing ? 'a missing classified' : 'an unclassified new'} module before any Cargo call`,
+    () => {
+      withFixture(({ run, repository }) => {
+        const file = join(repository, 'src-tauri', 'src', missing ? 'auth.rs' : 'unclassified.rs');
+        if (missing) rmSync(file);
+        else writeFileSync(file, '');
+        const { result, events } = run();
+        assert.equal(result.status, 1, result.stderr);
+        assert.match(result.stderr, /Rust coverage scope failed/);
+        assert.deepEqual(events, []);
+      });
+    }
+  );
+}
+
+testBash('custom ordinary target directory stays separate from the coverage workspace', () => {
+  withFixture(({ run, directory }) => {
+    const ordinary = join(directory, 'ordinary target');
+    const { result, events } = run(undefined, { CARGO_TARGET_DIR: ordinary });
+    assert.equal(result.status, 0, result.stderr);
+    for (const event of events.filter(({ kind }) => kind === 'cargo')) {
+      assert.equal(
+        event.target,
+        ['instrument', 'build'].includes(event.phase) ? join(ordinary, 'llvm-cov-target') : ordinary
+      );
+      assert.ok(event.coverage.startsWith(join(ordinary, 'llvm-cov-target')));
+      assert.equal(event.args.includes('clean') && event.args[0] !== 'llvm-cov', false);
+    }
+  });
+});
+
+testBash('the core report workspace sits inside the explicit instrumented target', () => {
+  withFixture(({ run, directory }) => {
+    const target = join(directory, 'instrumented target');
+    const { result, events } = run(undefined, { CARGO_LLVM_COV_TARGET_DIR: target });
+    assert.equal(result.status, 0, result.stderr);
+    assert.ok(
+      events
+        .filter(({ kind }) => kind === 'cargo')
+        .every(({ coverage, phase }) =>
+          phase === 'core-report'
+            ? coverage.startsWith(`${target}/`) && coverage.endsWith('/core-report')
+            : coverage === target
+        )
+    );
+  });
+});
+
+testBash(
+  'ordinary Core mode preserves locked tests, Continuity optimization and package-only cleanup',
+  () => {
+    withFixture(({ run }) => {
+      const { result, events } = run('scripts/regtest/test.sh');
+      assert.equal(result.status, 0, result.stderr);
+      const cargo = events.filter(({ kind }) => kind === 'cargo');
+      assert.equal(cargo.filter(({ args }) => args[0] === 'test').length, 12);
+      const clean = cargo.filter(({ args }) => args[0] === 'clean');
+      assert.equal(clean.length, 1);
+      assert.deepEqual(clean[0].args.slice(-2), ['--package', 'groot']);
+      assert.ok(cargo.every(({ args }) => args.includes('--locked') || args[0] === 'clean'));
+      const optimized = cargo.filter(({ args }) => args.includes('--config'));
+      assert.equal(optimized.length, 2);
+      for (const { args } of optimized) {
+        assert.ok(args.includes('profile.test.package.miniscript.opt-level=3'));
+        assert.ok(args.includes('profile.test.package.groot.opt-level=3'));
+      }
+      assert.equal(
+        cargo.some(({ args }) => args[0] === 'llvm-cov'),
+        false
+      );
+    });
+  }
+);

@@ -35,6 +35,7 @@
   import DiscardMultisigSetupModal from '$lib/components/DiscardMultisigSetupModal.svelte';
   import Modal from '$lib/components/Modal.svelte';
   import PasswordField from '$lib/components/PasswordField.svelte';
+  import ReadableIdentifier from '$lib/components/ReadableIdentifier.svelte';
   import SetupProgress from '$lib/components/SetupProgress.svelte';
   import SetupTask from '$lib/components/SetupTask.svelte';
   import TrezorPinModal from '$lib/components/TrezorPinModal.svelte';
@@ -154,6 +155,7 @@
   let hardwareBusy = $state(false);
   let hardwareProgress = $state('Looking for devices…');
   let copiedDescriptor = $state('');
+  let copiedReviewPublicKey = $state('');
   let standardWalletOpen = $state(false);
   let standardWalletDevice = $state<HardwareDevice | null>(null);
   let pinOpen = $state(false);
@@ -208,6 +210,7 @@
   let standardRecipe = $state<'2of3' | '3of5' | 'custom'>('2of3');
   let customCosignerCount = $state(3);
   let showDescriptor = $state(false);
+  let showReviewPublicKeys = $state(false);
   let savingDescriptor = $state(false);
   let backupError = $state('');
   const creationStep = $derived(
@@ -754,10 +757,6 @@
             : 'Manual entry';
   }
 
-  function sourceHeading(value: CosignerSource) {
-    return value === 'usb' || value === 'virtual' ? 'Connection' : 'Imported via';
-  }
-
   function policyRole(index: number) {
     if (templateKind === 'partner_continuity_v1') {
       return index < 3 ? 'Owner signer' : index < 5 ? 'Partner signer' : 'Estate guardian';
@@ -960,6 +959,15 @@
     });
     setTimeout(() => {
       if (copiedDescriptor === value) copiedDescriptor = '';
+    }, 1_500);
+  }
+
+  async function copyReviewPublicKey(value: string) {
+    await copyText(value, 'public-wallet-data');
+    copiedReviewPublicKey = value;
+    toast({ title: translate($locale, 'Public key copied'), tone: 'success' });
+    setTimeout(() => {
+      if (copiedReviewPublicKey === value) copiedReviewPublicKey = '';
     }, 1_500);
   }
 
@@ -1286,6 +1294,7 @@
         policyVerificationDeferred = false;
       }
       stage = 'review';
+      showReviewPublicKeys = false;
       showDescriptor = false;
       backupError = '';
     } catch (cause) {
@@ -1527,13 +1536,13 @@
                 >{/if}</button
             >
           </div>
-          <WarningNotice
-            title={translate($locale, 'Miniscript signer compatibility')}
-            body={translate(
-              $locale,
-              'Recovery and inheritance are not enabled yet. Ledger, Jade/Jade Plus and BitBox02 models are candidates only; no direct USB Miniscript workflow is certified in Groot. Standard multisig and phone pairing keep their existing support.'
-            )}
-          />
+          {#if templateKind !== 'standard'}<WarningNotice
+              title={translate($locale, 'Limited signer support')}
+              body={translate(
+                $locale,
+                'Regtest and Testnet4 only. Offline PSBT only. Candidates pending exact-model certification: Ledger, Jade/Jade Plus, BitBox02, BitBox02 Nova. Unsupported: Coldcard, Trezor, phone signers.'
+              )}
+            />{/if}
           <div class="policy-choice-insight">
             <span>{translate($locale, 'About this plan')}</span><InsightTip
               label={translate(
@@ -1550,7 +1559,7 @@
                   ? 'Choose how many independent keys must sign each payment. No single key can spend alone.'
                   : templateKind === 'partner_continuity_v1'
                     ? 'Your 2-of-3 remains available. After three months your partner uses both partner keys, after nine months either partner key works, and after twelve months two estate guardians can recover. Renewing moves every delayed path back.'
-                    : 'Both parents sign now. After three months either parent can sign with either child assistance key. After twelve months two of the children’s inheritance role keys and the executor can recover. Renewing moves the delayed paths back.'
+                    : 'Both parents sign now. After three months either parent can sign with either child assistance key. After about twelve months, any 2 of the 3 inheritance signers—the two child inheritance keys and the executor—can recover. Renewing moves the delayed paths back.'
               )}
             />
           </div>
@@ -1717,10 +1726,10 @@
             </p>
             <div class="recovery-separation">
               <ShieldCheck size={15} /><span
-                ><strong>{translate($locale, 'Fixed, reviewed roles')}</strong><small
+                ><strong>{translate($locale, 'Offline PSBT only')}</strong><small
                   >{translate(
                     $locale,
-                    'Only Ledger, Jade/Jade Plus, BitBox02, and BitBox02 Nova are Miniscript candidates; each exact setup still requires certification.'
+                    'Candidates pending exact-model certification: Ledger, Jade/Jade Plus, BitBox02, BitBox02 Nova. Unsupported: Coldcard, Trezor, phone signers.'
                   )}</small
                 ></span
               >
@@ -1834,12 +1843,7 @@
       <section class="form-card coordinator-main">
         <div class="section-heading compact cosigner-step-heading">
           <div>
-            <span class="setup-step">{translate($locale, 'SIGNERS')}</span>
-            <h2>
-              {translate($locale, 'Add')}
-              {requiredKeys}
-              {translate($locale, 'independent keys')}
-            </h2>
+            <h2>{translate($locale, 'Add {count} keys', { count: requiredKeys })}</h2>
             <p>
               {name.trim()} · {translate(
                 $locale,
@@ -1865,35 +1869,25 @@
           >
         </div>
         <div class="cosigner-list">
-          {#each cosigners as signer, i}
+          {#each cosigners as signer}
             <article class="cosigner-card">
               <button
                 class="draft-cosigner-trigger"
                 aria-label={translate($locale, 'View {signer} details', { signer: signer.label })}
                 onclick={() => (selectedSigner = signer)}
               >
-                <span class="device-number" aria-hidden="true">{i + 1}</span>
                 <span class="cosigner-card-body">
                   <strong class="cosigner-name">{signer.label}</strong>
                   <span class="cosigner-metadata">
-                    {#if templateKind !== 'standard'}<span
-                        ><small>{translate($locale, 'Policy role')}</small><span
-                          class="source-badge">{translate($locale, policyRole(i))}</span
-                        ></span
-                      >{/if}
                     <span
-                      ><small>{translate($locale, 'Device fingerprint')}</small><code
+                      ><small>{translate($locale, 'Fingerprint')}</small><code
                         >{signer.fingerprint.toLowerCase()}</code
                       ></span
                     >
                     <span
-                      ><small>{translate($locale, sourceHeading(signer.source))}</small><span
-                        class="source-badge">{translate($locale, sourceLabel(signer.source))}</span
-                      ></span
-                    >
-                    <span class="cosigner-public-key"
-                      ><small>{translate($locale, 'Public account key (xpub)')}</small><code
-                        >{signer.xpub}</code
+                      ><small>{translate($locale, 'Connection')}</small><span
+                        class="cosigner-connection"
+                        >{translate($locale, sourceLabel(signer.source))}</span
                       ></span
                     >
                   </span>
@@ -1909,11 +1903,7 @@
             </article>
           {:else}
             <div class="keys-empty">
-              <FileKey size={22} /><strong>{translate($locale, 'No signers yet')}</strong><span
-                >{translate($locale, 'Add')}
-                {requiredKeys}
-                {translate($locale, 'independent keys for this template.')}</span
-              >
+              <FileKey size={22} /><strong>{translate($locale, 'No signers yet')}</strong>
             </div>
           {/each}
         </div>
@@ -1970,7 +1960,7 @@
     </div>
   {:else if stage === 'review' && preview}
     <section class="form-card review-policy">
-      <h2>{translate($locale, '{walletName} Review', { walletName: preview.name })}</h2>
+      <h2>{translate($locale, 'Verify {walletName}', { walletName: preview.name })}</h2>
       <div class="policy-summary">
         <strong
           >{translate(
@@ -1991,13 +1981,68 @@
           )}</span
         >
       </div>
+      <div class="review-guidance">
+        <p>
+          {translate(
+            $locale,
+            'Compare each fingerprint with its signer or a trusted public-key backup.'
+          )}
+        </p>
+        <Button
+          variant="secondary"
+          size="small"
+          ariaLabel={translate(
+            $locale,
+            showReviewPublicKeys ? 'Hide all public keys' : 'Show all public keys'
+          )}
+          onclick={() => (showReviewPublicKeys = !showReviewPublicKeys)}
+          >{translate(
+            $locale,
+            showReviewPublicKeys ? 'Hide all public keys' : 'Show all public keys'
+          )}<ChevronDown size={14} class={showReviewPublicKeys ? 'rotated' : ''} /></Button
+        >
+      </div>
       <div class="review-signers">
-        {#each preview.cosigners as signer}<div>
-            <Check size={14} /><span
-              ><strong>{signer.label}</strong><small>{signer.fingerprint}</small></span
+        {#each preview.cosigners as signer, i}<div>
+            <FileKey size={14} /><span
+              ><strong>{signer.label}</strong><small
+                >{#if templateKind === 'partner_continuity_v1' || templateKind === 'family_continuity_v1'}<span
+                    class="review-signer-role">{translate($locale, policyRole(i))}</span
+                  >{/if}<code>{signer.fingerprint}</code></small
+              ></span
             >
           </div>{/each}
       </div>
+      {#if showReviewPublicKeys}
+        <section class="review-public-keys" aria-labelledby="review-public-keys-heading">
+          <div>
+            <h3 id="review-public-keys-heading">
+              {translate($locale, 'All signer public keys')}
+            </h3>
+          </div>
+          <dl>
+            {#each preview.cosigners as signer}
+              <div>
+                <dt>
+                  <strong>{signer.label}</strong><span
+                    >{translate($locale, 'Fingerprint')}
+                    <code>{signer.fingerprint.toLowerCase()}</code></span
+                  >
+                </dt>
+                <dd>
+                  <ReadableIdentifier
+                    value={signer.xpub}
+                    label={translate($locale, 'Account public key')}
+                    copied={copiedReviewPublicKey === signer.xpub}
+                    showHint={false}
+                    oncopy={() => copyReviewPublicKey(signer.xpub)}
+                  />
+                </dd>
+              </div>
+            {/each}
+          </dl>
+        </section>
+      {/if}
       <div class="coordinator-actions">
         <Button variant="secondary" onclick={() => (stage = 'keys')}
           ><ArrowLeft size={16} />{translate($locale, 'Back to signers')}</Button
@@ -2443,131 +2488,146 @@
   open={mobilePairOpen}
   dismissible={false}
   wide={mobilePairScan && !mobileCandidate}
+  fixedViewport={Boolean(mobileInvitation && !mobileCandidate)}
   title={translate($locale, 'Add a Groot phone')}
-  description={translate($locale, 'Create one words-only phone signer.')}
+  description={translate($locale, 'Add one recoverable phone signer to this wallet.')}
   onclose={cancelMobilePairing}
 >
-  <div class="mobile-pairing-flow">
-    {#if mobilePairAccepted}
-      <WarningNotice
-        role="status"
-        icon
-        title={translate($locale, 'Phone key added')}
-        body={translate(
-          $locale,
-          'Keep the phone on its waiting screen. After you add the remaining signers and create the wallet, desktop will show one final QR for the phone.'
-        )}
-      />
-      <Button class="full" onclick={continueAfterMobileSigner}
-        >{translate($locale, 'Continue wallet setup')}</Button
+  <div class="mobile-pairing-dialog" data-testid="desktop-phone-pairing-layout">
+    <div class="mobile-pairing-scroll" data-testid="desktop-phone-pairing-scroll">
+      <div
+        class="mobile-pairing-flow"
+        class:mobile-pairing-qr={Boolean(mobileInvitation && !mobilePairScan && !mobileCandidate)}
       >
-    {:else if mobilePairBusy}<HardwareActionPrompt
-        title={translate($locale, 'Creating one-time invitation')}
-        detail={translate($locale, 'Groot is generating a fresh 128-bit BIP129 token.')}
-        label={translate($locale, 'Pairing invitation in progress')}
-      />{:else if mobileInvitation && !mobilePairScan && !mobileCandidate}
-      <AnimatedUrQr
-        frames={mobileInvitation.frames}
-        label={translate($locale, 'Groot phone invitation QR')}
-      />
-      <div class="comparison-code">
-        <small>{translate($locale, 'Both devices must show')}</small><strong
-          >{mobileInvitation.comparisonCode}</strong
-        >
+        {#if mobilePairAccepted}
+          <WarningNotice
+            role="status"
+            icon
+            title={translate($locale, 'Phone key added')}
+            body={translate($locale, 'Finish setting up the wallet to get the final QR.')}
+          />
+        {:else if mobilePairBusy}<HardwareActionPrompt
+            title={translate($locale, 'Creating one-time invitation')}
+            detail={translate($locale, 'Groot is generating a fresh 128-bit BIP129 token.')}
+            label={translate($locale, 'Pairing invitation in progress')}
+          />{:else if mobileInvitation && !mobilePairScan && !mobileCandidate}
+          <AnimatedUrQr
+            frames={mobileInvitation.frames}
+            label={translate($locale, 'Groot phone invitation QR')}
+          />
+          <div class="comparison-code">
+            <small>{translate($locale, 'Both devices must show')}</small><strong
+              >{mobileInvitation.comparisonCode}</strong
+            >
+          </div>
+          <WarningNotice
+            role="note"
+            icon
+            title={translate($locale, 'One phone, one invitation')}
+            body={translate(
+              $locale,
+              'On the phone, choose “Connect desktop app” and scan this one-time QR. Keep the response private.'
+            )}
+          />
+        {:else if mobileInvitation && mobilePairScan && !mobileCandidate}
+          {#if mobilePairError}<WarningNotice
+              tone="danger"
+              icon
+              role="alert"
+              ariaLive="polite"
+              body={mobilePairError}
+            />{/if}
+          <UrQrScanner
+            acceptedTypes={['groot-bsms']}
+            prompt={translate($locale, 'Point the camera at the encrypted phone response')}
+            onframe={receiveMobileResponse}
+            onreset={() => {
+              mobileResponseFrames = [];
+              mobilePairError = '';
+            }}
+          />
+        {:else if mobileInvitation && mobileCandidate}
+          <div class="device-scan paired-mobile">
+            <Smartphone size={20} /><strong>{mobileCandidate.label}</strong><span
+              >{translate($locale, 'Phone key fingerprint')} {mobileCandidate.fingerprint}</span
+            >
+          </div>
+          <div class="comparison-code">
+            <small>{translate($locale, 'Confirm the phone shows the same digits')}</small><strong
+              >{mobileInvitation.comparisonCode}</strong
+            >
+          </div>
+          {#if mobilePairError}<WarningNotice
+              tone="danger"
+              icon
+              role="alert"
+              ariaLive="polite"
+              body={mobilePairError}
+            />{/if}
+        {:else if mobilePairError}<WarningNotice
+            tone="danger"
+            icon
+            role="alert"
+            ariaLive="polite"
+            body={mobilePairError}
+          />{/if}
       </div>
-      <WarningNotice
-        role="note"
-        icon
-        title={translate($locale, 'One phone, one invitation')}
-        body={translate(
-          $locale,
-          'On the fresh phone choose “Connect desktop app,” scan this QR, and keep the response private.'
-        )}
-      />
-      <Button class="full" onclick={() => (mobilePairScan = true)}
-        >{translate($locale, 'Scan phone QR code')}</Button
-      >
-    {:else if mobileInvitation && mobilePairScan && !mobileCandidate}
-      {#if mobilePairError}<WarningNotice
-          tone="danger"
-          icon
-          role="alert"
-          ariaLive="polite"
-          body={mobilePairError}
-        />{/if}
-      <UrQrScanner
-        acceptedTypes={['groot-bsms']}
-        prompt={translate($locale, 'Point the camera at the encrypted phone response')}
-        onframe={receiveMobileResponse}
-        onreset={() => {
-          mobileResponseFrames = [];
-          mobilePairError = '';
-        }}
-      />
-    {:else if mobileInvitation && mobileCandidate}
-      <div class="device-scan paired-mobile">
-        <Smartphone size={20} /><strong>{mobileCandidate.label}</strong><span
-          >{translate($locale, 'Phone key fingerprint')} {mobileCandidate.fingerprint}</span
-        >
-      </div>
-      <div class="comparison-code">
-        <small>{translate($locale, 'Confirm the phone shows the same digits')}</small><strong
-          >{mobileInvitation.comparisonCode}</strong
-        >
-      </div>
-      {#if mobilePairError}<WarningNotice
-          tone="danger"
-          icon
-          role="alert"
-          ariaLive="polite"
-          body={mobilePairError}
-        />{/if}
-      <Button class="full" onclick={confirmMobileSigner}
-        >{translate($locale, 'Six digits match — add signer')}</Button
-      >
-    {:else if mobilePairError}<WarningNotice
-        tone="danger"
-        icon
-        role="alert"
-        ariaLive="polite"
-        body={mobilePairError}
-      />{/if}
-    {#if !mobilePairAccepted}<Button
-        variant="secondary"
-        class="full"
-        disabled={mobilePairBusy}
-        onclick={cancelMobilePairing}>{translate($locale, 'Cancel pairing')}</Button
-      >{/if}
+    </div>
+    <div class="modal-footer mobile-pairing-footer" data-testid="desktop-phone-pairing-footer">
+      {#if !mobilePairAccepted}<Button
+          variant="secondary"
+          class="full"
+          disabled={mobilePairBusy}
+          onclick={cancelMobilePairing}>{translate($locale, 'Cancel pairing')}</Button
+        >{/if}
+      {#if mobilePairAccepted}<Button class="full" onclick={continueAfterMobileSigner}
+          >{translate($locale, 'Continue wallet setup')}</Button
+        >{:else if mobileInvitation && !mobilePairScan && !mobileCandidate}<Button
+          class="full"
+          onclick={() => (mobilePairScan = true)}>{translate($locale, 'Scan phone QR code')}</Button
+        >{:else if mobileInvitation && mobileCandidate}<Button
+          class="full"
+          onclick={confirmMobileSigner}
+          >{translate($locale, 'Six digits match — add signer')}</Button
+        >{/if}
+    </div>
   </div>
 </Modal>
 
 <Modal
   open={mobileFinalOpen}
   dismissible={false}
-  title={translate($locale, 'Return the final policy to the phone')}
-  description={translate(
-    $locale,
-    'Final phone step. This encrypted QR commits the wallet policy and first address.'
-  )}
+  fixedViewport
+  title={translate($locale, 'Finish pairing on the phone')}
+  description={translate($locale, 'Scan this QR in Groot on your phone.')}
   onclose={() => {}}
 >
-  <div class="mobile-pairing-flow">
-    <AnimatedUrQr
-      frames={mobileFinalFrames}
-      label={translate($locale, 'Final shared wallet policy QR')}
-    />
-    <WarningNotice
-      role="note"
-      icon
-      title={translate($locale, 'Verify before funding')}
-      body={translate(
-        $locale,
-        'On the phone, check the same threshold and first address. Pairing is not complete until the phone accepts this policy.'
-      )}
-    />
-    <Button class="full" onclick={() => goto('/multisig')}
-      >{translate($locale, 'Phone accepted the wallet')}</Button
-    >
+  <div
+    class="mobile-pairing-dialog final-phone-pairing-dialog"
+    data-testid="final-phone-pairing-layout"
+  >
+    <div class="mobile-pairing-scroll mobile-pairing-qr" data-testid="final-phone-pairing-scroll">
+      <div class="mobile-pairing-flow">
+        <AnimatedUrQr
+          frames={mobileFinalFrames}
+          label={translate($locale, 'Final shared wallet policy QR')}
+        />
+        <WarningNotice
+          role="note"
+          icon
+          title={translate($locale, 'Verify before funding')}
+          body={translate(
+            $locale,
+            'Accept on the phone, then compare the policy and first address before funding.'
+          )}
+        />
+      </div>
+    </div>
+    <div class="modal-footer mobile-pairing-footer" data-testid="final-phone-pairing-footer">
+      <Button class="full" onclick={() => goto('/multisig')}
+        >{translate($locale, 'Phone accepted the wallet')}</Button
+      >
+    </div>
   </div>
 </Modal>
 <Modal
@@ -2880,12 +2940,73 @@
     .path-visual.continuity-path-visual,
     .path-visual.family-continuity-path {
       grid-template-columns: 1fr;
+      gap: 0;
+      padding: 4px 0 2px 14px;
+      border-left: 2px solid var(--border-strong);
+    }
+    .path-visual.continuity-path-visual > span,
+    .path-visual.family-continuity-path > span,
+    .path-visual.continuity-path-visual > span:last-child,
+    .path-visual.family-continuity-path > span:last-child {
+      position: relative;
+      min-height: 0;
+      padding: 7px 0 15px 17px;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+    }
+    .path-visual.continuity-path-visual > span::before,
+    .path-visual.family-continuity-path > span::before {
+      content: '';
+      position: absolute;
+      top: 11px;
+      left: -20px;
+      width: 8px;
+      height: 8px;
+      border: 2px solid var(--panel);
+      border-radius: 50%;
+      background: var(--fr-blue);
+      box-shadow: 0 0 0 1px var(--border-strong);
+    }
+    .path-visual.continuity-path-visual > i,
+    .path-visual.family-continuity-path > i {
+      display: none;
     }
   }
 
   .mobile-pairing-flow {
     display: grid;
     gap: 1rem;
+  }
+  .mobile-pairing-dialog {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-height: 0;
+  }
+  .mobile-pairing-scroll {
+    min-height: 0;
+    flex: 1 1 auto;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+  }
+  .mobile-pairing-footer {
+    display: grid;
+    flex: 0 0 auto;
+    grid-template-columns: minmax(0, 1fr);
+    margin-top: 0;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border);
+    background: var(--panel);
+  }
+  .mobile-pairing-qr :global(.ur-qr > img),
+  .mobile-pairing-qr :global(.ur-qr > .qr-button),
+  .mobile-pairing-qr :global(.ur-qr > .placeholder) {
+    width: min(340px, 44dvh, 100%);
+  }
+  :global(body:has(.final-phone-pairing-dialog) .toast-region) {
+    z-index: 90;
   }
   .comparison-code {
     display: grid;
@@ -3097,7 +3218,7 @@
     width: 100%;
     min-width: 0;
     display: grid;
-    grid-template-columns: 32px minmax(0, 1fr) 18px;
+    grid-template-columns: minmax(0, 1fr) 18px;
     gap: 13px;
     align-items: start;
     padding: 16px 12px 16px 14px;
@@ -3123,7 +3244,7 @@
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 11px;
+    gap: 8px;
   }
   :global(.cosigner-name):where(.cosigner-name) {
     color: var(--text);
@@ -3156,33 +3277,10 @@
     color: var(--text-soft);
     font-size: var(--font-size-meta);
   }
-  :global(.cosigner-public-key):where(.cosigner-public-key) {
-    grid-column: 1 / -1;
-    width: 100%;
-  }
-  :global(.cosigner-public-key):where(.cosigner-public-key) :global(code) {
-    width: 100%;
-    padding: 8px 9px;
-    overflow-wrap: anywhere;
-    word-break: break-all;
-    white-space: normal;
-    line-height: 1.5;
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    background: var(--surface-inset);
-  }
-  :global(.source-badge):where(.source-badge) {
-    display: inline-flex;
-    align-items: center;
-    min-height: 22px;
-    padding: 3px 7px;
-    border: 1px solid var(--border);
-    border-radius: 999px;
-    background: var(--surface-inset);
+  :global(.cosigner-connection):where(.cosigner-connection) {
     color: var(--text-soft);
     font-size: var(--font-size-meta);
     font-weight: 600;
-    white-space: nowrap;
   }
   :global(.remove-cosigner):where(.remove-cosigner) {
     appearance: none;
@@ -3505,6 +3603,32 @@
     gap: 7px;
     margin: 10px 0 20px;
   }
+  :global(.review-guidance):where(.review-guidance) {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    padding: 12px 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+    background: var(--surface-inset);
+  }
+  :global(.review-guidance):where(.review-guidance) :global(p) {
+    max-width: 48ch;
+    margin: 0;
+    color: var(--text-soft);
+    font-size: var(--font-size-meta);
+    line-height: 1.45;
+  }
+  :global(.review-guidance):where(.review-guidance) :global(.button) {
+    flex: 0 0 auto;
+  }
+  :global(.review-guidance):where(.review-guidance) :global(svg) {
+    transition: transform 0.15s ease;
+  }
+  :global(.review-guidance):where(.review-guidance) :global(svg.rotated) {
+    transform: rotate(180deg);
+  }
   :global(.review-signers):where(.review-signers) > :global(div) {
     border: 1px solid var(--border);
     border-radius: var(--radius-control);
@@ -3514,7 +3638,7 @@
     align-items: center;
   }
   :global(.review-signers):where(.review-signers) :global(svg) {
-    color: var(--success);
+    color: var(--text-soft);
   }
   :global(.review-signers):where(.review-signers) :global(span) {
     display: flex;
@@ -3528,9 +3652,77 @@
     color: var(--muted);
     font-size: var(--font-size-meta);
   }
-  :global(.cosigner-step-heading):where(.cosigner-step-heading) :global(.setup-step) {
-    display: block;
-    margin: 0 0 5px;
+  :global(.review-signers):where(.review-signers) :global(small:has(.review-signer-role)) {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3px 6px;
+  }
+  :global(.review-signer-role):where(.review-signer-role) {
+    color: var(--text-soft);
+    font-weight: 650;
+  }
+  :global(.review-signers):where(.review-signers) :global(code) {
+    color: var(--muted);
+    font-size: inherit;
+  }
+  :global(.review-public-keys):where(.review-public-keys) {
+    display: grid;
+    gap: 12px;
+    padding: 14px;
+    margin: -8px 0 20px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+    background: var(--surface-control);
+  }
+  :global(.review-public-keys):where(.review-public-keys) :global(h3) {
+    margin: 0;
+    color: var(--text);
+    font-size: 15px;
+  }
+  :global(.review-public-keys):where(.review-public-keys) :global(dl) {
+    display: grid;
+    gap: 8px;
+    margin: 0;
+  }
+  :global(.review-public-keys):where(.review-public-keys) :global(dl > div) {
+    min-width: 0;
+    padding: 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+    background: var(--surface-inset);
+  }
+  :global(.review-public-keys):where(.review-public-keys) :global(dt) {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 7px;
+  }
+  :global(.review-public-keys):where(.review-public-keys) :global(dt strong) {
+    font-size: var(--font-size-meta);
+  }
+  :global(.review-public-keys):where(.review-public-keys) :global(dt span) {
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+  }
+  :global(.review-public-keys):where(.review-public-keys) :global(dt code) {
+    margin-left: 5px;
+    color: var(--text-soft);
+  }
+  :global(.review-public-keys):where(.review-public-keys) :global(dd) {
+    min-width: 0;
+    margin: 0;
+  }
+  :global(.review-public-keys):where(.review-public-keys) :global(.readable-address-block) {
+    width: 100%;
+  }
+  :global(.review-public-keys):where(.review-public-keys) :global(.readable-address) {
+    min-height: 0;
+    padding-block: 10px;
+  }
+  :global(.review-public-keys):where(.review-public-keys) :global(.readable-address-groups) {
+    justify-content: flex-start;
+    font-size: 12px;
   }
   :global(.cosigner-step-heading):where(.cosigner-step-heading) :global(h2) {
     margin: 0 0 4px;
@@ -3850,6 +4042,18 @@
     :global(.review-signers):where(.review-signers) {
       grid-template-columns: 1fr;
     }
+    :global(.review-guidance):where(.review-guidance) {
+      align-items: stretch;
+      flex-direction: column;
+    }
+    :global(.review-guidance):where(.review-guidance) :global(.button) {
+      width: 100%;
+    }
+    :global(.review-public-keys):where(.review-public-keys) :global(dt) {
+      align-items: flex-start;
+      flex-direction: column;
+      gap: 3px;
+    }
     :global(.cosigner-step-heading):where(.cosigner-step-heading) {
       display: grid;
       grid-template-columns: 1fr;
@@ -3945,15 +4149,12 @@
       grid-template-columns: minmax(0, 1fr) 42px;
     }
     :global(.draft-cosigner-trigger):where(.draft-cosigner-trigger) {
-      grid-template-columns: 30px minmax(0, 1fr);
+      grid-template-columns: minmax(0, 1fr);
       gap: 9px;
       padding: 13px 7px 13px 9px;
     }
     :global(.cosigner-metadata):where(.cosigner-metadata) {
       grid-template-columns: 1fr;
-    }
-    :global(.cosigner-public-key):where(.cosigner-public-key) {
-      grid-column: auto;
     }
     :global(.hardware-guide-tabs):where(.hardware-guide-tabs) {
       grid-template-columns: 1fr 1fr;

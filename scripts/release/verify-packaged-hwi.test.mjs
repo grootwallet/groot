@@ -184,7 +184,7 @@ test('production signing policy requires matching team, timestamps, and helper-o
     validateProductionSignatureMetadata(
       signature('ABCDEFGHIJ'),
       signature('ABCDEFGHIJ'),
-      '<plist><dict/></plist>',
+      '<plist><dict><key>com.apple.security.device.camera</key><true/></dict></plist>',
       entitlement,
       'ABCDEFGHIJ'
     )
@@ -194,7 +194,7 @@ test('production signing policy requires matching team, timestamps, and helper-o
       validateProductionSignatureMetadata(
         signature('ABCDEFGHIJ'),
         signature('ABCDEFGHIJ'),
-        '<plist><dict/></plist>',
+        '<plist><dict><key>com.apple.security.device.camera</key><true/></dict></plist>',
         entitlement
       ),
     /requires the expected 10-character Developer ID team/
@@ -204,7 +204,7 @@ test('production signing policy requires matching team, timestamps, and helper-o
       validateProductionSignatureMetadata(
         signature('ABCDEFGHIJ'),
         signature('KLMNOPQRST'),
-        '<plist><dict/></plist>',
+        '<plist><dict><key>com.apple.security.device.camera</key><true/></dict></plist>',
         entitlement,
         'ABCDEFGHIJ'
       ),
@@ -215,7 +215,7 @@ test('production signing policy requires matching team, timestamps, and helper-o
       validateProductionSignatureMetadata(
         signature('ABCDEFGHIJ').replace('Developer ID Application', 'Apple Development'),
         signature('ABCDEFGHIJ'),
-        '<plist><dict/></plist>',
+        '<plist><dict><key>com.apple.security.device.camera</key><true/></dict></plist>',
         entitlement,
         'ABCDEFGHIJ'
       ),

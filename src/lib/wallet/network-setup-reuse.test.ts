@@ -2,14 +2,25 @@ import { readUiStyles } from '../testing/ui-styles';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
-const nativeCommands = readFileSync(
-  new URL('../../../src-tauri/src/wallet/profile_commands.rs', import.meta.url),
-  'utf8'
-);
-const walletCore = readFileSync(
-  new URL('../../../src-tauri/src/wallet.rs', import.meta.url),
-  'utf8'
-);
+const nativeCommands =
+  readFileSync(
+    new URL('../../../src-tauri/src/wallet/profile_commands.rs', import.meta.url),
+    'utf8'
+  ) +
+  '\n' +
+  readFileSync(
+    new URL('../../../src-tauri/src/wallet/recovery_commands.rs', import.meta.url),
+    'utf8'
+  );
+const walletCore =
+  readFileSync(new URL('../../../src-tauri/src/wallet.rs', import.meta.url), 'utf8') +
+  '\n' +
+  readFileSync(new URL('../../../src-tauri/src/wallet/profiles.rs', import.meta.url), 'utf8') +
+  '\n' +
+  readFileSync(
+    new URL('../../../src-tauri/src/wallet/notification_delivery.rs', import.meta.url),
+    'utf8'
+  );
 const recoveryScan = readFileSync(
   new URL('../../../src-tauri/src/wallet/recovery_scan.rs', import.meta.url),
   'utf8'

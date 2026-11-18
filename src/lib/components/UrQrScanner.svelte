@@ -2,10 +2,10 @@
   import WarningNotice from '$lib/components/WarningNotice.svelte';
   import { locale } from '$lib/i18n';
   import { translate, localizedError } from '$lib/i18n-catalog';
-  import { Camera, CameraOff, Check } from '@lucide/svelte';
+  import { Camera, Check } from '@lucide/svelte';
   import { onDestroy } from 'svelte';
   import Button from './Button.svelte';
-  import type QrScanner from 'qr-scanner';
+  import { createQrCamera, cameraError } from '$lib/qr-camera';
 
   let {
     onframe,
@@ -26,7 +26,7 @@
   let expectedParts = $state(0);
   let scanComplete = $state(false);
   let processingFrames = false;
-  let scanner: QrScanner | undefined;
+  let scanner: ReturnType<typeof createQrCamera> | undefined;
   let stopped = false;
   const seen = new Set<string>();
   const pendingFrames: string[] = [];
@@ -118,56 +118,12 @@
     scanner = undefined;
     cameraActive = false;
     try {
-      if (!window.isSecureContext) throw new Error('insecure_camera_origin');
-      if (!navigator.mediaDevices?.getUserMedia) throw new Error('camera_unavailable');
-
-      // Request platform permission directly from this user gesture. QrScanner
-      // intentionally collapses all getUserMedia failures into "Camera not
-      // found", which would hide denial and camera-in-use states from Groot.
-      const permissionStream = await navigator.mediaDevices.getUserMedia({
-        audio: false,
-        video: true
-      });
-      for (const track of permissionStream.getTracks()) track.stop();
-      if (stopped) return;
-      const { default: QrScanner } = await import('qr-scanner');
-      if (stopped) return;
-
       if (!video) throw new Error('camera_unavailable');
-      scanner = new QrScanner(
-        video,
-        (result) => {
-          void acceptFrame(result.data);
-        },
-        {
-          preferredCamera: 'environment',
-          maxScansPerSecond: 8,
-          highlightScanRegion: false,
-          highlightCodeOutline: true,
-          returnDetailedScanResult: true,
-          onDecodeError: () => {}
-        }
-      );
-      await scanner.start();
-      if (stopped || scanComplete) {
-        scanner?.destroy();
-        return;
-      }
-      cameraActive = true;
+      scanner = createQrCamera(video, (frame) => void acceptFrame(frame));
+      cameraActive = await scanner.start();
     } catch (cause) {
       if (stopped) return;
-      const name = cause instanceof DOMException ? cause.name : '';
-      const message = cause instanceof Error ? cause.message : '';
-      error =
-        message === 'insecure_camera_origin'
-          ? 'Camera access requires Groot’s secure app connection. Reopen this scanner in the desktop app.'
-          : name === 'NotAllowedError'
-            ? 'Camera access was denied. Allow camera access for Groot, then reopen this scanner.'
-            : name === 'NotReadableError' || name === 'AbortError'
-              ? 'The camera is being used by another app. Close its camera, then try again.'
-              : name === 'NotFoundError' || name === 'DevicesNotFoundError'
-                ? 'No usable camera is available. Connect a camera or import the signed PSBT file instead.'
-                : 'Groot could not start the camera. Check its system permission, then try again.';
+      error = cameraError(cause, 'No usable camera is available.');
     } finally {
       starting = false;
     }
@@ -195,25 +151,23 @@
       icon
       role="alert"
       body={translate($locale, error)}
-    />{:else}
+    />{:else if scanComplete || cameraActive || starting}
     <div class="scan-status" role="status">
       {#if scanComplete}<Check size={16} /><span>{translate($locale, 'QR verified')}</span>
       {:else}
-        {#if cameraActive}<Camera size={16} /><span
-            >{translate(
-              $locale,
-              starting
-                ? 'Requesting camera permission…'
-                : scanned
-                  ? scanned === 1
-                    ? '{count} unique frame scanned'
-                    : '{count} unique frames scanned'
-                  : prompt,
-              { count: scanned }
-            )}</span
-          >{:else}<CameraOff size={16} /><span
-            >{translate($locale, 'Allow camera access to scan this QR.')}</span
-          >{/if}
+        <Camera size={16} /><span
+          >{translate(
+            $locale,
+            starting
+              ? 'Requesting camera permission…'
+              : scanned
+                ? scanned === 1
+                  ? '{count} unique frame scanned'
+                  : '{count} unique frames scanned'
+                : prompt,
+            { count: scanned }
+          )}</span
+        >
       {/if}
     </div>
   {/if}

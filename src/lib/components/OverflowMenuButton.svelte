@@ -4,12 +4,14 @@
   let {
     label = 'More actions',
     expanded = false,
+    popup = 'menu',
     size = 'default',
     element = $bindable<HTMLButtonElement | null>(null),
     onclick
   }: {
     label?: string;
     expanded?: boolean;
+    popup?: 'menu' | 'dialog';
     size?: 'default' | 'large';
     element?: HTMLButtonElement | null;
     onclick: (event: MouseEvent) => void;
@@ -22,7 +24,7 @@
   class="overflow-menu-trigger"
   class:large={size === 'large'}
   aria-label={label}
-  aria-haspopup="menu"
+  aria-haspopup={popup}
   aria-expanded={expanded}
   {onclick}
 >

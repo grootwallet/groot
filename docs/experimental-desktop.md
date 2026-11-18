@@ -1,9 +1,61 @@
-# Experimental Windows/Linux packages
+# Internal Windows/Linux desktop candidates
 
-The dispatch-only [packaging workflow](../.github/workflows/experimental-desktop.yml) prepares Windows x64 MSI and Linux x64 DEB builds. It retains validation/native gates and currently stops at the unchanged reviewed-source gate. No artifact has been built or tested on these hosts in this change. After passing every gate it retains supporting package/SBOM/digest/source evidence as a 14-day Actions artifact for owner testing, never a public GitHub release.
+The [cross-platform workflow](../.github/workflows/experimental-desktop.yml)
+builds unsigned `0.5.4-rc01` Testnet4-only packages on native GitHub-hosted
+Windows Server 2025 x86-64 and Ubuntu 24.04 x86-64 runners. It produces MSI/NSIS installers and
+an Ubuntu DEB with SBOM, source commit, build facts and SHA-256 evidence. Windows
+Installer requires a numeric prerelease identifier, so the MSI/NSIS package
+metadata uses `0.5.4-1`; Groot's visible candidate identity and evidence remain
+`0.5.4-rc01`.
 
-These first packages use a separate application identity and **Signet only**. Native recovery-word entry, backup verification and software creation/recovery are unavailable outside macOS. Passive USB inventory is macOS-only. No HWI helper is bundled; Windows production HWI trust is unavailable and Linux requires a separately certified pinned/root-owned helper. File/public-descriptor/BSMS/PSBT paths are implemented, but policy-verification prerequisites still apply; unavailable USB/native operations remain errors, not silent bypasses. Existing public import/transaction tests do not establish platform usability or device certification.
+Each build downloads the official HWI 3.2.0 platform archive and source,
+verifies the published archive and inner-executable hashes, and extracts the
+one-file executable into Groot's sealed fast runtime. Build probes load every
+included signer driver without opening USB. Runtime verifies the exact bundled
+executable and complete extracted manifest and never searches PATH or falls
+back to a system HWI.
 
-Windows and Linux are experimental and untested on physical machines. They are riskier than macOS and need user testing/feedback. Use disposable Signet data. macOS rc03 is the immediate owner-testing candidate; experimental packages require successful runners, target-specific provenance/SBOM, signatures and exact release review before distributing assets.
+Both native hosts wait on the protected GitHub Environment
+`internal-candidate-approval`. Its required reviewer accepts the exact run
+commit outside the candidate before either package job starts. Checkout is
+detached at that commit; the shared builder compares every tracked blob with
+it, records the commit tree and complete tracked-source digest, then runs the
+focused internal policy gate while preserving the separate public-release
+approval stop. Git source redirection, replacement objects, hidden local Vite
+environment files, tracked symlinks and inherited frontend overrides fail
+closed. Strict object-graph verification also rejects Git objects whose bytes
+do not match their IDs. A branch push may create a pending run, but it cannot
+upload an accepted package before this external approval.
 
-Local build prerequisites and runtime libraries follow Tauri 2's platform requirements. Run pinned installation, `pnpm validate`, all native checks, then `GROOT_BUILD_NETWORK=signet pnpm exec tauri build --config src-tauri/tauri.experimental.conf.json --bundles deb` (Linux) or the equivalent `msi` (Windows). Do not bypass failed gates. Compile success is not certification.
+After the package directory is complete, the commit-pinned GitHub attestation
+action signs every output file's digest before upload. Downloaded installers
+are accepted only after this command verifies the exact commit, workflow,
+GitHub-hosted runner and the signed protected-Environment certificate fields:
+
+```sh
+node scripts/release/verify-internal-artifact-attestation.mjs /absolute/installer FULL_40_CHARACTER_COMMIT
+```
+
+Use GitHub CLI 2.102.0 or newer. A matching checksum or candidate-authored
+`BUILD-INFO` alone does not prove that the required reviewer approved the
+build. Artifact names, digests and build identity are public attestation
+metadata; package bytes remain in the 14-day Actions artifact.
+
+The focused policy digest inventory catches known semantic drift; it is not a
+complete source-authorization root. Exact-commit review includes workflow,
+package-manager, Vite/Svelte/Tauri, native build and release-control changes.
+Post-build checks detect persistent accidental drift and do not claim to
+sandbox build code in an already accepted commit. ADR 0109 owns this boundary.
+
+These packages use a separate application identity and Testnet4 only. Windows
+does not guess the unverified WebUSB controller mapping used by some Trezors.
+Recovery-word verification and native recovery entry remain unavailable on
+these platforms. Packages are unsigned internal owner-test artifacts and expire
+from Actions after 14 days. Compile success does not establish platform or
+physical-device certification. Follow
+[the human test](testing/0.5.4-cross-platform-hardware.md) and record exact
+model, firmware, transport, reject/retry, signing and restart results.
+
+Final v0.5.4, Mainnet, public upload, installer signing and update metadata
+remain blocked pending a separate release decision, independent review and the
+physical certification matrix. ADRs 0106/0109 record this boundary.

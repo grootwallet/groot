@@ -33,6 +33,65 @@ describe('live wallet sync', () => {
     controller.stop();
     vi.useRealTimers();
   });
+
+  it('does not dispatch sync when lock stops the scheduler during a status read', async () => {
+    let finishStatus!: (status: null) => void;
+    const status = new Promise<null>((resolve) => {
+      finishStatus = resolve;
+    });
+    const wallet = {
+      sync: vi.fn().mockResolvedValue(undefined),
+      syncMultisig: vi.fn().mockResolvedValue(undefined),
+      cancelSync: vi.fn().mockResolvedValue(undefined),
+      syncStatus: vi.fn(() => status)
+    };
+    const controller = createLiveSync(wallet, () => 'multisig', 60_000);
+    controller.start();
+    const running = controller.runNow();
+    expect(wallet.syncStatus).toHaveBeenCalledOnce();
+
+    const stopping = controller.stopAndWait();
+    finishStatus(null);
+    await Promise.all([running, stopping]);
+
+    expect(wallet.cancelSync).toHaveBeenCalledOnce();
+    expect(wallet.syncMultisig).not.toHaveBeenCalled();
+    expect(wallet.sync).not.toHaveBeenCalled();
+  });
+
+  it('does not retry sync for the new wallet when an old node admission settles', async () => {
+    let startAdmission!: () => void;
+    let finishAdmission!: () => void;
+    const started = new Promise<void>((resolve) => {
+      startAdmission = resolve;
+    });
+    const admission = new Promise<void>((resolve) => {
+      finishAdmission = resolve;
+    });
+    const wallet = {
+      sync: vi.fn().mockRejectedValue({ code: 'node_admission_required' }),
+      syncMultisig: vi.fn().mockResolvedValue(undefined),
+      cancelSync: vi.fn().mockResolvedValue(undefined),
+      testNodeConnection: vi.fn(() => {
+        startAdmission();
+        return admission;
+      })
+    };
+    let kind: 'single_key' | 'multisig' = 'single_key';
+    const controller = createLiveSync(wallet, () => kind, 60_000);
+    controller.start();
+    const running = controller.runNow();
+    await started;
+    controller.stop();
+    kind = 'multisig';
+    controller.restart();
+    finishAdmission();
+    await running;
+
+    expect(wallet.sync).toHaveBeenCalledOnce();
+    expect(wallet.syncMultisig).not.toHaveBeenCalled();
+    controller.stop();
+  });
   it('syncs the selected single-key or multisig wallet', async () => {
     for (const kind of ['single_key', 'multisig'] as const) {
       const wallet = {

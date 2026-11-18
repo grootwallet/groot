@@ -23,6 +23,8 @@
   import { toast } from '$lib/stores/toasts';
   import { readTransferFile } from '$lib/transfer';
   import { walletService, type RecoveryDrill } from '$lib/wallet';
+  import type { PolicySignerGroup } from '$lib/types';
+  import { policySignerRoleLabel } from '$lib/wallet/policy';
   let backup = $state(''),
     loadedBackupName = $state(''),
     walletName = $state('Recovered wallet'),
@@ -43,6 +45,20 @@
   let pinError = $state('');
   let pinErrorCode = $state<WalletErrorCode | ''>('');
   const expectedSigners = $derived(drill?.cosigners ?? []);
+  const recoveredPolicyPaths = $derived(drill?.policyPaths ?? []);
+  const pathGroupRequirement = (group: PolicySignerGroup) =>
+    translate($locale, '{count} of {total} {group}', {
+      count: group.required,
+      total: group.signers.length,
+      group: translate($locale, group.label)
+    });
+  const recoveredPolicyLabel = (policyType: RecoveryDrill['policyType']) => {
+    if (policyType === 'partner_continuity_v1') return 'Partner continuity';
+    if (policyType === 'family_continuity_v1') return 'Family continuity';
+    if (policyType === 'inheritance') return 'Inheritance';
+    if (policyType === 'recovery') return 'Recovery';
+    return '';
+  };
   const signersReady = $derived(
     defaultConfig.network !== 'mainnet' ||
       (expectedSigners.length > 0 &&
@@ -291,7 +307,55 @@
           /></span
         >
       </div>
-      {#if drill.threshold && expectedSigners.length}<p>
+      {#if recoveredPolicyPaths.length}<section
+          class="recovered-policy"
+          aria-label={translate($locale, 'Recovered spending policy')}
+        >
+          <header>
+            <div>
+              <h2>{translate($locale, 'Recovered spending policy')}</h2>
+              <p>
+                {translate(
+                  $locale,
+                  'This backup contains the exact spending paths below. Verify every signer group before restoring.'
+                )}
+              </p>
+            </div>
+            {#if recoveredPolicyLabel(drill.policyType)}<span class="policy-pill"
+                >{translate($locale, recoveredPolicyLabel(drill.policyType))}</span
+              >{/if}
+          </header>
+          <div class="recovered-paths">
+            {#each recoveredPolicyPaths as path (path.index)}<article class="recovered-path">
+                <div class="recovered-path-heading">
+                  <strong>{translate($locale, path.name)}</strong>
+                  <small
+                    >{path.availableAfterBlocks === 0
+                      ? translate($locale, 'No timelock')
+                      : translate($locale, 'After {count} confirmations', {
+                          count: path.availableAfterBlocks
+                        })}</small
+                  >
+                </div>
+                <div class="recovered-path-groups">
+                  {#each path.signerGroups as group (group.code)}<section>
+                      <strong>{pathGroupRequirement(group)}</strong>
+                      <ul aria-label={translate($locale, group.label)}>
+                        {#each group.signers as signer (signer.fingerprint)}<li>
+                            <span class="recovered-signer"
+                              ><strong>{signer.label}</strong><small
+                                >{translate($locale, policySignerRoleLabel(signer.role))}</small
+                              ></span
+                            ><code>{signer.fingerprint}</code>
+                          </li>{/each}
+                      </ul>
+                    </section>{/each}
+                </div>
+              </article>{/each}
+          </div>
+        </section>
+        {#if expectedSigners.length}<PolicySignerList signers={expectedSigners} />{/if}
+      {:else if drill.threshold && expectedSigners.length}<p>
           {translate($locale, '{threshold} of {total} wallet policy', {
             threshold: drill.threshold,
             total: expectedSigners.length
@@ -467,5 +531,135 @@
     font-weight: 650;
     letter-spacing: 0.08em;
     text-transform: uppercase;
+  }
+
+  .recovered-policy {
+    display: grid;
+    gap: 12px;
+    padding: 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-inset);
+    background: var(--surface-inset);
+  }
+
+  .recovered-policy > header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .recovered-policy h2,
+  .recovered-policy p {
+    margin: 0;
+  }
+
+  .recovered-policy h2 {
+    font-size: 15px;
+  }
+
+  .recovered-policy p {
+    margin-top: 3px;
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+    line-height: 1.45;
+  }
+
+  .recovered-policy .policy-pill {
+    flex: 0 0 auto;
+  }
+
+  .recovered-paths {
+    display: grid;
+    gap: 8px;
+  }
+
+  .recovered-path {
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+    background: var(--panel);
+  }
+
+  .recovered-path-heading {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .recovered-path-heading strong,
+  .recovered-path-heading small,
+  .recovered-path-groups strong,
+  .recovered-path-groups li {
+    font-size: var(--font-size-meta);
+  }
+
+  .recovered-path-heading small,
+  .recovered-path-groups code {
+    color: var(--muted);
+  }
+
+  .recovered-path-groups {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    gap: 8px;
+    padding: 10px 12px 12px;
+  }
+
+  .recovered-path-groups section {
+    min-width: 0;
+  }
+
+  .recovered-path-groups ul {
+    display: grid;
+    gap: 3px;
+    margin: 6px 0 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .recovered-path-groups li {
+    min-width: 0;
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .recovered-signer {
+    min-width: 0;
+    display: grid;
+    gap: 1px;
+  }
+
+  .recovered-signer strong,
+  .recovered-signer small {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .recovered-signer strong {
+    font-weight: 550;
+  }
+
+  .recovered-signer small {
+    color: var(--muted);
+    font-size: 11px;
+  }
+
+  .recovered-path-groups code {
+    flex: 0 0 auto;
+    font-size: inherit;
+  }
+
+  @media (max-width: 540px) {
+    .recovered-policy > header,
+    .recovered-path-heading {
+      align-items: flex-start;
+      flex-direction: column;
+    }
   }
 </style>

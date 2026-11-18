@@ -20,6 +20,8 @@
 - Sync: exact network/genesis, consent, bounded failures, no silent fallback, atomic results, cancellation, reorg and restart.
 - UI: durable results plus toast, loading/empty/offline states, 1180×780 and 390×844, both themes, translated copy and keyboard-safe spacing.
 
+Harness fixtures additionally test aggregate failures, missing/skipped results, mixed source-approval failures, coverage ordering, scenario inventory and owned cleanup. CI optimizations preserve assertions and thresholds; command stubs are supplemented by actual tool and integration runs.
+
 Coverage gates protect deterministic policy and native module classification. A percentage is not a substitute for named adversarial assertions. Browser fixtures and virtual signers never establish physical or public-network readiness.
 
 ## Keep the suite maintainable
@@ -30,14 +32,10 @@ Delete obsolete tests with their unreachable implementation. Deduplicate only af
 
 Keep screenshots, SBOMs, coverage output and performance measurements as untracked artifacts. Record physical evidence against exact commit/model/firmware. Candidate-specific [test guides](testing/) are instructions for that candidate, not evergreen specifications.
 
-## Mobile foundation
+## Mobile and Continuity
 
-ADR 0089 adds native desktop/mobile capability-policy and command-order regression tests. Compile the arm64 iOS target to catch desktop-only native API calls. The isolated debug archive establishes build evidence only; pairing, camera, public watch sync, receive labels, PSBT transfer and device lifecycle require the staged evidence in the [5.3 plan](mobile-5.3-plan.md). Keep signing blocked and desktop profiles intact.
+Internal iOS Testnet4 tests cover native capability guards, pairing, complete-prevout PSBT review, bounded QR responses, stale results and key-access ordering. The isolated archive proves compilation and linked-network identity only. Physical camera, background/lock, backup/recovery and returned-signature exchange follow [the human checklist](testing/post-5.3-phone-miniscript-human.md).
 
-## 5.3 defect regressions
+Real-Core scenarios cover funded phone-sign/desktop-merge/broadcast and fixed Continuity roles, maturity, reorg, restoration and renewal. They do not certify a signer model or transport. Phone enrollment stays Standard-only; delayed policies keep USB signing blocked.
 
-ADR 0090 is covered by SQLite failure, transaction rollback/reopen and idempotent exact-proposal reconciliation tests, plus native-adapter null-snapshot tests. Browser regressions cover the accepted-but-recording-pending warning, retained Activity after refresh failure, accessible tooltip relationships/Escape, and translated scanner denial/count/limit states. Native worker source guards reject main-thread operation-lock waits and check identity binding for newly queued wallet-specific work. The [native review and device checklist](testing/5.3-native-review.md) records the remaining release-review boundary and exact device test scope. These guards supplement the Rust suites; browser fixtures do not prove native UI responsiveness, physical camera behavior or VoiceOver certification.
-
-The [mobile-key audit](testing/5.3-mobile-key-audit.md) records the installed iPhone capability gap and fresh retained-branch native/Core tests. ADR 0093 restores the broader phone-key delivery goal without claiming it is implemented.
-
-The [RC2 mobile-key record](testing/5.3.0-rc2-mobile-keys.md) tracks the recovered signer implementation, new iOS protection, native/Core checks and unfinished physical acceptance. The local Core harness now includes the retained phone-key review/sign/merge/broadcast scenario.
+The [maintenance record](testing/maintenance-2026-11-07.md) and [CI acceptance record](testing/ci-efficiency-proposal-2026-11-07.md) record their respective checks. Earlier candidate records retain their original scope and source identity. Never carry a passing result forward solely because a later build has the same version.

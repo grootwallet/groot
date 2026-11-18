@@ -36,6 +36,7 @@
     WalletError,
     type WalletErrorDetails,
     type CosignerHealthCheck,
+    type CoordinationStatus,
     type CoreNodeConfig,
     type ExternalSignerWallet,
     type MultisigProposal,
@@ -76,6 +77,7 @@
   import EmptyState from '$lib/components/EmptyState.svelte';
   import MultisigDescriptorsModal from '$lib/components/MultisigDescriptorsModal.svelte';
   import { useWalletShellContext } from '$lib/wallet/shell-context';
+  import { shouldShowMobileSend } from '$lib/wallet/mobile-quick-actions';
   import { fly } from 'svelte/transition';
   import { presentLocalTimestamp, syncAge } from '$lib/date-time';
   const walletShell = useWalletShellContext();
@@ -112,15 +114,26 @@
   let networkSetupRequired = $state(false);
   let selectedProfile = $state<WalletProfile | null>(null);
   let phoneBackupUnverified = $state(false);
+  let coordination = $state<CoordinationStatus | null>(null);
   let verifyOpen = $state(false);
+  let verifyPhoneKey = $state(false);
   let verifyCredential = $state('');
   let verifyError = $state('');
   let verifying = $state(false);
   let revealingBackup = $state(false);
+  let verifyGeneration = 0;
   let initialDataLoading = $state(true);
+  let checkingNode = $state(false);
   let syncSource = $state<WalletSyncSource | null>(null);
   let syncStatus = $state<WalletSyncStatus | null>(null);
   let mobileRuntime = $state(false);
+  const mobileReceiveOnDesktop = $derived(
+    mobileRuntime && selectedProfile !== null && selectedProfile.kind !== 'single_key'
+  );
+  const mobileCanSignPayment = $derived(
+    mobileRuntime && coordination?.role === 'mobile_cosigner' && coordination.canSignOnThisDevice
+  );
+  const mobileSendReady = $derived(snapshot !== null && shouldShowMobileSend(snapshot));
   let nodeConfig = $state<CoreNodeConfig | null>(null);
   let syncPollToken = 0;
   let syncStatusReadGeneration = 0;
@@ -158,6 +171,7 @@
   let initialHistoryRequired = $derived(
     syncSource?.type === 'bitcoin_core' && Boolean(snapshot) && !snapshot?.syncedAt
   );
+  const mobileUnverifiedBalance = $derived(mobileRuntime && initialHistoryRequired);
   let shellInitialScanRunning = $derived(
     Boolean(selectedProfile && walletShell.initialHistoryScanRunning(selectedProfile.id))
   );
@@ -231,7 +245,8 @@
   let syncInProgress = $derived(syncing || syncStatusIsActive(syncStatus));
   let syncAgeValue = $derived(syncAge(snapshot?.syncedAt ?? null, syncClock));
   let syncButtonLabel = $derived.by(() => {
-    if (initialDataLoading) return translate($locale, isMainnet ? 'Checking node…' : 'Loading…');
+    if (checkingNode) return translate($locale, 'Checking node…');
+    if (initialDataLoading) return translate($locale, 'Loading…');
     if (automaticInitialScanPending || walletAwaitingAutomaticScan)
       return translate($locale, 'Syncing');
     if (loadErrorCode === 'network_unavailable') return translate($locale, 'Node unavailable');
@@ -280,6 +295,16 @@
     hardwareSignerWallet
       ? ($hardwareHealthChecks[hardwareHealthKey(hardwareSignerWallet.signer.fingerprint)] ?? null)
       : null
+  );
+  const mobileSyncStatusVisible = $derived(
+    mobileRuntime &&
+      (mobileSyncSetupRequired ||
+        initialHistoryRequired ||
+        Boolean(
+          manualSyncDetailsVisible &&
+          syncStatus &&
+          (syncInProgress || syncStatus.state === 'failed')
+        ))
   );
   const pendingBreakdown = $derived(
     snapshot ? pendingBalanceBreakdown(snapshot) : { incoming: 0, change: 0, outgoing: 0 }
@@ -379,6 +404,7 @@
 
   onDestroy(() => {
     verifyCredential = '';
+    ++verifyGeneration;
     ++loadGeneration;
     ++syncStatusReadGeneration;
   });
@@ -399,32 +425,38 @@
   });
   async function loadSnapshot() {
     const generation = ++loadGeneration;
+    const selectedWalletId = walletShell.selectedWalletId();
+    const current = () =>
+      generation === loadGeneration && selectedWalletId === walletShell.selectedWalletId();
     let unlockSyncRequested = false;
     let admissionRestored = false;
     loadError = '';
     loadErrorCode = '';
     networkSetupRequired = false;
     initialDataLoading = true;
+    coordination = null;
+    phoneBackupUnverified = false;
+    checkingNode = false;
+    nodeReady = false;
     try {
-      const pendingPairingsPromise = walletService.pendingMobilePairings().catch(() => []);
       // Profile-mutating routes refresh the shell after navigation. Read the
       // authoritative registry here so this route cannot race that refresh and
       // query the newly selected wallet using the previous wallet's kind.
       const registry = await walletService.profiles();
-      if (generation !== loadGeneration) return;
+      if (!current()) return;
       if (!registry.wallets.length || !registry.selectedWalletId) {
-        if (!(await walletService.exists())) {
+        const exists = await walletService.exists();
+        if (!current()) return;
+        if (!exists) {
           await goto('/welcome');
           return;
         }
       }
-      const [nextSyncSource, runtime, networkSetupSources] = await Promise.all([
+      const [nextSyncSource, runtime] = await Promise.all([
         walletService.syncSource(),
-        walletService.runtimePlatform(),
-        walletService.networkSetupSources()
+        walletService.runtimePlatform()
       ]);
-      if (generation !== loadGeneration) return;
-      pendingMobilePairingCount = (await pendingPairingsPromise).length;
+      if (!current()) return;
       syncSource = nextSyncSource;
       mobileRuntime = runtime.mobile && runtime.platform !== 'browser';
       nodeConfig = null;
@@ -434,29 +466,35 @@
       // a retry after an offline preflight uses the single-key command for a
       // selected multisig wallet and returns `wrong_wallet_kind`.
       multisig = selectedProfile?.kind === 'multisig';
-      phoneBackupUnverified = Boolean(
-        multisig &&
-        !selectedProfile?.backupVerified &&
-        (await walletService.coordinationStatus()).role === 'mobile_cosigner'
-      );
-      unlockSyncRequested = Boolean(
-        selectedProfile && walletShell.consumeUnlockSync(selectedProfile.id)
-      );
-      nodeReady = Boolean(
-        selectedProfile &&
-        networkSetupSources.some(
-          (source) => source.walletId === selectedProfile?.id && source.ready
-        )
-      );
-      // Mainnet admission is required once after unlock, not whenever the user
-      // returns to Overview. The admitted wallet session remains authoritative.
-      if (isMainnet && nodeReady && unlockSyncRequested) await walletService.testNodeConnection();
-      if (generation !== loadGeneration) return;
       if (!selectedProfile)
         throw new WalletError('wallet_not_found', 'The selected wallet does not exist.');
+      const profile = selectedProfile;
+      unlockSyncRequested = walletShell.consumeUnlockSync(profile.id);
+      // Source availability is needed for a first-history decision or to
+      // restore admission, but not to paint committed history on navigation.
+      let readiness: ReturnType<typeof walletService.networkSetupSources> | undefined;
+      async function resolveNodeReadiness() {
+        const sources = await (readiness ??= walletService.networkSetupSources());
+        if (!current()) return false;
+        nodeReady = sources.some((source) => source.walletId === profile.id && source.ready);
+        return nodeReady;
+      }
+      async function checkNode() {
+        if (!current()) return;
+        checkingNode = true;
+        try {
+          await walletService.testNodeConnection();
+        } finally {
+          if (current()) checkingNode = false;
+        }
+      }
+      // Mainnet admission is required once after unlock, not whenever the user
+      // returns to Overview. The admitted wallet session remains authoritative.
+      if (isMainnet && unlockSyncRequested && (await resolveNodeReadiness())) await checkNode();
+      if (!current()) return;
       let nextSnapshot: WalletOverview;
       try {
-        nextSnapshot = await walletService.overview(selectedProfile.id);
+        nextSnapshot = await walletService.overview(profile.id);
       } catch (cause) {
         // The shell's unlock-sync handoff is deliberately ephemeral. If route
         // timing consumes or misses that hint, recover the native Mainnet
@@ -464,26 +502,30 @@
         // it had no Bitcoin Core connection.
         if (!(
           isMainnet &&
-          nodeReady &&
           cause instanceof WalletError &&
-          cause.code === 'node_admission_required'
+          cause.code === 'node_admission_required' &&
+          current() &&
+          (await resolveNodeReadiness())
         ))
           throw cause;
-        await walletService.testNodeConnection();
+        await checkNode();
+        if (!current()) return;
         admissionRestored = true;
-        nextSnapshot = await walletService.overview(selectedProfile.id);
+        nextSnapshot = await walletService.overview(profile.id);
       }
-      if (generation !== loadGeneration) return;
+      if (!current()) return;
+      const firstHistory = nextSyncSource.type === 'bitcoin_core' && !nextSnapshot.syncedAt;
+      if (firstHistory) await resolveNodeReadiness();
+      if (!current()) return;
       automaticInitialScanPending = false;
       snapshot = nextSnapshot;
       initialDataLoading = false;
       void loadSecondaryDetails(generation);
-      if (syncSource.type === 'bitcoin_core' && !snapshot?.syncedAt) {
-        await loadRecoveryState();
-      }
-      if ((unlockSyncRequested || admissionRestored) && !inheritedSyncObserved) void sync(false);
+      if (firstHistory) await loadRecoveryState(generation);
+      if (current() && (unlockSyncRequested || admissionRestored) && !inheritedSyncObserved)
+        void sync(false);
     } catch (cause) {
-      if (generation !== loadGeneration) return;
+      if (!current()) return;
       if (unlockSyncRequested && selectedProfile) walletShell.requestUnlockSync(selectedProfile.id);
       if (cause instanceof WalletError && cause.code === 'wallet_locked') {
         await goto('/unlock');
@@ -527,7 +569,21 @@
     secondaryError = '';
     const current = () =>
       generation === loadGeneration && profile.id === walletShell.selectedWalletId();
+    void walletService
+      .pendingMobilePairings()
+      .catch(() => [])
+      .then((value) => {
+        if (current()) pendingMobilePairingCount = value.length;
+      });
     const results = await Promise.allSettled([
+      (profile.kind === 'multisig' && (mobileRuntime || !profile.backupVerified)
+        ? walletService.coordinationStatus()
+        : Promise.resolve(null)
+      ).then((value) => {
+        if (!current()) return;
+        coordination = value;
+        phoneBackupUnverified = value?.role === 'mobile_cosigner' && !profile.backupVerified;
+      }),
       // Connection hints must not block cached wallet data or the separate
       // fail-closed wallet-history privacy disclosure.
       (mobileRuntime ? walletService.nodeConfig() : Promise.resolve(null)).then((config) => {
@@ -610,7 +666,11 @@
   }
   onMount(() =>
     walletService.subscribe((event) => {
-      if (event.type === 'wallet_updated' && event.walletId === walletShell.selectedWalletId()) {
+      if (
+        event.type === 'wallet_updated' &&
+        event.walletId === walletShell.selectedWalletId() &&
+        (!initialDataLoading || event.snapshot.syncedAt)
+      ) {
         multisig = event.walletKind === 'multisig';
         snapshot = event.snapshot;
         loadError = '';
@@ -622,7 +682,12 @@
   );
   onMount(() => {
     const closeOnOutsidePointer = (event: PointerEvent) => {
-      if (moreOpen && event.target instanceof Node && !moreMenu?.contains(event.target))
+      if (
+        moreOpen &&
+        !mobileRuntime &&
+        event.target instanceof Node &&
+        !moreMenu?.contains(event.target)
+      )
         moreOpen = false;
     };
     const closeOnEscape = (event: KeyboardEvent) => {
@@ -651,25 +716,31 @@
       return null;
     }
   }
-  async function loadRecoveryState() {
+  async function loadRecoveryState(generation: number) {
+    const profile = selectedProfile;
+    if (!profile) return;
+    const current = () =>
+      generation === loadGeneration && profile.id === walletShell.selectedWalletId();
     try {
       const [settings, status] = await Promise.all([
         walletService.recoveryScanSettings(),
         walletService.recoveryScanStatus()
       ]);
+      if (!current()) return;
       recoverySettings = settings;
       recoveryStatus = status;
       if (recoveryScanIsActive(status)) {
         automaticInitialScanPending = false;
         startRecoveryStatusPolling();
-      } else if (selectedProfile && walletShell.initialHistoryScanRunning(selectedProfile.id)) {
+      } else if (walletShell.initialHistoryScanRunning(profile.id)) {
         automaticInitialScanPending = true;
         startRecoveryStatusPolling(true);
-      } else if (!snapshot?.syncedAt && nodeReady) {
+      } else if (!snapshot?.syncedAt && nodeReady && !mobileSyncSetupRequired) {
         automaticInitialScanPending = false;
         walletShell.requestInitialHistoryApproval();
       }
     } catch (cause) {
+      if (!current()) return;
       automaticInitialScanPending = false;
       initialScanError = localizedError(
         cause,
@@ -745,17 +816,23 @@
       }
       return;
     }
-    if (syncInProgress) return;
+    const walletId = selectedProfile?.id;
+    if (syncInProgress || !walletId) return;
+    const generation = loadGeneration;
+    const current = () =>
+      generation === loadGeneration && walletShell.selectedWalletId() === walletId;
     manualSyncDetailsVisible = manual;
     syncing = true;
     if (manual) syncError = '';
     try {
       if (manual) await walletShell.pauseAutomaticSync();
+      if (!current()) return;
       startSyncStatusPolling();
       const [nextSnapshot] = await Promise.all([
         multisig ? walletService.syncMultisig() : walletService.sync(),
         new Promise((resolve) => setTimeout(resolve, 1_200))
       ]);
+      if (!current()) return;
       snapshot = nextSnapshot;
       if (manual)
         toast({
@@ -764,6 +841,7 @@
           tone: 'success'
         });
     } catch (cause) {
+      if (!current()) return;
       if (cause instanceof WalletError && cause.code === 'sync_cancelled') return;
       if (cause instanceof WalletError && cause.code === 'wallet_locked') {
         await goto('/unlock');
@@ -788,62 +866,58 @@
         return;
       }
     } finally {
-      await refreshSyncStatus();
+      if (current()) await refreshSyncStatus();
       syncing = false;
       if (syncStatus?.state !== 'failed') manualSyncDetailsVisible = false;
       if (manual) walletShell.resumeAutomaticSync();
     }
   };
-  async function verifyBackup() {
-    verifying = true;
+  function closeBackupVerification() {
+    ++verifyGeneration;
+    verifyOpen = false;
+    verifyCredential = '';
+    verifyError = '';
+  }
+
+  function openBackupVerification(phone = false) {
+    if (verifying || revealingBackup) return;
+    closeBackupVerification();
+    verifyPhoneKey = phone;
+    verifyOpen = true;
+  }
+
+  async function verifyBackup(reveal = false) {
+    const walletId = selectedProfile?.id;
+    if (!verifyCredential || !walletId || verifying || revealingBackup) return;
+    const generation = ++verifyGeneration;
+    const current = () =>
+      generation === verifyGeneration && walletShell.selectedWalletId() === walletId;
+    revealingBackup = reveal;
+    verifying = !reveal;
     verifyError = '';
     try {
-      const verified = await walletService.verifyBackup(verifyCredential);
+      const result = reveal
+        ? walletService.revealAndVerifyBackup(verifyCredential)
+        : walletService.verifyBackup(verifyCredential);
       verifyCredential = '';
-      verifyOpen = false;
+      const verified = await result;
+      if (!current()) return;
       if (!verified) {
-        toast({
-          title: 'Backup still unverified',
-          description: 'You can return to verification whenever you are ready.'
-        });
+        if (!reveal) closeBackupVerification();
+        toast({ title: 'Backup still unverified' });
         return;
       }
+      closeBackupVerification();
       if (selectedProfile) selectedProfile = { ...selectedProfile, backupVerified: true };
-      toast({
-        title: 'Recovery backup verified',
-        description: 'Your written words matched this wallet.',
-        tone: 'success'
-      });
+      phoneBackupUnverified = false;
+      toast({ title: 'Recovery backup verified', tone: 'success' });
     } catch (cause) {
-      verifyError = localizedError(cause, $locale, 'Could not verify this recovery backup.');
+      if (current()) {
+        verifyError = localizedError(cause, $locale, 'Could not verify this recovery backup.');
+      }
     } finally {
       verifyCredential = '';
       verifying = false;
-    }
-  }
-  async function revealAndVerifyBackup() {
-    revealingBackup = true;
-    verifyError = '';
-    try {
-      const verified = await walletService.revealAndVerifyBackup(verifyCredential);
-      if (!verified) {
-        toast({
-          title: 'Backup still unverified',
-          description: 'Your recovery words remain available to reveal again before verification.'
-        });
-        return;
-      }
-      verifyOpen = false;
-      if (selectedProfile) selectedProfile = { ...selectedProfile, backupVerified: true };
-      toast({
-        title: 'Recovery backup verified',
-        description: 'Your reconstructed word order matched this wallet.',
-        tone: 'success'
-      });
-    } catch (cause) {
-      verifyError = localizedError(cause, $locale, 'Could not reveal this recovery backup.');
-    } finally {
-      verifyCredential = '';
       revealingBackup = false;
     }
   }
@@ -884,37 +958,102 @@
   }
 </script>
 
-<div class="page dashboard-page">
+{#snippet walletActionItems()}
+  <a
+    href="/activity"
+    role={mobileRuntime ? undefined : 'menuitem'}
+    onclick={() => (moreOpen = false)}
+    ><Activity size={16} /><span
+      ><strong>{translate($locale, 'Activity')}</strong><small
+        >{translate($locale, 'View all transactions')}</small
+      ></span
+    ></a
+  >
+  <a href="/coins" role={mobileRuntime ? undefined : 'menuitem'} onclick={() => (moreOpen = false)}
+    ><CircleDot size={16} /><span
+      ><strong>{translate($locale, 'Coins')}</strong><small
+        >{translate($locale, 'Inspect and choose UTXOs')}</small
+      ></span
+    ></a
+  >
+  {#if hardwareSignerWallet}
+    <button
+      role={mobileRuntime ? undefined : 'menuitem'}
+      onclick={() => {
+        moreOpen = false;
+        signerDetailsOpen = true;
+      }}
+      ><HeartPulse size={16} /><span
+        ><strong>{translate($locale, 'Health check')}</strong><small
+          >{translate($locale, 'Verify the connected signer identity')}</small
+        ></span
+      ></button
+    >
+  {/if}
+  {#if multisig}
+    <a
+      href="/multisig"
+      role={mobileRuntime ? undefined : 'menuitem'}
+      onclick={() => (moreOpen = false)}
+      ><ShieldCheck size={16} /><span
+        ><strong>{translate($locale, 'Policy')}</strong><small
+          >{translate($locale, 'Keys, backups, and rules')}</small
+        ></span
+      ></a
+    >
+    <button
+      role={mobileRuntime ? undefined : 'menuitem'}
+      onclick={() => {
+        moreOpen = false;
+        showDescriptors = true;
+      }}
+      ><Eye size={16} /><span
+        ><strong>{translate($locale, 'Show descriptors')}</strong><small
+          >{translate($locale, 'Inspect receive and change logic')}</small
+        ></span
+      ></button
+    >
+    <a
+      href="/multisig/backup"
+      role={mobileRuntime ? undefined : 'menuitem'}
+      onclick={() => (moreOpen = false)}
+      ><FileKey size={16} /><span
+        ><strong>{translate($locale, 'Export & verify')}</strong><small
+          >{translate($locale, 'Save a public wallet backup')}</small
+        ></span
+      ></a
+    >
+  {/if}
+{/snippet}
+
+<div class="page dashboard-page" class:native-mobile-overview={mobileRuntime}>
   <header class="page-header">
     <div>
       <h1>{translate($locale, 'Overview')}</h1>
     </div>
-    <button
-      class="sync-button"
-      disabled={automaticInitialScanPending ||
-        walletAwaitingAutomaticScan ||
-        syncInProgress ||
-        recoveryScanIsActive(recoveryStatus)}
-      title={mobileSyncSetupRequired
-        ? translate($locale, 'Connect a trusted node to sync this wallet.')
-        : syncButtonTitle}
-      onclick={() => sync(true)}
-      ><RefreshCw
-        size={15}
-        class={automaticInitialScanPending ||
-        walletAwaitingAutomaticScan ||
-        syncInProgress ||
-        recoveryScanIsActive(recoveryStatus)
-          ? 'spin'
-          : ''}
-      />{mobileSyncSetupRequired ? translate($locale, 'Set up sync') : syncButtonLabel}</button
-    >
+    {#if !mobileSyncStatusVisible}<button
+        class="sync-button"
+        disabled={automaticInitialScanPending ||
+          walletAwaitingAutomaticScan ||
+          syncInProgress ||
+          recoveryScanIsActive(recoveryStatus)}
+        title={mobileSyncSetupRequired
+          ? translate($locale, 'Connect a trusted node to sync this wallet.')
+          : syncButtonTitle}
+        onclick={() => sync(true)}
+        ><RefreshCw
+          size={15}
+          class={automaticInitialScanPending ||
+          walletAwaitingAutomaticScan ||
+          syncInProgress ||
+          recoveryScanIsActive(recoveryStatus)
+            ? 'spin'
+            : ''}
+        />{mobileSyncSetupRequired ? translate($locale, 'Set up sync') : syncButtonLabel}</button
+      >{/if}
   </header>
   {#if mobileSyncSetupRequired}<div class="mobile-sync-notice">
-      <WarningNotice
-        class="compact-action"
-        title={translate($locale, 'Set up wallet sync')}
-        body={translate($locale, 'Connect a trusted node to sync this wallet.')}
+      <WarningNotice class="compact-action" title={translate($locale, 'Set up wallet sync')}
         ><Button size="small" variant="secondary" href="/settings#network-services"
           >{translate($locale, 'Configure sync')}</Button
         ></WarningNotice
@@ -1042,17 +1181,17 @@
       />
     </div>
   {/if}
-  {#if phoneBackupUnverified}
+  {#if phoneBackupUnverified && !mobileRuntime}
     <WarningNotice
       title={translate($locale, 'Recovery backup not verified')}
       class="compact-action"
     >
-      <Button size="small" variant="secondary" href="/multisig"
+      <Button size="small" variant="secondary" onclick={() => openBackupVerification(true)}
         >{translate($locale, 'Verify now')}</Button
       >
     </WarningNotice>
   {/if}
-  {#if selectedProfile?.kind === 'single_key' && !selectedProfile.backupVerified}
+  {#if !mobileRuntime && selectedProfile?.kind === 'single_key' && !selectedProfile.backupVerified}
     <section
       class="backup-verification-banner"
       aria-label={translate($locale, 'Recovery backup status')}
@@ -1061,13 +1200,8 @@
         ><strong>{translate($locale, 'Recovery backup not verified')}</strong><small
           >{translate($locale, 'Verify your written recovery words.')}</small
         ></span
-      ><Button
-        size="small"
-        variant="secondary"
-        onclick={() => {
-          verifyError = '';
-          verifyOpen = true;
-        }}>{translate($locale, 'Verify now')}</Button
+      ><Button size="small" variant="secondary" onclick={() => openBackupVerification()}
+        >{translate($locale, 'Verify now')}</Button
       >
     </section>
   {/if}
@@ -1139,10 +1273,15 @@
       description={loadError}
       onretry={networkSetupRequired ? openNetworkSetup : loadSnapshot}
     />
-  {:else if snapshot && !initialDataLoading && !initialScanInFlight}
+  {:else if snapshot && !initialDataLoading && !initialScanInFlight && (!mobileUnverifiedBalance || snapshot.balance.total === 0)}
     <section class="balance-card content-reveal">
       <div class="balance-top">
-        <span>{translate($locale, 'Total balance')}</span><button
+        <span
+          >{translate(
+            $locale,
+            mobileUnverifiedBalance ? 'Unverified balance' : 'Total balance'
+          )}</span
+        ><button
           class="ghost-icon"
           aria-label={translate(
             $locale,
@@ -1158,9 +1297,8 @@
           class="balance-value unverified-balance"
           aria-label={translate($locale, 'Unverified balance')}
         >
-          <Amount value={0} hidden={$discreetMode} /><small
-            >{translate($locale, 'Never synced')}</small
-          >
+          <Amount value={0} hidden={$discreetMode} />
+          {#if !mobileRuntime}<small>{translate($locale, 'Never synced')}</small>{/if}
         </div>
       {:else}
         <button
@@ -1176,21 +1314,23 @@
           )}
           onclick={() => setDenomination($denomination === 'btc' ? 'sats' : 'btc')}
         >
-          <Amount value={snapshot?.balance.total ?? 0} hidden={$discreetMode} />
+          <Amount value={snapshot.balance.total} hidden={$discreetMode} />
         </button>
       {/if}
-      <div class="pending-line">
-        <i></i>{translate(
-          $locale,
-          initialHistoryRequired
-            ? 'This wallet has not completed a sync yet.'
-            : $discreetMode
-              ? 'Pending activity hidden'
-              : pendingDescription
-        )}
-      </div>
+      {#if !mobileRuntime || (!initialHistoryRequired && !$discreetMode && (pendingBreakdown.incoming || pendingBreakdown.change || pendingBreakdown.outgoing))}
+        <div class="pending-line">
+          <i></i>{translate(
+            $locale,
+            initialHistoryRequired
+              ? 'This wallet has not completed a sync yet.'
+              : $discreetMode
+                ? 'Pending activity hidden'
+                : pendingDescription
+          )}
+        </div>
+      {/if}
     </section>
-  {:else}
+  {:else if initialDataLoading || initialScanInFlight}
     <WalletSkeleton variant="balance" />
   {/if}
   {#if !loadError}
@@ -1287,121 +1427,122 @@
           bind:element={moreTrigger}
           label={translate($locale, 'More wallet actions')}
           expanded={moreOpen}
+          popup={mobileRuntime ? 'dialog' : 'menu'}
           size="large"
           onclick={() => (moreOpen = !moreOpen)}
         />
-        {#if moreOpen}
+        {#if moreOpen && !mobileRuntime}
           <div
-            class="overview-more-menu"
+            class="overview-more-menu overview-wallet-actions"
             role="menu"
             aria-label={translate($locale, 'More wallet actions')}
             transition:fly={{ y: 5, duration: 160 }}
           >
-            <a href="/activity" role="menuitem" onclick={() => (moreOpen = false)}
-              ><Activity size={16} /><span
-                ><strong>{translate($locale, 'Activity')}</strong><small
-                  >{translate($locale, 'View all transactions')}</small
-                ></span
-              ></a
-            >
-            <a href="/coins" role="menuitem" onclick={() => (moreOpen = false)}
-              ><CircleDot size={16} /><span
-                ><strong>{translate($locale, 'Coins')}</strong><small
-                  >{translate($locale, 'Inspect and choose UTXOs')}</small
-                ></span
-              ></a
-            >
-            {#if hardwareSignerWallet}
-              <button
-                role="menuitem"
-                onclick={() => {
-                  moreOpen = false;
-                  signerDetailsOpen = true;
-                }}
-                ><HeartPulse size={16} /><span
-                  ><strong>{translate($locale, 'Health check')}</strong><small
-                    >{translate($locale, 'Verify the connected signer identity')}</small
-                  ></span
-                ></button
-              >
-            {/if}
-            {#if multisig}
-              <a href="/multisig" role="menuitem" onclick={() => (moreOpen = false)}
-                ><ShieldCheck size={16} /><span
-                  ><strong>{translate($locale, 'Policy')}</strong><small
-                    >{translate($locale, 'Keys, backups, and rules')}</small
-                  ></span
-                ></a
-              >
-              <button
-                role="menuitem"
-                onclick={() => {
-                  moreOpen = false;
-                  showDescriptors = true;
-                }}
-                ><Eye size={16} /><span
-                  ><strong>{translate($locale, 'Show descriptors')}</strong><small
-                    >{translate($locale, 'Inspect receive and change logic')}</small
-                  ></span
-                ></button
-              >
-              <a href="/multisig/backup" role="menuitem" onclick={() => (moreOpen = false)}
-                ><FileKey size={16} /><span
-                  ><strong>{translate($locale, 'Export & verify')}</strong><small
-                    >{translate($locale, 'Save a public wallet backup')}</small
-                  ></span
-                ></a
-              >
-            {/if}
+            {@render walletActionItems()}
           </div>
         {/if}
       </div>
-      <a
-        class="button secondary large overview-inline-primary"
-        href={multisig ? '/multisig/receive' : '/receive'}
-        ><ArrowDownToLine size={18} />{translate($locale, 'Receive')}</a
-      >
-      <a
-        class="button default large overview-inline-primary"
-        href={multisig ? '/multisig/send' : '/send'}
-        ><ArrowUpFromLine size={18} />{translate($locale, 'Send')}</a
-      >
-    </div>
-    <section class="section-block">
-      <div class="section-heading">
-        <div><h2>{translate($locale, 'Recent activity')}</h2></div>
-        <a href="/activity">{translate($locale, 'View all')}</a>
-      </div>
-      {#if initialDataLoading || initialScanInFlight}
-        <TxList items={[]} loading />
-      {:else if initialHistoryRequired}
-        <EmptyState
-          compact
-          title={translate($locale, 'Wallet history not verified')}
-          description={translate(
-            $locale,
-            'Complete or resume the first scan before relying on activity.'
-          )}
+      {#if !mobileRuntime}
+        <a
+          class="button secondary large overview-inline-primary"
+          href={multisig ? '/multisig/receive' : '/receive'}
+          ><ArrowDownToLine size={18} />{translate($locale, 'Receive')}</a
         >
-          {#snippet icon()}<Activity size={22} />{/snippet}
-        </EmptyState>
-      {:else if recentTransactions.length}
-        <TxList
-          items={recentTransactions}
-          onselect={(transaction) => (selectedTransactionId = transaction.id)}
-        />
-      {:else}
-        <EmptyState
-          compact
-          title={translate($locale, 'No transactions yet')}
-          description={translate($locale, 'Received and sent transactions will appear here.')}
+        <a
+          class="button default large overview-inline-primary"
+          href={multisig ? '/multisig/send' : '/send'}
+          ><ArrowUpFromLine size={18} />{translate($locale, 'Send')}</a
         >
-          {#snippet icon()}<Activity size={22} />{/snippet}
-        </EmptyState>
       {/if}
-    </section>
+    </div>
+    {#if snapshot && selectedProfile}
+      {#if mobileReceiveOnDesktop}
+        {#if mobileCanSignPayment}
+          <div class="mobile-actions">
+            <Button size="large" href="/mobile/sign"
+              ><Smartphone size={18} />{translate($locale, 'Sign payment')}</Button
+            >
+          </div>
+        {/if}
+        <p class="mobile-receive-note">{translate($locale, 'Receive on desktop')}</p>
+      {:else}
+        <div class="mobile-actions">
+          <Button
+            size="large"
+            variant="secondary"
+            href={multisig ? '/multisig/receive' : '/receive'}
+            ><ArrowDownToLine size={18} />{translate($locale, 'Receive')}</Button
+          >
+          <Button
+            size="large"
+            href={mobileSendReady ? (multisig ? '/multisig/send' : '/send') : undefined}
+            disabled={!mobileSendReady}
+            ><ArrowUpFromLine size={18} />{translate($locale, 'Send')}</Button
+          >
+        </div>
+      {/if}
+    {/if}
+    {#if mobileRuntime && (phoneBackupUnverified || (selectedProfile?.kind === 'single_key' && !selectedProfile.backupVerified))}
+      <div class="mobile-backup-reminder">
+        <ShieldCheck size={16} aria-hidden="true" />
+        <span>{translate($locale, 'Recovery backup not verified')}</span>
+        <Button
+          size="small"
+          variant="ghost"
+          onclick={() => openBackupVerification(phoneBackupUnverified)}
+          >{translate($locale, 'Verify now')}</Button
+        >
+      </div>
+    {/if}
+    {#if !(mobileRuntime && initialHistoryRequired)}<section class="section-block">
+        <div class="section-heading">
+          <div><h2>{translate($locale, 'Recent activity')}</h2></div>
+          {#if !mobileRuntime || recentTransactions.length}
+            <a href="/activity">{translate($locale, 'View all')}</a>
+          {/if}
+        </div>
+        {#if initialDataLoading || initialScanInFlight}
+          <TxList items={[]} loading />
+        {:else if initialHistoryRequired}
+          <EmptyState
+            compact
+            title={translate($locale, 'Wallet history not verified')}
+            description={translate(
+              $locale,
+              'Complete or resume the first scan before relying on activity.'
+            )}
+          >
+            {#snippet icon()}<Activity size={22} />{/snippet}
+          </EmptyState>
+        {:else if recentTransactions.length}
+          <TxList
+            items={recentTransactions}
+            onselect={(transaction) => (selectedTransactionId = transaction.id)}
+          />
+        {:else}
+          <EmptyState
+            compact
+            title={translate($locale, 'No transactions yet')}
+            description={mobileRuntime
+              ? undefined
+              : translate($locale, 'Received and sent transactions will appear here.')}
+          >
+            {#snippet icon()}<Activity size={22} />{/snippet}
+          </EmptyState>
+        {/if}
+      </section>{/if}
   {/if}
 </div>
+
+<Modal
+  open={moreOpen && mobileRuntime}
+  title={translate($locale, 'More wallet actions')}
+  onclose={() => (moreOpen = false)}
+>
+  <div class="overview-wallet-actions overview-mobile-actions">
+    {@render walletActionItems()}
+  </div>
+</Modal>
 
 <TxDetailsModal transaction={selected} {multisig} onclose={() => (selectedTransactionId = null)} />
 <DeviceDetailsModal
@@ -1458,72 +1599,144 @@
 
 <Modal
   open={verifyOpen}
-  title={translate($locale, 'Verify recovery backup')}
+  title={translate(
+    $locale,
+    verifyPhoneKey ? 'Verify phone recovery backup' : 'Verify recovery backup'
+  )}
   description={translate(
     $locale,
-    'Use your written 24 words for a private native proof, or reveal them securely first if you still need to make the backup.'
+    mobileRuntime
+      ? 'Have your 24 recovery words ready.'
+      : 'Use your written 24 words for a private native proof, or reveal them securely first if you still need to make the backup.'
   )}
-  onclose={() => {
-    verifyOpen = false;
-    verifyCredential = '';
-    verifyError = '';
-  }}
+  onclose={closeBackupVerification}
 >
-  <WarningNotice
-    class="verify-backup-warning"
-    credentialSpacing
-    title={translate($locale, 'Your recovery words stay private')}
-    body={translate($locale, 'Groot checks them securely on this device.')}
-    insightLabel={translate($locale, 'About recovery-word privacy')}
-    insightText={translate(
-      $locale,
-      'Groot reveals and verifies the words in a separate trusted native window. They never enter the webview or leave this device.'
-    )}
-  />
+  {#if !mobileRuntime}<WarningNotice
+      class="verify-backup-warning"
+      credentialSpacing
+      title={translate($locale, 'Your recovery words stay private')}
+      body={translate($locale, 'Groot checks them securely on this device.')}
+      insightLabel={translate($locale, 'About recovery-word privacy')}
+      insightText={translate(
+        $locale,
+        'Groot reveals and verifies the words in a separate trusted native window. They never enter the webview or leave this device.'
+      )}
+    />{/if}
   <PasswordField
-    label={translate($locale, 'Wallet passphrase')}
+    label={translate($locale, verifyPhoneKey ? 'App PIN' : 'Wallet passphrase')}
     bind:value={verifyCredential}
     autocomplete="current-password"
-    hint={translate(
-      $locale,
-      'Required to decrypt the recovery words only inside trusted Rust code.'
-    )}
+    hint={mobileRuntime
+      ? undefined
+      : translate($locale, 'Required to decrypt the recovery words only inside trusted Rust code.')}
   />
   {#if verifyError}<WarningNotice
       tone="danger"
       icon
       role="alert"
       ariaLive="polite"
-      body={verifyError.replace('passphrase / PIN', 'wallet passphrase')}
+      body={verifyPhoneKey
+        ? verifyError
+        : verifyError.replace('passphrase / PIN', 'wallet passphrase')}
     />{/if}
-  <div class="modal-footer verify-backup-actions">
+  <div class="modal-footer verify-backup-actions" class:compact-backup-actions={mobileRuntime}>
     <Button
       class="show-words-action"
       variant="secondary"
       disabled={!verifyCredential || verifying || revealingBackup}
       loading={revealingBackup}
       loadingLabel={translate($locale, 'Opening recovery words…')}
-      onclick={revealAndVerifyBackup}>{translate($locale, 'View recovery words first')}</Button
+      onclick={() => verifyBackup(true)}
+      >{translate(
+        $locale,
+        mobileRuntime ? 'Show recovery words' : 'View recovery words first'
+      )}</Button
     >
-    <Button
-      variant="secondary"
-      disabled={verifying || revealingBackup}
-      onclick={() => {
-        verifyOpen = false;
-        verifyCredential = '';
-        verifyError = '';
-      }}>{translate($locale, 'Cancel')}</Button
-    ><Button
+    {#if !mobileRuntime}<Button
+        variant="secondary"
+        disabled={verifying || revealingBackup}
+        onclick={closeBackupVerification}>{translate($locale, 'Cancel')}</Button
+      >{/if}<Button
       disabled={!verifyCredential || revealingBackup}
       loading={verifying}
       loadingLabel={translate($locale, 'Opening verification…')}
-      onclick={verifyBackup}>{translate($locale, 'Continue')}</Button
+      onclick={() => verifyBackup()}
+      >{translate($locale, mobileRuntime ? 'Verify backup' : 'Continue')}</Button
     >
   </div>
 </Modal>
 
 <style>
+  .mobile-actions,
+  .mobile-receive-note {
+    display: none;
+  }
+  .mobile-actions {
+    grid-auto-columns: minmax(0, 1fr);
+    grid-auto-flow: column;
+    gap: 10px;
+    margin-top: 12px;
+  }
+  .native-mobile-overview .mobile-actions {
+    display: grid;
+  }
+  .mobile-actions :global(.button) {
+    min-width: 0;
+    min-height: 46px;
+  }
+  .mobile-receive-note {
+    margin: 8px 0 0;
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+  }
+  .native-mobile-overview .mobile-receive-note {
+    display: block;
+  }
+  .mobile-backup-reminder {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 12px;
+    padding: 2px 4px;
+    border-top: 1px solid var(--border);
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+  }
+  .mobile-backup-reminder :global(svg) {
+    flex: none;
+  }
+  .mobile-backup-reminder :global(.button) {
+    min-height: 44px;
+    margin-inline-start: auto;
+    color: var(--link);
+  }
+
+  .unverified-balance {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    cursor: default;
+  }
+  .unverified-balance :global(strong) {
+    font-size: 42px;
+  }
+  .unverified-balance small {
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+    font-weight: 600;
+  }
+  .verify-backup-actions.compact-backup-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.5rem;
+  }
+  .compact-backup-actions :global(.show-words-action) {
+    margin-inline: 0;
+  }
   @media (max-width: 760px) {
+    .mobile-actions {
+      display: grid;
+    }
     .dashboard-page .page-header {
       min-height: 46px;
       margin-bottom: 18px;
@@ -1593,20 +1806,6 @@
     width: 100%;
     height: 5px;
     accent-color: var(--progress);
-  }
-  :global(.unverified-balance):where(.unverified-balance) {
-    display: flex;
-    align-items: baseline;
-    gap: 10px;
-    cursor: default;
-  }
-  :global(.unverified-balance):where(.unverified-balance) :global(strong) {
-    font-size: 42px;
-  }
-  :global(.unverified-balance):where(.unverified-balance) :global(small) {
-    color: var(--muted);
-    font-size: var(--font-size-meta);
-    font-weight: 600;
   }
   :global(.initial-history-scan):where(.initial-history-scan)
     + :global(.backup-verification-banner),
@@ -1893,8 +2092,12 @@
     background: var(--panel-2);
     box-shadow: 0 16px 42px rgba(0, 0, 0, 0.28);
   }
-  :global(.overview-more-menu):where(.overview-more-menu) :global(a),
-  :global(.overview-more-menu):where(.overview-more-menu) :global(button) {
+  :global(.overview-mobile-actions):where(.overview-mobile-actions) {
+    display: grid;
+    gap: 2px;
+  }
+  :global(.overview-wallet-actions):where(.overview-wallet-actions) :global(a),
+  :global(.overview-wallet-actions):where(.overview-wallet-actions) :global(button) {
     width: 100%;
     min-height: 48px;
     display: grid;
@@ -1909,30 +2112,33 @@
     text-align: left;
     cursor: pointer;
   }
-  :global(.overview-more-menu):where(.overview-more-menu) :global(a:hover),
-  :global(.overview-more-menu):where(.overview-more-menu) :global(a:focus-visible),
-  :global(.overview-more-menu):where(.overview-more-menu) :global(button:hover),
-  :global(.overview-more-menu):where(.overview-more-menu) :global(button:focus-visible) {
+  :global(.overview-wallet-actions):where(.overview-wallet-actions) :global(a:hover),
+  :global(.overview-wallet-actions):where(.overview-wallet-actions) :global(a:focus-visible),
+  :global(.overview-wallet-actions):where(.overview-wallet-actions) :global(button:hover),
+  :global(.overview-wallet-actions):where(.overview-wallet-actions) :global(button:focus-visible) {
     color: var(--text);
     background: var(--surface-hover);
     outline: 0;
   }
-  :global(.overview-more-menu):where(.overview-more-menu) :global(a > svg),
-  :global(.overview-more-menu):where(.overview-more-menu) :global(button > svg) {
+  :global(.overview-wallet-actions):where(.overview-wallet-actions) :global(a > svg),
+  :global(.overview-wallet-actions):where(.overview-wallet-actions) :global(button > svg) {
     color: var(--muted);
   }
-  :global(.overview-more-menu):where(.overview-more-menu) :global(a > span),
-  :global(.overview-more-menu):where(.overview-more-menu) :global(button > span) {
+  :global(.overview-wallet-actions):where(.overview-wallet-actions) :global(a > span),
+  :global(.overview-wallet-actions):where(.overview-wallet-actions) :global(button > span) {
     min-width: 0;
     display: grid;
     gap: 2px;
   }
-  :global(.overview-more-menu):where(.overview-more-menu) :global(strong) {
+  :global(.overview-wallet-actions):where(.overview-wallet-actions) :global(strong) {
     font-size: var(--font-size-meta);
   }
-  :global(.overview-more-menu):where(.overview-more-menu) :global(small) {
+  :global(.overview-wallet-actions):where(.overview-wallet-actions) :global(small) {
     color: var(--muted);
     font-size: var(--font-size-meta);
+  }
+  :global(.overview-mobile-actions):where(.overview-mobile-actions) :global(small) {
+    display: none;
   }
 
   @media (max-width: 700px) {
@@ -1947,19 +2153,54 @@
   }
 
   @media (max-width: 760px) {
+    :global(.initial-history-scan):where(.initial-history-scan) {
+      gap: 9px 12px;
+      padding: 10px 12px;
+    }
     :global(.balance-card):where(.balance-card) {
-      padding: 22px 20px;
+      padding: 16px;
+    }
+    :global(.pending-line):where(.pending-line) {
+      margin-top: 16px;
     }
     :global(.backup-verification-banner):where(.backup-verification-banner) {
-      grid-template-columns: 24px minmax(0, 1fr);
-      margin-top: -12px;
+      grid-template-columns: 22px minmax(0, 1fr) auto;
+      gap: 8px;
+      margin-top: 0;
+      padding: 10px 12px;
+    }
+    :global(.backup-verification-banner):where(.backup-verification-banner) :global(small) {
+      display: none;
     }
     :global(.backup-verification-banner):where(.backup-verification-banner) :global(.button) {
-      grid-column: 2;
-      justify-self: start;
+      grid-column: auto;
+      min-height: 44px;
     }
     :global(.balance-value):where(.balance-value) {
       font-size: 35px;
+      margin-top: 8px;
+    }
+    :global(.native-mobile-overview .section-block .empty-state.compact) {
+      min-height: 0;
+      display: grid;
+      grid-template-columns: 34px minmax(0, 1fr);
+      align-items: center;
+      justify-content: stretch;
+      gap: 2px 10px;
+      padding: 12px;
+      text-align: left;
+    }
+    :global(.native-mobile-overview .section-block .empty-state.compact .empty-icon) {
+      width: 34px;
+      height: 34px;
+      grid-row: 1 / span 2;
+    }
+    :global(.native-mobile-overview .section-block .empty-state.compact h2) {
+      margin: 0;
+    }
+    :global(.native-mobile-overview .section-block .empty-state.compact p) {
+      max-width: none;
+      margin: 0;
     }
     :global(.active-proposal-callout):where(.active-proposal-callout) {
       grid-template-columns: 32px minmax(0, 1fr);

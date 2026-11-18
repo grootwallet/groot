@@ -28,18 +28,24 @@ describe('global keyboard shortcut UI', () => {
   });
 
   it('coordinates the native wallet lock before showing the unlock route', () => {
-    const cancelHardware = shell.indexOf('await walletService.cancelHardwareOperations()');
+    const start = shell.indexOf('async function lockSelectedWallet()');
+    const cancellation = shell.indexOf('await Promise.all([', start);
     const cancelSync = shell.indexOf(
-      'await walletService.cancelSync().catch(() => undefined)',
-      cancelHardware
+      'walletService.cancelSync().catch(() => undefined)',
+      cancellation
     );
-    const lock = shell.indexOf('await walletService.lock()', cancelSync);
+    const cancelHardware = shell.indexOf(
+      'walletService.cancelHardwareOperations().catch(',
+      cancellation
+    );
+    const lock = shell.indexOf('await walletService.lock()', cancelHardware);
     const unlockRoute = shell.indexOf("await goto('/unlock')", lock);
-    expect(cancelHardware).toBeGreaterThan(-1);
-    expect(cancelSync).toBeGreaterThan(cancelHardware);
-    expect(lock).toBeGreaterThan(cancelSync);
+    expect(cancellation).toBeGreaterThan(start);
+    expect(cancelSync).toBeGreaterThan(cancellation);
+    expect(cancelHardware).toBeGreaterThan(cancelSync);
+    expect(lock).toBeGreaterThan(cancelHardware);
     expect(unlockRoute).toBeGreaterThan(lock);
-    expect(shell).toContain('shortcutLockPending');
+    expect(settings).toContain('onclick={walletShell.lockSelectedWallet}');
     expect(shell).toContain('await walletSelectionTask?.catch(() => undefined)');
     expect(shell).toContain('if (walletSelectionTask === task) walletSelectionTask = undefined');
     expect(shell).toContain("title: 'Wallet not locked'");

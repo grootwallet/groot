@@ -555,7 +555,7 @@ pub fn labels_for_subject(
     subject_kind: &str,
     subject_id: &str,
 ) -> Result<Vec<PermanentLabelDto>, bdk_wallet::rusqlite::Error> {
-    let mut statement = db.prepare(
+    let mut statement = db.prepare_cached(
         "SELECT label.label_id, label.text,
                 CASE assignment.subject_kind
                   WHEN 'address' THEN 'receive'
@@ -1223,6 +1223,95 @@ mod tests {
         )
         .unwrap();
         db
+    }
+
+    #[test]
+    fn repeated_label_reads_keep_fresh_transaction_views_and_subject_isolation() {
+        for cache_capacity in [0, 16] {
+            let mut db = database();
+            init_schema(&db).unwrap();
+            db.set_prepared_statement_cache_capacity(cache_capacity);
+            let read = |db: &Connection, kind: &str, id: &str| {
+                labels_for_subject(db, kind, id)
+                    .unwrap()
+                    .into_iter()
+                    .map(|label| (label.text, label.origin))
+                    .collect::<Vec<_>>()
+            };
+            assert!(read(&db, "address", "same-id").is_empty());
+            let transaction = db.transaction().unwrap();
+            assign_labels(
+                &transaction,
+                &["First".to_owned(), "Second".to_owned()],
+                LabelOrigin::Receive,
+                "address",
+                "same-id",
+                1,
+            )
+            .unwrap();
+            transaction.commit().unwrap();
+            let expected = vec![
+                ("First".to_owned(), "receive".to_owned()),
+                ("Second".to_owned(), "receive".to_owned()),
+            ];
+            assert_eq!(read(&db, "address", "same-id"), expected);
+            assert!(read(&db, "transaction", "same-id").is_empty());
+            assign_new_label(
+                &db,
+                "Payment",
+                LabelOrigin::Payment,
+                "transaction",
+                "same-id",
+                2,
+            )
+            .unwrap();
+            assert_eq!(
+                read(&db, "transaction", "same-id"),
+                vec![("Payment".to_owned(), "payment".to_owned())]
+            );
+            assert!(read(&db, "address", "other-id").is_empty());
+            assert_eq!(read(&db, "address", "same-id"), expected);
+
+            let transaction = db.transaction().unwrap();
+            assign_new_label(
+                &transaction,
+                "Uncommitted",
+                LabelOrigin::Receive,
+                "address",
+                "temporary",
+                3,
+            )
+            .unwrap();
+            assert_eq!(read(&transaction, "address", "temporary").len(), 1);
+            transaction.rollback().unwrap();
+            assert!(read(&db, "address", "temporary").is_empty());
+
+            let other = database();
+            init_schema(&other).unwrap();
+            assign_new_label(
+                &other,
+                "Other wallet",
+                LabelOrigin::Receive,
+                "address",
+                "same-id",
+                1,
+            )
+            .unwrap();
+            assert_eq!(
+                read(&other, "address", "same-id"),
+                vec![("Other wallet".to_owned(), "receive".to_owned())]
+            );
+            assert_eq!(read(&db, "address", "same-id"), expected);
+
+            db.execute_batch("DROP TABLE groot_additional_label_assignments")
+                .unwrap();
+            assert!(labels_for_subject(&db, "address", "same-id").is_err());
+            init_schema(&db).unwrap();
+            assert_eq!(
+                read(&db, "address", "same-id"),
+                vec![("First".to_owned(), "receive".to_owned())]
+            );
+        }
     }
 
     #[test]

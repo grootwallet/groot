@@ -26,3 +26,5 @@ hardware-certification.local/
 release-artifacts/
 __pycache__/
 *.py[cod]
+test-results/
+playwright-report/

@@ -51,6 +51,7 @@ export function createLiveSync(
   };
 
   const perform = async (startedGeneration: number): Promise<void> => {
+    const isCurrent = () => enabled && startedGeneration === generation;
     const report = (cause: unknown) => {
       try {
         onError(cause);
@@ -71,10 +72,11 @@ export function createLiveSync(
           // The sync call remains authoritative when status polling is unavailable.
         }
       }
+      if (!isCurrent()) return;
       if (kind === 'multisig') await wallet.syncMultisig(true);
       else await wallet.sync(true);
     } catch (cause) {
-      if (!enabled || startedGeneration !== generation) return;
+      if (!isCurrent()) return;
       let failure = cause;
       if (
         typeof failure === 'object' &&
@@ -85,6 +87,7 @@ export function createLiveSync(
       ) {
         try {
           await wallet.testNodeConnection();
+          if (!isCurrent()) return;
           const kind = selectedWalletKind();
           if (!kind) return;
           if (kind === 'multisig') await wallet.syncMultisig(true);
@@ -94,6 +97,7 @@ export function createLiveSync(
           failure = retryCause;
         }
       }
+      if (!isCurrent()) return;
       if (
         typeof failure === 'object' &&
         failure !== null &&

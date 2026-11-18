@@ -3,6 +3,7 @@ import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   plugins: [sveltekit()],
+  ...(process.env.GROOT_VITE_CACHE_DIR ? { cacheDir: process.env.GROOT_VITE_CACHE_DIR } : {}),
   define: {
     __GROOT_NATIVE_UI__: JSON.stringify(Boolean(process.env.TAURI_ENV_PLATFORM))
   },

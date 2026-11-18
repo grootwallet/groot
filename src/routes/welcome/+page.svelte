@@ -63,6 +63,7 @@
   let error = $state('');
   let walletName = $state('');
   let hasExistingWallet = $state(false);
+  let pairingPending = $state(false);
   let backupAcknowledged = $state(false);
   let backupVerified = $state(false);
   let verificationWords = $state<RecoveryWord[]>([]);
@@ -100,7 +101,18 @@
   onMount(async () => {
     runtimeIdentity = await walletService.runtimePlatform();
     hasExistingWallet = await walletService.exists();
-    if (hasExistingWallet && page.url.searchParams.get('add') !== '1') await goto('/unlock');
+    if (hasExistingWallet && page.url.searchParams.get('add') !== '1') {
+      await goto('/unlock');
+      return;
+    }
+    if (runtimeIdentity.mobile && runtimeIdentity.network !== 'mainnet') {
+      void walletService
+        .pendingMobilePairings()
+        .then((pairings) => {
+          pairingPending = pairings.length > 0;
+        })
+        .catch(() => undefined);
+    }
   });
   beforeNavigate(() => undefined);
   onDestroy(() => {
@@ -332,7 +344,16 @@
         )}
       </p>
       <div class="onboarding-actions simple">
-        <Button size="large" class="full" onclick={() => (mode = 'choose')}
+        {#if pairingPending}
+          <Button href="/mobile/pair" size="large" class="full"
+            ><Smartphone size={17} />{translate($locale, 'Resume pairing')}</Button
+          >
+        {/if}
+        <Button
+          variant={pairingPending ? 'secondary' : 'default'}
+          size="large"
+          class="full"
+          onclick={() => (mode = 'choose')}
           >{translate($locale, 'Add wallet')}<ArrowRight size={17} /></Button
         ><Button size="large" variant="secondary" class="full" onclick={() => (mode = 'recover')}
           >{translate($locale, 'Recover software wallet')}</Button
@@ -371,13 +392,15 @@
           >
             <span class="wallet-type-icon"><Smartphone size={20} /></span>
             <span class="wallet-type-copy"
-              ><strong>{translate($locale, 'Connect desktop app')}</strong><small
-                >{translate($locale, 'Add this phone as one signer in a shared wallet.')}</small
-              ></span
+              ><strong
+                >{translate(
+                  $locale,
+                  pairingPending ? 'Resume pairing' : 'Connect desktop app'
+                )}</strong
+              ><small>{translate($locale, 'Use this phone as a signer.')}</small></span
             >
             <span class="wallet-type-footer"
-              ><span class="wallet-type-meta">{translate($locale, 'No account')}</span>
-              <ArrowRight class="wallet-type-arrow" size={17} /></span
+              ><ArrowRight class="wallet-type-arrow" size={17} /></span
             >
           </a>
           <a class="wallet-type-card multisig" href="/mobile/recover">
@@ -1121,6 +1144,10 @@
     font-weight: 650;
     letter-spacing: 0.08em;
     text-transform: uppercase;
+  }
+  :global(.wallet-type-footer):where(.wallet-type-footer) :global(.wallet-type-arrow) {
+    flex-shrink: 0;
+    margin-inline-start: auto;
   }
   :global(.wallet-type-card:hover):where(.wallet-type-card) :global(.wallet-type-arrow) {
     color: var(--wallet-type-accent, var(--fr-blue));

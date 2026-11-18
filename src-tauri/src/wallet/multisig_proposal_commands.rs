@@ -689,13 +689,9 @@ fn multisig_tx_max_spend_blocking(
 }
 #[tauri::command]
 pub async fn multisig_proposals(app: AppHandle) -> ApiResult<Vec<MultisigProposalDto>> {
-    tauri::async_runtime::spawn_blocking(move || {
-        let state = app.state::<AppState>();
-        let _operation = operation_guard(&state)?;
-        require_unlocked(&app, &state)?;
-        let metadata = read_multisig_metadata(&app)?;
-        let mut db = open_multisig_db(&app)?;
-        let wallet = load_wallet(&mut db)?;
+    with_selected_proposal_db(app, true, |app, db| {
+        let metadata = read_multisig_metadata(app)?;
+        let wallet = load_wallet(db)?;
         let mut statement = db.prepare(
             "SELECT proposal_id, recipient, label, amount, fee, fee_rate, psbt, status, created_at, selection_strategy, fee_difference_vs_private FROM groot_proposals WHERE status IN ('collecting','ready') ORDER BY created_at DESC",
         ).map_err(internal)?;
@@ -718,12 +714,11 @@ pub async fn multisig_proposals(app: AppHandle) -> ApiResult<Vec<MultisigProposa
             .map_err(internal)?;
         rows.map(|row| {
             row.map_err(internal)
-                .and_then(|row| proposal_dto(row, &metadata, &wallet, &db))
+                .and_then(|row| proposal_dto(row, &metadata, &wallet, db))
         })
         .collect()
     })
     .await
-    .map_err(internal)?
 }
 
 pub(crate) fn import_multisig_proposal(

@@ -2,7 +2,14 @@ import { defaultConfig } from '$lib/config';
 import { receiveAddresses, transactions, utxos, wallet } from '$lib/data';
 import type { PolicyDraft } from '$lib/multisig/policy';
 import { descriptorPreview, MULTISIG_ACCOUNT_PATH } from '$lib/multisig/policy';
-import type { LabelSuggestion, Utxo } from '$lib/types';
+import type {
+  LabelSuggestion,
+  PolicyPathCoinStatus,
+  PolicyPathDefinition,
+  PolicyRenewalRecommendation,
+  PolicySignerGroup,
+  Utxo
+} from '$lib/types';
 import { addressPrefixForNetwork } from './policy';
 import type {
   CoreNodeConfig,
@@ -81,28 +88,56 @@ function fixtureCoins(): Utxo[] {
     };
   }
   if (fixtureContinuity === 'partner' || fixtureContinuity === 'family') {
-    return coins.map((coin, index) =>
-      index === 0
-        ? {
-            ...coin,
-            confirmations: 40_000,
-            policyMaturity: {
-              policyType:
-                fixtureContinuity === 'partner'
-                  ? ('partner_continuity_v1' as const)
-                  : ('family_continuity_v1' as const),
-              state: 'mature' as const,
-              delayBlocks: 13_140,
-              ageBlocks: 40_000,
-              remainingBlocks: 0,
-              approachingAtBlocks: 1_314,
-              maturityHeight: 223_140,
-              approximateSecondsRemaining: 0,
-              delayedSpendSupported: true
-            }
-          }
-        : coin
-    );
+    const ages = [40_000, 53_000, 13_139, 0];
+    const continuityCoins = [
+      ...coins,
+      {
+        ...structuredClone(coins.at(-1)!),
+        outpoint: 'fixture-unconfirmed-continuity-output:0',
+        amount: 125_000,
+        address: coins.at(-1)!.address.replace(/.$/, 'x'),
+        label: 'New continuity payment',
+        primaryLabel: null,
+        provenance: {
+          state: 'known' as const,
+          context: 'received' as const,
+          labels: [],
+          clusterCount: 1,
+          addressReused: false
+        }
+      }
+    ];
+    return continuityCoins.map((coin, index) => {
+      const confirmations = ages[index] ?? 1;
+      const remaining = confirmations === 0 ? null : Math.max(0, 13_140 - confirmations);
+      return {
+        ...coin,
+        confirmations,
+        policyMaturity: {
+          policyType:
+            fixtureContinuity === 'partner'
+              ? ('partner_continuity_v1' as const)
+              : ('family_continuity_v1' as const),
+          state:
+            confirmations === 0
+              ? ('unconfirmed' as const)
+              : remaining === 0
+                ? ('mature' as const)
+                : remaining !== null && remaining <= 1_314
+                  ? ('approaching' as const)
+                  : ('immature' as const),
+          delayBlocks: 13_140,
+          ageBlocks: confirmations,
+          remainingBlocks: remaining,
+          approachingAtBlocks: 1_314,
+          maturityHeight: confirmations === 0 ? null : 250_000 - confirmations + 1 + 13_140,
+          approximateSecondsRemaining: remaining === null ? null : remaining * 600,
+          delayedSpendSupported: true
+        },
+        policyPathStatuses: fixturePolicyPathStatuses(confirmations, coin.frozen),
+        policyRenewalRecommendation: fixtureRenewalRecommendation(confirmations)
+      };
+    });
   }
   const maturityFixture = fixtureDelayedPolicy !== null;
 
@@ -130,11 +165,30 @@ function fixtureCoins(): Utxo[] {
 
 export function fixtureMultisigWallet(): MultisigWallet {
   if (fixtureContinuity === 'partner' || fixtureContinuity === 'family') {
+    const partnerLabels = [
+      'Owner signer 1',
+      'Owner signer 2',
+      'Owner signer 3',
+      'Partner signer 1',
+      'Partner signer 2',
+      'Estate guardian 1',
+      'Estate guardian 2',
+      'Estate guardian 3'
+    ];
+    const familyLabels = [
+      'Parent 1',
+      'Parent 2',
+      'Child assistance signer 1',
+      'Child assistance signer 2',
+      'Inheritance signer 1',
+      'Inheritance signer 2',
+      'Executor'
+    ];
     const cosigners = Array.from(
       { length: fixtureContinuity === 'partner' ? 8 : 7 },
       (_, index) => ({
         id: `key-${index}`,
-        label: `Test role ${index}`,
+        label: (fixtureContinuity === 'partner' ? partnerLabels : familyLabels)[index],
         fingerprint: (index + 1).toString(16).padStart(8, '0'),
         xpub: `tpub-continuity-synthetic-${index}`,
         derivationPath: MULTISIG_ACCOUNT_PATH,
@@ -217,6 +271,193 @@ export function fixtureMultisigWallet(): MultisigWallet {
           { availableAfterBlocks: delayBlocks, threshold: 1, signerIds: [policyCosigners[3].id] }
         ]
       : undefined
+  };
+}
+
+function fixtureSignerGroup(
+  wallet: MultisigWallet,
+  code: string,
+  label: string,
+  required: number,
+  signerRoles: Array<[string, string]>
+): PolicySignerGroup {
+  return {
+    code,
+    label,
+    required,
+    signers: signerRoles.map(([id, role]) => {
+      const signer = wallet.cosigners.find((candidate) => candidate.id === id);
+      if (!signer) throw new Error('Fixture policy references an unknown signer.');
+      return { label: signer.label, fingerprint: signer.fingerprint.toLowerCase(), role };
+    })
+  };
+}
+
+export function fixturePolicyPaths(): PolicyPathDefinition[] {
+  const wallet = fixtureMultisigWallet();
+  const template = wallet.recoveryTemplate;
+  if (!template) return [];
+  const definition = (
+    index: number,
+    code: string,
+    name: string,
+    availableAfterBlocks: number,
+    signerGroups: PolicySignerGroup[]
+  ): PolicyPathDefinition => {
+    const fingerprints = signerGroups.flatMap((group) =>
+      group.signers.map((signer) => signer.fingerprint)
+    );
+    return {
+      index,
+      code,
+      name,
+      required: signerGroups.reduce((total, group) => total + group.required, 0),
+      eligibleSignerFingerprints: [...new Set(fingerprints)],
+      signerGroups,
+      availableAfterBlocks
+    };
+  };
+  const oneGroup = (
+    code: string,
+    label: string,
+    required: number,
+    signerIds: string[],
+    role: string
+  ) =>
+    fixtureSignerGroup(
+      wallet,
+      code,
+      label,
+      required,
+      signerIds.map((id) => [id, role])
+    );
+
+  if (template.type === 'partner_continuity_v1') {
+    return [
+      definition(0, 'partner_owner', 'Owner: 2 of 3', 0, [
+        oneGroup('owner_signers', 'Owner signers', 2, template.owner.signerIds, 'owner')
+      ]),
+      definition(1, 'partner_assistance', 'Both partner signers', 13_140, [
+        oneGroup('partner_signers', 'Partner signers', 2, template.partner.signerIds, 'partner')
+      ]),
+      definition(2, 'partner_solo', 'Either partner signer', 39_420, [
+        oneGroup('partner_signers', 'Partner signers', 1, template.partner.signerIds, 'partner')
+      ]),
+      definition(3, 'partner_estate', 'Estate guardians: 2 of 3', 52_560, [
+        oneGroup(
+          'estate_guardians',
+          'Estate guardians',
+          2,
+          template.estate.signerIds,
+          'estate_guardian'
+        )
+      ])
+    ];
+  }
+  if (template.type === 'family_continuity_v1') {
+    return [
+      definition(0, 'family_parents', 'Both parents', 0, [
+        oneGroup('parents', 'Parents', 2, template.parents.signerIds, 'parent')
+      ]),
+      definition(1, 'family_assistance', 'One parent and one child assistance signer', 13_140, [
+        oneGroup('parents', 'Parents', 1, template.parents.signerIds, 'parent'),
+        oneGroup(
+          'child_assistance_signers',
+          'Child assistance signers',
+          1,
+          template.childAssistance.signerIds,
+          'child_assistance'
+        )
+      ]),
+      definition(2, 'family_inheritance', 'Inheritance: 2 of 3', 52_560, [
+        fixtureSignerGroup(wallet, 'inheritance_signers', 'Inheritance signers', 2, [
+          ...template.childInheritance.signerIds.map(
+            (id) => [id, 'child_inheritance'] as [string, string]
+          ),
+          [template.executorSignerId, 'executor']
+        ])
+      ])
+    ];
+  }
+  if (template.type === 'recovery') {
+    const delayedLabel = wallet.policyType === 'inheritance' ? 'Heir signer' : 'Recovery signer';
+    const delayedRole = wallet.policyType === 'inheritance' ? 'heir' : 'recovery';
+    return [
+      definition(0, 'primary', 'Primary signers', 0, [
+        oneGroup(
+          'primary_signers',
+          'Primary signers',
+          template.immediate.threshold,
+          template.immediate.signerIds,
+          'primary'
+        )
+      ]),
+      definition(1, 'recovery', 'Recovery signers', template.recovery.availableAfterBlocks, [
+        oneGroup(
+          `${delayedRole}_signers`,
+          delayedLabel,
+          template.recovery.threshold,
+          template.recovery.signerIds,
+          delayedRole
+        )
+      ])
+    ];
+  }
+  return [];
+}
+
+export function fixturePolicyPathStatuses(
+  confirmations: number,
+  frozen = false,
+  chainCurrent = true
+): PolicyPathCoinStatus[] {
+  return fixturePolicyPaths().map((path) => {
+    const primary = path.availableAfterBlocks === 0;
+    const remaining = primary
+      ? 0
+      : confirmations === 0
+        ? null
+        : Math.max(0, path.availableAfterBlocks - confirmations);
+    const confirmationHeight = confirmations > 0 ? 250_000 - confirmations + 1 : null;
+    return {
+      pathIndex: path.index,
+      policyState: primary
+        ? 'available'
+        : !chainCurrent
+          ? 'unknown'
+          : confirmations === 0
+            ? 'unconfirmed'
+            : remaining === 0
+              ? 'available'
+              : 'waiting',
+      ageBlocks: confirmations,
+      blocksUntilBroadcastEligible: remaining,
+      confirmationHeight,
+      earliestInclusionHeight:
+        primary || confirmationHeight === null
+          ? null
+          : confirmationHeight + path.availableAfterBlocks,
+      approximateSecondsRemaining: remaining === null ? null : remaining * 600,
+      actionBlockers: [
+        ...(frozen ? (['frozen'] as const) : []),
+        ...(!chainCurrent ? (['stale_chain'] as const) : [])
+      ]
+    };
+  });
+}
+
+export function fixtureRenewalRecommendation(
+  confirmations: number
+): PolicyRenewalRecommendation | null {
+  if (fixtureContinuity !== 'partner' && fixtureContinuity !== 'family') return null;
+  const remaining = confirmations === 0 ? null : Math.max(0, 26_280 - confirmations);
+  const confirmationHeight = confirmations > 0 ? 250_000 - confirmations + 1 : null;
+  return {
+    recommendedAtAgeBlocks: 26_280,
+    remainingBlocks: remaining,
+    recommendedAtHeight: confirmationHeight === null ? null : confirmationHeight + 26_280 - 1,
+    approximateSecondsRemaining: remaining === null ? null : remaining * 600,
+    due: remaining === 0
   };
 }
 
@@ -321,9 +562,8 @@ export abstract class DummyWalletState {
           ? [this._selectedWalletId]
           : []
   );
-  protected _coins = fixtureCoins().map((coin, index) => ({
-    ...coin,
-    confirmations:
+  protected _coins = fixtureCoins().map((coin, index) => {
+    const confirmations =
       fixtureDelayedPolicy !== null
         ? index === 0
           ? fixtureDelayedPolicy === 'inheritance'
@@ -336,59 +576,70 @@ export abstract class DummyWalletState {
             : index === 2
               ? 12
               : 0
-        : coin.confirmations,
-    address: fixtureAddressForNetwork(coin.address),
-    policyMaturity:
-      fixtureDelayedPolicy !== null
-        ? (() => {
-            const policyType = fixtureDelayedPolicy;
-            const delayBlocks = policyType === 'inheritance' ? 52_560 : 4_320;
-            const approachingAge = policyType === 'inheritance' ? 48_000 : 3_500;
-            const approachingRemaining = delayBlocks - approachingAge;
-            const immatureRemaining = delayBlocks - 12;
-            return {
-              state:
-                index === 0
-                  ? ('mature' as const)
-                  : index === 1
-                    ? ('approaching' as const)
-                    : index === 2
-                      ? ('immature' as const)
-                      : ('unconfirmed' as const),
-              policyType,
-              delayBlocks,
-              ageBlocks:
-                index === 0 ? delayBlocks : index === 1 ? approachingAge : index === 2 ? 12 : 0,
-              remainingBlocks:
-                index === 0
-                  ? 0
-                  : index === 1
-                    ? approachingRemaining
-                    : index === 2
-                      ? immatureRemaining
-                      : null,
-              approachingAtBlocks: policyType === 'inheritance' ? 5_256 : 1_008,
-              maturityHeight:
-                index === 0
-                  ? 250_000
-                  : index === 1
-                    ? 250_000 + approachingRemaining
-                    : index === 2
-                      ? 250_000 + immatureRemaining
-                      : null,
-              approximateSecondsRemaining:
-                index === 0
-                  ? 0
-                  : index === 1
-                    ? approachingRemaining * 600
-                    : index === 2
-                      ? immatureRemaining * 600
-                      : null,
-              delayedSpendSupported: true
-            };
-          })()
-        : (coin.policyMaturity ?? null)
-  }));
+        : coin.confirmations;
+    return {
+      ...coin,
+      confirmations,
+      address: fixtureAddressForNetwork(coin.address),
+      policyMaturity:
+        fixtureDelayedPolicy !== null
+          ? (() => {
+              const policyType = fixtureDelayedPolicy;
+              const delayBlocks = policyType === 'inheritance' ? 52_560 : 4_320;
+              const approachingAge = policyType === 'inheritance' ? 48_000 : 3_500;
+              const approachingRemaining = delayBlocks - approachingAge;
+              const immatureRemaining = delayBlocks - 12;
+              return {
+                state:
+                  index === 0
+                    ? ('mature' as const)
+                    : index === 1
+                      ? ('approaching' as const)
+                      : index === 2
+                        ? ('immature' as const)
+                        : ('unconfirmed' as const),
+                policyType,
+                delayBlocks,
+                ageBlocks: confirmations,
+                remainingBlocks:
+                  index === 0
+                    ? 0
+                    : index === 1
+                      ? approachingRemaining
+                      : index === 2
+                        ? immatureRemaining
+                        : null,
+                approachingAtBlocks: policyType === 'inheritance' ? 5_256 : 1_008,
+                maturityHeight:
+                  index === 0
+                    ? 250_000
+                    : index === 1
+                      ? 250_000 + approachingRemaining
+                      : index === 2
+                        ? 250_000 + immatureRemaining
+                        : null,
+                approximateSecondsRemaining:
+                  index === 0
+                    ? 0
+                    : index === 1
+                      ? approachingRemaining * 600
+                      : index === 2
+                        ? immatureRemaining * 600
+                        : null,
+                delayedSpendSupported: true
+              };
+            })()
+          : (coin.policyMaturity ?? null),
+      policyPathStatuses:
+        fixtureDelayedPolicy !== null
+          ? fixturePolicyPathStatuses(confirmations, coin.frozen)
+          : (coin.policyPathStatuses ?? []),
+      policyRenewalRecommendation:
+        fixtureDelayedPolicy !== null
+          ? null
+          : (coin.policyRenewalRecommendation ?? fixtureRenewalRecommendation(confirmations))
+    };
+  });
   protected _addresses = structuredClone(receiveAddresses).map((address) => ({
     ...address,
     address: fixtureAddressForNetwork(address.address)

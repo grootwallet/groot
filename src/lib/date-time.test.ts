@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { parseTimestamp, presentLocalTimestamp, syncAge } from './date-time';
+import {
+  estimatedFutureTimestamp,
+  parseTimestamp,
+  presentLocalTimestamp,
+  syncAge
+} from './date-time';
 
 describe('date-time presentation', () => {
   it('parses Rust epoch seconds without first localizing the value', () => {
@@ -32,5 +37,20 @@ describe('date-time presentation', () => {
     expect(syncAge('2026-08-26T12:00:00.000Z', now)).toEqual({ unit: 'day', value: 2 });
     expect(syncAge('not-a-time', now)).toEqual({ unit: 'never', value: 0 });
     expect(syncAge('2026-08-28T15:31:00.000Z', now)).toEqual({ unit: 'now', value: 0 });
+  });
+
+  it('derives a display-only availability estimate from the verified observation', () => {
+    expect(estimatedFutureTimestamp('1786118029', 600)).toBe('2026-08-07T16:03:49.000Z');
+    expect(estimatedFutureTimestamp('2026-10-25T00:55:00.000Z', 600)).toBe(
+      '2026-10-25T01:05:00.000Z'
+    );
+  });
+
+  it('rejects malformed or unbounded availability estimates', () => {
+    expect(estimatedFutureTimestamp(null, 600)).toBeNull();
+    expect(estimatedFutureTimestamp('not-a-time', 600)).toBeNull();
+    expect(estimatedFutureTimestamp('1786118029', null)).toBeNull();
+    expect(estimatedFutureTimestamp('1786118029', -1)).toBeNull();
+    expect(estimatedFutureTimestamp('1786118029', Number.MAX_VALUE)).toBeNull();
   });
 });

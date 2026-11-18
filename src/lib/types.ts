@@ -23,6 +23,48 @@ export type ProvenanceSummary = {
   sourceOutpoints?: string[];
 };
 
+export type PolicyPathSigner = {
+  label: string;
+  fingerprint: string;
+  role: string;
+};
+
+export type PolicySignerGroup = {
+  code: string;
+  label: string;
+  required: number;
+  signers: PolicyPathSigner[];
+};
+
+export type PolicyPathDefinition = {
+  index: number;
+  code: string;
+  name: string;
+  required: number;
+  eligibleSignerFingerprints: string[];
+  signerGroups: PolicySignerGroup[];
+  availableAfterBlocks: number;
+};
+
+export type PolicyPathCoinStatus = {
+  pathIndex: number;
+  policyState: 'available' | 'waiting' | 'unconfirmed' | 'unknown';
+  ageBlocks: number;
+  blocksUntilBroadcastEligible: number | null;
+  confirmationHeight: number | null;
+  earliestInclusionHeight: number | null;
+  approximateSecondsRemaining: number | null;
+  actionBlockers: Array<'frozen' | 'stale_chain'>;
+};
+
+export type PolicyRenewalRecommendation = {
+  recommendedAtAgeBlocks: number;
+  remainingBlocks: number | null;
+  recommendedAtHeight: number | null;
+  approximateSecondsRemaining: number | null;
+  due: boolean;
+};
+
 export type Transaction = {
   id: string;
   kind: 'payment' | 'self_spend';
@@ -89,4 +131,6 @@ export type Utxo = {
     approximateSecondsRemaining: number | null;
     delayedSpendSupported: boolean;
   } | null;
+  policyPathStatuses?: PolicyPathCoinStatus[];
+  policyRenewalRecommendation?: PolicyRenewalRecommendation | null;
 };

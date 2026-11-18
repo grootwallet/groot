@@ -8,7 +8,8 @@ import {
   realpathSync,
   writeFileSync
 } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { basename, dirname, resolve } from 'node:path';
 
 const MAX_BYTES = 1024 * 1024;
 
@@ -152,7 +153,7 @@ function main() {
     if (input === output) throw new Error('Input and output must be different files.');
     const inputReal = realpathSync(input);
     const outputParent = realpathSync(dirname(output));
-    if (resolve(outputParent, output.split('/').at(-1)) === inputReal)
+    if (resolve(outputParent, basename(output)) === inputReal)
       throw new Error('Input and output must be different files.');
     const mutated = mutateSignedPsbt(readFileSync(input));
     const descriptor = openSync(
@@ -173,6 +174,6 @@ function main() {
 
 if (
   process.argv[1] &&
-  realpathSync(process.argv[1]) === realpathSync(new URL(import.meta.url).pathname)
+  realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))
 )
   main();

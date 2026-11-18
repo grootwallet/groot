@@ -1,3 +1,5 @@
+pub mod prevouts;
+
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use bdk_wallet::bitcoin::{
     bip32::Fingerprint, psbt::Psbt, secp256k1::Secp256k1, sighash::SighashCache, EcdsaSighashType,

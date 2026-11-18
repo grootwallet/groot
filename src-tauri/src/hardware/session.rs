@@ -1,14 +1,14 @@
 //! ADRs 0101/0102/0103: one fresh full identity and one action on one isolated client.
 use super::*;
-#[cfg(any(target_os = "macos", test))]
+#[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows", test))]
 use bdk_wallet::bitcoin::{
     bip32::{Fingerprint, Xpub},
     NetworkKind,
 };
-#[cfg(any(target_os = "macos", test))]
+#[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows", test))]
 use serde::Deserialize;
 use serde::Serialize;
-#[cfg(any(target_os = "macos", test))]
+#[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows", test))]
 use std::str::FromStr;
 
 #[derive(Clone, Serialize)]
@@ -38,7 +38,7 @@ pub(crate) struct HwiSessionInput<'a> {
     pub value: Option<&'a str>,
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct Request<'a> {
@@ -52,7 +52,7 @@ struct Request<'a> {
     value: Option<&'a str>,
 }
 
-#[cfg(any(target_os = "macos", test))]
+#[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows", test))]
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Response {
@@ -61,7 +61,7 @@ struct Response {
     result: serde_json::Value,
 }
 
-#[cfg(any(target_os = "macos", test))]
+#[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows", test))]
 fn validated_response(
     bytes: &[u8],
     expected: &[HwiSessionExpected],
@@ -91,7 +91,7 @@ fn validated_response(
 }
 
 // Bind each operation to the active network, account coin type, and xpub kind.
-#[cfg(any(target_os = "macos", test))]
+#[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows", test))]
 fn session_scope(
     chain: HwiChain,
 ) -> Option<(&'static str, &'static str, &'static str, NetworkKind)> {
@@ -107,7 +107,7 @@ fn session_scope(
     }
 }
 
-#[cfg(any(target_os = "macos", test))]
+#[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows", test))]
 fn valid_session_account(
     chain: HwiChain,
     account_path: &str,
@@ -128,7 +128,7 @@ fn valid_session_account(
 
 impl HwiCli {
     pub(crate) fn supports_operation_session(&self, device_type: &str) -> bool {
-        #[cfg(target_os = "macos")]
+        #[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
         {
             option_env!("GROOT_HWI_SESSION_PROTOCOL") == Some("1")
                 && (self.chain == HwiChain::Testnet4
@@ -139,7 +139,7 @@ impl HwiCli {
                 )
                 && matches!(self.source, HwiSource::Bundled { .. })
         }
-        #[cfg(not(target_os = "macos"))]
+        #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
         {
             let _ = device_type;
             false
@@ -159,7 +159,7 @@ impl HwiCli {
             action,
             value,
         } = input;
-        #[cfg(not(target_os = "macos"))]
+        #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
         {
             let _ = (
                 operation,
@@ -172,7 +172,7 @@ impl HwiCli {
             );
             Ok(None)
         }
-        #[cfg(target_os = "macos")]
+        #[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
         {
             if !self.supports_operation_session(device_type) {
                 return Ok(None);
@@ -187,7 +187,11 @@ impl HwiCli {
             let arguments = ["--chain", chain, "--device-type", device_type].map(str::to_owned);
             let root = runtime::for_operation(&self.source, &arguments, self.chain)?
                 .ok_or(HardwareError::Unavailable)?;
-            let helper = root.join("groot-hwi-session");
+            let helper = root.join(if cfg!(target_os = "windows") {
+                "groot-hwi-session.exe"
+            } else {
+                "groot-hwi-session"
+            });
             if !helper.is_file() {
                 return Err(HardwareError::Unavailable);
             }
@@ -288,6 +292,8 @@ mod tests {
             chain: HwiChain::Main,
             home: None,
             source: HwiSource::Bundled {
+                resource_dir: PathBuf::from("/unused/Groot.app/Contents/Resources"),
+                #[cfg(target_os = "macos")]
                 bundle_root: PathBuf::from("/unused/Groot.app"),
             },
         };

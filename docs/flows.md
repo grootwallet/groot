@@ -1,6 +1,6 @@
 # User flows
 
-Desktop state transitions from the shipped 5.2.0 baseline. The [5.3 mobile plan](mobile-5.3-plan.md) owns mobile candidate flows; internal iOS Testnet4 key and QR signer flows are enabled under ADR 0096 for acceptance testing, while other mobile platforms/networks, USB signing and multisig broadcast remain blocked. [Product behavior](product-spec.md) owns policy; [design system](design-system.md) owns presentation; [status](implementation-status.md) owns availability. Do not append historical overrides here.
+Current desktop and internal mobile state transitions. The [5.3 mobile plan](mobile-5.3-plan.md) owns mobile candidate flows; internal iOS Testnet4 key and QR signer flows are enabled under ADR 0096 for acceptance testing. Mobile USB signing, mobile multisig broadcast and other mobile platforms/networks remain blocked. [Product behavior](product-spec.md) owns policy; [design system](design-system.md) owns presentation; [status](implementation-status.md) owns availability. Do not append historical overrides here.
 
 ADR 0093 requires phone software create/restore and desktop-led multisig phone pairing/recovery/signing as distinct mobile flows. They are wired in the RC2 candidate; complete physical acceptance remains pending. QR shares public policy and PSBTs, never private keys; the [RC2 record](testing/5.3.0-rc2-mobile-keys.md) records what is actually verified.
 
@@ -58,6 +58,8 @@ Unknown required payment parameters and unsupported Payjoin requests fail withou
 
 Invalid/stale quotes disable continuation. Confirmed originals make saved proposals read-only; explicit discard preserves the payment. Final submission rechecks the configured node's original mempool state. Reopen resumes a proposal and collected signatures; navigation preserves it, destructive discard asks confirmation.
 
+Camera QR import starts with **Allow camera**. Denied, busy and unavailable capture have distinct localized errors and an in-place retry. Closing releases capture, including permission granted after closure. Payment entry and PSBT file import remain available when capture fails.
+
 ## Coins, activity and notifications
 
 `Coins → inspect provenance/reuse → select or confirm freeze/unfreeze → native eligibility state`
@@ -96,11 +98,15 @@ After Core accepts a payment, local storage failure keeps the accepted transacti
 
 Separate mobile setup (`/mobile/pair`, `/mobile/recover`, `/mobile/watch`) remains reachable when an existing selected wallet is locked, including direct startup and Add another wallet. These routes pause selected-wallet session redirects and background sync; they never unlock that wallet. Phone-key creation/recovery still requires its own native backup and credential/device authorization. Background locking and authenticated wallet/signing routes remain protected.
 
+With a phone key saved, switch apps or restart Groot while desktop verifies its other signers. Switching apps returns to the pairing screen after lock. After restart, choose **Resume pairing** on Welcome or Unlock. Enter the pairing PIN and continue from the saved step. If a final QR scan was interrupted, scan it again. A QR for a different pending session cannot advance the current pairing.
+
+Mobile Overview shows the sync action or status once. Before its first history scan starts or after a pause, an empty local snapshot shows zero under **Unverified balance**. A standalone wallet has inline Receive and Send actions. Send becomes enabled with a verified snapshot and available coins. A paired signer opens its QR scanner from **Sign payment**; receive-request creation stays on desktop for paired and watch-only phones. **Verify now** opens the recovery-backup prompt in Overview and passes the phone PIN or software-wallet passphrase to the existing native verification flow. Signer account details remain available on demand.
+
 Phone-key pairing uses the same optional native backup verification as software creation. Cancelling word presentation creates no signer; Verify later stages the key with `backupVerified=false`, preserved through restart and final policy acceptance. Pairing and the shared-wallet policy page show the reminder. The latter offers native verification/reveal using a fresh app PIN and device authorization. Only a successful native word check clears the reminder. Existing staging and profile formats remain compatible.
 
 After a QR is completely verified, release its camera stream and replace the preview with a compact success result before credential entry. Native mobile content scrolls between the fixed safe header and bottom controls, never beneath them. Keep setup copy brief; phone signer connections are QR. iOS uses Groot credentials without repeated platform prompts; an old key may need one final platform approval (ADR 0097).
 
-Unlocked mobile screens omit the brand header and start below the system safe area. Sync and backup reminders use compact inline actions with 44px touch targets; recovery verification remains available. This presentation change has no BIP or persisted-format impact.
+Unlocked mobile screens omit the brand header and start below the system safe area. Sync and backup reminders use compact inline actions with 44px touch targets. This presentation change has no BIP or persisted-format impact.
 
 Watch-only QR import retains an explicit Back to wallet action when mobile branding is hidden; leaving before camera permission resolves releases the eventual stream.
 
@@ -116,8 +122,12 @@ On test networks, choose Partner or Family → assign the fixed public signer ro
 
 Coins → choose a confirmed policy coin → choose an available named delayed path → recipient, labels and fee → review the actual PSBT and required roles → export/import partial signatures → finalize and broadcast after fresh native checks. Unavailable paths show the remaining blocks; a reorg, frozen input, stale chain state or missing role blocks progress with an inline error. Restart preserves the selected path through the transaction's exact CSV sequence. Renewal uses primary signatures and a fresh owned output; it is available before the delayed paths mature.
 
-## RC10 test-feedback corrections
+## Failure and retry behavior
 
-Saved signer → Check signer → connection/identity result leaves saved policy import/address evidence independent. Coldcard file import is an explicit acknowledgement performed outside Groot; its timestamp says Import recorded. Payment and policy setup/review errors use the existing WarningNotice, including fee-estimator failures. Partial Core fee responses enable only available target buttons; missing targets stay disabled, with explicit custom-rate entry. No rate is fabricated and an unset/invalid custom rate blocks preparation. Mobile payment actions retain scroll clearance above fixed navigation when longer localized errors appear.
+Hardware health checks do not replace saved policy/first-address evidence. Coldcard file import is an acknowledgement, dated **Import recorded**. Connection, account-read and policy errors stay visible after a dialog closes; retry clears only the obsolete error. Use WarningNotice with the existing actions and error classification.
 
-Hardware account-read failure remains visible as a shared error notice after closing the scan dialog; reconnecting or retrying clears the stale error before a new attempt. Creation/recovery/settings/mobile and credential validation use the same notice, preserving their existing actions and error classification.
+Partial Core fee responses enable only available targets. Missing estimates stay unavailable; a validated custom rate remains possible. Invalid or stale rates/quotes block preparation. Mobile errors retain scroll clearance above fixed navigation.
+
+Phone reset and teardown invalidate pending decode, review and signing replies. Clear the PIN immediately after dispatch. Signing does not broadcast; an intentionally dismissed result can be reviewed again from the same desktop proposal.
+
+Settings actions own independent request lifetimes. A read retry must not invalidate another same-wallet action. PIN-change success/failure after navigation stays quiet; native completion remains authoritative and the next session read reflects it. Clear credential fields after dispatch, on failure and on teardown.

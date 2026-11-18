@@ -9,6 +9,7 @@ import sys
 import tempfile
 import threading
 import unittest
+from contextlib import closing
 from unittest import mock
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -34,6 +35,9 @@ from gateway import (  # noqa: E402
 PASSWORD = b"correct horse battery staple"
 USERNAME = "test-client"
 HASH = "00" * 32
+# socketserver.shutdown waits for the next idle poll. Shorten that wait for the
+# three disposable servers each test starts, without changing request handling.
+TEST_SERVER_POLL_INTERVAL = 0.01
 
 
 class FakeCoreHandler(BaseHTTPRequestHandler):
@@ -117,6 +121,10 @@ def credential_document(password: bytes = PASSWORD) -> dict:
     }
 
 
+def enrollment_state(path: Path) -> Path:
+    return path.with_name(f"{path.name}.issuer.json")
+
+
 def authorization(password: bytes = PASSWORD) -> str:
     return "Basic " + base64.b64encode(USERNAME.encode() + b":" + password).decode()
 
@@ -133,11 +141,16 @@ class GatewayIntegrationTests(unittest.TestCase):
         self.cookie.chmod(0o640)
         self.enrolled = directory / "enrolled.json"
         enrollment = EnrollmentStore(self.enrolled)
+        enrollment.initialize()
         self.core = FakeCore()
-        self.core_thread = threading.Thread(target=self.core.serve_forever, daemon=True)
+        self.core_thread = threading.Thread(
+            target=self.core.serve_forever, args=(TEST_SERVER_POLL_INTERVAL,), daemon=True
+        )
         self.core_thread.start()
         self.fulcrum = FakeFulcrum()
-        self.fulcrum_thread = threading.Thread(target=self.fulcrum.serve_forever, daemon=True)
+        self.fulcrum_thread = threading.Thread(
+            target=self.fulcrum.serve_forever, args=(TEST_SERVER_POLL_INTERVAL,), daemon=True
+        )
         self.fulcrum_thread.start()
         self.gateway = Gateway(
             GatewayConfig(
@@ -149,7 +162,9 @@ class GatewayIntegrationTests(unittest.TestCase):
             )
         )
         self.server = GatewayServer(("127.0.0.1", 0), self.gateway)
-        self.server_thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+        self.server_thread = threading.Thread(
+            target=self.server.serve_forever, args=(TEST_SERVER_POLL_INTERVAL,), daemon=True
+        )
         self.server_thread.start()
 
     def tearDown(self) -> None:
@@ -205,7 +220,8 @@ class GatewayIntegrationTests(unittest.TestCase):
         self.assertEqual(rpc_result["result"]["method"], "getblockcount")
         persisted = json.loads(self.enrolled.read_text())
         self.assertNotIn(result["password"], self.enrolled.read_text())
-        self.assertEqual(persisted["principals"][0]["username"], result["username"])
+        self.assertEqual(persisted, {"version": 1, "principals": []})
+        self.assertNotIn(result["password"], enrollment_state(self.enrolled).read_text())
 
     def test_enrollment_is_strict_and_separately_rate_limited(self) -> None:
         status, result, _ = self.request({"version": 2}, path="/enroll")
@@ -418,13 +434,18 @@ class GatewayIntegrationTests(unittest.TestCase):
             for _ in range(MAX_HANDLER_CONCURRENCY):
                 self.assertTrue(self.server._handler_slots.acquire(blocking=False))
                 acquired += 1
-            status, result, headers = self.request(
-                {"id": 1, "method": "getblockcount", "params": []},
-                auth=authorization(),
-            )
-            self.assertEqual((status, result), (503, {"error": "gateway_busy"}))
-            self.assertEqual(headers["Cache-Control"], "no-store")
-            self.assertEqual(headers["Connection"], "close")
+            # Admission responds before reading the request. A header-only
+            # request avoids racing a second socket write against that close.
+            with closing(
+                http.client.HTTPConnection("127.0.0.1", self.server.server_port, timeout=2)
+            ) as connection:
+                connection.request("POST", "/", headers={"Authorization": authorization()})
+                response = connection.getresponse()
+                self.assertEqual(response.status, 503)
+                self.assertEqual(json.loads(response.read()), {"error": "gateway_busy"})
+                self.assertEqual(response.getheader("Cache-Control"), "no-store")
+                self.assertEqual(response.getheader("Connection"), "close")
+            self.assertEqual(self.core.requests, [])
         finally:
             for _ in range(acquired):
                 self.server._handler_slots.release()

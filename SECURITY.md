@@ -20,6 +20,6 @@ Rust is the trusted wallet boundary; the webview presents public DTOs through Wa
 
 ## Release and evidence
 
-Public v0.5.1 is authorized for macOS Apple silicon at exact commit `c731fa1cc6ce6431662342a007d9ca6bed6abbe6` (ADR 0083). ADR 0088 additionally authorizes the v5.2.0 macOS Apple-silicon campaign only when the final annotated `v5.2.0` tag, fresh `origin/main`, packaged source, reviewed source inventory and completed release evidence resolve to the same commit. The [checklist](docs/mainnet-release-checklist.md) and tracked authorization own release acceptance. Later commits, platforms, device/firmware tuples, backend classes and expanded policies require their own applicable evidence and authorization.
+Public macOS Apple-silicon v5.3.0 was published 2026-10-23 at `6a39bf50b2a6a042354b43369765a9af2174d061` under ADRs 0104/0105. The [checklist](docs/mainnet-release-checklist.md), tracked authorization and exact artifact evidence own release acceptance. This does not certify separate Testnet4 phone or Continuity previews. Later commits, platforms, device/firmware tuples, backend classes and expanded policies require their own applicable evidence and authorization.
 
 Dated review, remediation and certification documents are historical evidence, not the current specification. Frontend fixtures, unit tests and virtual signers do not prove physical support, independent review or public release readiness. Preserve exact-candidate evidence without transferring earlier results to a replacement build.

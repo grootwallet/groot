@@ -990,10 +990,6 @@ export const dynamicCopy = {
     fr: 'L’état de récupération est suspendu jusqu’à ce que la chaîne soit à jour.',
     es: 'El estado de recuperación está en pausa hasta que la cadena esté actualizada.'
   },
-  'Backup-key access becomes available separately for each coin. Your normal keys keep working.': {
-    fr: 'L’accès par clé de secours devient disponible séparément pour chaque pièce. Vos clés normales continuent de fonctionner.',
-    es: 'El acceso con la clave de respaldo se habilita por separado para cada moneda. Tus claves normales siguen funcionando.'
-  },
   'Labels and existing public links': {
     fr: 'Libellés et liens publics existants',
     es: 'Etiquetas y enlaces públicos existentes'

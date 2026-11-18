@@ -1,6 +1,7 @@
 <script lang="ts">
   import { formatInteger, locale } from '$lib/i18n';
   import { translate, localizedError } from '$lib/i18n-catalog';
+  import { discreetMode } from '$lib/privacy';
   import {
     ChevronRight,
     Clock3,
@@ -53,9 +54,12 @@
   import { toast } from '$lib/stores/toasts';
   import { coldcardPolicyFilename } from '$lib/transfer';
   import { useWalletShellContext } from '$lib/wallet/shell-context';
+  import { shouldShowMobileSend } from '$lib/wallet/mobile-quick-actions';
   import {
     hasMiniscriptPolicy,
+    isContinuityPolicyType,
     policyMaturitySummary,
+    validPolicyPathRows,
     validPolicyMaturity,
     walletPolicyPresentation
   } from '$lib/wallet/policy';
@@ -85,6 +89,13 @@
   let walletLoadError = $state('');
   let snapshot = $state<WalletSnapshot | null>(null);
   let coordination = $state<CoordinationStatus | null>(null);
+  let nativeMobileRuntime = $state<boolean | null>(null);
+  const receiveOnDesktop = $derived(
+    nativeMobileRuntime !== false ||
+      coordination === null ||
+      coordination.role === 'mobile_cosigner' ||
+      coordination.role === 'mobile_watch_only'
+  );
   let statusError = $state('');
   let selectedSigner = $state<CosignerDraft | null>(null);
   let showDescriptors = $state(false);
@@ -123,12 +134,85 @@
   const maturitySummary = $derived(
     snapshot ? policyMaturitySummary(snapshot.utxos, snapshot.chainTip) : null
   );
-  const policyCoins = $derived(snapshot?.utxos.filter((coin) => validPolicyMaturity(coin)) ?? []);
+  const continuityPolicy = $derived(isContinuityPolicyType(wallet?.policyType));
+  const policyPaths = $derived(snapshot?.policyPaths ?? []);
+  const policyRows = (coin: WalletSnapshot['utxos'][number]) =>
+    validPolicyPathRows(coin, policyPaths);
+  const continuityRowsByCoin = $derived(
+    continuityPolicy
+      ? (snapshot?.utxos ?? []).map((coin) => ({ coin, paths: policyRows(coin) }))
+      : []
+  );
+  const continuityCoinRows = $derived(continuityRowsByCoin.filter(({ paths }) => paths.length > 0));
+  const policyCoins = $derived(
+    continuityPolicy
+      ? []
+      : (snapshot?.utxos.filter((coin) => Boolean(validPolicyMaturity(coin))) ?? [])
+  );
+  const continuityAvailableDelayedPaths = $derived(
+    continuityCoinRows.reduce(
+      (count, { paths }) =>
+        count +
+        paths.filter(
+          ({ definition, status }) => definition.index > 0 && status.policyState === 'available'
+        ).length,
+      0
+    )
+  );
+  const continuityNextPathBlocks = $derived(
+    continuityCoinRows.reduce<number | null>((nearest, { paths }) => {
+      const next = paths
+        .filter(
+          ({ definition, status }) =>
+            definition.index > 0 &&
+            status.policyState === 'waiting' &&
+            status.blocksUntilBroadcastEligible !== null
+        )
+        .reduce<number | null>(
+          (coinNearest, { status }) =>
+            coinNearest === null
+              ? status.blocksUntilBroadcastEligible
+              : Math.min(coinNearest, status.blocksUntilBroadcastEligible!),
+          null
+        );
+      return next === null ? nearest : nearest === null ? next : Math.min(nearest, next);
+    }, null)
+  );
+  const continuityHasCoins = $derived((snapshot?.utxos.length ?? 0) > 0);
+  const continuityNeedsSync = $derived(
+    continuityHasCoins &&
+      (continuityCoinRows.length !== continuityRowsByCoin.length ||
+        continuityCoinRows.some(({ paths }) =>
+          paths.some(({ status }) => status.policyState === 'unknown')
+        ))
+  );
+  function continuityCoinPathSummary(paths: ReturnType<typeof policyRows>) {
+    const delayed = paths.filter(({ definition }) => definition.index > 0);
+    const available = delayed.filter(({ status }) => status.policyState === 'available').length;
+    const next = delayed
+      .filter(
+        ({ status }) =>
+          status.policyState === 'waiting' && status.blocksUntilBroadcastEligible !== null
+      )
+      .reduce<number | null>(
+        (nearest, { status }) =>
+          nearest === null
+            ? status.blocksUntilBroadcastEligible
+            : Math.min(nearest, status.blocksUntilBroadcastEligible!),
+        null
+      );
+    return {
+      available,
+      next,
+      unconfirmed: delayed.some(({ status }) => status.policyState === 'unconfirmed'),
+      unknown: delayed.some(({ status }) => status.policyState === 'unknown')
+    };
+  }
   const delayedPolicyType = $derived(
     wallet?.policyType === 'inheritance' ? 'inheritance' : 'recovery'
   );
   const policyPresentation = $derived(wallet ? walletPolicyPresentation(wallet) : null);
-  const recoveryPolicyLabAvailable = $derived(hasMiniscriptPolicy(wallet));
+  const recoveryPolicyLabAvailable = $derived(hasMiniscriptPolicy(wallet) && !continuityPolicy);
   onDestroy(() => {
     phoneBackupCredential = '';
     healthPinChallenge = '';
@@ -141,9 +225,11 @@
     phoneBackupError = '';
     phoneBackupNotice = '';
     try {
-      const verified = reveal
-        ? await walletService.revealAndVerifyBackup(phoneBackupCredential)
-        : await walletService.verifyBackup(phoneBackupCredential);
+      const result = reveal
+        ? walletService.revealAndVerifyBackup(phoneBackupCredential)
+        : walletService.verifyBackup(phoneBackupCredential);
+      phoneBackupCredential = '';
+      const verified = await result;
       phoneBackupVerified = verified;
       phoneBackupNotice = translate(
         $locale,
@@ -153,7 +239,6 @@
       toast({ title: phoneBackupNotice, tone: verified ? 'success' : 'default' });
     } catch (cause) {
       phoneBackupError = localizedError(cause, $locale, 'Could not verify this recovery backup.');
-      toast({ title: 'Backup verification failed', description: phoneBackupError, tone: 'danger' });
     } finally {
       phoneBackupCredential = '';
       phoneBackupBusy = false;
@@ -162,6 +247,10 @@
   async function loadPolicyWallet() {
     walletLoading = true;
     walletLoadError = '';
+    void walletService.runtimePlatform().then(
+      (runtime) => (nativeMobileRuntime = runtime.mobile && runtime.platform !== 'browser'),
+      () => (nativeMobileRuntime = null)
+    );
     try {
       wallet = await walletService.multisigWallet();
     } catch (cause) {
@@ -640,7 +729,7 @@
           {translate(
             $locale,
             coordination?.role === 'mobile_cosigner'
-              ? 'Phone signer · QR connection'
+              ? 'Phone signer'
               : coordination?.role === 'desktop_coordinator'
                 ? 'Desktop coordinator'
                 : 'Watch-only wallet'
@@ -675,9 +764,33 @@
     <section class="vault-hero">
       <span><ShieldCheck size={22} /></span>
       <div class="vault-summary">
-        <strong class="vault-balance"><Amount value={snapshot?.balance.total ?? 0} /></strong>
+        <strong class="vault-balance desktop-policy-balance"
+          ><Amount value={snapshot?.balance.total ?? 0} /></strong
+        >
+        {#if snapshot && (snapshot.syncedAt || snapshot.balance.total === 0)}
+          {@const balanceLabel = translate(
+            $locale,
+            snapshot.syncedAt ? 'Total balance' : 'Unverified balance'
+          )}
+          <div class="mobile-policy-balance" role="group" aria-label={balanceLabel}>
+            <small>{balanceLabel}</small>
+            <strong class="vault-balance"
+              ><Amount value={snapshot.balance.total} hidden={$discreetMode} /></strong
+            >
+          </div>
+        {/if}
         <div class="vault-policy-tags" aria-label={translate($locale, 'Spending policy')}>
-          {#if policyPresentation?.delayed && policyPresentation.delayedKeyLabel}
+          {#if continuityPolicy && policyPresentation?.delayed}
+            <span class="policy-pill"
+              >{translate($locale, '{required} of {total} primary keys', {
+                required: policyPresentation.primaryThreshold,
+                total: policyPresentation.primarySignerCount
+              })}</span
+            >
+            <span class="policy-pill delayed"
+              ><Clock3 size={12} />{translate($locale, 'Named delayed paths')}</span
+            >
+          {:else if policyPresentation?.delayed && policyPresentation.delayedKeyLabel}
             <span class="policy-pill"
               >{translate($locale, '{required} of {total} primary keys', {
                 required: policyPresentation.primaryThreshold,
@@ -751,13 +864,124 @@
                 >{/if}
             </div>{/if}
         </div>
-        <Button variant="secondary" href="/multisig/receive">{translate($locale, 'Receive')}</Button
+        <Button variant="secondary" href="/multisig/receive"
+          >{translate($locale, receiveOnDesktop ? 'Address history' : 'Receive')}</Button
         >{#if coordination?.canSignOnThisDevice}<Button href="/mobile/sign"
-            ><Smartphone size={16} />{translate($locale, 'Sign desktop PSBT')}</Button
-          >{:else}<Button href="/multisig/send">{translate($locale, 'Send')}</Button>{/if}
+            ><Smartphone size={16} />
+            <span class="desktop-sign-action">{translate($locale, 'Sign desktop PSBT')}</span>
+            <span class="mobile-sign-action">{translate($locale, 'Sign payment')}</span>
+          </Button>
+        {:else if !receiveOnDesktop}<Button
+            class={snapshot && shouldShowMobileSend(snapshot) ? '' : 'empty-wallet-send'}
+            href="/multisig/send">{translate($locale, 'Send')}</Button
+          >{/if}
       </div>
     </section>
-    {#if maturitySummary}
+    {#if continuityPolicy}
+      <section class="policy-maturity-panel" aria-live="polite">
+        <div class="policy-maturity-panel-heading">
+          <span><Clock3 size={19} /></span>
+          <div>
+            <h2>
+              {translate($locale, 'Spending paths')}<InsightTip
+                label={translate($locale, 'About spending paths')}
+                text={translate(
+                  $locale,
+                  'Each coin follows its own block timeline. Open Coins to see every signer group and exact earliest inclusion block.'
+                )}
+              />
+            </h2>
+            <p>
+              {#if !continuityHasCoins}
+                {translate($locale, 'No coins yet')}
+              {:else if continuityNeedsSync}
+                {translate($locale, 'Sync to verify spending paths')}
+              {:else if continuityAvailableDelayedPaths === 1}
+                {translate($locale, '1 delayed path is available across your coins.')}
+              {:else if continuityAvailableDelayedPaths > 1}
+                {translate($locale, '{count} delayed paths are available across your coins.', {
+                  count: formatInteger(continuityAvailableDelayedPaths, $locale)
+                })}
+              {:else}
+                {translate(
+                  $locale,
+                  'Delayed paths are still waiting. Each coin follows its own confirmation age.'
+                )}
+              {/if}
+            </p>
+          </div>
+          <Button variant="secondary" size="small" href="/coins"
+            >{translate($locale, 'Review coins')}</Button
+          >
+        </div>
+        <div class="policy-maturity-facts">
+          {#if continuityHasCoins}<div class="info-banner">
+              <ShieldCheck size={16} />
+              <p>{translate($locale, 'The primary path remains available for every coin.')}</p>
+            </div>{:else}<div class="info-banner">
+              <Clock3 size={16} />
+              <p>{translate($locale, 'No coins yet')}</p>
+            </div>{/if}
+          {#if !continuityNeedsSync && continuityNextPathBlocks !== null}<div class="info-banner">
+              <Clock3 size={16} />
+              <p>
+                {translate($locale, 'Next path in {count} blocks', {
+                  count: formatInteger(continuityNextPathBlocks, $locale)
+                })}
+              </p>
+            </div>{/if}
+        </div>
+        <details class="policy-maturity-details">
+          <summary>{translate($locale, 'How spending paths work')}</summary>
+          <p>
+            {translate(
+              $locale,
+              'New spending paths become available over time. Earlier paths remain available unless a chain reorganization reduces this coin’s confirmed age.'
+            )}
+          </p>
+          <p>{translate($locale, 'Coins do not expire.')}</p>
+          {#if continuityCoinRows.length}<div class="policy-access-coins">
+              <h3>{translate($locale, 'Coin timelines')}</h3>
+              <div>
+                {#each continuityCoinRows as { coin, paths } (coin.outpoint)}{@const pathSummary =
+                    continuityCoinPathSummary(paths)}
+                  <article>
+                    <span>
+                      {#if coin.label}<PermanentLabelTags
+                          labels={[coin.label]}
+                          prominent
+                        />{:else}<strong>{translate($locale, 'Coin')}</strong>{/if}
+                      <small
+                        class="coin-status"
+                        class:policy-mature={pathSummary.available > 0}
+                        class:policy-immature={pathSummary.available === 0 &&
+                          pathSummary.next !== null}
+                        class:pending={pathSummary.unconfirmed || pathSummary.unknown}
+                        >{pathSummary.unknown
+                          ? translate($locale, 'Sync to verify')
+                          : pathSummary.available === 1
+                            ? translate($locale, '1 delayed path available')
+                            : pathSummary.available > 1
+                              ? translate($locale, '{count} delayed paths available', {
+                                  count: formatInteger(pathSummary.available, $locale)
+                                })
+                              : pathSummary.next !== null
+                                ? translate($locale, 'Next path in {count} blocks', {
+                                    count: formatInteger(pathSummary.next, $locale)
+                                  })
+                                : translate($locale, 'Wait starts after confirmation')}</small
+                      >
+                    </span>
+                    <Amount value={coin.amount} />
+                  </article>{/each}
+              </div>
+            </div>{:else if continuityHasCoins}<WarningNotice
+              title={translate($locale, 'Policy details unavailable')}
+              body={translate($locale, 'Sync to verify spending paths')}
+            />{:else}<p>{translate($locale, 'No coins yet')}</p>{/if}
+        </details>
+      </section>
+    {:else if maturitySummary}
       <section class="policy-maturity-panel" aria-live="polite">
         <div class="policy-maturity-panel-heading">
           <span><Clock3 size={19} /></span>
@@ -905,9 +1129,11 @@
             <p>
               {translate(
                 $locale,
-                policyPresentation?.delayed
-                  ? 'Payments normally use 2 of 3 primary keys. The separate backup key becomes available per coin after its wait.'
-                  : translate($locale, 'Any {count} keys can sign.', { count: wallet.threshold })
+                continuityPolicy
+                  ? 'The primary signer group can spend now. Delayed paths require the named signer groups shown in each coin’s policy.'
+                  : policyPresentation?.delayed
+                    ? 'Payments normally use 2 of 3 primary keys. The separate backup key becomes available per coin after its wait.'
+                    : translate($locale, 'Any {count} keys can sign.', { count: wallet.threshold })
               )}
             </p>
           </div>
@@ -954,6 +1180,11 @@
             {translate($locale, 'Back up the policy and verify its first address.')}
           </p>
         </div>
+        <Button
+          variant="secondary"
+          class="full mobile-descriptors"
+          onclick={() => (showDescriptors = true)}>{translate($locale, 'Show descriptors')}</Button
+        >
         <Button variant="secondary" class="full" href="/multisig/backup"
           >{translate($locale, 'Export & verify')}</Button
         >{#if coordination?.role === 'desktop_coordinator'}<Button
@@ -1094,8 +1325,9 @@
     error={phoneBackupError}
   />
   {#if phoneBackupNotice}<p role="status">{phoneBackupNotice}</p>{/if}
-  <div class="modal-footer">
+  <div class="modal-footer phone-recovery-actions">
     <Button
+      class="phone-recovery-later"
       variant="secondary"
       disabled={phoneBackupBusy}
       onclick={() => {
@@ -1111,7 +1343,7 @@
     <Button
       disabled={!phoneBackupCredential}
       loading={phoneBackupBusy}
-      onclick={() => verifyPhoneBackup()}>{translate($locale, 'Verify now')}</Button
+      onclick={() => verifyPhoneBackup()}>{translate($locale, 'Verify backup')}</Button
     >
   </div>
 </Modal>
@@ -1585,20 +1817,83 @@
     }
   }
 
+  .mobile-policy-balance,
+  .mobile-sign-action,
+  :global(.vault-backup-card .mobile-descriptors) {
+    display: none;
+  }
+
+  .mobile-policy-balance {
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.2rem 0.65rem;
+    margin-bottom: 0.5rem;
+  }
+
+  :global(.native-mobile) .desktop-sign-action,
+  :global(.native-mobile .vault-actions .wallet-more),
+  :global(.native-mobile) .desktop-policy-balance {
+    display: none;
+  }
+
+  :global(.native-mobile) .mobile-sign-action,
+  :global(.native-mobile .vault-backup-card .mobile-descriptors) {
+    display: inline-flex;
+  }
+
+  :global(.native-mobile) .mobile-policy-balance {
+    display: flex;
+  }
+
   @media (max-width: 760px) {
+    .desktop-sign-action,
+    :global(.vault-actions .wallet-more) {
+      display: none;
+    }
+    .mobile-sign-action,
+    :global(.vault-backup-card .mobile-descriptors) {
+      display: inline-flex;
+    }
+    .coordinator-page > .page-header {
+      min-height: auto;
+      margin-bottom: 0.75rem;
+    }
     :global(.vault-grid):where(.vault-grid) {
       grid-template-columns: 1fr;
     }
     :global(.vault-hero):where(.vault-hero) {
-      grid-template-columns: 42px minmax(0, 1fr);
+      grid-template-columns: minmax(0, 1fr);
+      gap: 0.65rem;
+      padding: 0.875rem;
+      margin-bottom: 1rem;
+    }
+    :global(.vault-hero):where(.vault-hero) > :global(span),
+    .desktop-policy-balance {
+      display: none;
+    }
+    .mobile-policy-balance {
+      display: flex;
+    }
+    :global(.vault-policy-tags):where(.vault-policy-tags) {
+      margin: 0 0 0.25rem;
     }
     :global(.vault-actions):where(.vault-actions) {
       grid-column: 1 / -1;
       display: grid;
-      grid-template-columns: auto 1fr 1fr;
+      grid-auto-flow: column;
+      grid-auto-columns: minmax(0, 1fr);
+    }
+    :global(.vault-actions):where(.vault-actions) :global(.empty-wallet-send) {
+      display: none;
     }
     :global(.vault-backup-card):where(.vault-backup-card) {
       order: -1;
+      gap: 0.5rem;
+      padding: 0.875rem;
+    }
+    :global(.vault-backup-card):where(.vault-backup-card) :global(.vault-backup-icon),
+    :global(.vault-backup-card):where(.vault-backup-card) :global(p) {
+      display: none;
     }
     :global(.saved-cosigner-list):where(.saved-cosigner-list) :global(button) {
       grid-template-columns: 32px minmax(0, 1fr) auto;
@@ -1606,10 +1901,13 @@
     :global(.saved-cosigner-list):where(.saved-cosigner-list) :global(.row-chevron) {
       display: none;
     }
-    :global(.vault-actions):where(.vault-actions) :global(.wallet-more-menu) {
-      right: 18px;
-      left: 18px;
-      width: auto;
+    .phone-recovery-actions {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 0.5rem;
+    }
+    .phone-recovery-actions :global(.phone-recovery-later) {
+      display: none;
     }
   }
 

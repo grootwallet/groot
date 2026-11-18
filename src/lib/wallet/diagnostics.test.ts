@@ -15,10 +15,16 @@ const settings = readFileSync(
   'utf8'
 );
 const clipboard = readFileSync(new URL('../clipboard.ts', import.meta.url), 'utf8');
-const profileCommands = readFileSync(
-  new URL('../../../src-tauri/src/wallet/profile_commands.rs', import.meta.url),
-  'utf8'
-);
+const profileCommands =
+  readFileSync(
+    new URL('../../../src-tauri/src/wallet/profile_commands.rs', import.meta.url),
+    'utf8'
+  ) +
+  '\n' +
+  readFileSync(
+    new URL('../../../src-tauri/src/wallet/recovery_commands.rs', import.meta.url),
+    'utf8'
+  );
 const multisigCommands = readFileSync(
   new URL('../../../src-tauri/src/wallet/multisig_setup_commands.rs', import.meta.url),
   'utf8'

@@ -46,20 +46,30 @@ test('tooltip trigger exposes its explanation and Escape dismisses it', async ({
   await expect(first).toHaveAttribute('aria-expanded', 'false');
 });
 
-for (const [locale, button, error] of [
-  ['fr', 'Scanner le QR de paiement Bitcoin', 'L’accès à la caméra a été refusé.'],
-  ['es', 'Escanear QR de pago de Bitcoin', 'Se denegó el acceso a la cámara.']
+for (const [locale, button, allow, error] of [
+  [
+    'fr',
+    'Scanner le QR de paiement Bitcoin',
+    'Autoriser la caméra',
+    'L’accès à la caméra a été refusé.'
+  ],
+  ['es', 'Escanear QR de pago de Bitcoin', 'Permitir cámara', 'Se denegó el acceso a la cámara.']
 ]) {
   test(`camera denial is localized in ${locale}`, async ({ page }) => {
     await page.addInitScript((value) => localStorage.setItem('groot-language', value), locale);
-    await page.route(/\/qr-scanner\.js(?:\?|$)/, (route) =>
-      route.fulfill({
-        contentType: 'application/javascript',
-        body: `export default class { async start() { throw new DOMException('synthetic', 'NotAllowedError'); } destroy() {} }`
-      })
-    );
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, 'mediaDevices', {
+        configurable: true,
+        value: {
+          getUserMedia: async () => {
+            throw new DOMException('synthetic', 'NotAllowedError');
+          }
+        }
+      });
+    });
     await page.goto('/send');
     await page.getByRole('button', { name: button, exact: true }).click();
+    await page.getByRole('button', { name: allow, exact: true }).click();
     await expect(page.locator('.scanner').getByRole('alert')).toContainText(error);
     await expect(page.locator('.scanner').getByRole('alert')).not.toContainText(
       'Camera access was denied'
@@ -156,7 +166,17 @@ test('UR scanner translates live counts and its bounded frame-limit failure', as
   await expect(page.locator('.scanner').getByRole('alert')).toContainText(
     'Trop d’images QR. Relancez l’analyse.'
   );
+  // A reset replaces the decoder. Deliver the next frame to its new callback,
+  // not the obsolete mock callback retained from the stopped camera.
+  await page.evaluate(() => {
+    delete (window as Window & { emitUrFrame?: unknown }).emitUrFrame;
+  });
   await page.locator('.scanner-retry').click();
+  await expect
+    .poll(() =>
+      page.evaluate(() => typeof (window as Window & { emitUrFrame?: unknown }).emitUrFrame)
+    )
+    .toBe('function');
   await expect(page.locator('.scanner').getByRole('alert')).toHaveCount(0);
   await page.evaluate(() =>
     (window as Window & { emitUrFrame: (frame: string) => void }).emitUrFrame(

@@ -6,6 +6,7 @@ import { lstatSync, readFileSync, statSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { probeHwiVersionOnDisposableCopy, verifySignedHwiArtifact } from './verify-signed-hwi.mjs';
+import { validateCameraEntitlements, verifyMacosCameraAccess } from './verify-macos-camera.mjs';
 
 const repoRoot = resolve(fileURLToPath(new URL('../../', import.meta.url)));
 const canonicalManifestPath = join(repoRoot, 'docs/hwi-artifact-manifest-3.2.0-mac-arm64.json');
@@ -71,6 +72,7 @@ export function validateProductionSignatureMetadata(
   if (hasTrueEntitlement(appEntitlements, libraryValidation)) {
     throw new Error('Groot must not disable library validation');
   }
+  validateCameraEntitlements(appEntitlements);
 }
 
 export function verifyPackagedHwi(
@@ -116,6 +118,7 @@ export function verifyPackagedHwi(
     stdio: 'pipe'
   });
   if (requireProductionSigning) {
+    verifyMacosCameraAccess(app);
     const plist = join(app, 'Contents', 'Info.plist');
     const executableName = execFileSync(
       '/usr/libexec/PlistBuddy',

@@ -99,7 +99,9 @@ for (const theme of ['light', 'dark']) {
     await expect(page.locator('.toast-close')).toHaveCount(0);
     await capture('signature-ready');
     await page.getByRole('button', { name: 'Sign another PSBT', exact: true }).click();
-    await expect(page.getByText('Scan unsigned PSBT from desktop', { exact: true })).toBeVisible();
+    await expect(
+      page.getByText('Scan the QR code shown on desktop.', { exact: true })
+    ).toBeVisible();
     await expect(page.getByLabel('Local app PIN', { exact: true })).toHaveCount(0);
   });
 }

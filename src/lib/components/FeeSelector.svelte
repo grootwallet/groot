@@ -8,12 +8,14 @@
 
   let {
     estimates,
+    loading = false,
     value,
     estimatedFee,
     error = '',
     onchange
   } = $props<{
     estimates: FeeEstimates | null;
+    loading?: boolean;
     value: number;
     estimatedFee: number;
     error?: string;
@@ -44,7 +46,10 @@
           onchange(option.rate);
         }}
         ><span><strong>{translate($locale, option.name)}</strong></span><b
-          >{translate($locale, option.rate > 0 ? `${option.rate} sat/vB` : 'Unavailable')}</b
+          >{translate(
+            $locale,
+            option.rate > 0 ? `${option.rate} sat/vB` : loading ? 'Loading…' : 'Unavailable'
+          )}</b
         ></button
       >
     {/each}
@@ -74,10 +79,9 @@
   </div>
   <span class="fee-source">
     {#if value > 0}{translate($locale, 'Estimated fee')}
-      <Amount value={estimatedFee} />{:else}{translate(
-        $locale,
-        'Estimate\n      unavailable · Enter a custom rate'
-      )}{/if}
+      <Amount value={estimatedFee} />{:else if loading}<span role="status"
+        >{translate($locale, 'Loading…')}</span
+      >{:else}{translate($locale, 'Estimate\n      unavailable · Enter a custom rate')}{/if}
   </span>
   {#if error}<WarningNotice
       tone="danger"

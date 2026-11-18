@@ -4,6 +4,7 @@
   import { translate, localizedError } from '$lib/i18n-catalog';
   import {
     CheckCircle2,
+    ChevronDown,
     KeyRound,
     Maximize2,
     Pencil,
@@ -28,6 +29,7 @@
   import IdentifierDetailsModal from './IdentifierDetailsModal.svelte';
   import LocalTimestamp from './LocalTimestamp.svelte';
   import Modal from './Modal.svelte';
+  import { onMount } from 'svelte';
 
   let {
     signer,
@@ -62,6 +64,23 @@
   let nameDraft = $state('');
   let nameError = $state('');
   let renaming = $state(false);
+  let technicalDetailsOpen = $state(true);
+  let compactViewport = $state(false);
+
+  onMount(() => {
+    const compactQuery = matchMedia('(max-width: 760px)');
+    const syncDisclosure = () => {
+      compactViewport = compactQuery.matches;
+      technicalDetailsOpen = !compactQuery.matches;
+    };
+    syncDisclosure();
+    compactQuery.addEventListener('change', syncDisclosure);
+    return () => compactQuery.removeEventListener('change', syncDisclosure);
+  });
+
+  $effect(() => {
+    if (!signer) technicalDetailsOpen = !compactViewport;
+  });
 
   function signerSourceName(signer: CosignerDraft) {
     return signer.deviceType === 'groot-mobile' ? 'QR connection' : sourceName(signer.source);
@@ -85,11 +104,11 @@
     return 'Ready';
   }
 
-  function connectionLabel() {
-    if (signer?.deviceType === 'groot-mobile') return 'QR connection';
+  function connectionLabel(currentSigner: CosignerDraft) {
+    if (currentSigner.deviceType === 'groot-mobile') return 'QR connection';
     if (deviceContext === LOCAL_MOBILE_SIGNER_CONTEXT) return 'This phone';
     if (deviceContext === DESKTOP_MANAGED_SIGNER_CONTEXT) return 'Connect on desktop';
-    return signer?.source === 'usb' || signer?.source === 'virtual'
+    return currentSigner.source === 'usb' || currentSigner.source === 'virtual'
       ? 'Ready to check'
       : 'USB connection needed';
   }
@@ -132,6 +151,48 @@
     }
   }
 </script>
+
+{#snippet signerMetadata(currentSigner: CosignerDraft)}
+  <dl>
+    <div>
+      <dt>{translate($locale, 'Master fingerprint')}</dt>
+      <dd><code>{currentSigner.fingerprint}</code></dd>
+    </div>
+    <div>
+      <dt>{translate($locale, 'Account path')}</dt>
+      <dd><code>{currentSigner.derivationPath}</code></dd>
+    </div>
+    <div>
+      <dt>{translate($locale, 'Key source')}</dt>
+      <dd>
+        {translate($locale, signerSourceName(currentSigner))}
+      </dd>
+    </div>
+    {#if currentSigner.deviceType}<div>
+        <dt>{translate($locale, 'Device type')}</dt>
+        <dd>{deviceTypeName(currentSigner.deviceType)}</dd>
+      </div>{/if}
+    <div class="connection-detail">
+      <dt>{translate($locale, 'Connection')}</dt>
+      <dd>
+        {translate($locale, connectionLabel(currentSigner))}
+      </dd>
+    </div>
+    <div class="public-key-detail">
+      <dt>{translate($locale, 'Public account key (xpub)')}</dt>
+      <dd>
+        <button
+          class="public-key-trigger"
+          aria-label={translate($locale, 'View public account key (xpub)')}
+          onclick={() => (publicKeyOpen = true)}
+          ><code>{compactIdentifier(currentSigner.xpub, 18, 12)}</code><Maximize2
+            size={14}
+          /></button
+        >
+      </dd>
+    </div>
+  </dl>
+{/snippet}
 
 <Modal
   open={!!signer}
@@ -208,43 +269,12 @@
           {/if}
         </section>
       {/if}
-      <dl>
-        <div>
-          <dt>{translate($locale, 'Master fingerprint')}</dt>
-          <dd><code>{signer.fingerprint}</code></dd>
-        </div>
-        <div>
-          <dt>{translate($locale, 'Account path')}</dt>
-          <dd><code>{signer.derivationPath}</code></dd>
-        </div>
-        <div>
-          <dt>{translate($locale, 'Key source')}</dt>
-          <dd>
-            {translate($locale, signerSourceName(signer))}
-          </dd>
-        </div>
-        {#if signer.deviceType}<div>
-            <dt>{translate($locale, 'Device type')}</dt>
-            <dd>{deviceTypeName(signer.deviceType)}</dd>
-          </div>{/if}
-        <div class="connection-detail">
-          <dt>{translate($locale, 'Connection')}</dt>
-          <dd>
-            {translate($locale, connectionLabel())}
-          </dd>
-        </div>
-        <div class="public-key-detail">
-          <dt>{translate($locale, 'Public account key (xpub)')}</dt>
-          <dd>
-            <button
-              class="public-key-trigger"
-              aria-label={translate($locale, 'View public account key (xpub)')}
-              onclick={() => (publicKeyOpen = true)}
-              ><code>{compactIdentifier(signer.xpub, 18, 12)}</code><Maximize2 size={14} /></button
-            >
-          </dd>
-        </div>
-      </dl>
+      <details class="signer-metadata" bind:open={technicalDetailsOpen}>
+        <summary>
+          <span>{translate($locale, 'Technical details')}</span><ChevronDown size={16} />
+        </summary>
+        {@render signerMetadata(signer)}
+      </details>
       {#if policyStatus}
         <section class="device-policy-status" class:attention={policyStatus.attention}>
           <span><ShieldCheck size={18} /></span>
@@ -347,6 +377,9 @@
 <style>
   .connection-detail {
     grid-column: 1 / -1;
+  }
+  .signer-metadata > summary {
+    display: none;
   }
   /* Keep the original cascade weight while constraining these rules to this owner. */
 
@@ -599,6 +632,41 @@
   }
 
   @media (max-width: 760px) {
+    .signer-metadata {
+      display: block;
+      overflow: hidden;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-control);
+      background: var(--surface-control);
+    }
+    .signer-metadata > summary {
+      min-height: 44px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 0 12px;
+      color: var(--text-soft);
+      font-size: var(--font-size-meta);
+      font-weight: 650;
+      list-style: none;
+    }
+    .signer-metadata > summary::-webkit-details-marker {
+      display: none;
+    }
+    .signer-metadata > summary :global(svg) {
+      flex: 0 0 auto;
+      color: var(--muted);
+      transition: transform 0.16s ease;
+    }
+    .signer-metadata[open] > summary :global(svg) {
+      transform: rotate(180deg);
+    }
+    .device-details .signer-metadata dl {
+      border: 0;
+      border-top: 1px solid var(--border);
+      border-radius: 0;
+    }
     :global(.signer-name-editor):where(.signer-name-editor) :global(form) {
       grid-template-columns: 1fr;
     }

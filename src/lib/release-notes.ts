@@ -1,11 +1,10 @@
 export const releaseNotes = [
-  'Seven hardware signers now connect, identify, verify addresses and sign much faster.',
-  'A simpler start page helps you create, connect or recover a wallet.',
-  'Mainnet payments no longer have a 0.01 BTC app limit; transaction and fee checks still apply.',
-  'Wallet scans show progress sooner, with clearer activity, errors and payment results.',
+  'Maintenance work makes wallet screens, restart recovery and device operations more predictable.',
+  'Windows and Ubuntu Testnet4 builds now bundle the verified fast HWI runtime for physical testing.',
+  'Version numbering returns to the pre-1.0 line with the 0.5.4 candidate.',
   'Testnet4 preview: pair an iPhone key and sign multisig transactions by QR; unavailable on Mainnet.',
   'Test-network preview: Partner and Family Continuity wallets with Miniscript recovery paths; unavailable on Mainnet.'
 ] as const;
 export const experimentalPlatformWarning =
-  'Windows and Linux are experimental and untested on physical machines. They are riskier than macOS: native seed creation/recovery and USB device discovery are unavailable. Test public-wallet and file-signing flows and report feedback.';
+  'Windows and Linux are experimental Testnet4 platforms. Their bundled HWI runtime and device discovery have automated checks, but physical model testing and production signing remain incomplete. Use disposable wallets and Testnet4 bitcoin.';
 export const publicReleaseDetails = releaseNotes;

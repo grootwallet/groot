@@ -32,6 +32,25 @@ export function syncAge(value: string | null, currentTime = Date.now()): SyncAge
   return { unit: 'day', value: Math.floor(elapsedHours / 24) };
 }
 
+export function estimatedFutureTimestamp(
+  observedAt: string | null,
+  secondsRemaining: number | null
+): string | null {
+  if (
+    !observedAt ||
+    !Number.isSafeInteger(secondsRemaining) ||
+    secondsRemaining === null ||
+    secondsRemaining < 0
+  )
+    return null;
+  const observed = parseTimestamp(observedAt);
+  if (!observed) return null;
+  const milliseconds = observed.getTime() + secondsRemaining * 1_000;
+  if (!Number.isSafeInteger(milliseconds)) return null;
+  const estimate = new Date(milliseconds);
+  return Number.isNaN(estimate.getTime()) ? null : estimate.toISOString();
+}
+
 function readableDate(date: Date, timeZone: string, includeSeconds = true) {
   return new Intl.DateTimeFormat('en-US', {
     year: 'numeric',
