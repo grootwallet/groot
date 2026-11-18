@@ -15,13 +15,17 @@ import stat
 import tempfile
 from pathlib import Path
 
-from gateway import USERNAME
+from gateway import EnrollmentStore, USERNAME, is_public_username
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--clients", type=Path, required=True)
-    parser.add_argument("--username", required=True)
+    parser.add_argument("--username")
+    parser.add_argument(
+        "--issuer-clients", type=Path,
+        help="enrolled-client file owning issuer state when --clients names a separate manual store",
+    )
     parser.add_argument("--group", default="groot-gateway")
     action = parser.add_mutually_exclusive_group()
     action.add_argument(
@@ -33,6 +37,10 @@ def parse_args() -> argparse.Namespace:
         "--remove",
         action="store_true",
         help="revoke the named principal without prompting for a password",
+    )
+    action.add_argument(
+        "--initialize-enrollment", action="store_true",
+        help="explicitly create the separate owner-only issuer state; never overwrite it",
     )
     return parser.parse_args()
 
@@ -66,7 +74,15 @@ def atomic_write(path: Path, document: dict, group_id: int) -> None:
 
 def main() -> None:
     args = parse_args()
-    if USERNAME.fullmatch(args.username) is None:
+    if args.initialize_enrollment:
+        if os.geteuid() == 0:
+            raise SystemExit("initialize enrollment as the unprivileged gateway service user")
+        if args.username is not None:
+            raise SystemExit("initialization does not accept a username")
+        EnrollmentStore(args.clients).initialize()
+        print("Initialized enrollment issuer state; back it up privately before enabling enrollment.")
+        return
+    if args.username is None or USERNAME.fullmatch(args.username) is None:
         raise SystemExit("username must contain 1-64 letters, digits, dots, dashes, or underscores")
     try:
         group_id = grp.getgrnam(args.group).gr_gid
@@ -82,10 +98,26 @@ def main() -> None:
         retained = [
             item for item in document["principals"] if item.get("username") != args.username
         ]
-        if len(retained) == len(document["principals"]):
+        if is_public_username(args.username):
+            issuer_clients = getattr(args, "issuer_clients", None) or args.clients
+            issuer_state = issuer_clients.with_name(f"{issuer_clients.name}.issuer.json")
+            if not issuer_clients.exists() or not issuer_state.exists():
+                raise SystemExit(
+                    "public credential revocation requires its readable issuer state; "
+                    "restore it or select --issuer-clients before removing a legacy record"
+                )
+            try:
+                EnrollmentStore(issuer_clients).revoke(args.username)
+            except (OSError, ValueError):
+                raise SystemExit(
+                    "public credential revocation failed: issuer state is unsafe, corrupt, "
+                    "unwritable, or full; no legacy record was removed"
+                ) from None
+        elif len(retained) == len(document["principals"]):
             raise SystemExit("client principal does not exist")
-        document["principals"] = retained
-        atomic_write(args.clients, document, group_id)
+        if len(retained) != len(document["principals"]):
+            document["principals"] = retained
+            atomic_write(args.clients, document, group_id)
         print(f"Revoked {args.username} in {args.clients}")
         return
     if args.generate:

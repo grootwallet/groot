@@ -32,11 +32,89 @@ access to Bitcoin Core's cookie, install `gateway.py` under
 `nginx-location.conf` documents the reusable route fragments. The service
 refuses a non-loopback listener.
 
-Production clients request a unique random credential from the separately
-throttled `/enroll` endpoint. The password is returned once, stays in Groot's
-native process, and is encrypted under the wallet credential before use. The
-endpoint contains no shared application secret; source and principal quotas,
-the narrow method allowlist, and revocation remain the abuse boundary.
+Public enrollment returns the same version-1 username/password response to
+native Groot. Future passwords are domain-separated HMAC-SHA256 values under
+an owner-only server key; no per-enrollment principal record is written.
+Existing version-1 salted-verifier files and credentials remain unchanged and
+take precedence. A known legacy username with a wrong password never falls
+through to signed authentication. Passwords remain inside Rust and its existing
+wallet-credential-encrypted node envelope; no client DTO or wallet format changes.
+
+The gateway service and provisioning tools require POSIX permissions and file
+locks. The boundary harness already skips these service tests on Windows;
+Windows wallet support is separate. See the candidate decision in
+[ADR 0123](../../docs/adr/0123-stateless-managed-gateway-enrollment.md).
+
+### Issuer state initialization and custody
+
+Before enabling future enrollment, initialize its separate state as the actual
+unprivileged service user, never root:
+
+```sh
+sudo -u groot-gateway -- python3 /opt/groot-core-gateway/provision_client.py \
+  --clients /var/lib/groot-core-gateway/clients.json --initialize-enrollment
+```
+
+This explicitly creates `clients.json.issuer.json` beside the existing enrolled
+credential file. Initialization refuses an existing issuer file; startup never
+regenerates a missing or corrupt key. The state and empty `clients.json.issuer.lock`
+are owner-only. Root-run revocation preserves the issuer UID/GID and recreates a
+missing lock with that identity. Initialize as the service user even for a fresh
+installation; the CLI refuses root initialization before creating any file.
+
+Privately back up the complete issuer JSON before accepting new enrollments. It
+contains the signing key, revocations and durable admission budgets. Preserve
+its daemon UID/GID and mode `0600` on restore. The empty lock need not be backed
+up. Do not restore an older revocation snapshot without first replaying every
+later revocation: that would restore revoked authority. Existing v1 principal
+files also remain part of the normal backup. No credential file is migrated,
+cleared or recreated during this rollout.
+
+Missing or invalid issuer state blocks future enrollment and signed credentials
+with a bounded unavailable result; legacy KDF authentication remains independent.
+Normally idle clients keep the same saved credentials indefinitely, including
+after restart. Losing or rotating the signing key instead invalidates signed
+credentials; restore the exact backed-up state or use Groot's existing explicit,
+wallet-credential-authenticated managed-access renewal. Do not silently replace
+saved native credentials. Key rotation is an incident/operations decision,
+not automatic expiry or a rollback shortcut.
+
+Admission keeps the existing per-IP limit and adds durable global burst 32 with
+one token per minute, plus IPv4 `/24` and IPv6 `/48` prefix burst 8 with one token
+per hour. IPv4-mapped IPv6 uses its IPv4 prefix. Prefix state is capped at 4,096
+and idle entries are reclaimed after 16 hours without expiring credentials.
+The per-IP enrollment bucket map is also bounded. Counters and prefix admission
+are serialized across processes; restart does not reset the budgets.
+
+### Explicit revocation and rollback
+
+Use the existing `--remove` command below for signed credentials too. The tool
+records a permanent tombstone before removing a colliding legacy record. Every
+public-format name requires readable issuer state, including a legacy record:
+if the key is temporarily missing or corrupt, revocation fails and leaves that
+record intact. Restore issuer state before retrying; otherwise a later restore
+could revive the old signed credential. When `--clients` names a separate manual
+store, also pass `--issuer-clients /var/lib/groot-core-gateway/clients.json` to
+select the actual issuer. Non-public legacy names do not depend on issuer state.
+Signed revocations are never evicted. Explicit owner-provisioned KDF credentials remain
+a separate authority: deliberately provisioning a new independent KDF password
+for the same name is a new operator grant; it does not restore the old signed
+password. A bad KDF password never enables a signed fallback.
+
+The revocation ledger is capped at 10,000 entries. At capacity, new enrollment
+fails closed and a new revocation returns an error without dropping old
+revocations. Non-revoked credentials keep working. Do not clear the ledger to
+restore enrollment; capacity/key-epoch maintenance requires a separate reviewed
+operations plan.
+
+Rolling back to the old gateway preserves existing v1 clients but rejects newly
+signed credentials, since the old server has no verifier rows for them. Keep the
+issuer state and updated revocation tool for a forward recovery. This candidate
+is not deployed by changing these source files. Sustained distributed Sybils can
+still consume admission or RPC capacity; existing RPC authentication, source and
+principal throttles, method allowlists and concurrency limits remain in force.
+The change closes permanent passive principal-store exhaustion, not all denial
+of service or proof of genuine-app identity.
 
 Operators can also provision or rotate a credential manually. This command prompts
 without echo and stores only a salted scrypt verifier:

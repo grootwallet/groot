@@ -121,6 +121,10 @@ def credential_document(password: bytes = PASSWORD) -> dict:
     }
 
 
+def enrollment_state(path: Path) -> Path:
+    return path.with_name(f"{path.name}.issuer.json")
+
+
 def authorization(password: bytes = PASSWORD) -> str:
     return "Basic " + base64.b64encode(USERNAME.encode() + b":" + password).decode()
 
@@ -137,6 +141,7 @@ class GatewayIntegrationTests(unittest.TestCase):
         self.cookie.chmod(0o640)
         self.enrolled = directory / "enrolled.json"
         enrollment = EnrollmentStore(self.enrolled)
+        enrollment.initialize()
         self.core = FakeCore()
         self.core_thread = threading.Thread(
             target=self.core.serve_forever, args=(TEST_SERVER_POLL_INTERVAL,), daemon=True
@@ -215,7 +220,8 @@ class GatewayIntegrationTests(unittest.TestCase):
         self.assertEqual(rpc_result["result"]["method"], "getblockcount")
         persisted = json.loads(self.enrolled.read_text())
         self.assertNotIn(result["password"], self.enrolled.read_text())
-        self.assertEqual(persisted["principals"][0]["username"], result["username"])
+        self.assertEqual(persisted, {"version": 1, "principals": []})
+        self.assertNotIn(result["password"], enrollment_state(self.enrolled).read_text())
 
     def test_enrollment_is_strict_and_separately_rate_limited(self) -> None:
         status, result, _ = self.request({"version": 2}, path="/enroll")
